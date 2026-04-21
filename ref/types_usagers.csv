@@ -1,8 +1,0 @@
-source_table;source_champ;valeur_source;type_usager
-point_ctrl;type_usager;Particulier (usager de la nature + gestionnaire d'une propriété);Particulier (usager de la nature + gestionnaire d'une propriété)
-point_ctrl;type_usager;Agriculteur et autres acteurs agricoles;Agriculteur et autres acteurs agricoles
-point_ctrl;type_usager;Collectivité;Collectivité
-point_ctrl;type_usager;Collectivite;Collectivité
-point_ctrl;type_usager;Entreprise;Entreprise
-point_ctrl;type_usager;Acteurs sylvicoles;Acteurs sylvicoles
-point_ctrl;type_usager;Autre;Autre
