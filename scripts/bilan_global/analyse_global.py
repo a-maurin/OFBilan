@@ -1,5 +1,6 @@
 """Bilan global — activité du service départemental (tous domaines/thèmes, PA, PEJ, PVe)."""
 import argparse
+import logging
 import shutil
 import sys
 import tempfile
@@ -25,7 +26,15 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from scripts.paths import get_cartes_dir, get_out_dir
-from scripts.common.loaders import load_natinf_ref, load_pa, load_pej, load_point_ctrl, load_pnf, load_pve
+from scripts.common.loaders import (
+    load_natinf_ref,
+    load_pa,
+    load_pej,
+    load_point_ctrl,
+    load_pve,
+    ensure_insee_from_communes_shp,
+    enrich_with_pnforet_sig_zones,
+)
 from scripts.common.prompt_periode import ask_periode_dept
 from scripts.common.utils import _load_csv_opt, serie_type_usager, agg_effectifs_usagers, agg_effectifs_usagers_par_domaine
 from scripts.common.ofb_charte import (
@@ -46,6 +55,7 @@ from scripts.common.ofb_charte import (
     _get_styles,
 )
 from scripts.common.pdf_utils import key_figures_table, ofb_table
+from scripts.common.chart_display_config import load_chart_display_config, compute_pdf_ratios
 from scripts.common.charts import chart_pie, chart_bar_grouped, chart_bar_stacked, chart_line_evolution
 from bilans.bilan_global.core import (
     analyse_controles_global,
@@ -97,7 +107,11 @@ def resolve_ventilation_mode_global(date_deb: pd.Timestamp, date_fin: pd.Timesta
     return "trimestrielle"
 
 
-def generate_pdf_report(out_dir: Path, ventilation_mode: str = "globale") -> None:
+def generate_pdf_report(
+    out_dir: Path,
+    ventilation_mode: str = "globale",
+    chart_preset: str | None = None,
+) -> None:
     """Génère le PDF du bilan global (page de garde, sommaire, chiffres clés, contrôles par domaine/thème, résultats, PEJ/PA/PVe)."""
     # Appliquer le style matplotlib pour utiliser la police Marianne
     from scripts.common.charts import apply_mpl_style
@@ -106,14 +120,28 @@ def generate_pdf_report(out_dir: Path, ventilation_mode: str = "globale") -> Non
     styles = _get_styles()
     tmp_dir = Path(tempfile.mkdtemp(prefix="ofb_global_"))
     try:
-        _generate_pdf_content(out_dir, tmp_dir, styles, ventilation_mode)
+        _generate_pdf_content(
+            out_dir,
+            tmp_dir,
+            styles,
+            ventilation_mode,
+            chart_preset=chart_preset,
+        )
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
-def _generate_pdf_content(out_dir: Path, tmp_dir: Path, styles, ventilation_mode: str = "globale") -> None:
+def _generate_pdf_content(
+    out_dir: Path,
+    tmp_dir: Path,
+    styles,
+    ventilation_mode: str = "globale",
+    *,
+    chart_preset: str | None = None,
+) -> None:
     """Corps de la génération PDF, séparé pour garantir le nettoyage de tmp_dir."""
     avail_w = PAGE_W - MARGIN_LEFT - MARGIN_RIGHT
+    chart_ratios = compute_pdf_ratios(load_chart_display_config(_ROOT, preset=chart_preset))
 
     tab_resultats = _load_csv_opt(out_dir, "controles_global_resultats.csv")
     agg_domaine = _load_csv_opt(out_dir, "controles_global_par_domaine.csv")
@@ -389,8 +417,7 @@ def _generate_pdf_content(out_dir: Path, tmp_dir: Path, styles, ventilation_mode
                 from PIL import Image as PILImage
                 from reportlab.platypus import Image as RLImage
                 _pimg = PILImage.open(pie_path)
-                # Largeur compacte, augmentée d'environ 10 %
-                _target_w = avail_w * 0.55
+                _target_w = avail_w * chart_ratios["global_resultats_pie"]
                 _target_h = _target_w * (_pimg.height / _pimg.width)
                 _pimg.close()
                 story.append(RLImage(pie_path, width=_target_w, height=_target_h))
@@ -528,8 +555,7 @@ def _generate_pdf_content(out_dir: Path, tmp_dir: Path, styles, ventilation_mode
             from PIL import Image as PILImage
             from reportlab.platypus import Image as RLImage
             _pimg = PILImage.open(pie_path)
-            # Largeur compacte, augmentée d'environ 10 %
-            _target_w = avail_w * 0.55
+            _target_w = avail_w * chart_ratios["global_usagers_pie"]
             _target_h = _target_w * (_pimg.height / _pimg.width)
             _pimg.close()
             story.append(RLImage(pie_path, width=_target_w, height=_target_h))
@@ -592,7 +618,12 @@ def _generate_pdf_content(out_dir: Path, tmp_dir: Path, styles, ventilation_mode
     doc.build(story)
 
 
-def run_global(date_deb: str, date_fin: str, dept_code: str) -> int:
+def run_global(
+    date_deb: str,
+    date_fin: str,
+    dept_code: str,
+    chart_preset: str | None = None,
+) -> int:
     """
     Exécute le bilan global (tous domaines/thèmes, PA, PEJ, PVe).
     Utilisable depuis le script unique run_bilan.py.
@@ -624,6 +655,20 @@ def run_global(date_deb: str, date_fin: str, dept_code: str) -> int:
             pa = load_pa(root, date_deb=DATE_DEB, date_fin=DATE_FIN)
             pej = load_pej(root, date_deb=DATE_DEB, date_fin=DATE_FIN)
             pve = load_pve(root, dept_code=DEPT_CODE, date_deb=DATE_DEB, date_fin=DATE_FIN)
+
+        spatial_log = logging.getLogger("bilans.spatial")
+        if not point.empty:
+            point = ensure_insee_from_communes_shp(
+                point, root, context="bilan global — points de contrôle", log=spatial_log
+            )
+        if not pve.empty:
+            pve = ensure_insee_from_communes_shp(
+                pve, root, context="bilan global — PVe", log=spatial_log
+            )
+        if not point.empty:
+            point = enrich_with_pnforet_sig_zones(
+                point, root, context="bilan global — points de contrôle", log=spatial_log
+            )
 
         print("Étape 2/4 : analyse des contrôles...")
         with Spinner():
@@ -659,7 +704,11 @@ def run_global(date_deb: str, date_fin: str, dept_code: str) -> int:
 
         print("Étape 4/4 : génération du PDF...")
         with Spinner():
-            generate_pdf_report(out_dir, ventilation_mode=ventilation_mode)
+            generate_pdf_report(
+                out_dir,
+                ventilation_mode=ventilation_mode,
+                chart_preset=chart_preset,
+            )
 
         print("Bilan global généré dans out/bilan_global.")
         return 0
@@ -675,6 +724,12 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--date-deb", type=str, default=None, help="Date de début (YYYY-MM-DD).")
     parser.add_argument("--date-fin", type=str, default=None, help="Date de fin (YYYY-MM-DD).")
     parser.add_argument("--dept-code", type=str, default=None, help="Code département (ex: 21).")
+    parser.add_argument(
+        "--preset",
+        choices=("compact", "standard", "large"),
+        default=None,
+        help="Preset de taille des graphiques PDF.",
+    )
     return parser.parse_args()
 
 
@@ -700,7 +755,12 @@ def main() -> None:
         raise SystemExit("Dates invalides : utiliser YYYY-MM-DD.")
     DEPT_CODE = str(args.dept_code)
 
-    exit_code = run_global(args.date_deb, args.date_fin, args.dept_code)
+    exit_code = run_global(
+        args.date_deb,
+        args.date_fin,
+        args.dept_code,
+        chart_preset=args.preset,
+    )
     if exit_code != 0:
         sys.exit(exit_code)
 

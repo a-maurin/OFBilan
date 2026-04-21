@@ -402,6 +402,68 @@ def agg_resultats_par_type_usager_theme(
     return pd.DataFrame(rows)
 
 
+def agg_resultat_counts_par_type_usager(
+    df: pd.DataFrame,
+    col_resultat: str = "resultat",
+    source_table: str = "point_ctrl",
+    source_champ: str = "type_usager",
+) -> pd.DataFrame:
+    """
+    Compte les contrôles par type d'usager et par résultat explicite
+    (Conforme / Infraction / Manquement ; le reste → Autre).
+
+    Une ligne de point peut contribuer à plusieurs types d'usager si le champ
+    source est multi-catégories (même logique que les autres ``agg_*_par_type_usager``).
+    """
+    if source_champ not in df.columns or col_resultat not in df.columns:
+        return pd.DataFrame(
+            columns=[
+                "type_usager",
+                "Conforme",
+                "Infraction",
+                "Manquement",
+                "Autre",
+                "Total",
+            ]
+        )
+
+    buckets = ("Conforme", "Infraction", "Manquement", "Autre")
+    counts: dict[str, dict[str, int]] = {}
+
+    for _, row in df.iterrows():
+        res = str(row.get(col_resultat, "") or "").strip()
+        if res == "Infraction":
+            b = "Infraction"
+        elif res == "Manquement":
+            b = "Manquement"
+        elif res == "Conforme":
+            b = "Conforme"
+        else:
+            b = "Autre"
+
+        toks = _parse_type_usager_tokens(row.get(source_champ))
+        if not toks:
+            cats = ["Autre"]
+        else:
+            cats = list(
+                {map_type_usager(source_table, source_champ, lab) for lab, _ in toks}
+            )
+
+        for cat in cats:
+            d = counts.setdefault(cat, {k: 0 for k in buckets})
+            d[b] += 1
+
+    rows: list[dict[str, object]] = []
+    for cat in sorted(counts.keys(), key=lambda x: (-sum(counts[x].values()), x)):
+        d = counts[cat]
+        tot = sum(d.values())
+        row = {"type_usager": cat, "Total": tot}
+        for k in buckets:
+            row[k] = int(d[k])
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
 def agg_procedures_par_type_usager_domaine(
     df: pd.DataFrame,
     col_domaine: str = "domaine",

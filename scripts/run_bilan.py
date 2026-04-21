@@ -86,6 +86,12 @@ def main() -> int:
     parser.add_argument("--date-deb", type=str, default=None, help="Date début (YYYY-MM-DD).")
     parser.add_argument("--date-fin", type=str, default=None, help="Date fin (YYYY-MM-DD).")
     parser.add_argument("--dept-code", type=str, default=None, help="Code département (ex. 21).")
+    parser.add_argument(
+        "--preset",
+        choices=("compact", "standard", "large"),
+        default=None,
+        help="Preset de taille des graphiques PDF.",
+    )
     args = parser.parse_args()
 
     if args.list_themes:
@@ -141,7 +147,7 @@ def main() -> int:
             print(f"[WARN] Impossible de générer les cartes pour le bilan global : {e}", file=sys.stderr)
 
         from scripts.bilan_global.analyse_global import run_global
-        return run_global(date_deb, date_fin, dept_code)
+        return run_global(date_deb, date_fin, dept_code, chart_preset=args.preset)
 
     # mode thematique
     from scripts.bilan_thematique.run_bilan_thematique import run_thematic, _resolve_profils
@@ -156,12 +162,17 @@ def main() -> int:
         logger.warning("Impossible de générer les cartes pour les profils [%s] : %s", profils_str, e)
         print(f"[WARN] Impossible de générer les cartes pour les profils [{profils_str}] : {e}", file=sys.stderr)
 
+    cli_options = {}
+    if args.preset:
+        cli_options["chart_preset"] = args.preset
+
     return run_thematic(
         profils_resolus,
         date_deb,
         date_fin,
         dept_code,
         combine=args.combine,
+        cli_options=cli_options or None,
     )
 
 

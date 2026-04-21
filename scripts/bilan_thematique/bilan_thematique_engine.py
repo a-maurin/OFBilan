@@ -11,6 +11,7 @@ Usage interne (appelé par run_bilan_thematique.py) :
 """
 from __future__ import annotations
 
+import logging
 import re
 import sys
 import subprocess
@@ -28,6 +29,7 @@ from scripts.common.bilan_config import BilanConfig
 from scripts.common.loaders import (
     load_point_ctrl,
     load_pej,
+    merge_pej_faits_locations,
     load_pa,
     load_pve,
     load_pnf,
@@ -35,6 +37,9 @@ from scripts.common.loaders import (
     load_natinf_ref,
     load_tub_pnf_codes,
     load_communes_noms,
+    ensure_insee_from_communes_shp,
+    enrich_with_pnforet_sig_zones,
+    pnf_sig_union_membership_mask,
 )
 from scripts.common.utils import (
     est_chasse_point,
@@ -50,11 +55,22 @@ from scripts.common.utils import (
     agg_resultats_par_type_usager_theme,
     agg_procedures_par_type_usager_domaine,
     agg_procedures_par_type_usager_theme,
+    agg_resultat_counts_par_type_usager,
     serie_type_usager,
 )
 from scripts.common.ofb_charte import Spinner
-from scripts.common.pdf_report_builder import PDFReportBuilder
-from scripts.common.charts import chart_pie, chart_bar, chart_bar_grouped, chart_bar_stacked, chart_line_evolution
+from scripts.common.pdf_report_builder import (
+    PDFReportBuilder,
+)
+from scripts.common.chart_display_config import load_chart_display_config, compute_pdf_ratios
+from scripts.common.charts import (
+    chart_pie,
+    chart_bar,
+    chart_bar_grouped,
+    chart_bar_horizontal_stacked,
+    chart_bar_stacked,
+    chart_line_evolution,
+)
 from scripts.common.carte_helper import find_map
 
 
@@ -77,7 +93,13 @@ def load_profile_config(root: Path, profil_id: str) -> dict:
         with open(path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
     else:
-        data = _parse_yaml_minimal(path)
+        # Sans PyYAML, l'ancien parseur minimal écrase des clés (ex. plusieurs « label »
+        # dans le fichier) et ignore les blocs imbriqués (restrict_geo, filter…).
+        raise ImportError(
+            "PyYAML est requis pour lire les profils bilan (ref/profils_bilan/*.yaml). "
+            "Installez les dépendances du projet, par exemple : "
+            "pip install -r tools/requirements.txt"
+        ) from None
 
     return _normalize_profile(data, profil_id)
 
@@ -140,6 +162,9 @@ def _normalize_profile(data: dict, profil_id: str) -> dict:
         period_cfg["ventilation"] = vent_cfg
     vent_cfg.setdefault("type", "auto")  # auto | globale | annuelle
     vent_cfg.setdefault("seuil_jours", 366)
+
+    # --- restriction géographique (ex. périmètre PNF sur codes INSEE) ---
+    data.setdefault("restrict_geo", None)
 
     # --- options ---
     data.setdefault("options", {})
@@ -245,24 +270,6 @@ def _load_glossary_config(root: Path) -> dict:
         return default_cfg
 
     return result
-
-
-def _parse_yaml_minimal(path: Path) -> dict:
-    """Fallback YAML parser sans PyYAML."""
-    data: dict[str, Any] = {}
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if ":" not in line:
-            continue
-        k, v = line.split(":", 1)
-        k, v = k.strip(), v.strip().strip("'\"").strip()
-        if k in ("natinf_pve", "natinf_pej", "keywords"):
-            data[k] = [x.strip().strip("'\"") for x in v.strip("[]").split(",") if x.strip()]
-        elif k in ("id", "label", "out_subdir", "filter_type", "legacy_script"):
-            data[k] = v
-    return data
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -737,43 +744,191 @@ def _get_insee_col(df: pd.DataFrame) -> str | None:
     return None
 
 
+def _coalesced_insee_for_pnf_mask(df: pd.DataFrame) -> pd.Series:
+    """
+    Code INSEE normalisé (5 chiffres) par ligne, en combinant les colonnes usuelles
+    (première valeur exploitable). Évite de n'utiliser qu'une colonne vide alors
+    qu'une autre source est renseignée.
+    """
+    if df.empty:
+        return pd.Series(pd.NA, index=df.index, dtype="string")
+    out = pd.Series(pd.NA, index=df.index, dtype="string")
+    for col in ("insee_comm", "insee_commun", "INSEE_COM", "INF-INSEE"):
+        if col not in df.columns:
+            continue
+        raw = df[col]
+        cand = (
+            raw.astype(str)
+            .str.extract(r"(\d{1,5})", expand=False)
+            .fillna("")
+            .str.zfill(5)
+        )
+        cand = cand.mask(~cand.str.fullmatch(r"\d{5}", na=False), pd.NA)
+        out = out.fillna(cand)
+    return out
+
+
+def _mask_insee_in_pnf_codes(df: pd.DataFrame, pnf_codes: set) -> pd.Series:
+    if df.empty:
+        return pd.Series([], dtype=bool)
+    s = _coalesced_insee_for_pnf_mask(df)
+    return s.notna() & s.astype(str).isin(pnf_codes)
+
+
+def _apply_restrict_geo_pnf(
+    point_filtered: pd.DataFrame,
+    pej_filtered: pd.DataFrame,
+    pa_filtered: pd.DataFrame,
+    pve_filtered: pd.DataFrame,
+    root: Path,
+    log: logging.Logger,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """
+    Restreint les jeux de données au périmètre PNF : communes listées dans le
+    référentiel (INSEE) **ou** localisation dans les polygones SIG (cœur +
+    aire d'adhésion), pour pallier les écarts entre liste de communes et périmètre réel.
+    """
+    _, pnf_codes = load_tub_pnf_codes(root)
+
+    if not point_filtered.empty:
+        point_filtered = ensure_insee_from_communes_shp(
+            point_filtered,
+            root,
+            context="restriction PNF — points de contrôle",
+            log=log,
+        )
+        mask_insee = _mask_insee_in_pnf_codes(point_filtered, pnf_codes)
+        mask_sig = pnf_sig_union_membership_mask(point_filtered, root, log=log)
+        mask = mask_insee | mask_sig
+        if not mask.any():
+            log.warning(
+                "Restriction PNF : aucun point ne correspond à la liste INSEE du référentiel "
+                "ni aux couches SIG (cœur / adhésion) ; vérifiez communes_pnf, les coordonnées "
+                "et ref/sig/PNF."
+            )
+        point_filtered = point_filtered.loc[mask].copy()
+    # Règle métier PA : seules les localisations de contrôles "Manquement" portent
+    # l'assiette spatiale des PA.
+    point_manq = point_filtered
+    if "resultat" in point_filtered.columns:
+        point_manq = point_filtered[
+            point_filtered["resultat"].astype(str).str.strip().str.lower() == "manquement"
+        ].copy()
+
+    dc_ids: Set[str] = set()
+    if not point_filtered.empty and "dc_id" in point_filtered.columns:
+        dc_ids = set(point_filtered["dc_id"].dropna().astype(str).unique())
+    dc_ids_pa: Set[str] = set()
+    if not point_manq.empty and "dc_id" in point_manq.columns:
+        dc_ids_pa = set(point_manq["dc_id"].dropna().astype(str).unique())
+
+    if not pej_filtered.empty and "DC_ID" in pej_filtered.columns:
+        # Les PEJ ne sont pas toutes liées à un contrôle : on conserve celles qui
+        # suivent un contrôle dans le périmètre OU dont la localisation FAITS
+        # (x_faits / y_faits) est dans le parc (polygones SIG et/ou communes PNF).
+        mask_pej = pd.Series(False, index=pej_filtered.index)
+        if dc_ids:
+            mask_pej = mask_pej | pej_filtered["DC_ID"].astype(str).str.strip().isin(dc_ids)
+        if "x_faits" in pej_filtered.columns and "y_faits" in pej_filtered.columns:
+            xy_ok = pej_filtered["x_faits"].notna() & pej_filtered["y_faits"].notna()
+            if bool(xy_ok.any()):
+                loc_df = pd.DataFrame(
+                    {
+                        "x": pd.to_numeric(pej_filtered.loc[xy_ok, "x_faits"], errors="coerce"),
+                        "y": pd.to_numeric(pej_filtered.loc[xy_ok, "y_faits"], errors="coerce"),
+                    },
+                    index=pej_filtered.index[xy_ok],
+                )
+                sig_m = pnf_sig_union_membership_mask(loc_df, root, log=log).reindex(
+                    pej_filtered.index, fill_value=False
+                )
+                mask_pej = mask_pej | sig_m
+                sub = pej_filtered.loc[xy_ok].copy()
+                sub["x"] = pd.to_numeric(sub["x_faits"], errors="coerce")
+                sub["y"] = pd.to_numeric(sub["y_faits"], errors="coerce")
+                sub_insee = ensure_insee_from_communes_shp(
+                    sub,
+                    root,
+                    context="restriction PNF — PEJ (coordonnées FAITS)",
+                    log=log,
+                )
+                m_insee = _mask_insee_in_pnf_codes(sub_insee, pnf_codes)
+                mask_pej = mask_pej | m_insee.reindex(pej_filtered.index, fill_value=False)
+        if not mask_pej.any():
+            log.warning(
+                "Restriction PNF : aucune PEJ ne correspond à un contrôle du périmètre "
+                "ni à une localisation FAITS dans le parc."
+            )
+        pej_filtered = pej_filtered.loc[mask_pej].copy()
+
+    if not pa_filtered.empty and "DC_ID" in pa_filtered.columns:
+        if dc_ids_pa:
+            pa_filtered = pa_filtered[
+                pa_filtered["DC_ID"].dropna().astype(str).isin(dc_ids_pa)
+            ].copy()
+        else:
+            pa_filtered = pa_filtered.iloc[0:0].copy()
+
+    if not pve_filtered.empty:
+        pve_filtered = ensure_insee_from_communes_shp(
+            pve_filtered,
+            root,
+            context="restriction PNF — PVe",
+            log=log,
+        )
+        mask_pi = _mask_insee_in_pnf_codes(pve_filtered, pnf_codes)
+        mask_pg = pnf_sig_union_membership_mask(pve_filtered, root, log=log)
+        mask_p = mask_pi | mask_pg
+        if not mask_p.any():
+            log.warning(
+                "Restriction PNF : aucune PVe ne correspond au périmètre INSEE ni SIG."
+            )
+            pve_filtered = pve_filtered.iloc[0:0].copy()
+        else:
+            pve_filtered = pve_filtered.loc[mask_p].copy()
+
+    return point_filtered, pej_filtered, pa_filtered, pve_filtered
+
+
 def _run_spatial_analyses(
     point_filtered: pd.DataFrame,
     pej_filtered: pd.DataFrame,
     pve_filtered: pd.DataFrame,
     options: dict,
     cfg: BilanConfig,
-) -> dict:
+    profil_id: str | None = None,
+) -> tuple[dict[str, Any], pd.DataFrame]:
     """Calcule les découpages spatiaux (PNF, TUB) si les options le demandent."""
     results: dict[str, Any] = {}
     need_pnf = options.get("pnf", False)
     need_tub = options.get("tub", False)
 
     if not need_pnf and not need_tub:
-        return results
+        return results, point_filtered
 
     tub_codes, pnf_codes = load_tub_pnf_codes(cfg.root)
     results["tub_codes"] = tub_codes
     results["pnf_codes"] = pnf_codes
 
-    insee_col = _get_insee_col(point_filtered)
+    pt = point_filtered.copy()
+    insee_col = _get_insee_col(pt)
 
-    if need_pnf and not point_filtered.empty and insee_col:
-        point_filtered[insee_col] = point_filtered[insee_col].astype(str).str.zfill(5)
+    if need_pnf and not pt.empty and insee_col:
+        pt[insee_col] = pt[insee_col].astype(str).str.zfill(5)
         pnf_df = load_pnf(cfg.root)
-        point_filtered = point_filtered.merge(
+        pt = pt.merge(
             pnf_df[["CODE_INSEE"]],
             left_on=insee_col,
             right_on="CODE_INSEE",
             how="left",
         )
-        point_filtered["PNF"] = point_filtered["CODE_INSEE"].notna().map(
+        pt["PNF"] = pt["CODE_INSEE"].notna().map(
             {True: "PNF", False: "Hors PNF"}
         )
-        point_filtered.drop(columns=["CODE_INSEE"], inplace=True, errors="ignore")
+        pt = pt.drop(columns=["CODE_INSEE"], errors="ignore")
 
         agg_pnf = (
-            point_filtered.groupby("PNF")
+            pt.groupby("PNF")
             .agg(
                 nb_controles=("dc_id", "count"),
                 nb_inf=("resultat", lambda s: (s == "Infraction").sum()),
@@ -782,22 +937,72 @@ def _run_spatial_analyses(
         )
         agg_pnf["taux_inf"] = agg_pnf["nb_inf"] / agg_pnf["nb_controles"].replace(0, pd.NA)
         results["agg_pnf"] = agg_pnf
-        results["point_with_pnf"] = point_filtered
+        results["point_with_pnf"] = pt
+        # Bilan thématique PNF : présenter "Ensemble PNF" + "Cœur de parc"
+        # (sur périmètre déjà restreint au PNF : aire d'adhésion + cœur).
+        if str(profil_id or "").strip().lower() in {"pnf", "pnf_foret"}:
+            nb_total = int(len(pt))
+            nb_inf_total = int((pt["resultat"] == "Infraction").sum()) if "resultat" in pt.columns else 0
+            rows = [
+                {
+                    "PNF": "Ensemble PNF",
+                    "nb_controles": nb_total,
+                    "nb_inf": nb_inf_total,
+                    "taux_inf": (nb_inf_total / nb_total) if nb_total > 0 else pd.NA,
+                }
+            ]
+            if "pnf_zone_sig" in pt.columns:
+                coeur = pt[pt["pnf_zone_sig"] == "Coeur_PNF"].copy()
+                nb_c = int(len(coeur))
+                nb_inf_c = int((coeur["resultat"] == "Infraction").sum()) if "resultat" in coeur.columns else 0
+                rows.append(
+                    {
+                        "PNF": "Cœur de parc",
+                        "nb_controles": nb_c,
+                        "nb_inf": nb_inf_c,
+                        "taux_inf": (nb_inf_c / nb_c) if nb_c > 0 else pd.NA,
+                    }
+                )
+            results["agg_pnf_detail"] = pd.DataFrame(rows)
 
-    if (need_pnf or need_tub) and not point_filtered.empty and insee_col:
-        results["zone_ctrl"] = _zone_summary(point_filtered, insee_col, tub_codes, pnf_codes)
+    if (need_pnf or need_tub) and not pt.empty and insee_col:
+        results["zone_ctrl"] = _zone_summary(pt, insee_col, tub_codes, pnf_codes)
 
     if (need_pnf or need_tub) and not pve_filtered.empty:
         pve_insee = _get_insee_col(pve_filtered)
         if pve_insee:
-            results["zone_pve"] = _zone_count(pve_filtered, pve_insee, tub_codes, pnf_codes)
+            base_z = _zone_count(pve_filtered, pve_insee, tub_codes, pnf_codes)
+            pid = str(profil_id or "").strip().lower()
+            if pid in {"pnf", "pnf_foret"}:
+                insee = pve_filtered[pve_insee].astype(str).str.zfill(5)
+                mask_pnf = insee.isin(pnf_codes)
+                nb_ensemble = int(mask_pnf.sum())
+                if "pnf_zone_sig" in pve_filtered.columns:
+                    zs = pve_filtered["pnf_zone_sig"]
+                    nb_coeur = int((zs == "Coeur_PNF").sum())
+                    nb_aire = int((zs == "Aire_adhesion_PNF").sum())
+                else:
+                    nb_coeur = 0
+                    nb_aire = 0
+                # PDF / exports : uniquement le découpage PNF (pas département ni TUB).
+                results["zone_pve"] = pd.DataFrame(
+                    [
+                        {"zone": "Ensemble PNF", "nb": nb_ensemble},
+                        {"zone": "Cœur de parc", "nb": nb_coeur},
+                        {"zone": "Aire d'adhésion", "nb": nb_aire},
+                    ]
+                )
+            else:
+                results["zone_pve"] = base_z
 
     if (need_pnf or need_tub) and not pej_filtered.empty:
         pej_insee = _get_insee_col(pej_filtered)
-        if not pej_insee and "DC_ID" in pej_filtered.columns and not point_filtered.empty and insee_col:
+        if not pej_insee and "DC_ID" in pej_filtered.columns and not pt.empty and insee_col:
             pej_with_insee = pej_filtered.merge(
-                point_filtered[["dc_id", insee_col]].drop_duplicates("dc_id"),
-                left_on="DC_ID", right_on="dc_id", how="left",
+                pt[["dc_id", insee_col]].drop_duplicates("dc_id"),
+                left_on="DC_ID",
+                right_on="dc_id",
+                how="left",
             )
             pej_insee = insee_col
             results["zone_pej"] = _zone_count(
@@ -806,7 +1011,7 @@ def _run_spatial_analyses(
         elif pej_insee:
             results["zone_pej"] = _zone_count(pej_filtered, pej_insee, tub_codes, pnf_codes)
 
-    return results
+    return results, pt
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -945,50 +1150,69 @@ def _run_aggregations(
                 ).reset_index()
                 results[f"pej_par_{grp_col.lower()}"] = grp
 
-    # Types d'usagers
-    if profile.get("analyses", {}).get("type_usager", False) and not point_filtered.empty:
-        # Cibles éventuelles (profils ciblés : agriculteur, types_usager_cible, etc.).
-        targets = (profile.get("filter", {}) or {}).get("type_usager_target") or []
+    # Types d'usagers : profil dédié (analyses.type_usager) et/ou section PDF
+    # « Activité par types d'usagers » (tous profils avec colonne type_usager).
+    have_type_usager_col = (
+        not point_filtered.empty and "type_usager" in point_filtered.columns
+    )
+    type_usager_profile = profile.get("analyses", {}).get("type_usager", False)
+    targets = (profile.get("filter", {}) or {}).get("type_usager_target") or []
+    pt_us = point_filtered
+    if have_type_usager_col and targets:
+        pt_us = _filter_by_type_usager(point_filtered, targets)
 
-        ue = agg_effectifs_usagers(point_filtered)
+    if have_type_usager_col:
+        ue = agg_effectifs_usagers(pt_us)
         if targets and not ue.empty:
             ue = ue[ue["type_usager"].isin(targets)]
         results["usager_effectifs"] = ue
 
-        ud = agg_effectifs_usagers_par_domaine(point_filtered)
+        ud = agg_effectifs_usagers_par_domaine(pt_us)
         if targets and not ud.empty and "type_usager" in ud.columns:
             ud = ud[ud["type_usager"].isin(targets)]
         results["usager_par_domaine"] = ud
 
-        ctrl_ud = agg_controles_par_type_usager_domaine(point_filtered)
+        ctrl_ud = agg_controles_par_type_usager_domaine(pt_us)
         if targets and not ctrl_ud.empty:
             ctrl_ud = ctrl_ud[ctrl_ud["type_usager"].isin(targets)]
         results["ctrl_par_usager_domaine"] = ctrl_ud
 
-        ctrl_ut = agg_controles_par_type_usager_theme(point_filtered)
+        ctrl_ut = agg_controles_par_type_usager_theme(pt_us)
         if targets and not ctrl_ut.empty:
             ctrl_ut = ctrl_ut[ctrl_ut["type_usager"].isin(targets)]
         results["ctrl_par_usager_theme"] = ctrl_ut
 
-        res_ud = agg_resultats_par_type_usager_domaine(point_filtered)
+        res_ud = agg_resultats_par_type_usager_domaine(pt_us)
         if targets and not res_ud.empty:
             res_ud = res_ud[res_ud["type_usager"].isin(targets)]
         results["res_par_usager_domaine"] = res_ud
 
-        res_ut = agg_resultats_par_type_usager_theme(point_filtered)
+        res_ut = agg_resultats_par_type_usager_theme(pt_us)
         if targets and not res_ut.empty:
             res_ut = res_ut[res_ut["type_usager"].isin(targets)]
         results["res_par_usager_theme"] = res_ut
 
-        proc_ud = agg_procedures_par_type_usager_domaine(point_filtered)
+        proc_ud = agg_procedures_par_type_usager_domaine(pt_us)
         if targets and not proc_ud.empty:
             proc_ud = proc_ud[proc_ud["type_usager"].isin(targets)]
         results["proc_par_usager_domaine"] = proc_ud
 
-        proc_ut = agg_procedures_par_type_usager_theme(point_filtered)
+        proc_ut = agg_procedures_par_type_usager_theme(pt_us)
         if targets and not proc_ut.empty:
             proc_ut = proc_ut[proc_ut["type_usager"].isin(targets)]
         results["proc_par_usager_theme"] = proc_ut
+
+        results["res_bilan_par_type_usager"] = agg_resultat_counts_par_type_usager(
+            pt_us
+        )
+
+        # Section PDF dédiée : pas de doublon avec le profil « types d'usagers » (sommaire séparé).
+        results["_pdf_show_activite_usagers"] = bool(
+            not type_usager_profile
+            and not results["ctrl_par_usager_theme"].empty
+        )
+    else:
+        results["_pdf_show_activite_usagers"] = False
 
     # Synthèse croisée par zone
     if options.get("synthese_croisee", False):
@@ -1007,7 +1231,7 @@ def _run_aggregations(
             results["synthese_zone"] = synth
 
     # Copier les résultats spatiaux dans le dict principal
-    for k in ("agg_pnf", "zone_ctrl", "zone_pve", "zone_pej"):
+    for k in ("agg_pnf", "agg_pnf_detail", "zone_ctrl", "zone_pve", "zone_pej"):
         if k in spatial:
             results[k] = spatial[k]
 
@@ -1225,6 +1449,7 @@ def _export_csv(
             "nom_commun", "insee_comm", "dr", "entit_ctrl",
             "type_usage", "domaine", "theme", "type_actio", "type_action",
             "fc_type", "resultat", "code_pej", "code_pa", "natinf_pej", "x", "y", "PNF",
+            "pnf_zone_sig",
         ] if c in point_filtered.columns]
         point_filtered[cols].to_csv(
             out_dir / f"controles_{prefix}_points.csv", sep=";", index=False
@@ -1261,6 +1486,10 @@ def _export_csv(
     if "agg_pnf" in results:
         results["agg_pnf"].to_csv(
             out_dir / f"indicateurs_{prefix}_par_pnf.csv", sep=";", index=False
+        )
+    if "agg_pnf_detail" in results:
+        results["agg_pnf_detail"].to_csv(
+            out_dir / f"indicateurs_{prefix}_pnf_ensemble_coeur.csv", sep=";", index=False
         )
 
     # PEJ
@@ -1331,6 +1560,7 @@ def _export_csv(
         ("ctrl_par_usager_theme", f"controles_par_type_usager_theme.csv"),
         ("res_par_usager_domaine", f"resultats_par_type_usager_domaine.csv"),
         ("res_par_usager_theme", f"resultats_par_type_usager_theme.csv"),
+        ("res_bilan_par_type_usager", f"resultats_bilan_par_type_usager.csv"),
         ("proc_par_usager_domaine", f"procedures_par_type_usager_domaine.csv"),
         ("proc_par_usager_theme", f"procedures_par_type_usager_theme.csv"),
     ]:
@@ -1342,6 +1572,171 @@ def _export_csv(
 # 6. Génération PDF
 # ═══════════════════════════════════════════════════════════════════════════
 
+
+def _pct_table_cell(n: int | float, denom: float) -> str:
+    if denom is None or denom <= 0:
+        return "n.d."
+    return f"{100.0 * float(n) / float(denom):.1f} %"
+
+
+def _pdf_section_activite_par_types_usagers(
+    builder: Any,
+    results: dict,
+    tmp_dir: Path,
+    avail_w: float,
+    *,
+    pie_ratio: float,
+    bar_ratio: float,
+) -> None:
+    """Section VIII : activité par types d'usagers (camembert, tableaux par type, barres horizontales empilées)."""
+    ctrl_ut = results.get("ctrl_par_usager_theme")
+    if ctrl_ut is None or ctrl_ut.empty:
+        return
+
+    total_ctrl_lignes = float(ctrl_ut["nb_controles"].sum()) or 1.0
+    sum_par_type = ctrl_ut.groupby("type_usager")["nb_controles"].sum()
+
+    # 1) Camembert : même modèle que « Répartition des résultats » (chart_pie par défaut + ratio PDF identique).
+    pie_data = {str(k): int(v) for k, v in sum_par_type.items()}
+    if pie_data:
+        pie_path = chart_pie(
+            pie_data,
+            "Répartition des contrôles par type d'usager",
+            tmp_dir,
+            "pie_controles_par_type_usager.png",
+        )
+        builder.add_image(Path(pie_path), width_ratio=pie_ratio)
+
+    # 2) Un tableau par type d'usager : thèmes (nb + % du total général + % du sous-total type)
+    type_order = sum_par_type.sort_values(ascending=False).index
+    first_tbl = True
+    for tu in type_order:
+        tu_s = str(tu)
+        sub = ctrl_ut[ctrl_ut["type_usager"].astype(str) == tu_s].copy()
+        if sub.empty:
+            continue
+        sub = sub.sort_values("nb_controles", ascending=False, kind="stable")
+        st = float(sum_par_type.loc[tu]) if tu in sum_par_type.index else 1.0
+        st = st or 1.0
+        tbl_th = [
+            ["Thème", "Nombre", "% du total général", "% du sous-total (type)"],
+        ]
+        for _, r in sub.iterrows():
+            nb = int(r["nb_controles"])
+            tbl_th.append(
+                [
+                    str(r["theme"]),
+                    str(nb),
+                    _pct_table_cell(nb, total_ctrl_lignes),
+                    _pct_table_cell(nb, st),
+                ]
+            )
+        if not first_tbl:
+            builder.add_spacer(4)
+        first_tbl = False
+        builder.add_table(
+            tbl_th,
+            caption=f"Thèmes de contrôle — {tu_s}",
+            col_widths=[
+                avail_w * 0.40,
+                avail_w * 0.14,
+                avail_w * 0.23,
+                avail_w * 0.23,
+            ],
+            col_aligns=["LEFT", "RIGHT", "RIGHT", "RIGHT"],
+            keep_together=True,
+        )
+
+    # 3) Sous-partie : résultats des contrôles par type d'usager (graphique + tableau)
+    rb = results.get("res_bilan_par_type_usager")
+    if rb is not None and not rb.empty:
+        builder.add_paragraph("Résultats des contrôles par type d'usager", style="Heading2")
+        labels = [str(x) for x in rb["type_usager"].tolist()]
+        series: dict[str, list[int]] = {
+            "Conforme": [int(x) for x in rb["Conforme"].tolist()],
+            "Infraction": [int(x) for x in rb["Infraction"].tolist()],
+            "Manquement": [int(x) for x in rb["Manquement"].tolist()],
+        }
+        if int(rb["Autre"].sum()) > 0:
+            series["Autre"] = [int(x) for x in rb["Autre"].tolist()]
+        bar_path = chart_bar_horizontal_stacked(
+            labels,
+            series,
+            "Résultats des contrôles par type d'usager",
+            "Nombre",
+            tmp_dir,
+            "bar_resultats_par_type_usager.png",
+        )
+        builder.add_image(Path(bar_path), width_ratio=bar_ratio)
+        # Tableau chiffré + pourcentages (part de chaque résultat dans le type,
+        # et poids du type dans le total de cette sous-partie).
+        has_autre = int(rb["Autre"].sum()) > 0
+        total_global = float(
+            rb["Conforme"].sum() + rb["Infraction"].sum() + rb["Manquement"].sum() + rb["Autre"].sum()
+        ) or 1.0
+        tbl_res = [
+            [
+                "Type d'usager",
+                "Conforme",
+                "% conforme",
+                "Infraction",
+                "% infraction",
+                "Manquement",
+                "% manquement",
+                *(
+                    ["Autre", "% autre"]
+                    if has_autre
+                    else []
+                ),
+                "Total",
+                "% du total",
+            ]
+        ]
+        for _, row in rb.iterrows():
+            c = int(row["Conforme"])
+            i = int(row["Infraction"])
+            m = int(row["Manquement"])
+            a = int(row["Autre"]) if has_autre else 0
+            t = c + i + m + a
+            row_cells = [
+                str(row["type_usager"]),
+                str(c),
+                _pct_table_cell(c, t),
+                str(i),
+                _pct_table_cell(i, t),
+                str(m),
+                _pct_table_cell(m, t),
+            ]
+            if has_autre:
+                row_cells.extend([str(a), _pct_table_cell(a, t)])
+            row_cells.extend([str(t), _pct_table_cell(t, total_global)])
+            tbl_res.append(row_cells)
+        if has_autre:
+            col_widths = [
+                avail_w * 0.20,
+                avail_w * 0.08, avail_w * 0.10,
+                avail_w * 0.08, avail_w * 0.10,
+                avail_w * 0.08, avail_w * 0.10,
+                avail_w * 0.07, avail_w * 0.08,
+                avail_w * 0.06, avail_w * 0.05,
+            ]
+        else:
+            col_widths = [
+                avail_w * 0.21,
+                avail_w * 0.09, avail_w * 0.11,
+                avail_w * 0.09, avail_w * 0.11,
+                avail_w * 0.09, avail_w * 0.11,
+                avail_w * 0.09, avail_w * 0.10,
+            ]
+        builder.add_table(
+            tbl_res,
+            caption="Résultats des contrôles par type d'usager (chiffres et pourcentages)",
+            col_widths=col_widths,
+            col_aligns=["LEFT"] + ["RIGHT"] * (len(tbl_res[0]) - 1),
+            keep_together=True,
+        )
+
+
 def _generate_pdf(
     results: dict,
     out_dir: Path,
@@ -1352,6 +1747,7 @@ def _generate_pdf(
     """Génère le PDF du bilan avec des sections modulaires."""
     profil_id = profile["id"]
     label = profile["label"]
+    sources = profile.get("sources", {}) or {}
     dept_name = cfg.dept_name
     period_str = f"du {cfg.date_deb.date():%d/%m/%Y} au {cfg.date_fin.date():%d/%m/%Y}"
 
@@ -1372,6 +1768,9 @@ def _generate_pdf(
     )
     avail_w = builder.avail_w
     tmp_dir = builder.tmp_dir
+    chart_preset = options.get("chart_preset")
+    chart_ratios = compute_pdf_ratios(load_chart_display_config(PROJECT_ROOT, preset=chart_preset))
+    chart_ratio_base = chart_ratios["chart_base"]
 
     # Correspondance code INSEE → nom de commune pour les tableaux PDF
     insee_to_nom = load_communes_noms(PROJECT_ROOT)
@@ -1428,6 +1827,8 @@ def _generate_pdf(
         # intégrée dans la section \"Contrôles agrainage\".
         if results.get("synthese_zone") is not None:
             _next_sec("Synthèse par zone")
+        if results.get("_pdf_show_activite_usagers"):
+            _next_sec("Activité par types d'usagers")
         if options.get("cartes", False):
             _next_sec("Cartographie")
         _next_sec("Annexes")
@@ -1447,11 +1848,17 @@ def _generate_pdf(
         if nb_pa > 0:
             _next_sec("Procédures administratives (PA)")
         if results.get("agg_pnf") is not None:
-            _next_sec("PNF / Hors PNF")
+            # Bilan thématique PNF : périmètre déjà restreint au parc — pas de « Hors PNF ».
+            if str(profil_id).strip().lower() in {"pnf", "pnf_foret"}:
+                _next_sec("Contrôles – Ensemble PNF et Cœur de parc")
+            else:
+                _next_sec("PNF / Hors PNF")
         if results.get("zone_ctrl") is not None and options.get("tub", False):
             _next_sec("Analyse par zone")
         if results.get("synthese_zone") is not None:
             _next_sec("Synthèse croisée par zone")
+        if results.get("_pdf_show_activite_usagers"):
+            _next_sec("Activité par types d'usagers")
         if options.get("cartes", False):
             _next_sec("Cartographie")
         _next_sec("Annexes")
@@ -1597,7 +2004,7 @@ def _generate_pdf(
             "Nombre de contrôles",
             tmp_dir, "bar_annuel_ctrl_stacked.png",
         )
-        builder.add_image(Path(stacked_path), width_ratio=0.78)
+        builder.add_image(Path(stacked_path), width_ratio=chart_ratio_base)
 
         # Graphique 2 : barres empilées — procédures et PVe par période
         series_proc = {
@@ -1613,7 +2020,7 @@ def _generate_pdf(
                 "Nombre",
                 tmp_dir, "bar_annuel_proc_stacked.png",
             )
-            builder.add_image(Path(stacked_proc_path), width_ratio=0.78)
+            builder.add_image(Path(stacked_proc_path), width_ratio=chart_ratio_base)
 
         # Graphique 3 : courbe d'évolution — taux d'infraction
         taux_values = []
@@ -1630,7 +2037,7 @@ def _generate_pdf(
             )
             # Graphique plus compact pour libérer de la place pour le tableau
             # et le camembert des résultats sur la même page.
-            builder.add_image(Path(line_path), width_ratio=0.55)
+            builder.add_image(Path(line_path), width_ratio=chart_ratio_base)
 
     # ── RÉSULTATS DES CONTRÔLES ──
     if nb_ctrl > 0 and not is_type_usager and not is_procedures:
@@ -1660,11 +2067,9 @@ def _generate_pdf(
                 )
                 # Légère augmentation pour un meilleur confort de lecture,
                 # tout en restant assez compact pour tenir sur la même page.
-                builder.add_image(Path(pie_path), width_ratio=0.5)
-        # Saut de page pour que le titre \"Communes avec le plus de contrôles\"
-        # soit regroupé avec son tableau sur la page suivante.
+                builder.add_image(Path(pie_path), width_ratio=chart_ratios["global_resultats_pie"])
+        # Tableau des communes : suite directe sous le camembert (même page si place).
         if "agg_commune" in results:
-            builder.add_page_break()
             top = results["agg_commune"].sort_values("nb_controles", ascending=False).head(10)
             tbl = [["Commune", "Nb contrôles", "Contrôles non-conformes", "Taux d'infraction"]]
             for _, row in top.iterrows():
@@ -1697,7 +2102,7 @@ def _generate_pdf(
                 pie_data = {str(r["type_usager"]): int(r["nb"]) for _, r in ue.iterrows()}
                 if pie_data:
                     pie_path = chart_pie(pie_data, "Usagers contrôlés par type", tmp_dir, "pie_usagers.png")
-                    builder.add_image(Path(pie_path), width_ratio=0.55)
+                    builder.add_image(Path(pie_path), width_ratio=chart_ratios["global_usagers_pie"])
         else:
             # Mono-usager : l'effectif du type ciblé est déjà mis en avant
             # dans les chiffres clés (tuile \"Effectifs – <type>\").
@@ -1749,7 +2154,7 @@ def _generate_pdf(
                     tmp_dir,
                     "pie_resultats_usager.png",
                 )
-                builder.add_image(Path(pie_path), width_ratio=0.5)
+                builder.add_image(Path(pie_path), width_ratio=chart_ratios["global_resultats_pie"])
 
         # Résultats des contrôles par domaine (top 15)
         res_ud = results.get("res_par_usager_domaine")
@@ -1845,7 +2250,7 @@ def _generate_pdf(
     # ── PVe ──
     if nb_pve > 0:
         anchor, title = sections[sec_idx]; sec_idx += 1
-        builder.add_section(anchor, title)
+        builder.add_section(anchor, title, compact=True)
         pve_top = results.get("pve_top_infractions")
         if pve_top is not None and not pve_top.empty:
             natinf_ref = load_natinf_ref(PROJECT_ROOT)
@@ -1887,28 +2292,28 @@ def _generate_pdf(
             tbl = [["Zone", "Nombre"]]
             for _, row in zone_pve.iterrows():
                 tbl.append([str(row["zone"]), str(int(row["nb"]))])
-            builder.add_table(tbl, caption="PVe par zone",
-                              col_widths=[avail_w * 0.6, avail_w * 0.4],
+            cap_pve_zone = "PVe par zone"
+            if str(profil_id).strip().lower() in {"pnf", "pnf_foret"}:
+                cap_pve_zone = "PVe par zone (ensemble PNF, cœur de parc, aire d'adhésion)"
+            builder.add_table(tbl, caption=cap_pve_zone,
+                              col_widths=[avail_w * 0.62, avail_w * 0.38],
                               col_aligns=["LEFT", "RIGHT"])
         # Section dense : on conserve un saut de page dédié.
 
     # ── PEJ ──
     if nb_pej > 0:
-        # Démarrer la partie V sur une nouvelle page pour éviter qu'elle soit
-        # tronquée en bas de la page précédente (PVe).
-        builder.add_page_break()
         anchor, title = sections[sec_idx]; sec_idx += 1
-        builder.add_section(anchor, title)
+        builder.add_section(anchor, title, compact=True)
         pej_top = results.get("pej_top_infractions")
         pej_theme = results.get("pej_par_theme")
         has_infractions = pej_top is not None and not pej_top.empty
         has_theme = pej_theme is not None and not pej_theme.empty
 
         if has_infractions and has_theme:
-            # Bandeau + Infractions les plus relevées + PEJ par thème sur la même page.
-            # On limite le tableau infractions à 7 lignes pour que le bloc tienne sur une page.
+            # Bandeau + Infractions les plus relevées + PEJ par thème : espacements compacts
+            # et hauteur de tableaux limitée pour tenir sur une page.
             natinf_ref = load_natinf_ref(PROJECT_ROOT)
-            top_df = pej_top.head(7).copy()
+            top_df = pej_top.head(6).copy()
             top_df["numero_natinf"] = top_df["natinf"].astype(str).str.extract(r"(\d+)", expand=False)
             if not natinf_ref.empty:
                 top_df = top_df.merge(natinf_ref, on="numero_natinf", how="left")
@@ -1931,7 +2336,8 @@ def _generate_pdf(
             tbl_infractions = [["Infraction (qualification et nature)", "Nombre"]]
             for _, row in top_df.iterrows():
                 tbl_infractions.append([str(row["libelle_affich"]), str(int(row["nb"]))])
-            df_theme = pej_theme.head(15).copy()
+            # Limiter le volume pour garantir une section V sur une seule page.
+            df_theme = pej_theme.head(8).copy()
             if "nb_pej" in df_theme.columns:
                 df_theme = df_theme.rename(columns={"nb_pej": "Nombre de procédures judiciaires"})
             tbl_theme = [list(df_theme.columns)]
@@ -1957,6 +2363,7 @@ def _generate_pdf(
                         "col_aligns": col_aligns_theme,
                     },
                 ],
+                compact=True,
             )
         elif has_infractions:
             natinf_ref = load_natinf_ref(PROJECT_ROOT)
@@ -1992,7 +2399,7 @@ def _generate_pdf(
             )
         elif has_theme:
             builder.add_key_figures([(str(nb_pej), "PEJ")])
-            df = pej_theme.head(15).copy()
+            df = pej_theme.head(10).copy()
             if "nb_pej" in df.columns:
                 df = df.rename(columns={"nb_pej": "Nombre de procédures judiciaires"})
             tbl = [list(df.columns)]
@@ -2042,8 +2449,10 @@ def _generate_pdf(
             builder.add_table(tbl, caption="PA par thème")
         # Section dense : on conserve un saut de page dédié.
 
-    # ── PNF / HORS PNF ──
-    agg_pnf = results.get("agg_pnf")
+    # ── Analyse PNF (libellé de section selon le profil, cf. sommaire) ──
+    agg_pnf = results.get("agg_pnf_detail")
+    if agg_pnf is None:
+        agg_pnf = results.get("agg_pnf")
     if agg_pnf is not None:
         anchor, title = sections[sec_idx]; sec_idx += 1
         builder.add_section(anchor, title)
@@ -2056,16 +2465,39 @@ def _generate_pdf(
             grp_labels.append(str(row["PNF"]))
             series_ctrl["Contrôles"].append(int(row["nb_controles"]))
             series_ctrl["Infractions"].append(int(row["nb_inf"]))
-        builder.add_table(tbl, caption="Contrôles – PNF vs Hors PNF",
-                          col_widths=[avail_w * 0.30, avail_w * 0.23, avail_w * 0.23, avail_w * 0.24],
-                          col_aligns=["LEFT", "RIGHT", "RIGHT", "RIGHT"])
+        caption_pnf = (
+            "Contrôles – Ensemble PNF et Cœur de parc"
+            if str(profil_id).strip().lower() in {"pnf", "pnf_foret"}
+            else "Contrôles – PNF vs Hors PNF"
+        )
+        col_w_pnf = [avail_w * 0.30, avail_w * 0.23, avail_w * 0.23, avail_w * 0.24]
+        col_a_pnf = ["LEFT", "RIGHT", "RIGHT", "RIGHT"]
         if grp_labels:
             bar_path = chart_bar_grouped(
                 grp_labels, series_ctrl,
-                "Contrôles : PNF vs Hors PNF", "Nombre",
+                (
+                    "Contrôles : Ensemble PNF et Cœur de parc"
+                    if str(profil_id).strip().lower() in {"pnf", "pnf_foret"}
+                    else "Contrôles : PNF vs Hors PNF"
+                ),
+                "Nombre",
                 tmp_dir, "bar_pnf.png",
             )
-            builder.add_image(Path(bar_path), width_ratio=0.495)
+            builder.add_table_and_image_keep_together(
+                tbl,
+                table_caption=caption_pnf,
+                col_widths=col_w_pnf,
+                col_aligns=col_a_pnf,
+                image_path=Path(bar_path),
+                image_width_ratio=chart_ratio_base * 0.88,
+            )
+        else:
+            builder.add_table(
+                tbl,
+                caption=caption_pnf,
+                col_widths=col_w_pnf,
+                col_aligns=col_a_pnf,
+            )
         # Pour l'agrainage, on laisse la place au bloc Zone TUB
         # sur la même page (pas de saut forcé ici).
         if profil_id != "agrainage":
@@ -2156,7 +2588,7 @@ def _generate_pdf(
                     tmp_dir,
                     "bar_tub.png",
                 )
-                builder.add_image(Path(bar_tub_path), width_ratio=0.495)
+                builder.add_image(Path(bar_tub_path), width_ratio=chart_ratio_base)
             # Pour l'agrainage, on place l'ensemble de la section « Zones d'intérêt »
             # (PNF + TUB) sur une seule page. Un saut de page unique est ajouté ici.
             if profil_id == "agrainage":
@@ -2229,6 +2661,20 @@ def _generate_pdf(
         )
         # Section dense : on conserve un saut de page dédié.
 
+    # ── ACTIVITÉ PAR TYPES D'USAGERS (hors profil dédié « analyses.type_usager ») ──
+    if results.get("_pdf_show_activite_usagers"):
+        anchor, title = sections[sec_idx]; sec_idx += 1
+        builder.add_section(anchor, title)
+        _pdf_section_activite_par_types_usagers(
+            builder,
+            results,
+            tmp_dir,
+            avail_w,
+            pie_ratio=chart_ratios["activite_usagers_controles_pie"],
+            bar_ratio=chart_ratios["activite_usagers_resultats_bar"],
+        )
+        builder.add_spacer(4)
+
     # ── CARTOGRAPHIE ──
     if options.get("cartes", False):
         anchor, title = sections[sec_idx]; sec_idx += 1
@@ -2249,15 +2695,51 @@ def _generate_pdf(
 
     # ── ANNEXES ──
     builder.add_section(sections[-1][0], sections[-1][1])
-    builder.add_methodology(
-        f"<b>Période d'analyse :</b> {period_str}.<br/>"
-        f"<b>Périmètre :</b> département {dept_name} ({cfg.dept_code}).<br/>"
-        f"<b>Profil :</b> {label}.<br/>"
-        f"<b>Sources :</b> OSCEAN (points de contrôle, PEJ, PA) et PVe OFB.<br/>"
-        f"<b>Analyse par zones :</b> la zone « Département » inclut l'ensemble des "
-        f"contrôles réalisés en zones PNF et TUB (ces zones sont ensuite détaillées "
-        f"séparément dans les tableaux dédiés).<br/>"
-    )
+    src_parts: list[str] = []
+    if sources.get("point_ctrl", True):
+        src_parts.append("OSCEAN (points de contrôle)")
+    if sources.get("pej", True):
+        src_parts.append("OSCEAN (PEJ)")
+    if sources.get("pa", True):
+        src_parts.append("OSCEAN (PA)")
+    if sources.get("pve", True):
+        src_parts.append("PVe OFB")
+    src_text = ", ".join(src_parts) if src_parts else "sources spécifiques au profil"
+
+    method_lines: list[str] = [
+        f"<b>Période d'analyse :</b> {period_str}.",
+        f"<b>Périmètre :</b> département {dept_name} ({cfg.dept_code}).",
+        f"<b>Profil :</b> {label}.",
+        f"<b>Sources :</b> {src_text}.",
+    ]
+
+    has_zone_table = zone_ctrl is not None and not zone_ctrl.empty
+    has_pnf = bool(options.get("pnf", False)) and results.get("agg_pnf") is not None
+    has_tub = bool(options.get("tub", False)) and has_zone_table
+    is_pnf_profile = str(profil_id).strip().lower() in {"pnf", "pnf_foret"}
+
+    if is_pnf_profile and has_pnf:
+        method_lines.append(
+            "<b>Analyse par zones :</b> bilan restreint au périmètre PNF ; "
+            "la lecture spatiale distingue l'ensemble du parc et le cœur de parc."
+        )
+    elif has_pnf and has_tub:
+        method_lines.append(
+            "<b>Analyse par zones :</b> la zone « Département » inclut l'ensemble des "
+            "contrôles, puis les zones PNF et TUB sont détaillées séparément."
+        )
+    elif has_pnf:
+        method_lines.append(
+            "<b>Analyse par zones :</b> la zone « Département » inclut l'ensemble des "
+            "contrôles, puis la zone PNF est détaillée séparément."
+        )
+    elif has_tub:
+        method_lines.append(
+            "<b>Analyse par zones :</b> la zone « Département » inclut l'ensemble des "
+            "contrôles, puis la zone TUB est détaillée séparément."
+        )
+
+    builder.add_methodology("<br/>".join(method_lines) + "<br/>")
 
     # Glossaire dynamique basé sur une configuration YAML exhaustive,
     # filtrée pour ne conserver que les abréviations réellement utiles
@@ -2342,6 +2824,7 @@ def run_engine(
 ) -> int:
     """Point d'entrée unique du moteur thématique unifié."""
     options = options or {}
+    chart_preset = options.pop("chart_preset", None)
     root = PROJECT_ROOT
     profile = load_profile_config(root, profil_id)
     cfg = BilanConfig.from_strings(date_deb, date_fin, dept_code, root=root)
@@ -2406,6 +2889,8 @@ def run_engine(
 
     # Résoudre les options (pnf, tub, cartes, synthèse, etc.)
     resolved_opts = resolve_options(profile, options)
+    if chart_preset:
+        resolved_opts["chart_preset"] = chart_preset
     resolved_opts = ask_interactive_options(profile, resolved_opts)
 
     # Pour les profils basés sur le type d'usager, si aucune cible n'est
@@ -2508,15 +2993,55 @@ def run_engine(
     with Spinner():
         point_filtered = _filter_point_ctrl(point, profile) if not point.empty else point
         pej_filtered = _filter_pej(pej, profile, cfg, point_filtered) if not pej.empty else pej
+        if not pej_filtered.empty and sources.get("pej", True):
+            pej_filtered = merge_pej_faits_locations(
+                pej_filtered, root, dept_code, log=logging.getLogger("bilans.spatial")
+            )
         pa_filtered = _filter_pa(pa, profile, cfg, point_filtered) if not pa.empty else pa
         pve_filtered = _filter_pve(pve, profile) if not pve.empty else pve
+
+    spatial_log = logging.getLogger("bilans.spatial")
+    if str(profile.get("restrict_geo") or "").strip().lower() == "pnf":
+        print("  Restriction géographique PNF...")
+        with Spinner():
+            point_filtered, pej_filtered, pa_filtered, pve_filtered = _apply_restrict_geo_pnf(
+                point_filtered, pej_filtered, pa_filtered, pve_filtered, root, spatial_log
+            )
+
+    # ── INSEE commune (jointure communes.shp si besoin) ──
+    if resolved_opts.get("pnf") or resolved_opts.get("tub"):
+        if not point_filtered.empty:
+            point_filtered = ensure_insee_from_communes_shp(
+                point_filtered, root, context="points de contrôle", log=spatial_log
+            )
+        if not pve_filtered.empty:
+            pve_filtered = ensure_insee_from_communes_shp(
+                pve_filtered, root, context="PVe", log=spatial_log
+            )
+
+    if not point_filtered.empty and (
+        resolved_opts.get("pnf")
+        or resolved_opts.get("tub")
+        or str(profile.get("restrict_geo") or "").strip().lower() == "pnf"
+    ):
+        point_filtered = enrich_with_pnforet_sig_zones(
+            point_filtered, root, context="points de contrôle", log=spatial_log
+        )
+    if not pve_filtered.empty and (
+        resolved_opts.get("pnf")
+        or resolved_opts.get("tub")
+        or str(profile.get("restrict_geo") or "").strip().lower() == "pnf"
+    ):
+        pve_filtered = enrich_with_pnforet_sig_zones(
+            pve_filtered, root, context="PVe", log=spatial_log
+        )
 
     # ── Analyses spatiales ──
     print("  Analyses spatiales...")
     with Spinner():
-        spatial = _run_spatial_analyses(
+        spatial, point_filtered = _run_spatial_analyses(
             point_filtered, pej_filtered, pve_filtered,
-            resolved_opts, cfg,
+            resolved_opts, cfg, profil_id=profil_id,
         )
 
     # ── Agrégations ──

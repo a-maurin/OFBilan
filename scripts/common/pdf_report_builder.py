@@ -13,6 +13,7 @@ from typing import List, Optional, Tuple
 
 from reportlab.lib import colors as rl_colors
 from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import (
     BaseDocTemplate,
@@ -44,6 +45,13 @@ from scripts.common.ofb_charte import (
     _get_styles,
 )
 from scripts.common.pdf_utils import key_figures_table, ofb_table, ofb_table_wide
+
+# Largeur relative (sur la zone utile du PDF) pour les graphiques matplotlib
+# des bilans thématiques — barres, courbes, etc.
+THEMATIC_CHART_WIDTH_RATIO = 0.72
+# Camemberts : plus compacts que les barres (équilibre visuel), calibrés pour A4 +
+# export matplotlib un peu plus dense (dpi / polices dans chart_pie) afin de rester nets à l’écran.
+THEMATIC_PIE_CHART_WIDTH_RATIO = 0.34
 
 
 class PDFReportBuilder:
@@ -212,13 +220,27 @@ class PDFReportBuilder:
     # ------------------------------------------------------------------
     # Section header
     # ------------------------------------------------------------------
-    def add_section(self, anchor: str, title: str, level: int = 1) -> None:
+    def add_section(
+        self,
+        anchor: str,
+        title: str,
+        level: int = 1,
+        *,
+        compact: bool = False,
+    ) -> None:
         if self._pending_section is not None:
             self.story.extend(self._pending_section)
             self._pending_section = None
         heading = {1: "Heading1", 2: "Heading2", 3: "Heading3"}.get(level, "Heading1")
         anchor_para = Paragraph(f'<a name="{anchor}"/>', self.styles["BodyText"])
-        title_para = Paragraph(title, self.styles[heading])
+        heading_style = self.styles[heading]
+        if compact:
+            heading_style = ParagraphStyle(
+                f"{heading}_compact",
+                parent=heading_style,
+                spaceBefore=max(0, heading_style.spaceBefore - 8 * mm),
+            )
+        title_para = Paragraph(title, heading_style)
         spacer = Spacer(1, 2 * mm)
         self._pending_section = [anchor_para, title_para, spacer]
 
@@ -269,19 +291,25 @@ class PDFReportBuilder:
         self,
         figures: List[Tuple[str, str]],
         tables: List[dict],
+        *,
+        compact: bool = False,
     ) -> None:
         """Bandeau + plusieurs tableaux dans un même KeepTogether (même page).
         tables = [{"data_rows": ..., "caption": ..., "col_widths": ..., "col_aligns": ...}, ...]
+        compact=True : espacements verticaux réduits (ex. section PEJ sur une page).
         """
         if not figures:
             return
         kf_table = key_figures_table(figures, self.styles)
-        spacer = Spacer(1, 6 * mm)
-        block: List = [kf_table, spacer]
-        for t in tables:
+        gap_kf = 3 * mm if compact else 6 * mm
+        gap_cap = 1 * mm if compact else 2 * mm
+        gap_after_tbl = 2 * mm if compact else 6 * mm
+        block: List = [kf_table, Spacer(1, gap_kf)]
+        n_tables = len(tables)
+        for i, t in enumerate(tables):
             if t.get("caption"):
                 block.append(Paragraph(t["caption"], self.styles["TableCaption"]))
-                block.append(Spacer(1, 2 * mm))
+                block.append(Spacer(1, gap_cap))
             col_w = t.get("col_widths")
             col_a = t.get("col_aligns")
             tbl = ofb_table(
@@ -290,7 +318,8 @@ class PDFReportBuilder:
                 col_aligns=col_a,
             )
             block.append(tbl)
-            block.append(Spacer(1, 6 * mm))
+            if i < n_tables - 1:
+                block.append(Spacer(1, gap_after_tbl))
         if self._pending_section is not None:
             self.story.append(KeepTogether(self._pending_section + block))
             self._pending_section = None
@@ -333,6 +362,45 @@ class PDFReportBuilder:
         else:
             for el in block:
                 self.story.append(el)
+
+    def add_table_and_image_keep_together(
+        self,
+        data_rows: list,
+        *,
+        table_caption: str = "",
+        col_widths: Optional[list] = None,
+        col_aligns: Optional[list] = None,
+        image_path: Optional[Path] = None,
+        image_width_ratio: float = THEMATIC_CHART_WIDTH_RATIO,
+    ) -> None:
+        """
+        Titre de section éventuellement en attente + légende de tableau + tableau
+        + graphique PNG dans un seul ``KeepTogether`` (ex. section VII PNF).
+        """
+        block: List = []
+        if self._pending_section is not None:
+            block.extend(self._pending_section)
+            self._pending_section = None
+        if table_caption:
+            block.append(Paragraph(table_caption, self.styles["TableCaption"]))
+            block.append(Spacer(1, 1 * mm))
+        block.append(
+            ofb_table(data_rows, col_widths=col_widths, col_aligns=col_aligns)
+        )
+        if image_path is not None and Path(image_path).exists():
+            block.append(Spacer(1, 2 * mm))
+            w = self.avail_w * image_width_ratio
+            try:
+                with PILImage.open(str(image_path)) as im:
+                    width_px, height_px = im.size
+                ratio = (height_px / float(width_px)) if width_px > 0 else 0.45
+            except Exception:
+                ratio = 0.45
+            img = RLImage(str(image_path), width=w, height=w * ratio)
+            img.hAlign = "CENTER"
+            block.append(img)
+        block.append(Spacer(1, 2 * mm))
+        self.story.append(KeepTogether(block))
 
     # ------------------------------------------------------------------
     # Images / Charts

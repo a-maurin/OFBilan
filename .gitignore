@@ -5,6 +5,8 @@
 # Dossiers de données brutes / locales (non versionnées)
 data/
 sources/
+ref/
+/ref/**
 
 # Dossiers de sorties générées (PDF, CSV, images, logs…)
 out/

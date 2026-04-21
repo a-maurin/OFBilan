@@ -25,7 +25,7 @@ from scripts.common.loaders import load_ref_themes_ctrl
 from scripts.common.prompt_periode import ask_periode_dept
 
 
-_HIDDEN_PROFILES: set[str] = set()
+_HIDDEN_PROFILES: set[str] = {"pnf_foret"}
 
 
 def _list_profiles() -> list[str]:
@@ -172,6 +172,9 @@ def _parse_cli_options(args: argparse.Namespace) -> dict:
         else:
             opts[k] = parsed
 
+    if getattr(args, "preset", None):
+        opts["chart_preset"] = str(args.preset).strip().lower()
+
     return opts
 
 
@@ -257,6 +260,12 @@ def main() -> int:
     parser.add_argument(
         "--option", action="append", metavar="KEY=VALUE",
         help="Option générique (répétable). Ex. --option pnf=true --option tub=false.",
+    )
+    parser.add_argument(
+        "--preset",
+        choices=("compact", "standard", "large"),
+        default=None,
+        help="Preset de taille des graphiques PDF.",
     )
 
     args = parser.parse_args()

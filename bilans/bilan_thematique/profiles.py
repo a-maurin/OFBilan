@@ -22,9 +22,10 @@ def load_profile_config(root: Path, profil_id: str) -> dict:
         with open(path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
     else:
-        from scripts.bilan_thematique.bilan_thematique_engine import _parse_yaml_minimal  # type: ignore
-
-        data = _parse_yaml_minimal(path)
+        raise ImportError(
+            "PyYAML est requis pour lire les profils bilan (ref/profils_bilan/*.yaml). "
+            "Installez les dépendances : pip install -r tools/requirements.txt"
+        ) from None
 
     return _normalize_profile(data, profil_id)
 
@@ -87,6 +88,8 @@ def _normalize_profile(data: dict, profil_id: str) -> dict:
         period_cfg["ventilation"] = vent_cfg
     vent_cfg.setdefault("type", "auto")  # auto | globale | annuelle
     vent_cfg.setdefault("seuil_jours", 366)
+
+    data.setdefault("restrict_geo", None)
 
     # --- options ---
     data.setdefault("options", {})

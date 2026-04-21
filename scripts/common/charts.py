@@ -25,28 +25,76 @@ def _pick_mpl_font() -> str:
     return "sans-serif"
 
 
+# Dimensions harmonisées (pouces) pour export PNG puis intégration PDF homogène.
+CHART_FIG_WIDTH = 7.2
+# Camemberts avec peu de parts (ex. résultats Conforme / Infraction / Manquement) : même base que PDF.
+CHART_FIG_HEIGHT_PIE_COMPACT = 4.0
+# Hauteur des barres / barres groupées-empilées : +50 % vs ancienne base pour lisibilité PDF.
+CHART_FIG_HEIGHT_BAR = 3.5 * 1.5
+CHART_FIG_HEIGHT_WITH_LEGEND = 4.15 * 1.5
+
+
 def apply_mpl_style() -> None:
     """Style matplotlib pour les graphiques exportés en PNG."""
     plt.rcParams["font.family"] = _pick_mpl_font()
     plt.rcParams["axes.titlesize"] = 12
     plt.rcParams["axes.labelsize"] = 10
     plt.rcParams["figure.facecolor"] = "white"
+    plt.rcParams["legend.frameon"] = False
 
 
-def save_chart(fig, tmp_dir: Path, name: str) -> str:
+def _legend_below_axis(ax, *, ncol: int | None = None) -> None:
+    """Légende centrée sous le graphique (repère axes, y négatif)."""
+    handles, labels = ax.get_legend_handles_labels()
+    if not handles:
+        return
+    n = len(handles)
+    if ncol is None:
+        ncol = min(4, max(2, n))
+    ax.legend(
+        handles,
+        labels,
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.14),
+        ncol=ncol,
+        fontsize=8,
+        frameon=False,
+    )
+
+
+def _tight_with_legend_space(fig, *, bottom: float = 0.20, top: float = 0.92) -> None:
+    """Marges figure après placement de légende sous l'axe."""
+    fig.tight_layout(rect=(0.04, bottom, 0.96, top))
+
+
+def save_chart(fig, tmp_dir: Path, name: str, *, dpi: int = 150) -> str:
     path = str(tmp_dir / name)
-    fig.savefig(path, dpi=150, bbox_inches="tight", facecolor="white")
+    fig.savefig(path, dpi=dpi, bbox_inches="tight", facecolor="white")
     plt.close(fig)
     return path
 
 
-def chart_pie(data: dict, title: str, tmp_dir: Path, name: str) -> str:
+def chart_pie(
+    data: dict,
+    title: str,
+    tmp_dir: Path,
+    name: str,
+    *,
+    figsize: tuple[float, float] | None = None,
+) -> str:
     apply_mpl_style()
     labels = list(data.keys())
     values = list(data.values())
-    # Légende volumineuse : on élargit légèrement la figure pour ne pas tasser
-    # exagérément le camembert.
-    fig, ax = plt.subplots(figsize=(6, 4))
+    if figsize is not None:
+        fig_w, fig_h = figsize
+    else:
+        fig_w = CHART_FIG_WIDTH
+        fig_h = (
+            CHART_FIG_HEIGHT_WITH_LEGEND
+            if len(labels) > 4
+            else CHART_FIG_HEIGHT_PIE_COMPACT
+        )
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h))
     # Palette : on force une couleur rouge douce (COLOR_CHART_4) pour les parts
     # correspondant aux infractions / non-conformes, les autres utilisent la
     # palette standard CHART_PIE_COLORS.
@@ -68,13 +116,21 @@ def chart_pie(data: dict, title: str, tmp_dir: Path, name: str) -> str:
         values, startangle=90, colors=colors_pie
     )
     ax.set_aspect("equal")
+    ncol = min(3, max(1, (len(legend_labels) + 2) // 3))
     ax.legend(
-        wedges, legend_labels, loc="center left", bbox_to_anchor=(1.0, 0.5),
-        fontsize=9, frameon=False,
+        wedges,
+        legend_labels,
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.08),
+        ncol=ncol,
+        fontsize=9,
+        frameon=False,
     )
-    ax.set_title(title, fontsize=11, fontweight="bold", color=COLOR_PRIMARY, pad=10)
-    fig.subplots_adjust(left=0.05, right=0.58, top=0.90, bottom=0.05)
-    return save_chart(fig, tmp_dir, name)
+    ax.set_title(title, fontsize=12, fontweight="bold", color=COLOR_PRIMARY, pad=10)
+    bottom = 0.26 if len(legend_labels) > 6 else 0.20
+    _tight_with_legend_space(fig, bottom=bottom, top=0.90)
+    # DPI un peu plus élevé : le PDF insère le camembert plus étroit que les barres.
+    return save_chart(fig, tmp_dir, name, dpi=165)
 
 
 def chart_bar(
@@ -87,7 +143,7 @@ def chart_bar(
     color=COLOR_PRIMARY,
 ) -> str:
     apply_mpl_style()
-    fig, ax = plt.subplots(figsize=(5, 3))
+    fig, ax = plt.subplots(figsize=(CHART_FIG_WIDTH, CHART_FIG_HEIGHT_BAR))
     x = np.arange(len(categories))
     bars = ax.bar(x, values, color=color, width=0.5)
     ax.set_xticks(x)
@@ -97,7 +153,7 @@ def chart_bar(
     ax.bar_label(bars, fmt="%g", fontsize=9, fontweight="bold")
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
-    fig.tight_layout()
+    fig.tight_layout(rect=(0.05, 0.10, 0.95, 0.92))
     return save_chart(fig, tmp_dir, name)
 
 
@@ -110,7 +166,7 @@ def chart_bar_grouped(
     name: str,
 ) -> str:
     apply_mpl_style()
-    fig, ax = plt.subplots(figsize=(6, 3.5))
+    fig, ax = plt.subplots(figsize=(CHART_FIG_WIDTH, CHART_FIG_HEIGHT_WITH_LEGEND))
     x = np.arange(len(group_labels))
     n = len(series)
     w = 0.30
@@ -131,10 +187,10 @@ def chart_bar_grouped(
     ax.set_xticklabels(group_labels, fontsize=9)
     ax.set_ylabel(ylabel, fontsize=9)
     ax.set_title(title, fontsize=11, fontweight="bold", color=COLOR_PRIMARY, pad=10)
-    ax.legend(fontsize=8)
+    _legend_below_axis(ax, ncol=min(4, max(2, n)))
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
-    fig.tight_layout()
+    _tight_with_legend_space(fig, bottom=0.22, top=0.90)
     return save_chart(fig, tmp_dir, name)
 
 
@@ -148,7 +204,9 @@ def chart_bar_stacked(
 ) -> str:
     """Barres empilées : chaque série est empilée sur la précédente."""
     apply_mpl_style()
-    fig, ax = plt.subplots(figsize=(max(5, len(group_labels) * 1.1), 4))
+    n_groups = max(1, len(group_labels))
+    fig_w = max(CHART_FIG_WIDTH, min(10.0, n_groups * 0.75))
+    fig, ax = plt.subplots(figsize=(fig_w, CHART_FIG_HEIGHT_WITH_LEGEND))
     x = np.arange(len(group_labels))
     bottom = np.zeros(len(group_labels))
     keywords_inf = ("infraction", "infractions", "non conforme", "non conformes", "non-conforme", "non-conformes")
@@ -174,10 +232,68 @@ def chart_bar_stacked(
     ax.set_xticklabels(group_labels, fontsize=9)
     ax.set_ylabel(ylabel, fontsize=9)
     ax.set_title(title, fontsize=11, fontweight="bold", color=COLOR_PRIMARY, pad=10)
-    ax.legend(fontsize=8, loc="upper left")
+    _legend_below_axis(ax, ncol=min(4, max(2, len(series))))
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
-    fig.tight_layout()
+    _tight_with_legend_space(fig, bottom=0.22, top=0.90)
+    return save_chart(fig, tmp_dir, name)
+
+
+def chart_bar_horizontal_stacked(
+    row_labels: list,
+    series: dict,
+    title: str,
+    xlabel: str,
+    tmp_dir: Path,
+    name: str,
+) -> str:
+    """Barres horizontales empilées : une ligne par catégorie, segments empilés selon les séries."""
+    apply_mpl_style()
+    n = max(1, len(row_labels))
+    y = np.arange(n)
+    height = 0.62
+    left = np.zeros(n)
+    keywords_inf = (
+        "infraction",
+        "infractions",
+        "non conforme",
+        "non conformes",
+        "non-conforme",
+        "non-conformes",
+    )
+    # Hauteur figure : assez d'espace pour les libellés Y (types d'usager souvent longs).
+    fig_h = max(CHART_FIG_HEIGHT_WITH_LEGEND, min(14.0, 0.55 * n + 2.8))
+    fig, ax = plt.subplots(figsize=(CHART_FIG_WIDTH, fig_h))
+    for i, (label, vals) in enumerate(series.items()):
+        vals_arr = np.array(vals, dtype=float)
+        lbl = str(label).lower()
+        if any(k in lbl for k in keywords_inf):
+            color = COLOR_CHART_4
+        else:
+            color = CHART_BAR_GROUPED_COLORS[i % len(CHART_BAR_GROUPED_COLORS)]
+        bars = ax.barh(y, vals_arr, height, left=left, label=label, color=color)
+        for bar, val in zip(bars, vals_arr):
+            if val > 0:
+                ax.text(
+                    bar.get_x() + bar.get_width() / 2,
+                    bar.get_y() + bar.get_height() / 2,
+                    f"{int(val)}",
+                    ha="center",
+                    va="center",
+                    fontsize=8,
+                    fontweight="bold",
+                    color="white",
+                )
+        left += vals_arr
+    ax.set_yticks(y)
+    ax.set_yticklabels(row_labels, fontsize=9)
+    ax.invert_yaxis()
+    ax.set_xlabel(xlabel, fontsize=9)
+    ax.set_title(title, fontsize=11, fontweight="bold", color=COLOR_PRIMARY, pad=10)
+    _legend_below_axis(ax, ncol=min(4, max(2, len(series))))
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    _tight_with_legend_space(fig, bottom=0.18, top=0.92)
     return save_chart(fig, tmp_dir, name)
 
 
@@ -191,7 +307,9 @@ def chart_line_evolution(
 ) -> str:
     """Courbe d'évolution multi-séries (un trait par indicateur)."""
     apply_mpl_style()
-    fig, ax = plt.subplots(figsize=(max(5, len(x_labels) * 1.1), 3.5))
+    n_x = max(1, len(x_labels))
+    fig_w = max(CHART_FIG_WIDTH, min(10.0, n_x * 0.75))
+    fig, ax = plt.subplots(figsize=(fig_w, CHART_FIG_HEIGHT_WITH_LEGEND))
     x = np.arange(len(x_labels))
     keywords_inf = ("infraction", "infractions", "non conforme", "non conformes", "non-conforme", "non-conformes")
     for i, (label, vals) in enumerate(series.items()):
@@ -211,10 +329,10 @@ def chart_line_evolution(
     ax.set_xticklabels(x_labels, fontsize=9)
     ax.set_ylabel(ylabel, fontsize=9)
     ax.set_title(title, fontsize=11, fontweight="bold", color=COLOR_PRIMARY, pad=10)
-    ax.legend(fontsize=8)
+    _legend_below_axis(ax, ncol=min(4, max(2, len(series))))
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
-    fig.tight_layout()
+    _tight_with_legend_space(fig, bottom=0.22, top=0.90)
     return save_chart(fig, tmp_dir, name)
 
 

@@ -54,16 +54,16 @@ def test_run_global_smoke(monkeypatch, tmp_path: Path) -> None:
 
     # Chargeurs minimaux : renvoient de petits DataFrame ou des DataFrame vides.
     minimal_point = _minimal_point_df()
-    minimal_pa = pd.DataFrame([{"dc_id": 1}])
-    minimal_pej = pd.DataFrame([{"dc_id": 1, "ENTITE_ORIGINE_PROCEDURE": "SD21"}])
+    minimal_pa = pd.DataFrame([{"DC_ID": "1"}])
+    minimal_pej = pd.DataFrame([{"DC_ID": "1", "ENTITE_ORIGINE_PROCEDURE": "SD21"}])
     minimal_pve = pd.DataFrame([{"dc_id": 1}])
-    minimal_pnf = pd.DataFrame()
 
     monkeypatch.setattr(mod, "load_point_ctrl", lambda root, dept_code, date_deb, date_fin: minimal_point)
-    monkeypatch.setattr(mod, "load_pa", lambda root, dept_code, date_deb, date_fin: minimal_pa)
-    monkeypatch.setattr(mod, "load_pej", lambda root, dept_code, date_deb, date_fin: minimal_pej)
+    monkeypatch.setattr(mod, "load_pa", lambda root, date_deb, date_fin: minimal_pa)
+    monkeypatch.setattr(mod, "load_pej", lambda root, date_deb, date_fin: minimal_pej)
     monkeypatch.setattr(mod, "load_pve", lambda root, dept_code, date_deb, date_fin: minimal_pve)
-    monkeypatch.setattr(mod, "load_pnf", lambda root, dept_code, date_deb, date_fin: minimal_pnf)
+    monkeypatch.setattr(mod, "ensure_insee_from_communes_shp", lambda df, *args, **kwargs: df)
+    monkeypatch.setattr(mod, "enrich_with_pnforet_sig_zones", lambda df, *args, **kwargs: df)
     monkeypatch.setattr(mod, "load_natinf_ref", lambda root: pd.DataFrame())
 
     # Neutralise les fonctions de rendu PDF/graphique pour ce test.

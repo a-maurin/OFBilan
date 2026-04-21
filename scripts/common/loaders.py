@@ -1,4 +1,5 @@
 """Chargement des données OSCEAN (points de contrôle, PEJ, PA, PVe, PNF, TUB, infractions PJ)."""
+import logging
 import sys
 from pathlib import Path
 from typing import List, Optional, Tuple, Union
@@ -8,6 +9,16 @@ import pandas as pd
 import re
 
 from scripts.common.utils import filtre_periode
+
+logger = logging.getLogger(__name__)
+
+# Ordre aligné sur bilan_thematique_engine._get_insee_col
+_INSEE_COL_PRIORITY: Tuple[str, ...] = (
+    "insee_comm",
+    "insee_commun",
+    "INSEE_COM",
+    "INF-INSEE",
+)
 
 
 def _gpkg_engine() -> str:
@@ -289,10 +300,14 @@ def load_pej(
     """
     Charge le classeur ODS des procédures d'enquête judiciaire le plus récent
     (suivi_procedure_enq_judiciaire_YYYYMMDD.ods dans sources/) et prépare
-    la colonne DATE_REF.
+    ``DATE_REF`` (affichages / tris) ainsi que ``RECAP_DATE_INIT_PJ``.
 
-    Si date_deb et date_fin sont fournis, filtre les lignes sur cette période
-    (réduit le volume en analyse ciblée).
+    Le **décompte et le filtre de période** s'appuient uniquement sur le classeur
+    ODS, sur ``RECAP_DATE_INIT_PJ`` (et non plus sur la coalescence DATE_REF).
+
+    Les localisations ne sont pas dans l'ODS : les joindre via
+    ``merge_pej_faits_locations`` sur la couche ``localisation_infrac_FAITS_*``.
+    Voir ref/README_sources.md § 2.2.
     """
     sources = root / "sources"
     prefix = "suivi_procedure_enq_judiciaire_"
@@ -312,9 +327,15 @@ def load_pej(
     df["DATE_OUVERTURE_PROCEDURE"] = pd.to_datetime(
         df["DATE_OUVERTURE_PROCEDURE"], errors="coerce"
     )
-    df["RECAP_DATE_INIT_PJ"] = pd.to_datetime(
-        df.get("RECAP_DATE_INIT_PJ", pd.Series(dtype=str)), errors="coerce"
-    )
+    if "RECAP_DATE_INIT_PJ" not in df.columns:
+        if date_deb is not None and date_fin is not None:
+            raise KeyError(
+                "Colonne RECAP_DATE_INIT_PJ absente du classeur PEJ — "
+                "obligatoire pour le filtre de période."
+            )
+        df["RECAP_DATE_INIT_PJ"] = pd.NaT
+    else:
+        df["RECAP_DATE_INIT_PJ"] = pd.to_datetime(df["RECAP_DATE_INIT_PJ"], errors="coerce")
     df["DATE_REF"] = (
         df["DATE_CONSTATATION"]
         .fillna(df["DATE_OUVERTURE_PROCEDURE"])
@@ -323,7 +344,7 @@ def load_pej(
     if date_deb is not None and date_fin is not None:
         deb_ts = pd.to_datetime(date_deb)
         fin_ts = pd.to_datetime(date_fin)
-        df = filtre_periode(df, "DATE_REF", deb_ts, fin_ts)
+        df = filtre_periode(df, "RECAP_DATE_INIT_PJ", deb_ts, fin_ts)
     return df
 
 
@@ -339,6 +360,12 @@ def load_pa(
     la colonne DATE_REF.
 
     Si date_deb et date_fin sont fournis, filtre les lignes sur cette période.
+
+    Localisation spatiale : ce classeur ne sert pas de référence pour placer
+    une PA dans le PNF. Pour un critère géographique, s'appuyer sur les
+    points de contrôle OSCEAN (load_point_ctrl) : effectifs et localisations
+    des PA alignés sur les contrôles dont resultat == « Manquement »
+    (voir ref/README_sources.md § 2.5bis).
     """
     sources = root / "sources"
     path = _find_latest_dated_file(
@@ -355,16 +382,108 @@ def load_pa(
     return df
 
 
+def _load_pnf_from_shp(root: Path) -> Optional[pd.DataFrame]:
+    """
+    Lit ref/sig/communes_pnf/communes_pnf.shp et renvoie un DataFrame au format attendu
+    par load_tub_pnf_codes / merge PNF (colonne CODE_INSEE, optionnellement NOM).
+
+    Retourne None si le fichier est absent ; lève une erreur explicite si le fichier
+    existe mais qu'aucune colonne INSEE n'est reconnue.
+    """
+    shp = root / "ref" / "sig" / "communes_pnf" / "communes_pnf.shp"
+    if not shp.exists():
+        return None
+
+    gdf = gpd.read_file(shp)
+    if gdf.empty:
+        return pd.DataFrame(columns=["CODE_INSEE"])
+
+    insee_col = next(
+        (
+            c
+            for c in (
+                "INSEE_COM",
+                "CODE_INSEE",
+                "insee_comm",
+                "INSEE",
+                "code_insee",
+                "INSEE_COM_M",
+            )
+            if c in gdf.columns
+        ),
+        None,
+    )
+    if insee_col is None:
+        raise KeyError(
+            f"Aucune colonne INSEE reconnue dans {shp} "
+            f"(colonnes : {list(gdf.columns)} ; attendu p.ex. INSEE_COM ou CODE_INSEE)."
+        )
+
+    nom_col = next(
+        (
+            c
+            for c in (
+                "NOM_COM",
+                "NOM",
+                "nom_commune",
+                "nom_commun",
+                "LIBELLE",
+                "libelle",
+            )
+            if c in gdf.columns
+        ),
+        None,
+    )
+
+    insee_series = (
+        gdf[insee_col]
+        .astype(str)
+        .str.strip()
+        .str.extract(r"(\d{1,5})", expand=False)
+        .fillna("")
+        .str.zfill(5)
+    )
+    out = pd.DataFrame({"CODE_INSEE": insee_series})
+    if nom_col is not None:
+        out["NOM"] = gdf[nom_col].astype(str).str.strip()
+
+    out = out.drop_duplicates(subset=["CODE_INSEE"]).reset_index(drop=True)
+    out = out[out["CODE_INSEE"].str.match(r"^[0-9]{5}$", na=False)]
+    out = out[out["CODE_INSEE"].ne("00000")]
+    return out
+
+
 def load_pnf(root: Path) -> pd.DataFrame:
-    """Charge la liste des communes PNF (référentiel). Cherche dans ref/ puis sources/."""
+    """
+    Charge la liste des communes PNF (référentiel).
+
+    Ordre de priorité :
+    1. Shapefile ref/sig/communes_pnf/communes_pnf.shp (attributs INSEE + optionnellement nom) ;
+    2. Fichier communes_PNF.csv dans ref/ ou sources/.
+    """
+    try:
+        from_shp = _load_pnf_from_shp(root)
+    except KeyError:
+        raise
+    except Exception as e:
+        shp = root / "ref" / "sig" / "communes_pnf" / "communes_pnf.shp"
+        if shp.exists():
+            raise RuntimeError(f"Lecture du shapefile PNF impossible ({shp}) : {e}") from e
+        from_shp = None
+
+    if from_shp is not None and not from_shp.empty:
+        return from_shp
+
     for base in ("ref", "sources"):
         path = root / base / "communes_PNF.csv"
         if path.exists():
             df = pd.read_csv(path, sep=",", dtype=str)
             df["CODE_INSEE"] = df["CODE_INSEE"].astype(str).str.zfill(5)
             return df
+
     raise FileNotFoundError(
-        "Aucun fichier communes_PNF.csv trouvé dans ref/ ni sources/."
+        "Référentiel PNF introuvable : ni ref/sig/communes_pnf/communes_pnf.shp (non vide), "
+        "ni communes_PNF.csv dans ref/ ou sources/."
     )
 
 
@@ -426,6 +545,195 @@ def load_tub_pnf_codes(root: Path) -> Tuple[set, set]:
     return set(tub["INSEE_COM"].unique()), set(pnf["CODE_INSEE"].unique())
 
 
+def get_pnf_coeur_shp_path(root: Path) -> Path:
+    """Chemin du shapefile « cœur de parc » PNF (Parc national de forêts)."""
+    return root / "ref" / "sig" / "PNF" / "coeur_pnforets" / "Coeur_data_gouv_PNForets.shp"
+
+
+def get_pnf_aoa_shp_path(root: Path) -> Path:
+    """Chemin du shapefile de l'aire d'adhésion PNF (millésime 2021)."""
+    return root / "ref" / "sig" / "PNF" / "aoa_2021_pnforets" / "AOA_2021_PNForets.shp"
+
+
+def load_pnf_coeur_gdf(root: Path) -> gpd.GeoDataFrame:
+    """Charge la couche polygonale du cœur de parc. GeoDataFrame vide si fichier absent."""
+    path = get_pnf_coeur_shp_path(root)
+    if not path.exists():
+        return gpd.GeoDataFrame(columns=["geometry"], geometry="geometry", crs=None)
+    return gpd.read_file(path)
+
+
+def load_pnf_aoa_gdf(root: Path) -> gpd.GeoDataFrame:
+    """Charge la couche polygonale de l'aire d'adhésion. GeoDataFrame vide si fichier absent."""
+    path = get_pnf_aoa_shp_path(root)
+    if not path.exists():
+        return gpd.GeoDataFrame(columns=["geometry"], geometry="geometry", crs=None)
+    return gpd.read_file(path)
+
+
+def pnf_sig_union_membership_mask(
+    df: pd.DataFrame,
+    root: Path,
+    *,
+    log: Optional[logging.Logger] = None,
+) -> pd.Series:
+    """
+    Pour chaque ligne avec coordonnées (x/y WGS84, inf_gps_*, ou geometry),
+    indique si le point intersecte le cœur PNForêts et/ou l'aire d'adhésion SIG.
+
+    Complète le filtre par liste de communes INSEE : une localisation peut être
+    dans le parc sans que son code commune figure au référentiel tabulaire PNF.
+    Retourne une série booléenne alignée sur ``df.index`` (False si SIG ou points absents).
+    """
+    lg = log or logger
+    if df is None or df.empty:
+        return pd.Series(False, index=df.index if df is not None else pd.RangeIndex(0))
+
+    coeur = load_pnf_coeur_gdf(root)
+    aoa = load_pnf_aoa_gdf(root)
+    if coeur.empty and aoa.empty:
+        return pd.Series(False, index=df.index)
+
+    gdf_pts = _dataframe_with_xy_geometry(df)
+    if gdf_pts is None:
+        return pd.Series(False, index=df.index)
+
+    coeur_u = _union_perimeter_geometry(coeur)
+    aoa_u = _union_perimeter_geometry(aoa)
+    if coeur_u is None and aoa_u is None:
+        return pd.Series(False, index=df.index)
+
+    ref_crs = None
+    if coeur_u is not None and not coeur.empty and coeur.crs is not None:
+        ref_crs = coeur.crs
+    if ref_crs is None and aoa_u is not None and not aoa.empty and aoa.crs is not None:
+        ref_crs = aoa.crs
+
+    if gdf_pts.crs is None:
+        gdf_pts = gdf_pts.set_crs(4326)
+    if ref_crs is not None and gdf_pts.crs != ref_crs:
+        gdf_pts = gdf_pts.to_crs(ref_crs)
+
+    geom = gdf_pts.geometry
+    valid = geom.notna() & ~geom.is_empty
+
+    in_coeur = pd.Series(False, index=gdf_pts.index)
+    if coeur_u is not None:
+        in_coeur = geom.within(coeur_u) | geom.intersects(coeur_u)
+
+    in_aoa = pd.Series(False, index=gdf_pts.index)
+    if aoa_u is not None:
+        in_aoa = geom.within(aoa_u) | geom.intersects(aoa_u)
+
+    inside = valid & (in_coeur | in_aoa)
+    n_in = int(inside.sum())
+    if n_in:
+        lg.info(
+            "Périmètre PNF SIG : %s localisations dans cœur ou aire d'adhésion (hors filtre INSEE seul).",
+            n_in,
+        )
+    return inside.reindex(df.index, fill_value=False)
+
+
+def _union_perimeter_geometry(gdf: gpd.GeoDataFrame):
+    """Fusionne les géométries d'une couche périmètre (MultiPolygon / Polygon)."""
+    if gdf.empty:
+        return None
+    geoms = gdf.geometry.dropna()
+    if geoms.empty:
+        return None
+    try:
+        return geoms.union_all()
+    except Exception:
+        try:
+            return geoms.unary_union
+        except Exception:
+            from shapely.ops import unary_union
+
+            return unary_union(list(geoms))
+
+
+def enrich_with_pnforet_sig_zones(
+    df: pd.DataFrame,
+    root: Path,
+    *,
+    context: str = "jeu de données",
+    log: Optional[logging.Logger] = None,
+    out_col: str = "pnf_zone_sig",
+) -> pd.DataFrame:
+    """
+    Ajoute une colonne (par défaut `pnf_zone_sig`) : « Coeur_PNF », « Aire_adhesion_PNF »,
+    « Hors_perimetres_sig » selon la position des points par rapport aux couches
+    `ref/sig/PNF/coeur_pnforets/` et `ref/sig/PNF/aoa_2021_pnforets/`.
+
+    Nécessite des coordonnées (`x`/`y` en WGS84, ou `geometry`, ou GPS PVe).
+    Si les shapefiles sont absents ou sans géométrie exploitable, retourne `df` inchangé.
+    """
+    lg = log or logger
+    if df is None or df.empty:
+        return df
+
+    coeur = load_pnf_coeur_gdf(root)
+    aoa = load_pnf_aoa_gdf(root)
+    if coeur.empty and aoa.empty:
+        return df
+
+    gdf_pts = _dataframe_with_xy_geometry(df)
+    if gdf_pts is None:
+        lg.info(
+            "Périmètres PNF SIG : pas de coordonnées pour %s — %s non renseignée.",
+            context,
+            out_col,
+        )
+        return df
+
+    coeur_u = _union_perimeter_geometry(coeur)
+    aoa_u = _union_perimeter_geometry(aoa)
+    if coeur_u is None and aoa_u is None:
+        return df
+
+    ref_crs = None
+    if coeur_u is not None and not coeur.empty and coeur.crs is not None:
+        ref_crs = coeur.crs
+    if ref_crs is None and aoa_u is not None and not aoa.empty and aoa.crs is not None:
+        ref_crs = aoa.crs
+
+    if gdf_pts.crs is None:
+        gdf_pts = gdf_pts.set_crs(4326)
+    if ref_crs is not None and gdf_pts.crs != ref_crs:
+        gdf_pts = gdf_pts.to_crs(ref_crs)
+
+    geom = gdf_pts.geometry
+    valid = geom.notna() & ~geom.is_empty
+
+    in_coeur = pd.Series(False, index=gdf_pts.index)
+    if coeur_u is not None:
+        in_coeur = geom.within(coeur_u) | geom.intersects(coeur_u)
+
+    in_aoa = pd.Series(False, index=gdf_pts.index)
+    if aoa_u is not None:
+        in_aoa = geom.within(aoa_u) | geom.intersects(aoa_u)
+
+    zone = pd.Series(pd.NA, index=gdf_pts.index, dtype="string")
+    zone = zone.mask(~valid, pd.NA)
+    zone = zone.mask(valid & in_coeur, "Coeur_PNF")
+    adhesion = valid & ~in_coeur & in_aoa
+    zone = zone.mask(adhesion, "Aire_adhesion_PNF")
+    hors = valid & ~in_coeur & ~in_aoa
+    zone = zone.mask(hors, "Hors_perimetres_sig")
+
+    out = df.copy()
+    out[out_col] = zone.values
+    n_tagged = int(zone.notna().sum())
+    lg.info(
+        "Périmètres PNF SIG : %s — %s lignes classées (%s).",
+        context,
+        n_tagged,
+        out_col,
+    )
+    return out
+
+
 def load_communes_noms(root: Path) -> dict:
     """
     Charge la table de correspondance code INSEE → nom de commune.
@@ -445,6 +753,258 @@ def load_communes_noms(root: Path) -> dict:
         code_col, nom_col = df.columns[0], df.columns[1]
     df[code_col] = df[code_col].astype(str).str.strip().str.zfill(5)
     return dict(zip(df[code_col], df[nom_col].astype(str).str.strip()))
+
+
+def _load_communes_21_gdf(root: Path) -> gpd.GeoDataFrame:
+    """
+    Charge la couche des communes 21 et harmonise les colonnes de sortie:
+    - insee_comm (code INSEE sur 5 caractères)
+    - nom_commune (nom de la commune)
+    """
+    shp_path = root / "ref" / "sig" / "communes_21" / "communes.shp"
+    if not shp_path.exists():
+        raise FileNotFoundError(
+            f"Le shapefile des communes est introuvable : {shp_path}"
+        )
+
+    gdf = gpd.read_file(shp_path)
+    if gdf.empty:
+        return gpd.GeoDataFrame(columns=["insee_comm", "nom_commune", "geometry"], geometry="geometry", crs=gdf.crs)
+
+    insee_col = next(
+        (c for c in ("INSEE_COM", "insee_comm", "INSEE", "code_insee", "CODE_INSEE") if c in gdf.columns),
+        None,
+    )
+    nom_col = next(
+        (c for c in ("NOM_COM", "nom_commune", "nom_commun", "NOM_COMMUNE", "NOM") if c in gdf.columns),
+        None,
+    )
+    if insee_col is None or nom_col is None:
+        raise KeyError(
+            "Colonnes INSEE/nom introuvables dans communes.shp "
+            "(attendues: INSEE_COM et NOM_COM ou équivalents)."
+        )
+    if "geometry" not in gdf.columns:
+        raise KeyError("Aucune colonne 'geometry' dans la couche communes.shp.")
+
+    out = gdf[[insee_col, nom_col, "geometry"]].copy()
+    out = out.rename(columns={insee_col: "insee_comm", nom_col: "nom_commune"})
+    out["insee_comm"] = out["insee_comm"].astype(str).str.strip().str.zfill(5)
+    out["nom_commune"] = out["nom_commune"].astype(str).str.strip()
+    out = out.dropna(subset=["geometry"])
+    return gpd.GeoDataFrame(out, geometry="geometry", crs=gdf.crs)
+
+
+def enrich_with_commune_from_geometry(
+    df: Union[pd.DataFrame, gpd.GeoDataFrame],
+    root: Path,
+    geometry_col: str = "geometry",
+    insee_col: str = "insee_comm",
+    nom_col: str = "nom_commune",
+    fill_only_missing: bool = True,
+) -> Union[pd.DataFrame, gpd.GeoDataFrame]:
+    """
+    Enrichit un jeu d'entités avec le code INSEE et le nom de commune via jointure spatiale.
+
+    Règles:
+    - si `insee_col`/`nom_col` existent déjà et `fill_only_missing=True`, seules les valeurs
+      manquantes sont complétées;
+    - sinon, les colonnes sont (re)calculées à partir de `ref/sig/communes_21/communes.shp`.
+    """
+    if geometry_col not in df.columns:
+        raise KeyError(
+            f"La colonne de géométrie '{geometry_col}' est absente des entités à enrichir."
+        )
+
+    communes = _load_communes_21_gdf(root)
+    if communes.empty:
+        enriched = df.copy()
+        if insee_col not in enriched.columns:
+            enriched[insee_col] = pd.NA
+        if nom_col not in enriched.columns:
+            enriched[nom_col] = pd.NA
+        return enriched
+
+    # Convertit en GeoDataFrame si nécessaire tout en conservant les colonnes initiales.
+    gdf = df if isinstance(df, gpd.GeoDataFrame) else gpd.GeoDataFrame(df.copy(), geometry=geometry_col)
+
+    if gdf.crs is None:
+        # Hypothèse par défaut cohérente avec les autres chargeurs SIG.
+        gdf = gdf.set_crs(epsg=4326)
+    if communes.crs is None:
+        communes = communes.set_crs(gdf.crs)
+    elif gdf.crs != communes.crs:
+        gdf = gdf.to_crs(communes.crs)
+
+    left = gdf.copy()
+    if insee_col not in left.columns:
+        left[insee_col] = pd.NA
+    if nom_col not in left.columns:
+        left[nom_col] = pd.NA
+    left["_row_id_tmp"] = range(len(left))
+
+    # Évite les collisions de noms de colonnes pendant la jointure.
+    join_left = left.drop(columns=[insee_col, nom_col], errors="ignore")
+    joined = gpd.sjoin(
+        join_left,
+        communes[["insee_comm", "nom_commune", "geometry"]],
+        how="left",
+        predicate="within",
+    )
+    joined = joined.sort_values("_row_id_tmp").drop_duplicates(subset=["_row_id_tmp"], keep="first")
+    joined = joined.set_index("_row_id_tmp")
+    left = left.set_index("_row_id_tmp")
+
+    if fill_only_missing:
+        insee_join = joined["insee_comm"] if "insee_comm" in joined.columns else pd.Series(index=left.index, dtype="object")
+        nom_join = joined["nom_commune"] if "nom_commune" in joined.columns else pd.Series(index=left.index, dtype="object")
+        left[insee_col] = left[insee_col].where(left[insee_col].notna(), insee_join)
+        left[nom_col] = left[nom_col].where(left[nom_col].notna(), nom_join)
+    else:
+        left[insee_col] = joined["insee_comm"] if "insee_comm" in joined.columns else pd.NA
+        left[nom_col] = joined["nom_commune"] if "nom_commune" in joined.columns else pd.NA
+
+    left[insee_col] = left[insee_col].astype("string").str.strip().str.zfill(5)
+    left[nom_col] = left[nom_col].astype("string").str.strip()
+
+    left = left.reset_index(drop=True)
+    if isinstance(df, gpd.GeoDataFrame):
+        return gpd.GeoDataFrame(left, geometry=geometry_col, crs=gdf.crs)
+    return pd.DataFrame(left)
+
+
+def _insee_cell_missing(v) -> bool:
+    """True si la valeur n'est pas un code INSEE communal exploitable (5 chiffres)."""
+    if v is None or (isinstance(v, float) and pd.isna(v)):
+        return True
+    s = str(v).strip()
+    if not s or s.lower() in ("nan", "none", "<na>"):
+        return True
+    digits = re.sub(r"\D", "", s)
+    if len(digits) < 5:
+        return True
+    if digits == "00000":
+        return True
+    return False
+
+
+def _first_insee_column(df: pd.DataFrame) -> Optional[str]:
+    for c in _INSEE_COL_PRIORITY:
+        if c in df.columns:
+            return c
+    return None
+
+
+def _all_insee_filled(df: pd.DataFrame, col: str) -> bool:
+    if col not in df.columns or df.empty:
+        return False
+    return not df[col].map(_insee_cell_missing).any()
+
+
+def _dataframe_with_xy_geometry(df: pd.DataFrame) -> Optional[gpd.GeoDataFrame]:
+    """Construit un GeoDataFrame (WGS84) depuis x/y ou lat/lon PVe si possible."""
+    if "geometry" in df.columns:
+        try:
+            gdf = gpd.GeoDataFrame(df.copy(), geometry="geometry", crs=None)
+            if gdf.crs is None:
+                gdf = gdf.set_crs(epsg=4326)
+            return gdf
+        except Exception:
+            return None
+
+    if "x" in df.columns and "y" in df.columns:
+        x = pd.to_numeric(df["x"], errors="coerce")
+        y = pd.to_numeric(df["y"], errors="coerce")
+        if x.notna().any() and y.notna().any():
+            return gpd.GeoDataFrame(df.copy(), geometry=gpd.points_from_xy(x, y), crs="EPSG:4326")
+
+    if "inf_gps_lat" in df.columns and "inf_gps_long" in df.columns:
+        lat = pd.to_numeric(df["inf_gps_lat"], errors="coerce")
+        lon = pd.to_numeric(df["inf_gps_long"], errors="coerce")
+        if lat.notna().any() and lon.notna().any():
+            return gpd.GeoDataFrame(df.copy(), geometry=gpd.points_from_xy(lon, lat), crs="EPSG:4326")
+
+    return None
+
+
+def ensure_insee_from_communes_shp(
+    df: pd.DataFrame,
+    root: Path,
+    *,
+    context: str = "jeu de données",
+    log: Optional[logging.Logger] = None,
+) -> pd.DataFrame:
+    """
+    Garantit une colonne `insee_comm` (et `nom_commune`) pour les analyses par commune
+    (PNF, TUB, etc.) : normalise un code INSEE déjà présent ou complète via jointure spatiale
+    avec `ref/sig/communes_21/communes.shp`.
+
+    Les points de contrôle sans géométrie mais avec `x`/`y` sont convertis en points WGS84.
+    Les PVe peuvent utiliser `inf_gps_lat` / `inf_gps_long` si `INF-INSEE` est absent ou incomplet.
+    """
+    lg = log or logger
+    if df is None or df.empty:
+        return df
+
+    out = df.copy()
+    if "insee_comm" not in out.columns:
+        alt = _first_insee_column(out)
+        if alt:
+            out["insee_comm"] = out[alt]
+        else:
+            out["insee_comm"] = pd.NA
+
+    if _all_insee_filled(out, "insee_comm"):
+        out["insee_comm"] = (
+            out["insee_comm"]
+            .astype(str)
+            .str.extract(r"(\d{1,5})", expand=False)
+            .fillna("")
+            .str.zfill(5)
+        )
+        out.loc[out["insee_comm"].isin(("", "00000")), "insee_comm"] = pd.NA
+        return out
+
+    gdf_try = _dataframe_with_xy_geometry(out)
+    if gdf_try is None:
+        lg.warning(
+            "Impossible d'enrichir le code INSEE (%s) : pas de géométrie ni de x/y ou GPS exploitables.",
+            context,
+        )
+        return out
+
+    n_before = int(out["insee_comm"].map(_insee_cell_missing).sum())
+
+    try:
+        enriched = enrich_with_commune_from_geometry(
+            gdf_try,
+            root,
+            geometry_col="geometry",
+            insee_col="insee_comm",
+            nom_col="nom_commune",
+            fill_only_missing=True,
+        )
+    except FileNotFoundError as e:
+        lg.warning("Couche communes indisponible pour %s : %s", context, e)
+        return out
+    except Exception as e:  # pragma: no cover - dépend des données SIG
+        lg.warning("Échec jointure spatiale communes (%s) : %s", context, e)
+        return out
+
+    if isinstance(enriched, gpd.GeoDataFrame):
+        drop_geom = enriched.drop(columns=["geometry"], errors="ignore")
+        out = pd.DataFrame(drop_geom)
+    else:
+        out = enriched.drop(columns=["geometry"], errors="ignore") if "geometry" in enriched.columns else enriched
+
+    n_after = int(out["insee_comm"].map(_insee_cell_missing).sum()) if "insee_comm" in out.columns else n_before
+    lg.info(
+        "Communes (shp) : %s — lignes sans INSEE : %s -> %s (jointure spatiale).",
+        context,
+        n_before,
+        n_after,
+    )
+    return out
 
 
 def load_communes_centroides(root: Path) -> pd.DataFrame:
@@ -602,6 +1162,97 @@ def load_natinf_ref(root: Path) -> pd.DataFrame:
     return pd.DataFrame(columns=["numero_natinf", "libelle_natinf"])
 
 
+def enrich_pve_positions_from_pnf_commune_centroids(
+    root: Path,
+    df: pd.DataFrame,
+    *,
+    log: Optional[logging.Logger] = None,
+) -> pd.DataFrame:
+    """
+    Attache des coordonnées WGS84 fiables aux PVe : jointure ``INF-INSEE`` avec
+    ``ref/sig/communes_pnf/communes_PNF_centroides.shp`` (colonnes ``long_centr`` /
+    ``lat_centro`` en degrés).
+
+    Les coordonnées ``x`` (longitude) et ``y`` (latitude) sont renseignées ou
+    écrasées pour les lignes appariées, afin d'aligner la localisation sur le
+    centroïde communal du périmètre PNF (cohérent avec les masques SIG et la liste
+    INSEE du référentiel).
+    """
+    lg = log or logger
+    if df is None or df.empty or "INF-INSEE" not in df.columns:
+        return df
+
+    shp = root / "ref" / "sig" / "communes_pnf" / "communes_PNF_centroides.shp"
+    if not shp.exists():
+        lg.debug(
+            "Centroïdes communes PNF absents (%s) — coordonnées PVe non dérivées du référentiel.",
+            shp,
+        )
+        return df
+
+    try:
+        cen = gpd.read_file(shp)
+    except Exception as e:
+        lg.warning("Lecture centroïdes PNF impossible (%s) : %s", shp, e)
+        return df
+
+    if cen.empty or "INSEE_COM" not in cen.columns:
+        return df
+
+    lon_col = "long_centr" if "long_centr" in cen.columns else None
+    lat_col = "lat_centro" if "lat_centro" in cen.columns else None
+    if lon_col is None or lat_col is None:
+        lg.warning(
+            "Shapefile centroïdes PNF : colonnes long_centr / lat_centro introuvables."
+        )
+        return df
+
+    cen_small = cen[["INSEE_COM", lon_col, lat_col]].copy()
+    cen_small["INSEE_COM"] = (
+        cen_small["INSEE_COM"]
+        .astype(str)
+        .str.extract(r"(\d{1,5})", expand=False)
+        .fillna("")
+        .str.zfill(5)
+    )
+    cen_small = cen_small.drop_duplicates(subset=["INSEE_COM"], keep="first")
+    cen_small = cen_small.rename(columns={lon_col: "_lon_cent", lat_col: "_lat_cent"})
+
+    out = df.copy()
+    out["_insee_pve"] = (
+        out["INF-INSEE"]
+        .astype(str)
+        .str.extract(r"(\d{1,5})", expand=False)
+        .fillna("")
+        .str.zfill(5)
+    )
+    merged = out.merge(cen_small, left_on="_insee_pve", right_on="INSEE_COM", how="left")
+    ok = merged["_lon_cent"].notna() & merged["_lat_cent"].notna()
+    n = int(ok.sum())
+    if n:
+        lon = pd.to_numeric(merged.loc[ok, "_lon_cent"], errors="coerce")
+        lat = pd.to_numeric(merged.loc[ok, "_lat_cent"], errors="coerce")
+        # Stats_PVe en dtype=str / StringDtype : convertir les colonnes coords en float
+        # avant assignation (sinon TypeError sur inf_gps_*).
+        for col in ("x", "y", "inf_gps_long", "inf_gps_lat"):
+            if col in merged.columns:
+                merged[col] = pd.to_numeric(merged[col], errors="coerce")
+            else:
+                merged[col] = pd.Series(float("nan"), index=merged.index, dtype="float64")
+        merged.loc[ok, "x"] = lon
+        merged.loc[ok, "y"] = lat
+        # Compatibilité chemins qui lisent encore le couple GPS PVe
+        merged.loc[ok, "inf_gps_long"] = lon
+        merged.loc[ok, "inf_gps_lat"] = lat
+        lg.info(
+            "PVe : %s ligne(s) géolocalisées au centroïde commune PNF (jointure INF-INSEE).",
+            n,
+        )
+    drop_cols = [c for c in ("_insee_pve", "INSEE_COM", "_lon_cent", "_lat_cent") if c in merged.columns]
+    merged = merged.drop(columns=drop_cols, errors="ignore")
+    return merged
+
+
 def load_pve(
     root: Path,
     dept_code: Optional[str] = None,
@@ -609,11 +1260,12 @@ def load_pve(
     date_fin: Optional[Union[str, pd.Timestamp]] = None,
 ) -> pd.DataFrame:
     """
-    Charge le tableau Stats_PVe_OFB (format .csv ou .ods) et homogénéise
+    Charge le tableau Stats_PVe_OFB (format .csv, .ods ou .xlsx) et homogénéise
     les principales colonnes utilisées dans les analyses/cartes.
 
     Le fichier est recherché dynamiquement dans sources/ : on prend le plus récent
-    parmi les fichiers dont le nom commence par "Stats_PVe_OFB" (extensions .csv ou .ods),
+    parmi les fichiers dont le nom commence par "Stats_PVe_OFB"
+    (extensions .csv, .ods ou .xlsx),
     en se basant sur la date de modification du fichier.
 
     Colonnes normalisées :
@@ -622,25 +1274,33 @@ def load_pve(
       * INF-DATE-INTG : datetime (date d'intégration, jour/mois/année)
 
     Si dept_code et/ou date_deb/date_fin sont fournis, filtre les lignes en conséquence.
+
+    **Période :** le filtre sur ``INF-DATE-INTG`` réduit le nombre de PVe par rapport à une
+    simple jointure spatiale (ex. QGIS Excel × centroïdes PNF sans critère de date) : seules
+    les infractions dont la date d'intégration tombe dans l'intervalle du bilan sont comptées.
     """
     sources = root / "sources"
     if not sources.exists():
         raise FileNotFoundError(f"Le dossier sources n'existe pas : {sources}")
 
     candidates: List[Path] = []
-    for ext in (".csv", ".ods"):
+    for ext in (".csv", ".ods", ".xlsx"):
         candidates.extend(sources.glob(f"Stats_PVe_OFB*{ext}"))
     if not candidates:
         raise FileNotFoundError(
-            f"Aucun fichier Stats_PVe_OFB*.csv ou Stats_PVe_OFB*.ods trouvé dans {sources}."
+            f"Aucun fichier Stats_PVe_OFB*.csv, *.ods ou *.xlsx trouvé dans {sources}."
         )
     # Fichier le plus récent (date de modification)
     path = max(candidates, key=lambda p: p.stat().st_mtime)
 
-    if path.suffix.lower() == ".csv":
+    suffix = path.suffix.lower()
+    if suffix == ".csv":
         df = pd.read_csv(path, sep=";", dtype=str, encoding="latin1")
-    else:
+    elif suffix == ".ods":
         df = pd.read_excel(path, dtype=str, engine="odf")
+    else:
+        # .xlsx : moteur openpyxl requis côté environnement Python
+        df = pd.read_excel(path, dtype=str, engine="openpyxl")
 
     # Normalisation du code commune
     if "INF-INSEE" in df.columns:
@@ -669,10 +1329,24 @@ def load_pve(
         if dept_col in df.columns:
             df = df[df[dept_col].astype(str).str.strip() == str(dept_code).strip()].copy()
     if date_deb is not None and date_fin is not None and "INF-DATE-INTG" in df.columns:
+        n_before_period = len(df)
         deb_ts = pd.to_datetime(date_deb)
         fin_ts = pd.to_datetime(date_fin)
         df = filtre_periode(df, "INF-DATE-INTG", deb_ts, fin_ts)
+        n_after_period = len(df)
+        if n_before_period > n_after_period:
+            logger.info(
+                "PVe : %s ligne(s) retenues sur %s après filtre période INF-DATE-INTG "
+                "(%s → %s) ; %s ligne(s) hors période exclues. "
+                "(Une jointure QGIS sans filtre date sur les mêmes communes PNF peut compter plus de lignes.)",
+                n_after_period,
+                n_before_period,
+                date_deb,
+                date_fin,
+                n_before_period - n_after_period,
+            )
 
+    df = enrich_pve_positions_from_pnf_commune_centroids(root, df, log=logger)
     return df
 
 
@@ -696,6 +1370,74 @@ def get_points_infrac_pj_path(root: Path) -> Path:
     except FileNotFoundError:
         # On laisse l'appelant gérer l'absence de fichier
         return base_dir / "localisation_infrac_FAITS_00000000.gpkg"
+
+
+def merge_pej_faits_locations(
+    pej: pd.DataFrame,
+    root: Path,
+    dept_code: str,
+    *,
+    log: Optional[logging.Logger] = None,
+) -> pd.DataFrame:
+    """
+    Enrichit le tableau PEJ (ODS) avec les coordonnées WGS84 issues de la couche
+    ``localisation_infrac_FAITS_*`` (jointure ``DC_ID`` = ``dossier``).
+
+    L'ODS ne contient pas de géométrie : cette étape est nécessaire pour les
+    analyses spatiales (ex. restriction PNF sur les faits localisés).
+    """
+    lg = log or logger
+    if pej is None or pej.empty or "DC_ID" not in pej.columns:
+        return pej
+
+    path = get_points_infrac_pj_path(root)
+    if not path.exists():
+        lg.info("Couche FAITS PJ absente (%s) — PEJ sans coordonnées SIG.", path)
+        return pej.copy()
+
+    try:
+        gdf = gpd.read_file(path)
+    except Exception as e:
+        lg.warning("Lecture FAITS pour localisations PEJ impossible (%s) : %s", path, e)
+        return pej.copy()
+
+    if gdf.empty:
+        return pej.copy()
+
+    ent_col = next((c for c in ("entite", "ENTITE", "Entite") if c in gdf.columns), None)
+    if ent_col is None:
+        lg.warning("Couche FAITS : pas de colonne entite — jointure PEJ ignorée.")
+        return pej.copy()
+    sd = f"SD{str(dept_code).strip()}"
+    gdf = gdf[gdf[ent_col].astype(str).str.strip().eq(sd)].copy()
+    if gdf.empty:
+        lg.info("Couche FAITS : aucune entité %s — pas de localisations jointes.", sd)
+        return pej.copy()
+
+    doss_col = next((c for c in ("dossier", "DOSSIER") if c in gdf.columns), None)
+    if doss_col is None:
+        lg.warning("Couche FAITS : colonne dossier introuvable.")
+        return pej.copy()
+
+    xcol = "x_infrac" if "x_infrac" in gdf.columns else ("x" if "x" in gdf.columns else None)
+    ycol = "y_infrac" if "y_infrac" in gdf.columns else ("y" if "y" in gdf.columns else None)
+    if xcol is None or ycol is None:
+        lg.warning("Couche FAITS : colonnes de coordonnées introuvables.")
+        return pej.copy()
+
+    loc = gdf[[doss_col, xcol, ycol]].copy()
+    loc["_doss"] = loc[doss_col].astype(str).str.strip()
+    loc = loc.drop_duplicates(subset="_doss", keep="first")
+    loc = loc.rename(columns={xcol: "x_faits", ycol: "y_faits"}).drop(columns=[doss_col], errors="ignore")
+
+    out = pej.copy()
+    out["_dc"] = out["DC_ID"].astype(str).str.strip()
+    out = out.merge(loc, left_on="_dc", right_on="_doss", how="left")
+    out = out.drop(columns=["_dc", "_doss"], errors="ignore")
+    n = int(out["x_faits"].notna().sum())
+    if n:
+        lg.info("PEJ : %s ligne(s) avec localisation FAITS (jointure dossier).", n)
+    return out
 
 
 def load_points_infrac_pj(
