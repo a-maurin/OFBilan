@@ -1,219 +1,116 @@
-# Bilans de production 2025–2026
+# Bilans de production 2025-2026
 
-Projet de génération des bilans d'activité de contrôle pour le SD Côte-d'Or, à partir des données OSCEAN.
+Projet de generation des bilans d'activite de controle (SD Cote-d'Or) a partir des donnees OSCEAN et PVe.
 
-## Architecture
+## A quoi sert ce depot
 
-**Point d'entrée unique** : tous les bilans passent par le script **`scripts/run_bilan.py`**, qui adapte son comportement au choix (global ou un/plusieurs thèmes).
+Le depot produit deux types de rapports PDF :
 
-**Moteur thématique unifié** : tous les bilans thématiques (agrainage, chasse, piégeage, types d'usagers, procédures, etc.) sont générés par un **seul moteur** (`scripts/bilan_thematique/bilan_thematique_engine.py`), piloté par les profils YAML dans `ref/profils_bilan/`.
+- **Bilan global** : vue complete de l'activite du service (controles, resultats, PEJ, PA, PVe).
+- **Bilans thematiques** : rapports cibles par profil (ex. `agrainage`, `chasse`, `types_usager`, `procedures_pve`, `pnf`).
 
-## Points d'entrée utilisateur (trois batch uniquement)
+Tout passe par un point d'entree unique :
 
-À la racine du projet, **trois** fichiers batch permettent toute l'exécution :
+- `scripts/run_bilan.py`
 
-| Batch | Rôle |
-|-------|------|
-| **lancer_bilans.bat** | Générer un bilan global (choix 1) ou un ou plusieurs bilans thématiques (choix 2 : liste exhaustive des profils). |
-| **generer_cartes.bat** | Générer une ou plusieurs cartes pour une période et un département. |
-| **parametrer_cartes.bat** | Ouvrir la fenêtre de configuration des profils de cartes (couches, symbologie). |
+## Utilisation rapide
 
-## Structure du projet
+### Interface Windows (recommande)
 
-```
-Bilans_production/
-├── README.md
-├── OBJECTIFS_BILANS.md
-├── .gitignore                         # Exclut données sources + sorties générées
-├── requirements.txt / pyproject.toml  # Dépendances Python
-├── bilans/                            # Package Python principal
-│   ├── __init__.py
-│   ├── cli.py                         # Point d'entrée CLI (`python -m bilans`)
-│   ├── common/                        # Modules partagés
-│   ├── bilan_global/                  # Bilan global (objectif 1)
-│   └── bilan_thematique/              # Moteur bilans thématiques (objectif 2)
-├── scripts/
-│   ├── run_bilan.py                   # Point d'entrée unique (--mode global | thematique)
-│   ├── paths.py
-│   ├── generateur_de_cartes/          # Génération de cartes QGIS
-│   ├── generer_cartes.py              # Wrapper Python vers le générateur de cartes
-│   └── windows/                       # Wrappers batch Windows
-│       ├── lancer_bilans.bat
-│       ├── generer_cartes.bat
-│       └── parametrer_cartes.bat
-├── config/                            # Configurations versionnées
-│   ├── README.md
-│   ├── profils_bilan/                 # Profils YAML (agrainage, chasse, piégeage, etc.)
-│   ├── cartes/                        # Profils de cartes / symbologies
-│   └── ref_themes_ctrl.csv            # Liste ordonnée des thèmes
-├── ref/                               # Référentiels (SIG, modèle OFB, glossaire…)
-├── sources/                           # Données sources locales (non versionnées)
-├── out/                               # Sorties générées (non versionnées)
-├── docs/                              # Documentation détaillée
-└── legacy/                            # Ancien code conservé à titre d’archive
+- `lancer_bilans.bat` : generation des bilans (global/thematique)
+- `generer_cartes.bat` : generation des cartes PNG
+- `parametrer_cartes.bat` : parametrage des profils cartographiques
+
+### CLI (direct)
+
+```bat
+REM Lister les themes disponibles
+python scripts/run_bilan.py --list-themes
+
+REM Bilan global
+python scripts/run_bilan.py --mode global --date-deb 2025-01-01 --date-fin 2025-12-31 --dept-code 21
+
+REM Bilan thematique (un ou plusieurs profils)
+python scripts/run_bilan.py --mode thematique --profil chasse --profil agrainage --date-deb 2025-01-01 --date-fin 2025-12-31 --dept-code 21
+
+REM Bilan thematique avec preset de taille graphique
+python scripts/run_bilan.py --mode thematique --profil pnf --date-deb 2025-01-01 --date-fin 2025-12-31 --dept-code 21 --preset standard
 ```
 
-## Profils YAML (schema v2)
+## Objectifs fonctionnels
 
-Chaque profil dans `ref/profils_bilan/` décrit un bilan thématique :
+### 1) Bilan global
 
-```yaml
-schema_version: 2
-id: chasse
-label: "Bilan chasse"
-out_subdir: bilan_chasse
+- **But** : produire un bilan unique sur une periode et un departement.
+- **Entree recommandee** : `scripts/run_bilan.py --mode global`
+- **Sorties** : `out/bilan_global/` (PDF + CSV)
 
-filter:
-  type: chasse              # chasse | agrainage | keywords | type_usager | procedures | all
-  keywords: [...]
-  columns: [theme, type_actio, nom_dossie]
-  exclude_patterns: []
-  type_usager_target: []
+### 2) Bilan thematique
 
-natinf_pve: [...]
-natinf_pej: [...]
+- **But** : produire un ou plusieurs bilans cibles via des profils.
+- **Entree recommandee** : `scripts/run_bilan.py --mode thematique --profil <id>`
+- **Combine** possible : `--combine`
+- **Sorties** : `out/bilan_<profil>/` (ou bilan combine)
 
-sources:
-  point_ctrl: true
-  pej: true
-  pa: true
-  pve: true
+## Architecture (vue simple)
 
-options:
-  pnf:
-    label: "Analyse PNF / hors PNF"
-    default: true
-    ask: true                # question interactive avant le lancement
-  tub:
-    label: "Analyse zones TUB"
-    default: false
-    ask: true
-  cartes:
-    label: "Intégration des cartes"
-    default: true
-```
+- `scripts/run_bilan.py` : orchestrateur principal
+- `scripts/bilan_global/analyse_global.py` : moteur global
+- `scripts/bilan_thematique/bilan_thematique_engine.py` : moteur thematique unifie
+- `scripts/bilan_thematique/run_bilan_thematique.py` : lanceur thematique direct
+- `config/profils_bilan/` et `ref/profils_bilan/` : profils YAML de pilotage
+- `scripts/common/` : utilitaires partages (PDF, chartes, loaders, etc.)
 
-### Options configurables
+## Profils et options
 
-Les options sont des paramètres modifiables par l'utilisateur (console interactive ou CLI). Pour ajouter une nouvelle option :
-1. Ajouter la clé dans le bloc `options` du profil YAML.
-2. Ajouter le traitement correspondant dans le moteur (`bilan_thematique_engine.py`).
+Chaque profil YAML definit :
 
-Options actuelles :
-- **pnf** : découpage PNF / hors PNF
-- **tub** : découpage zones TUB (tuberculose bovine)
-- **cartes** : intégration des cartes générées par QGIS
-- **par_commune** : indicateurs par commune
-- **synthese_croisee** : synthèse croisée Ctrl × PVe × PEJ par zone
+- le filtre metier,
+- les sources actives (`point_ctrl`, `pej`, `pa`, `pve`),
+- les options activables (`pnf`, `tub`, `cartes`, `synthese_croisee`, etc.).
 
-### Surcharge CLI
+Surcharge possible en CLI :
 
-```batch
-REM Activer PNF, désactiver TUB
+```bat
 python scripts/run_bilan.py --mode thematique --profil chasse --with-pnf --no-tub
-
-REM Option générique
 python scripts/bilan_thematique/run_bilan_thematique.py --profil agrainage --option synthese_croisee=true
 ```
 
-### Profil `types_usager_cible` (sélection interactive)
+## Taille des graphiques PDF
 
-Le profil `types_usager_cible` permet de générer un bilan ciblé sur un ou plusieurs types d’usagers :
+Configuration centralisee via :
 
-- **Mode interactif** (par défaut) :
+- `ref/charts_config.yaml`
 
-  ```batch
-  python scripts\run_bilan.py --mode thematique --profil types_usager_cible
-  ```
+Presets disponibles :
 
-  Le moteur affiche la liste des types d’usagers (d’après `ref/types_usagers.csv`) et vous invite
-  à saisir un ou plusieurs numéros (ex. `1,3,5`) ou `*` pour tous les types.
+- `compact`
+- `standard`
+- `large`
 
-- **Mode non interactif** (pilotage par la CLI) :
+Utilisation :
 
-  ```batch
-  python scripts\bilan_thematique\run_bilan_thematique.py --profil types_usager_cible ^
-      --date-deb 2025-01-01 --date-fin 2025-12-31 --dept-code 21 ^
-      --option type_usager_target="Agriculteur et autres acteurs agricoles" ^
-      --option type_usager_target="Collectivité"
-  ```
-
-  Dans ce cas, aucune question n’est posée et seuls les types explicitement fournis sont analysés.
-
-#### Cas particulier : bilan ciblé sur un seul type d’usager
-
-- Lorsque **un seul** type d’usager est ciblé (ex. uniquement les agriculteurs) :
-  - le bandeau de chiffres clés indique toujours le **nombre de localisations de contrôle**, mais l’effectif s’intitule explicitement
-    *« Effectifs – &lt;type ciblé&gt; »* (par ex. « Effectifs – Agriculteur et autres acteurs agricoles ») ;
-  - la section \"Contrôles par type d’usager\" :
-    - ne comporte plus de camembert (inutile à 100 %),
-    - présente un tableau résumé spécifique au type ciblé,
-    - supprime la colonne `type_usager` des tableaux lorsqu’elle serait identique sur toutes les lignes
-      (les tableaux deviennent alors simplement \"Répartition par domaine\", \"Résultats par domaine\", etc.).
-- Lorsque **plusieurs** types d’usagers sont sélectionnés, l’architecture complète (camembert + colonnes `type_usager`) est conservée.
-
-## Prérequis
-
-- **Python 3.10+** (pandas, geopandas, matplotlib, reportlab, Pillow)
-- **QGIS** avec Python intégré (pour le générateur de cartes uniquement)
-
-## Ordre d'exécution recommandé
-
-1. **Générateur de cartes** — produit les PNG dans `out/generateur_de_cartes/`
-2. **Bilans** — consomment les cartes et produisent les PDF
-
-## Exécution
-
-### Bilans (global ou thématiques)
-
-```batch
-lancer_bilans.bat
+```bat
+python scripts/run_bilan.py --mode thematique --profil pnf --preset large
 ```
 
-En ligne de commande :
+## Cartographie
 
-```batch
-REM Liste des thèmes disponibles
-python scripts\run_bilan.py --list-themes
+Ordre recommande :
 
-REM Bilan global
-python scripts\run_bilan.py --mode global --date-deb 2025-01-01 --date-fin 2026-02-05 --dept-code 21
+1. Generer les cartes (`generer_cartes.bat` ou script associe)
+2. Generer les bilans (qui integrent ensuite les cartes disponibles)
 
-REM Bilans thématiques (un ou plusieurs profils)
-python scripts\run_bilan.py --mode thematique --profil agrainage --profil chasse --date-deb 2025-01-01 --date-fin 2026-02-05 --dept-code 21
+Les cartes attendues sont stockees dans `out/generateur_de_cartes/` sous forme `carte_<profil>.png`.
 
-REM Bilan thématique avec options
-python scripts\run_bilan.py --mode thematique --profil chasse --with-pnf --with-tub --date-deb 2025-09-01 --date-fin 2026-03-01 --dept-code 21
-```
+## Prerequis
 
-### Génération de cartes
+- Python 3.10+
+- dependances Python du projet
+- QGIS (uniquement pour la generation de cartes)
 
-```batch
-generer_cartes.bat
-```
+## Licence et contact
 
-### Configuration des profils de cartes
-
-```batch
-parametrer_cartes.bat
-```
-
-## Sorties
-
-| Programme / objectif | Fichiers principaux |
-|---------------------|---------------------|
-| **Bilan global** (objectif 1) | `out/bilan_global/` (PDF, CSV par domaine/thème) |
-| **Bilan thématique** (objectif 2) | `out/bilan_<profil>/` (PDF, CSV filtré, graphiques) |
-| **Cartes** (generer_cartes.bat) | `out/generateur_de_cartes/carte_*.png` |
-
-## Licence
-
-Le code de ce dépôt est publié sous licence **Apache 2.0** (voir le fichier `LICENSE` à la racine du projet).
-
-Les jeux de données externes éventuellement utilisés (référentiels géographiques, etc.) restent soumis à leurs **licences propres** ; leur réutilisation doit respecter ces conditions.
-
-## Contact
-
-- **Auteur** : Aguirre MAURIN  
-- **Service** : Service départemental de la Côte-d'Or – Office Français de la Biodiversité  
-- **Courriel** : aguirre.maurin@ofb.gouv.fr
+- Licence : voir `LICENSE`
+- Auteur : Aguirre Maurin
+- Service : OFB, SD Cote-d'Or
