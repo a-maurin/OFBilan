@@ -2,6 +2,7 @@
 import re
 
 from reportlab.lib import colors as rl_colors
+from reportlab.lib.styles import ParagraphStyle
 from reportlab.pdfbase import pdfmetrics
 from reportlab.platypus import Flowable, Paragraph, Spacer, Table, TableStyle
 
@@ -147,8 +148,17 @@ def ofb_table_wide(
 
 
 
-def ofb_table(data_rows, col_widths=None, col_aligns=None):
+def ofb_table(
+    data_rows,
+    col_widths=None,
+    col_aligns=None,
+    *,
+    header_font_size: float | None = None,
+):
     """Crée un Table reportlab stylisé charte OFB (en-tête bleu, lignes alternées).
+
+    header_font_size : si renseigné, police des cellules d'en-tête (ligne 0) réduite
+    pour limiter le retour à la ligne / la compression visuelle sur tableaux étroits.
 
     Règle d’alignement :
     - si col_aligns est fourni, il est utilisé tel quel ;
@@ -184,6 +194,24 @@ def ofb_table(data_rows, col_widths=None, col_aligns=None):
                 "RIGHT" if ci in right_cols else "LEFT" for ci in range(max_cols)
             ]
 
+    hdr_left = _CELL_HEADER
+    hdr_right = _CELL_HEADER_RIGHT
+    if header_font_size is not None:
+        fs = float(header_font_size)
+        lead = max(fs + 2.0, fs * 1.25)
+        hdr_left = ParagraphStyle(
+            "CellHeaderCustom",
+            parent=_CELL_HEADER,
+            fontSize=fs,
+            leading=lead,
+        )
+        hdr_right = ParagraphStyle(
+            "CellHeaderRightCustom",
+            parent=_CELL_HEADER_RIGHT,
+            fontSize=fs,
+            leading=lead,
+        )
+
     wrapped = []
     for ri, row in enumerate(data_rows):
         new_row = []
@@ -196,7 +224,7 @@ def ofb_table(data_rows, col_widths=None, col_aligns=None):
                     is_right = inferred_aligns[ci] == "RIGHT"
 
                 if ri == 0:
-                    style = _CELL_HEADER_RIGHT if is_right else _CELL_HEADER
+                    style = hdr_right if is_right else hdr_left
                 else:
                     style = _CELL_RIGHT if is_right else _CELL_NORMAL
                 new_row.append(Paragraph(cell, style))

@@ -41,9 +41,15 @@ from scripts.common.loaders import (
     enrich_with_pnforet_sig_zones,
     pnf_sig_union_membership_mask,
 )
+from scripts.common.percent_format import (
+    format_pct_int_from_rate,
+    int_percents_largest_remainder,
+    tab_counts_to_pct_strings,
+)
 from scripts.common.utils import (
     est_chasse_point,
     contient_natinf,
+    count_controles_non_conformes_oscean,
     get_dept_name,
     _zone_summary,
     _zone_count,
@@ -931,36 +937,51 @@ def _run_spatial_analyses(
             pt.groupby("PNF")
             .agg(
                 nb_controles=("dc_id", "count"),
-                nb_inf=("resultat", lambda s: (s == "Infraction").sum()),
+                nb_non_conforme=(
+                    "resultat",
+                    lambda s: count_controles_non_conformes_oscean(s),
+                ),
             )
             .reset_index()
         )
-        agg_pnf["taux_inf"] = agg_pnf["nb_inf"] / agg_pnf["nb_controles"].replace(0, pd.NA)
+        agg_pnf["taux_non_conformite"] = agg_pnf["nb_non_conforme"] / agg_pnf[
+            "nb_controles"
+        ].replace(0, pd.NA)
         results["agg_pnf"] = agg_pnf
         results["point_with_pnf"] = pt
         # Bilan thématique PNF : présenter "Ensemble PNF" + "Cœur de parc"
         # (sur périmètre déjà restreint au PNF : aire d'adhésion + cœur).
         if str(profil_id or "").strip().lower() in {"pnf", "pnf_foret"}:
             nb_total = int(len(pt))
-            nb_inf_total = int((pt["resultat"] == "Infraction").sum()) if "resultat" in pt.columns else 0
+            nb_nc_total = (
+                count_controles_non_conformes_oscean(pt["resultat"])
+                if "resultat" in pt.columns
+                else 0
+            )
             rows = [
                 {
                     "PNF": "Ensemble PNF",
                     "nb_controles": nb_total,
-                    "nb_inf": nb_inf_total,
-                    "taux_inf": (nb_inf_total / nb_total) if nb_total > 0 else pd.NA,
+                    "nb_non_conforme": nb_nc_total,
+                    "taux_non_conformite": (nb_nc_total / nb_total)
+                    if nb_total > 0
+                    else pd.NA,
                 }
             ]
             if "pnf_zone_sig" in pt.columns:
                 coeur = pt[pt["pnf_zone_sig"] == "Coeur_PNF"].copy()
                 nb_c = int(len(coeur))
-                nb_inf_c = int((coeur["resultat"] == "Infraction").sum()) if "resultat" in coeur.columns else 0
+                nb_nc_c = (
+                    count_controles_non_conformes_oscean(coeur["resultat"])
+                    if "resultat" in coeur.columns
+                    else 0
+                )
                 rows.append(
                     {
                         "PNF": "Cœur de parc",
                         "nb_controles": nb_c,
-                        "nb_inf": nb_inf_c,
-                        "taux_inf": (nb_inf_c / nb_c) if nb_c > 0 else pd.NA,
+                        "nb_non_conforme": nb_nc_c,
+                        "taux_non_conformite": (nb_nc_c / nb_c) if nb_c > 0 else pd.NA,
                     }
                 )
             results["agg_pnf_detail"] = pd.DataFrame(rows)
@@ -1074,11 +1095,16 @@ def _run_aggregations(
             point_filtered.groupby(insee_col)
             .agg(
                 nb_controles=("dc_id", "count"),
-                nb_infractions=("resultat", lambda s: (s == "Infraction").sum()),
+                nb_non_conformes=(
+                    "resultat",
+                    lambda s: count_controles_non_conformes_oscean(s),
+                ),
             )
             .reset_index()
         )
-        agg_c["taux_infraction"] = agg_c["nb_infractions"] / agg_c["nb_controles"].replace(0, pd.NA)
+        agg_c["taux_non_conformite"] = agg_c["nb_non_conformes"] / agg_c[
+            "nb_controles"
+        ].replace(0, pd.NA)
         results["agg_commune"] = agg_c
 
     # PEJ par thème/domaine
@@ -1220,8 +1246,8 @@ def _run_aggregations(
         zone_pve = spatial.get("zone_pve")
         zone_pej = spatial.get("zone_pej")
         if zone_ctrl is not None:
-            synth = zone_ctrl[["zone", "nb_total", "nb_infraction"]].rename(
-                columns={"nb_total": "ctrl_total", "nb_infraction": "ctrl_infraction"}
+            synth = zone_ctrl[["zone", "nb_total", "nb_non_conforme"]].rename(
+                columns={"nb_total": "ctrl_total", "nb_non_conforme": "ctrl_infraction"}
             )
             if zone_pve is not None:
                 synth = synth.merge(zone_pve.rename(columns={"nb": "pve_nb"}), on="zone", how="left")
@@ -1253,25 +1279,29 @@ def _run_aggregations(
             if not top_pve.empty:
                 results["pve_top_infractions"] = top_pve
 
-    # PEJ : top infractions (par NATINF) pour le tableau « Infractions les plus relevées »
+    # PEJ : infractions (par NATINF) pour le tableau PDF.
+    # Si le volume PEJ est faible (< 10), on conserve toute la liste.
+    # Sinon, on limite au top 10 pour garder un tableau lisible.
     if not pej_filtered.empty:
         natinf_col = "NATINF_PEJ" if "NATINF_PEJ" in pej_filtered.columns else "NATINF"
         if natinf_col in pej_filtered.columns:
-            top_pej = (
+            pej_counts = (
                 pej_filtered[natinf_col]
                 .astype(str)
                 .str.strip()
                 .replace("", pd.NA)
                 .dropna()
                 .value_counts()
-                .head(10)
                 .rename_axis("natinf")
                 .reset_index(name="nb")
             )
-            if not top_pej.empty:
-                results["pej_top_infractions"] = top_pej
+            if not pej_counts.empty:
+                if len(pej_filtered) < 10:
+                    results["pej_top_infractions"] = pej_counts
+                else:
+                    results["pej_top_infractions"] = pej_counts.head(10)
 
-    # Agrégation annuelle ou trimestrielle (selon la durée de la période)
+    # Agrégation annuelle, trimestrielle ou mensuelle (selon la durée de la période)
     if ventilation_mode == "annuelle":
         years: set[int] = set()
         if not point_filtered.empty and "date_ctrl" in point_filtered.columns:
@@ -1299,8 +1329,8 @@ def _run_aggregations(
                 p_year = point_filtered[point_filtered["date_ctrl"].dt.year == year]
                 year_row["nb_controles"] = int(len(p_year))
                 if "resultat" in p_year.columns:
-                    year_row["nb_controles_non_conformes"] = int(
-                        (p_year["resultat"] == "Infraction").sum()
+                    year_row["nb_controles_non_conformes"] = (
+                        count_controles_non_conformes_oscean(p_year["resultat"])
                     )
                 else:
                     year_row["nb_controles_non_conformes"] = 0
@@ -1333,7 +1363,7 @@ def _run_aggregations(
 
         if rows:
             yearly = pd.DataFrame(rows)
-            yearly["taux_infraction_controles"] = yearly.apply(
+            yearly["taux_non_conformite_controles"] = yearly.apply(
                 lambda r: (
                     (r["nb_controles_non_conformes"] / r["nb_controles"])
                     if r["nb_controles"] > 0
@@ -1383,8 +1413,14 @@ def _run_aggregations(
                 mask = (dt.dt.year == year) & (dt.dt.month >= m1) & (dt.dt.month <= m2)
                 row_t["nb_controles"] = int(mask.sum())
                 if "resultat" in point_filtered.columns:
-                    mask_inf = mask & (point_filtered["resultat"] == "Infraction")
-                    row_t["nb_controles_non_conformes"] = int(mask_inf.sum())
+                    rnc = (
+                        point_filtered["resultat"]
+                        .astype(str)
+                        .str.strip()
+                        .str.lower()
+                        .isin(("infraction", "manquement"))
+                    )
+                    row_t["nb_controles_non_conformes"] = int((mask & rnc).sum())
                 else:
                     row_t["nb_controles_non_conformes"] = 0
             else:
@@ -1416,7 +1452,7 @@ def _run_aggregations(
 
         if rows_trim:
             trimestriel = pd.DataFrame(rows_trim)
-            trimestriel["taux_infraction_controles"] = trimestriel.apply(
+            trimestriel["taux_non_conformite_controles"] = trimestriel.apply(
                 lambda r: (
                     (r["nb_controles_non_conformes"] / r["nb_controles"])
                     if r["nb_controles"] > 0
@@ -1426,6 +1462,76 @@ def _run_aggregations(
             )
             results["agg_annuelle"] = trimestriel
             results["ventilation_temporelle_type"] = "trimestrielle"
+
+    elif ventilation_mode == "mensuelle":
+        periods_m: set[tuple[int, int]] = set()
+        if not point_filtered.empty and "date_ctrl" in point_filtered.columns:
+            for _, r in point_filtered["date_ctrl"].dropna().items():
+                t = r
+                if hasattr(t, "year") and hasattr(t, "month"):
+                    periods_m.add((int(t.year), int(t.month)))
+        if not pej_filtered.empty and "DATE_REF" in pej_filtered.columns:
+            for _, r in pej_filtered["DATE_REF"].dropna().items():
+                t = r
+                if hasattr(t, "year") and hasattr(t, "month"):
+                    periods_m.add((int(t.year), int(t.month)))
+        if not pa_filtered.empty and "DATE_REF" in pa_filtered.columns:
+            for _, r in pa_filtered["DATE_REF"].dropna().items():
+                t = r
+                if hasattr(t, "year") and hasattr(t, "month"):
+                    periods_m.add((int(t.year), int(t.month)))
+        if not pve_filtered.empty and "INF-DATE-INTG" in pve_filtered.columns:
+            for _, r in pve_filtered["INF-DATE-INTG"].dropna().items():
+                t = r
+                if hasattr(t, "year") and hasattr(t, "month"):
+                    periods_m.add((int(t.year), int(t.month)))
+
+        rows_month: list[dict[str, Any]] = []
+        for (year, month) in sorted(periods_m):
+            row_m: dict[str, Any] = {"periode": f"{year}-{month:02d}"}
+            if not point_filtered.empty and "date_ctrl" in point_filtered.columns:
+                dt = point_filtered["date_ctrl"]
+                mask = (dt.dt.year == year) & (dt.dt.month == month)
+                row_m["nb_controles"] = int(mask.sum())
+                if "resultat" in point_filtered.columns:
+                    row_m["nb_controles_non_conformes"] = count_controles_non_conformes_oscean(
+                        point_filtered.loc[mask, "resultat"]
+                    )
+                else:
+                    row_m["nb_controles_non_conformes"] = 0
+            else:
+                row_m["nb_controles"] = 0
+                row_m["nb_controles_non_conformes"] = 0
+
+            if not pej_filtered.empty and "DATE_REF" in pej_filtered.columns:
+                dt = pej_filtered["DATE_REF"]
+                row_m["nb_pej"] = int(((dt.dt.year == year) & (dt.dt.month == month)).sum())
+            else:
+                row_m["nb_pej"] = 0
+            if not pa_filtered.empty and "DATE_REF" in pa_filtered.columns:
+                dt = pa_filtered["DATE_REF"]
+                row_m["nb_pa"] = int(((dt.dt.year == year) & (dt.dt.month == month)).sum())
+            else:
+                row_m["nb_pa"] = 0
+            if not pve_filtered.empty and "INF-DATE-INTG" in pve_filtered.columns:
+                dt = pve_filtered["INF-DATE-INTG"]
+                row_m["nb_pve"] = int(((dt.dt.year == year) & (dt.dt.month == month)).sum())
+            else:
+                row_m["nb_pve"] = 0
+            rows_month.append(row_m)
+
+        if rows_month:
+            mensuel = pd.DataFrame(rows_month)
+            mensuel["taux_non_conformite_controles"] = mensuel.apply(
+                lambda r: (
+                    (r["nb_controles_non_conformes"] / r["nb_controles"])
+                    if r["nb_controles"] > 0
+                    else pd.NA
+                ),
+                axis=1,
+            )
+            results["agg_annuelle"] = mensuel
+            results["ventilation_temporelle_type"] = "mensuelle"
 
     return results
 
@@ -1526,10 +1632,14 @@ def _export_csv(
             out_dir / f"synthese_{prefix}_par_zone.csv", sep=";", index=False
         )
 
-    # Agrégation temporelle (annuelle ou trimestrielle)
+    # Agrégation temporelle (annuelle, trimestrielle ou mensuelle)
     vent_type = results.get("ventilation_temporelle_type")
     if "agg_annuelle" in results and isinstance(results["agg_annuelle"], pd.DataFrame):
-        if vent_type == "trimestrielle":
+        if vent_type == "mensuelle":
+            results["agg_annuelle"].to_csv(
+                out_dir / f"indicateurs_{prefix}_par_mois.csv", sep=";", index=False
+            )
+        elif vent_type == "trimestrielle":
             results["agg_annuelle"].to_csv(
                 out_dir / f"indicateurs_{prefix}_par_trimestre.csv", sep=";", index=False
             )
@@ -1576,7 +1686,7 @@ def _export_csv(
 def _pct_table_cell(n: int | float, denom: float) -> str:
     if denom is None or denom <= 0:
         return "n.d."
-    return f"{100.0 * float(n) / float(denom):.1f} %"
+    return format_pct_int_from_rate(float(n) / float(denom))
 
 
 def _pdf_section_activite_par_types_usagers(
@@ -1621,14 +1731,18 @@ def _pdf_section_activite_par_types_usagers(
         tbl_th = [
             ["Thème", "Nombre", "% du total général", "% du sous-total (type)"],
         ]
-        for _, r in sub.iterrows():
+        nbs_th = sub["nb_controles"].astype(int).tolist()
+        pct_sous_th = (
+            int_percents_largest_remainder(nbs_th) if st > 0 else [0] * len(nbs_th)
+        )
+        for j, (_, r) in enumerate(sub.iterrows()):
             nb = int(r["nb_controles"])
             tbl_th.append(
                 [
                     str(r["theme"]),
                     str(nb),
                     _pct_table_cell(nb, total_ctrl_lignes),
-                    _pct_table_cell(nb, st),
+                    f"{pct_sous_th[j]} %",
                 ]
             )
         if not first_tbl:
@@ -1657,8 +1771,10 @@ def _pdf_section_activite_par_types_usagers(
             "Infraction": [int(x) for x in rb["Infraction"].tolist()],
             "Manquement": [int(x) for x in rb["Manquement"].tolist()],
         }
-        if int(rb["Autre"].sum()) > 0:
-            series["Autre"] = [int(x) for x in rb["Autre"].tolist()]
+        # « Autre résultat » : résultat OSCEAN hors Conforme/Infraction/Manquement
+        # (à ne pas confondre avec le type d'usager « Autre » sur l'axe Y).
+        if int(rb["Autre_resultat"].sum()) > 0:
+            series["Autre résultat"] = [int(x) for x in rb["Autre_resultat"].tolist()]
         bar_path = chart_bar_horizontal_stacked(
             labels,
             series,
@@ -1670,9 +1786,12 @@ def _pdf_section_activite_par_types_usagers(
         builder.add_image(Path(bar_path), width_ratio=bar_ratio)
         # Tableau chiffré + pourcentages (part de chaque résultat dans le type,
         # et poids du type dans le total de cette sous-partie).
-        has_autre = int(rb["Autre"].sum()) > 0
+        has_autre = int(rb["Autre_resultat"].sum()) > 0
         total_global = float(
-            rb["Conforme"].sum() + rb["Infraction"].sum() + rb["Manquement"].sum() + rb["Autre"].sum()
+            rb["Conforme"].sum()
+            + rb["Infraction"].sum()
+            + rb["Manquement"].sum()
+            + rb["Autre_resultat"].sum()
         ) or 1.0
         tbl_res = [
             [
@@ -1684,7 +1803,7 @@ def _pdf_section_activite_par_types_usagers(
                 "Manquement",
                 "% manquement",
                 *(
-                    ["Autre", "% autre"]
+                    ["Autre résultat", "% autre résultat"]
                     if has_autre
                     else []
                 ),
@@ -1696,19 +1815,38 @@ def _pdf_section_activite_par_types_usagers(
             c = int(row["Conforme"])
             i = int(row["Infraction"])
             m = int(row["Manquement"])
-            a = int(row["Autre"]) if has_autre else 0
+            a = int(row["Autre_resultat"]) if has_autre else 0
             t = c + i + m + a
+            if t > 0:
+                parts = [c, i, m]
+                if has_autre:
+                    parts.append(a)
+                pct_row = int_percents_largest_remainder(parts)
+                k = 0
+                pc_c = f"{pct_row[k]} %"
+                k += 1
+                pc_i = f"{pct_row[k]} %"
+                k += 1
+                pc_m = f"{pct_row[k]} %"
+                k += 1
+                if has_autre:
+                    pc_a = f"{pct_row[k]} %"
+                else:
+                    pc_a = ""
+            else:
+                pc_c = pc_i = pc_m = "n.d."
+                pc_a = ""
             row_cells = [
                 str(row["type_usager"]),
                 str(c),
-                _pct_table_cell(c, t),
+                pc_c,
                 str(i),
-                _pct_table_cell(i, t),
+                pc_i,
                 str(m),
-                _pct_table_cell(m, t),
+                pc_m,
             ]
             if has_autre:
-                row_cells.extend([str(a), _pct_table_cell(a, t)])
+                row_cells.extend([str(a), pc_a])
             row_cells.extend([str(t), _pct_table_cell(t, total_global)])
             tbl_res.append(row_cells)
         if has_autre:
@@ -1730,10 +1868,11 @@ def _pdf_section_activite_par_types_usagers(
             ]
         builder.add_table(
             tbl_res,
-            caption="Résultats des contrôles par type d'usager (chiffres et pourcentages)",
+            caption="Résultats des contrôles par types d'usagers",
             col_widths=col_widths,
             col_aligns=["LEFT"] + ["RIGHT"] * (len(tbl_res[0]) - 1),
             keep_together=True,
+            header_font_size=8,
         )
 
 
@@ -1901,12 +2040,16 @@ def _generate_pdf(
         kf = []
         if nb_ctrl > 0:
             kf.append((str(nb_ctrl), "Localisations de contrôle"))
-        if tab_resultats is not None and "Infraction" in tab_resultats["resultat"].values:
-            nb_inf = int(tab_resultats.loc[tab_resultats["resultat"] == "Infraction", "nb"].sum())
-            taux = nb_inf / nb_ctrl if nb_ctrl else 0
-            # Nombre de contrôles dont le résultat est "Infraction"
-            kf.append((str(nb_inf), "Contrôles non-conformes"))
-            kf.append((f"{taux:.1%}", "Taux d'infraction"))
+        if tab_resultats is not None:
+            nb_nc = 0
+            for _lbl in ("Infraction", "Manquement"):
+                sub = tab_resultats[tab_resultats["resultat"] == _lbl]
+                if not sub.empty and "nb" in sub.columns:
+                    nb_nc += int(sub["nb"].sum())
+            if nb_nc > 0:
+                taux_nc = nb_nc / nb_ctrl if nb_ctrl else 0
+                kf.append((str(nb_nc), "Contrôles non-conformes"))
+                kf.append((format_pct_int_from_rate(taux_nc), "Taux de non-conformité"))
         if nb_pej > 0:
             # Procédures judiciaires issues des contrôles
             kf.append((str(nb_pej), "Nombre de procédures judiciaires"))
@@ -1938,26 +2081,27 @@ def _generate_pdf(
     if isinstance(agg_annuelle, pd.DataFrame) and not agg_annuelle.empty:
         anchor, title = sections[sec_idx]; sec_idx += 1
         builder.add_section(anchor, title)
+        is_month = vent_temp_type == "mensuelle"
         is_trim = vent_temp_type == "trimestrielle"
-        texte_vent = "par trimestre " if is_trim else "par année "
+        texte_vent = "par mois " if is_month else ("par trimestre " if is_trim else "par année ")
         builder.add_paragraph(
             "Ventilation des principaux indicateurs " + texte_vent
             + "sur l'ensemble de la période du bilan."
         )
-        label_col = "Trimestre" if is_trim else "Année"
+        label_col = "Mois" if is_month else ("Trimestre" if is_trim else "Année")
         tbl = [[
             label_col,
             "Nb contrôles",
             "Contrôles non-conformes",
-            "Taux d'infraction",
+            "Taux de non-conformité",
             "PEJ",
             "PA",
             "PVe",
         ]]
         for _, row in agg_annuelle.iterrows():
             taux = (
-                f"{row['taux_infraction_controles']:.1%}"
-                if pd.notna(row.get("taux_infraction_controles"))
+                format_pct_int_from_rate(row.get("taux_non_conformite_controles"))
+                if pd.notna(row.get("taux_non_conformite_controles"))
                 else "n.d."
             )
             tbl.append([
@@ -1971,7 +2115,7 @@ def _generate_pdf(
             ])
         builder.add_table(
             tbl,
-            caption="Indicateurs " + ("trimestriels" if is_trim else "annuels"),
+            caption="Indicateurs " + ("mensuels" if is_month else ("trimestriels" if is_trim else "annuels")),
             col_widths=[
                 avail_w * 0.12,
                 avail_w * 0.14,
@@ -1985,8 +2129,15 @@ def _generate_pdf(
         )
 
         period_labels = [str(v) for v in agg_annuelle["periode"].tolist()]
-        titre_ctrl = "Contrôles par trimestre (conformes / non-conformes)" if is_trim else "Contrôles par année (conformes / non-conformes)"
-        titre_proc = "Procédures et PVe par trimestre" if is_trim else "Procédures et PVe par année"
+        if is_month:
+            titre_ctrl = "Contrôles par mois (conformes / non-conformes)"
+            titre_proc = "Procédures et PVe par mois"
+        elif is_trim:
+            titre_ctrl = "Contrôles par trimestre (conformes / non-conformes)"
+            titre_proc = "Procédures et PVe par trimestre"
+        else:
+            titre_ctrl = "Contrôles par année (conformes / non-conformes)"
+            titre_proc = "Procédures et PVe par année"
 
         # Graphique 1 : barres empilées — contrôles conformes vs non-conformes
         conformes = [
@@ -2022,16 +2173,16 @@ def _generate_pdf(
             )
             builder.add_image(Path(stacked_proc_path), width_ratio=chart_ratio_base)
 
-        # Graphique 3 : courbe d'évolution — taux d'infraction
+        # Graphique 3 : courbe d'évolution — taux de non-conformité des contrôles
         taux_values = []
         for _, row in agg_annuelle.iterrows():
-            val = row.get("taux_infraction_controles")
-            taux_values.append(round(float(val) * 100, 1) if pd.notna(val) else 0)
+            val = row.get("taux_non_conformite_controles")
+            taux_values.append(int(round(float(val) * 100)) if pd.notna(val) else 0)
         if any(v > 0 for v in taux_values):
             line_path = chart_line_evolution(
                 period_labels,
-                {"Taux d'infraction (%)": taux_values},
-                "Évolution du taux d'infraction",
+                {"Taux de non-conformité (%)": taux_values},
+                "Évolution du taux de non-conformité",
                 "Taux (%)",
                 tmp_dir, "line_annuel_taux_inf.png",
             )
@@ -2050,10 +2201,11 @@ def _generate_pdf(
                 "(champ « nom_dossie » ou « nom_dossier » contenant « agrain »)."
             )
         if tab_resultats is not None:
+            tr = tab_resultats
+            taux_strs_res = tab_counts_to_pct_strings(tr["nb"].astype(int).tolist())
             tbl = [["Résultat", "Nombre", "Taux"]]
-            for _, row in tab_resultats.iterrows():
-                t = f"{row['taux']:.1%}" if pd.notna(row.get("taux")) else "n.d."
-                tbl.append([str(row["resultat"]), str(int(row["nb"])), t])
+            for i, (_, row) in enumerate(tr.iterrows()):
+                tbl.append([str(row["resultat"]), str(int(row["nb"])), taux_strs_res[i]])
             builder.add_table(tbl, caption="Résultats des contrôles",
                               col_widths=[avail_w * 0.50, avail_w * 0.25, avail_w * 0.25],
                               col_aligns=["LEFT", "RIGHT", "RIGHT"])
@@ -2071,12 +2223,12 @@ def _generate_pdf(
         # Tableau des communes : suite directe sous le camembert (même page si place).
         if "agg_commune" in results:
             top = results["agg_commune"].sort_values("nb_controles", ascending=False).head(10)
-            tbl = [["Commune", "Nb contrôles", "Contrôles non-conformes", "Taux d'infraction"]]
+            tbl = [["Commune", "Nb contrôles", "Contrôles non-conformes", "Taux de non-conformité"]]
             for _, row in top.iterrows():
-                t = f"{row['taux_infraction']:.1%}" if pd.notna(row.get("taux_infraction")) else "n.d."
+                t = format_pct_int_from_rate(row.get("taux_non_conformite"))
                 code_insee = row.iloc[0]
                 tbl.append([_nom_commune(code_insee), str(int(row["nb_controles"])),
-                            str(int(row["nb_infractions"])), t])
+                            str(int(row["nb_non_conformes"])), t])
             builder.add_table(tbl, caption="Communes avec le plus de contrôles",
                               col_widths=[avail_w * 0.25] * 4,
                               col_aligns=["LEFT", "RIGHT", "RIGHT", "RIGHT"])
@@ -2136,10 +2288,11 @@ def _generate_pdf(
                 cap_res = f"{cap_res} – {single_label}"
             else:
                 cap_res = f"{cap_res} (usager ciblé)"
+            tr_u = tab_resultats
+            taux_strs_u = tab_counts_to_pct_strings(tr_u["nb"].astype(int).tolist())
             tbl = [["Résultat", "Nombre", "Taux"]]
-            for _, row in tab_resultats.iterrows():
-                t = f"{row['taux']:.1%}" if pd.notna(row.get("taux")) else "n.d."
-                tbl.append([str(row["resultat"]), str(int(row["nb"])), t])
+            for i, (_, row) in enumerate(tr_u.iterrows()):
+                tbl.append([str(row["resultat"]), str(int(row["nb"])), taux_strs_u[i]])
             builder.add_table(
                 tbl,
                 caption=cap_res,
@@ -2205,12 +2358,12 @@ def _generate_pdf(
             cap_comm = "Communes avec le plus de contrôles (usager ciblé)"
             if is_single_usager and single_label:
                 cap_comm = f"Communes avec le plus de contrôles – {single_label}"
-            tbl = [["Commune", "Nb contrôles", "Contrôles non-conformes", "Taux d'infraction"]]
+            tbl = [["Commune", "Nb contrôles", "Contrôles non-conformes", "Taux de non-conformité"]]
             for _, row in top.iterrows():
-                t = f"{row['taux_infraction']:.1%}" if pd.notna(row.get("taux_infraction")) else "n.d."
+                t = format_pct_int_from_rate(row.get("taux_non_conformite"))
                 code_insee = row.iloc[0]
                 tbl.append([_nom_commune(code_insee), str(int(row["nb_controles"])),
-                            str(int(row["nb_infractions"])), t])
+                            str(int(row["nb_non_conformes"])), t])
             builder.add_table(tbl, caption=cap_comm,
                               col_widths=[avail_w * 0.25] * 4,
                               col_aligns=["LEFT", "RIGHT", "RIGHT", "RIGHT"])
@@ -2313,7 +2466,9 @@ def _generate_pdf(
             # Bandeau + Infractions les plus relevées + PEJ par thème : espacements compacts
             # et hauteur de tableaux limitée pour tenir sur une page.
             natinf_ref = load_natinf_ref(PROJECT_ROOT)
-            top_df = pej_top.head(6).copy()
+            # Si le volume PEJ est faible, afficher toutes les infractions relevées.
+            top_cap = len(pej_top) if nb_pej < 10 else 6
+            top_df = pej_top.head(top_cap).copy()
             top_df["numero_natinf"] = top_df["natinf"].astype(str).str.extract(r"(\d+)", expand=False)
             if not natinf_ref.empty:
                 top_df = top_df.merge(natinf_ref, on="numero_natinf", how="left")
@@ -2347,12 +2502,17 @@ def _generate_pdf(
             if "Nombre de procédures judiciaires" in df_theme.columns:
                 idx = list(df_theme.columns).index("Nombre de procédures judiciaires")
                 col_aligns_theme[idx] = "RIGHT"
+            caption_infra_pej = (
+                "Infractions relevées"
+                if nb_pej < 10
+                else "Infractions les plus relevées"
+            )
             builder.add_key_figures_and_tables(
                 [(str(nb_pej), "PEJ")],
                 [
                     {
                         "data_rows": tbl_infractions,
-                        "caption": "Infractions les plus relevées",
+                        "caption": caption_infra_pej,
                         "col_widths": [avail_w * 0.75, avail_w * 0.25],
                         "col_aligns": ["LEFT", "RIGHT"],
                     },
@@ -2390,10 +2550,15 @@ def _generate_pdf(
             tbl_infractions = [["Infraction (qualification et nature)", "Nombre"]]
             for _, row in top_df.iterrows():
                 tbl_infractions.append([str(row["libelle_affich"]), str(int(row["nb"]))])
+            caption_infra_pej = (
+                "Infractions relevées"
+                if nb_pej < 10
+                else "Infractions les plus relevées"
+            )
             builder.add_key_figures_and_table(
                 [(str(nb_pej), "PEJ")],
                 tbl_infractions,
-                caption="Infractions les plus relevées",
+                caption=caption_infra_pej,
                 col_widths=[avail_w * 0.75, avail_w * 0.25],
                 col_aligns=["LEFT", "RIGHT"],
             )
@@ -2456,15 +2621,15 @@ def _generate_pdf(
     if agg_pnf is not None:
         anchor, title = sections[sec_idx]; sec_idx += 1
         builder.add_section(anchor, title)
-        tbl = [["Zone", "Nb contrôles", "Contrôles non-conformes", "Taux d'infraction"]]
-        grp_labels, series_ctrl = [], {"Contrôles": [], "Infractions": []}
+        tbl = [["Zone", "Nb contrôles", "Contrôles non-conformes", "Taux de non-conformité"]]
+        grp_labels, series_ctrl = [], {"Contrôles": [], "Non conformes": []}
         for _, row in agg_pnf.iterrows():
-            t = f"{row['taux_inf']:.1%}" if pd.notna(row.get("taux_inf")) else "n.d."
+            t = format_pct_int_from_rate(row.get("taux_non_conformite"))
             tbl.append([str(row["PNF"]), str(int(row["nb_controles"])),
-                        str(int(row["nb_inf"])), t])
+                        str(int(row["nb_non_conforme"])), t])
             grp_labels.append(str(row["PNF"]))
             series_ctrl["Contrôles"].append(int(row["nb_controles"]))
-            series_ctrl["Infractions"].append(int(row["nb_inf"]))
+            series_ctrl["Non conformes"].append(int(row["nb_non_conforme"]))
         caption_pnf = (
             "Contrôles – Ensemble PNF et Cœur de parc"
             if str(profil_id).strip().lower() in {"pnf", "pnf_foret"}
@@ -2512,7 +2677,7 @@ def _generate_pdf(
         # Ligne départementale
         dep = df_zone[df_zone["zone"] == "Département"].iloc[0]
         total_dep = int(dep["nb_total"])
-        inf_dep = int(dep["nb_infraction"])
+        nc_dep = int(dep["nb_non_conforme"])
         conf_dep = int(dep["nb_conforme"])
 
         # Ligne TUB (peut être absente si aucune commune TUB dans le département)
@@ -2520,28 +2685,28 @@ def _generate_pdf(
         if not tub_rows.empty:
             tub = tub_rows.iloc[0]
             total_tub = int(tub["nb_total"])
-            inf_tub = int(tub["nb_infraction"])
+            nc_tub = int(tub["nb_non_conforme"])
             conf_tub = int(tub["nb_conforme"])
 
             total_hors_tub = max(total_dep - total_tub, 0)
-            inf_hors_tub = max(inf_dep - inf_tub, 0)
+            nc_hors_tub = max(nc_dep - nc_tub, 0)
             conf_hors_tub = max(conf_dep - conf_tub, 0)
 
             data_tub = [
                 {
                     "zone": "Zone TUB",
                     "nb_controles": total_tub,
-                    "nb_inf": inf_tub,
-                    "taux_inf": (
-                        inf_tub / total_tub if total_tub > 0 else pd.NA
+                    "nb_non_conforme": nc_tub,
+                    "taux_non_conformite": (
+                        nc_tub / total_tub if total_tub > 0 else pd.NA
                     ),
                 },
                 {
                     "zone": "Hors zone TUB",
                     "nb_controles": total_hors_tub,
-                    "nb_inf": inf_hors_tub,
-                    "taux_inf": (
-                        inf_hors_tub / total_hors_tub
+                    "nb_non_conforme": nc_hors_tub,
+                    "taux_non_conformite": (
+                        nc_hors_tub / total_hors_tub
                         if total_hors_tub > 0
                         else pd.NA
                     ),
@@ -2553,21 +2718,21 @@ def _generate_pdf(
             # le bloc Zone TUB fait partie de la section « Zones d'intérêt ».
             if profil_id != "agrainage":
                 builder.add_section("sec_tub", "Zone TUB / Hors zone TUB")
-            tbl = [["Zone", "Nb contrôles", "Contrôles non-conformes", "Taux d'infraction"]]
-            grp_labels, series_ctrl_tub = [], {"Contrôles": [], "Infractions": []}
+            tbl = [["Zone", "Nb contrôles", "Contrôles non-conformes", "Taux de non-conformité"]]
+            grp_labels, series_ctrl_tub = [], {"Contrôles": [], "Non conformes": []}
             for _, row in agg_tub.iterrows():
-                t = f"{row['taux_inf']:.1%}" if pd.notna(row.get("taux_inf")) else "n.d."
+                t = format_pct_int_from_rate(row.get("taux_non_conformite"))
                 tbl.append(
                     [
                         str(row["zone"]),
                         str(int(row["nb_controles"])),
-                        str(int(row["nb_inf"])),
+                        str(int(row["nb_non_conforme"])),
                         t,
                     ]
                 )
                 grp_labels.append(str(row["zone"]))
                 series_ctrl_tub["Contrôles"].append(int(row["nb_controles"]))
-                series_ctrl_tub["Infractions"].append(int(row["nb_inf"]))
+                series_ctrl_tub["Non conformes"].append(int(row["nb_non_conforme"]))
             builder.add_table(
                 tbl,
                 caption="Contrôles – Zone TUB vs Hors zone TUB",
@@ -2604,15 +2769,15 @@ def _generate_pdf(
         else:
             anchor, title = sections[sec_idx]; sec_idx += 1
             builder.add_section(anchor, title)
-        tbl = [["Zone", "Nb total", "Nb conforme", "Contrôles non-conformes", "Taux d'infraction"]]
+        tbl = [["Zone", "Nb total", "Nb conforme", "Contrôles non-conformes", "Taux de non-conformité"]]
         for _, row in zone_ctrl.iterrows():
-            t = f"{row['taux_infraction']:.1%}" if pd.notna(row.get("taux_infraction")) else "n.d."
+            t = format_pct_int_from_rate(row.get("taux_non_conformite"))
             tbl.append(
                 [
                     str(row["zone"]),
                     str(int(row["nb_total"])),
                     str(int(row["nb_conforme"])),
-                    str(int(row["nb_infraction"])),
+                    str(int(row["nb_non_conforme"])),
                     t,
                 ]
             )
@@ -2855,7 +3020,10 @@ def run_engine(
     elif vent_type == "globale":
         ventilation_mode = "globale"
     else:
-        ventilation_mode = "annuelle" if duree_jours > seuil_jours else "trimestrielle"
+        if duree_jours < 183:
+            ventilation_mode = "mensuelle"
+        else:
+            ventilation_mode = "annuelle" if duree_jours > seuil_jours else "trimestrielle"
     print(
         f"Ventilation temporelle : {ventilation_mode} "
         f"(type={vent_type}, seuil={seuil_jours} j, durée={duree_jours} j)"

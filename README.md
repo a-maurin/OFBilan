@@ -52,6 +52,20 @@ python scripts/run_bilan.py --mode thematique --profil pnf --date-deb 2025-01-01
 - **Combine** possible : `--combine`
 - **Sorties** : `out/bilan_<profil>/` (ou bilan combine)
 
+## Méthodologie des sources (vue non technique)
+
+Le bilan ne constitue pas une base unique « toute mélangée » : il part de plusieurs jeux de données distincts, qui répondent chacun à une question différente, puis les met en cohérence sur un même cadre (département et période choisis).
+
+Les **points de contrôle OSCEAN** sont la colonne vertébrale lorsqu’ils sont utilisés : ils décrivent l’activité de contrôle sur le terrain (où, quand, sur quel thème ou domaine, avec quel résultat, parfois avec un lien vers des suites administratives ou judiciaires lorsque l’information est présente dans le point). C’est la référence pour parler de **contrôles** et de **résultats de contrôle** au sens « point de contrôle ».
+
+Les **procédures judiciaires (PEJ)** et les **procédures administratives (PA)** sont lues comme des **suites possibles** de l’activité, mais pas seulement comme la suite d’un contrôle : une **infraction peut faire suite à un contrôle** ou être **constatée en dehors d’un contrôle** (autre saisine, enquête, etc.). Pour le volet judiciaire, le bilan s’appuie en pratique sur **deux entrées complémentaires** : le **classeur de suivi des PEJ** (`sources/suivi_procedure_enq_judiciaire_YYYYMMDD.ods`, par exemple `sources/suivi_procedure_enq_judiciaire_20260206.ods`), qui porte le contenu procédural et le filtrage temporel, et la **couche de localisation des faits PJ** (`sources/sig/points_infractions_pj/localisation_infrac_FAITS_YYYYMMDD` en GeoPackage ou shapefile, par exemple les fichiers `localisation_infrac_FAITS_20260403.shp` / `.shx` / `.dbf`, etc.), qui apporte la **géolocalisation des faits** lorsque le classeur ne suffit pas seul. Ces sources **complètent** les points de contrôle sans les remplacer : elles décrivent ce qui existe côté dossiers PEJ/PA et côté faits localisés, avec des **recoupements possibles** lorsque les données le permettent (par exemple repères communs entre un point OSCEAN, un dossier PEJ et un fait géolocalisé).
+
+Les **infractions relevées par procès-verbal électronique (PVe)** sont comprises comme une **autre voie de constat des infractions**, issue d’un circuit différent d’OSCEAN et distincte du couple PEJ / faits PJ ci-dessus. Elles sont donc traitées en **source parallèle** : utiles pour le volume et le profil des infractions « PVe », sans être confondues avec le seul décompte des contrôles OSCEAN ni avec le périmètre PEJ + localisation des faits. Le bilan peut les présenter à côté des contrôles pour donner une vision plus large de l’activité répressive ou de constat, en rappelant qu’il ne s’agit pas du même périmètre métier.
+
+Les **référentiels et fonds cartographiques** (communes, zones d’intérêt, libellés d’infractions, etc.) ne sont pas des « sources d’événements » au même titre : ils servent à interpréter ou situer les lignes des sources ci-dessus (libellés lisibles, regroupements par commune ou par zone lorsque l’option est activée), sans créer de nouveaux faits.
+
+Le **profil du bilan** (fichier de paramètres) précise quelles sources sont activées ou non pour ce rapport et comment le périmètre métier est restreint (par exemple un thème ou des mots-clés). Ainsi, pour un bilan thématique, on ne « réduit » pas arbitrairement la base : on filtre les points OSCEAN selon les règles du profil, puis on rapproche PEJ, PA et éventuellement PVe sur ce même cadre temporel et territorial, pour que les chiffres et graphiques du PDF restent comparables dans le temps et dans l’espace, tout en respectant la sémantique de chaque source (contrôle d’un côté, procédures et faits PJ d’un autre, PVe d’un troisième). Détail des jointures et des champs : `ref/README_sources.md`, `scripts/common/loaders.py`.
+
 ## Architecture (vue simple)
 
 - `scripts/run_bilan.py` : orchestrateur principal

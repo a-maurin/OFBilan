@@ -338,6 +338,8 @@ class PDFReportBuilder:
         col_aligns: Optional[list] = None,
         keep_together: bool = False,
         wide_headers: bool = False,
+        *,
+        header_font_size: float | None = None,
     ) -> None:
         block: List = []
         if caption:
@@ -351,7 +353,12 @@ class PDFReportBuilder:
                 avail_w=self.avail_w,
             )
         else:
-            tbl = ofb_table(data_rows, col_widths=col_widths, col_aligns=col_aligns)
+            tbl = ofb_table(
+                data_rows,
+                col_widths=col_widths,
+                col_aligns=col_aligns,
+                header_font_size=header_font_size,
+            )
         block.append(tbl)
         block.append(Spacer(1, 6 * mm))
         if keep_together:

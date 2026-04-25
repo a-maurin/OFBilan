@@ -13,6 +13,7 @@ from scripts.common.ofb_charte import (
     CHART_BAR_GROUPED_COLORS,
     COLOR_CHART_4,
 )
+from scripts.common.percent_format import int_percents_largest_remainder
 
 
 def _pick_mpl_font() -> str:
@@ -108,10 +109,14 @@ def chart_pie(
         else:
             colors_pie.append(base)
     total = sum(values)
-    legend_labels = [
-        f"{lb} : {v} ({v / total:.1%})" if total else f"{lb} : {v} (0.0%)"
-        for lb, v in zip(labels, values)
-    ]
+    if total:
+        pcts = int_percents_largest_remainder([int(v) for v in values])
+        legend_labels = [
+            f"{lb} : {v} ({pcts[i]} %)"
+            for i, (lb, v) in enumerate(zip(labels, values))
+        ]
+    else:
+        legend_labels = [f"{lb} : {v} (0 %)" for lb, v in zip(labels, values)]
     wedges, _ = ax.pie(
         values, startangle=90, colors=colors_pie
     )
@@ -145,7 +150,10 @@ def chart_bar(
     apply_mpl_style()
     fig, ax = plt.subplots(figsize=(CHART_FIG_WIDTH, CHART_FIG_HEIGHT_BAR))
     x = np.arange(len(categories))
-    bars = ax.bar(x, values, color=color, width=0.5)
+    bar_w = 0.34 if len(categories) == 1 else 0.5
+    bars = ax.bar(x, values, color=color, width=bar_w)
+    if len(categories) == 1:
+        ax.set_xlim(-0.9, 0.9)
     ax.set_xticks(x)
     ax.set_xticklabels(categories, fontsize=9)
     ax.set_ylabel(ylabel, fontsize=9)
@@ -169,7 +177,7 @@ def chart_bar_grouped(
     fig, ax = plt.subplots(figsize=(CHART_FIG_WIDTH, CHART_FIG_HEIGHT_WITH_LEGEND))
     x = np.arange(len(group_labels))
     n = len(series)
-    w = 0.30
+    w = 0.18 if len(group_labels) == 1 else 0.30
     keywords_inf = ("infraction", "infractions", "non conforme", "non conformes", "non-conforme", "non-conformes")
     for i, (label, vals) in enumerate(series.items()):
         offset = (i - n / 2 + 0.5) * w
@@ -185,6 +193,8 @@ def chart_bar_grouped(
         ax.bar_label(bars, fmt="%g", fontsize=8, fontweight="bold")
     ax.set_xticks(x)
     ax.set_xticklabels(group_labels, fontsize=9)
+    if len(group_labels) == 1:
+        ax.set_xlim(-0.9, 0.9)
     ax.set_ylabel(ylabel, fontsize=9)
     ax.set_title(title, fontsize=11, fontweight="bold", color=COLOR_PRIMARY, pad=10)
     _legend_below_axis(ax, ncol=min(4, max(2, n)))
@@ -210,6 +220,7 @@ def chart_bar_stacked(
     x = np.arange(len(group_labels))
     bottom = np.zeros(len(group_labels))
     keywords_inf = ("infraction", "infractions", "non conforme", "non conformes", "non-conforme", "non-conformes")
+    bar_w = 0.34 if len(group_labels) == 1 else 0.55
     for i, (label, vals) in enumerate(series.items()):
         vals_arr = np.array(vals, dtype=float)
         lbl = str(label).lower()
@@ -217,7 +228,7 @@ def chart_bar_stacked(
             color = COLOR_CHART_4
         else:
             color = CHART_BAR_GROUPED_COLORS[i % len(CHART_BAR_GROUPED_COLORS)]
-        bars = ax.bar(x, vals_arr, 0.55, label=label, bottom=bottom, color=color)
+        bars = ax.bar(x, vals_arr, bar_w, label=label, bottom=bottom, color=color)
         for bar, val in zip(bars, vals_arr):
             if val > 0:
                 ax.text(
@@ -230,6 +241,8 @@ def chart_bar_stacked(
         bottom += vals_arr
     ax.set_xticks(x)
     ax.set_xticklabels(group_labels, fontsize=9)
+    if len(group_labels) == 1:
+        ax.set_xlim(-0.9, 0.9)
     ax.set_ylabel(ylabel, fontsize=9)
     ax.set_title(title, fontsize=11, fontweight="bold", color=COLOR_PRIMARY, pad=10)
     _legend_below_axis(ax, ncol=min(4, max(2, len(series))))

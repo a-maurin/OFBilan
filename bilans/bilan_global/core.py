@@ -9,6 +9,7 @@ from scripts.common.loaders import load_natinf_ref
 from scripts.common.utils import (
     agg_effectifs_usagers,
     agg_effectifs_usagers_par_domaine,
+    count_controles_non_conformes_oscean,
 )
 
 _ROOT = Path(__file__).resolve().parents[2]
@@ -241,8 +242,8 @@ def analyse_annuelle_global(
             else 0
         )
         nb_ctrl_inf = (
-            int(
-                ((point["date_ctrl"].dt.year == year) & (point["resultat"] == "Infraction")).sum()
+            count_controles_non_conformes_oscean(
+                point.loc[point["date_ctrl"].dt.year == year, "resultat"]
             )
             if not point.empty and "date_ctrl" in point.columns and "resultat" in point.columns
             else 0
@@ -267,7 +268,7 @@ def analyse_annuelle_global(
                 "periode": str(year),
                 "nb_controles": nb_ctrl,
                 "nb_controles_non_conformes": nb_ctrl_inf,
-                "taux_infraction_controles": (nb_ctrl_inf / nb_ctrl) if nb_ctrl > 0 else pd.NA,
+                "taux_non_conformite_controles": (nb_ctrl_inf / nb_ctrl) if nb_ctrl > 0 else pd.NA,
                 "nb_pej": nb_pej,
                 "nb_pa": nb_pa,
                 "nb_pve": nb_pve,
@@ -329,8 +330,8 @@ def analyse_trimestrielle_global(
         nb_ctrl_inf = 0
         if not point.empty and "date_ctrl" in point.columns and "resultat" in point.columns:
             dt = point["date_ctrl"]
-            mask = (dt.dt.year == year) & (dt.dt.month >= m1) & (dt.dt.month <= m2) & (point["resultat"] == "Infraction")
-            nb_ctrl_inf = int(mask.sum())
+            mask = (dt.dt.year == year) & (dt.dt.month >= m1) & (dt.dt.month <= m2)
+            nb_ctrl_inf = count_controles_non_conformes_oscean(point.loc[mask, "resultat"])
         nb_pej = 0
         if not pej.empty and "DATE_REF" in pej.columns:
             dt = pej["DATE_REF"]
@@ -352,7 +353,7 @@ def analyse_trimestrielle_global(
                 "periode": f"{year}-T{quarter}",
                 "nb_controles": nb_ctrl,
                 "nb_controles_non_conformes": nb_ctrl_inf,
-                "taux_infraction_controles": (nb_ctrl_inf / nb_ctrl) if nb_ctrl > 0 else pd.NA,
+                "taux_non_conformite_controles": (nb_ctrl_inf / nb_ctrl) if nb_ctrl > 0 else pd.NA,
                 "nb_pej": nb_pej,
                 "nb_pa": nb_pa,
                 "nb_pve": nb_pve,
@@ -361,6 +362,84 @@ def analyse_trimestrielle_global(
 
     pd.DataFrame(rows).to_csv(
         out_dir / "indicateurs_global_par_trimestre.csv", sep=";", index=False
+    )
+
+
+def analyse_mensuelle_global(
+    point: pd.DataFrame,
+    pa: pd.DataFrame,
+    pej: pd.DataFrame,
+    pve: pd.DataFrame,
+    out_dir: Path,
+) -> None:
+    """Construit les indicateurs mensuels globaux (YYYY-MM)."""
+    periods: set[tuple[int, int]] = set()
+
+    if not point.empty and "date_ctrl" in point.columns:
+        for _, r in point["date_ctrl"].dropna().items():
+            t = r
+            if hasattr(t, "year") and hasattr(t, "month"):
+                periods.add((int(t.year), int(t.month)))
+    if not pej.empty and "DATE_REF" in pej.columns:
+        for _, r in pej["DATE_REF"].dropna().items():
+            t = r
+            if hasattr(t, "year") and hasattr(t, "month"):
+                periods.add((int(t.year), int(t.month)))
+    if not pa.empty and "DATE_REF" in pa.columns:
+        for _, r in pa["DATE_REF"].dropna().items():
+            t = r
+            if hasattr(t, "year") and hasattr(t, "month"):
+                periods.add((int(t.year), int(t.month)))
+    if not pve.empty and "INF-DATE-INTG" in pve.columns:
+        for _, r in pve["INF-DATE-INTG"].dropna().items():
+            t = r
+            if hasattr(t, "year") and hasattr(t, "month"):
+                periods.add((int(t.year), int(t.month)))
+
+    rows = []
+    for (year, month) in sorted(periods):
+        nb_ctrl = 0
+        nb_ctrl_nc = 0
+        if not point.empty and "date_ctrl" in point.columns:
+            dt = point["date_ctrl"]
+            mask = (dt.dt.year == year) & (dt.dt.month == month)
+            nb_ctrl = int(mask.sum())
+            if "resultat" in point.columns:
+                nb_ctrl_nc = count_controles_non_conformes_oscean(
+                    point.loc[mask, "resultat"]
+                )
+        nb_pej = 0
+        if not pej.empty and "DATE_REF" in pej.columns:
+            dt = pej["DATE_REF"]
+            mask = (dt.dt.year == year) & (dt.dt.month == month)
+            nb_pej = int(mask.sum())
+        nb_pa = 0
+        if not pa.empty and "DATE_REF" in pa.columns:
+            dt = pa["DATE_REF"]
+            mask = (dt.dt.year == year) & (dt.dt.month == month)
+            nb_pa = int(mask.sum())
+        nb_pve = 0
+        if not pve.empty and "INF-DATE-INTG" in pve.columns:
+            dt = pve["INF-DATE-INTG"]
+            mask = (dt.dt.year == year) & (dt.dt.month == month)
+            nb_pve = int(mask.sum())
+
+        rows.append(
+            {
+                "periode": f"{year}-{month:02d}",
+                "nb_controles": nb_ctrl,
+                "nb_controles_non_conformes": nb_ctrl_nc,
+                "taux_non_conformite_controles": (nb_ctrl_nc / nb_ctrl)
+                if nb_ctrl > 0
+                else pd.NA,
+                "nb_pej": nb_pej,
+                "nb_pa": nb_pa,
+                "nb_pve": nb_pve,
+            }
+        )
+
+    pd.DataFrame(rows).to_csv(
+        out_dir / "indicateurs_global_par_mois.csv", sep=";", index=False
     )
 
 

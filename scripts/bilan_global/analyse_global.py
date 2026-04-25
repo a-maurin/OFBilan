@@ -57,11 +57,13 @@ from scripts.common.ofb_charte import (
 from scripts.common.pdf_utils import key_figures_table, ofb_table
 from scripts.common.chart_display_config import load_chart_display_config, compute_pdf_ratios
 from scripts.common.charts import chart_pie, chart_bar_grouped, chart_bar_stacked, chart_line_evolution
+from scripts.common.percent_format import format_pct_int_from_rate, tab_counts_to_pct_strings
 from bilans.bilan_global.core import (
     analyse_controles_global,
     analyse_pej_pa_global,
     analyse_pve_global,
     analyse_annuelle_global,
+    analyse_mensuelle_global,
     analyse_trimestrielle_global,
 )
 
@@ -98,6 +100,8 @@ def resolve_ventilation_mode_global(date_deb: pd.Timestamp, date_fin: pd.Timesta
     """Détermine le mode global de ventilation temporelle."""
     vent_type = str(VENTILATION_TYPE_GLOBAL).strip().lower()
     duree_jours = int((date_fin - date_deb).days)
+    if duree_jours < 183:
+        return "mensuelle"
     if vent_type == "annuelle":
         return "annuelle"
     if vent_type == "globale":
@@ -149,7 +153,9 @@ def _generate_pdf_content(
     agg_usager = _load_csv_opt(out_dir, "controles_global_par_usager.csv")
     cross_usager_dom = _load_csv_opt(out_dir, "controles_global_usager_par_domaine.csv")
     usagers_resume = _load_csv_opt(out_dir, "controles_global_usagers_resume.csv")
-    if ventilation_mode == "trimestrielle":
+    if ventilation_mode == "mensuelle":
+        agg_periode = _load_csv_opt(out_dir, "indicateurs_global_par_mois.csv")
+    elif ventilation_mode == "trimestrielle":
         agg_periode = _load_csv_opt(out_dir, "indicateurs_global_par_trimestre.csv")
     else:
         agg_periode = _load_csv_opt(out_dir, "indicateurs_global_par_annee.csv")
@@ -280,9 +286,14 @@ def _generate_pdf_content(
 
     # I bis. Analyse de l’ensemble de la période du bilan
     if agg_periode is not None and not agg_periode.empty:
+        is_mensuel = ventilation_mode == "mensuelle"
         is_trimestriel = ventilation_mode == "trimestrielle"
-        label_periode = "Trimestre" if is_trimestriel else "Ann\u00e9e"
-        texte_ventilation = "par trimestre " if is_trimestriel else "par ann\u00e9e "
+        label_periode = "Mois" if is_mensuel else ("Trimestre" if is_trimestriel else "Ann\u00e9e")
+        texte_ventilation = (
+            "par mois "
+            if is_mensuel
+            else ("par trimestre " if is_trimestriel else "par ann\u00e9e ")
+        )
         story.append(Paragraph(
             '<a name="sec1b"/>I bis. Analyse de l\u2019ensemble de la p\u00e9riode du bilan',
             styles["Heading1"],
@@ -296,15 +307,15 @@ def _generate_pdf_content(
             label_periode,
             "Nb contr\u00f4les",
             "Contr\u00f4les non-conformes",
-            "Taux d\u2019infraction",
+            "Taux de non-conformit\u00e9",
             "PEJ",
             "PA",
             "PVe",
         ]]
         for _, row in agg_periode.iterrows():
             taux_str = (
-                f"{float(row['taux_infraction_controles']):.1%}"
-                if pd.notna(row.get("taux_infraction_controles"))
+                format_pct_int_from_rate(row.get("taux_non_conformite_controles"))
+                if pd.notna(row.get("taux_non_conformite_controles"))
                 else "n.d."
             )
             tbl.append([
@@ -337,8 +348,15 @@ def _generate_pdf_content(
         from reportlab.platypus import Image as RLImage
 
         year_labels = [str(v) for v in agg_periode["periode"].tolist()]
-        titre_ctrl = "Contr\u00f4les par trimestre (conformes / non-conformes)" if ventilation_mode == "trimestrielle" else "Contr\u00f4les par ann\u00e9e (conformes / non-conformes)"
-        titre_proc = "Proc\u00e9dures et PVe par trimestre" if ventilation_mode == "trimestrielle" else "Proc\u00e9dures et PVe par ann\u00e9e"
+        if ventilation_mode == "mensuelle":
+            titre_ctrl = "Contr\u00f4les par mois (conformes / non-conformes)"
+            titre_proc = "Proc\u00e9dures et PVe par mois"
+        elif ventilation_mode == "trimestrielle":
+            titre_ctrl = "Contr\u00f4les par trimestre (conformes / non-conformes)"
+            titre_proc = "Proc\u00e9dures et PVe par trimestre"
+        else:
+            titre_ctrl = "Contr\u00f4les par ann\u00e9e (conformes / non-conformes)"
+            titre_proc = "Proc\u00e9dures et PVe par ann\u00e9e"
 
         conformes = [
             int(row["nb_controles"]) - int(row["nb_controles_non_conformes"])
@@ -380,13 +398,13 @@ def _generate_pdf_content(
 
         taux_values = []
         for _, row in agg_periode.iterrows():
-            val = row.get("taux_infraction_controles")
-            taux_values.append(round(float(val) * 100, 1) if pd.notna(val) else 0)
+            val = row.get("taux_non_conformite_controles")
+            taux_values.append(int(round(float(val) * 100)) if pd.notna(val) else 0)
         if any(v > 0 for v in taux_values):
             line_path = chart_line_evolution(
                 year_labels,
-                {"Taux d\u2019infraction (%)": taux_values},
-                "\u00c9volution du taux d\u2019infraction",
+                {"Taux de non-conformit\u00e9 (%)": taux_values},
+                "\u00c9volution du taux de non-conformit\u00e9",
                 "Taux (%)",
                 tmp_dir, "line_global_taux_inf.png",
             )
@@ -403,7 +421,7 @@ def _generate_pdf_content(
         story.append(Paragraph("Tableau 1 : Localisations de contrôle par domaine", styles["TableCaption"]))
         tbl = [["Domaine", "Nombre", "Taux"]]
         for _, row in agg_domaine.head(25).iterrows():
-            taux_str = f"{row['taux']:.1%}" if pd.notna(row.get("taux")) else "n.d."
+            taux_str = format_pct_int_from_rate(row.get("taux"))
             tbl.append([str(row["domaine"]), str(int(row["nb"])), taux_str])
         story.append(ofb_table(tbl, col_widths=[avail_w * 0.55, avail_w * 0.22, avail_w * 0.23], col_aligns=["LEFT", "RIGHT", "RIGHT"]))
         if len(agg_domaine) > 25:
@@ -431,7 +449,7 @@ def _generate_pdf_content(
         story.append(Paragraph("Tableau 2 : Localisations de contrôle par thème (extrait)", styles["TableCaption"]))
         tbl = [["Thème", "Nombre", "Taux"]]
         for _, row in agg_theme.head(20).iterrows():
-            taux_str = f"{row['taux']:.1%}" if pd.notna(row.get("taux")) else "n.d."
+            taux_str = format_pct_int_from_rate(row.get("taux"))
             tbl.append([str(row["theme"])[:45], str(int(row["nb"])), taux_str])
         story.append(ofb_table(tbl, col_widths=[avail_w * 0.55, avail_w * 0.22, avail_w * 0.23], col_aligns=["LEFT", "RIGHT", "RIGHT"]))
     else:
@@ -443,9 +461,9 @@ def _generate_pdf_content(
     if tab_resultats is not None and not tab_resultats.empty:
         story.append(Paragraph("Tableau 3 : Résultats (Conforme / Infraction / Manquement)", styles["TableCaption"]))
         tbl = [["Résultat", "Nombre", "Taux"]]
-        for _, row in tab_resultats.iterrows():
-            taux_str = f"{row['taux']:.1%}" if pd.notna(row.get("taux")) else "n.d."
-            tbl.append([str(row["resultat"]), str(int(row["nb"])), taux_str])
+        tr_pct = tab_counts_to_pct_strings(tab_resultats["nb"].astype(int).tolist())
+        for i, (_, row) in enumerate(tab_resultats.iterrows()):
+            tbl.append([str(row["resultat"]), str(int(row["nb"])), tr_pct[i]])
         story.append(ofb_table(tbl, col_widths=[avail_w * 0.50, avail_w * 0.25, avail_w * 0.25], col_aligns=["LEFT", "RIGHT", "RIGHT"]))
     else:
         story.append(Paragraph("Aucune donnée de résultat disponible.", styles["BodyText"]))
@@ -538,9 +556,10 @@ def _generate_pdf_content(
         # Tableau distribution
         story.append(Paragraph("Tableau 7 : Usagers contrôlés par type", styles["TableCaption"]))
         tbl_u = [["Type d’usagers", "Nombre", "Taux"]]
-        for _, row in agg_usager.iterrows():
-            taux_str = f"{float(row['taux']):.1%}" if pd.notna(row.get("taux")) else "n.d."
-            tbl_u.append([str(row["type_usager"]), str(int(row["nb"])), taux_str])
+        nbs_ug = [int(row["nb"]) for _, row in agg_usager.iterrows()]
+        pct_ug = tab_counts_to_pct_strings(nbs_ug)
+        for i, (_, row) in enumerate(agg_usager.iterrows()):
+            tbl_u.append([str(row["type_usager"]), str(int(row["nb"])), pct_ug[i]])
         story.append(ofb_table(
             tbl_u,
             col_widths=[avail_w * 0.58, avail_w * 0.21, avail_w * 0.21],
@@ -680,6 +699,8 @@ def run_global(
             analyse_pve_global(pve, out_dir)
             if ventilation_mode == "annuelle":
                 analyse_annuelle_global(point, pa, pej, pve, out_dir)
+            elif ventilation_mode == "mensuelle":
+                analyse_mensuelle_global(point, pa, pej, pve, out_dir)
             elif ventilation_mode == "trimestrielle":
                 analyse_trimestrielle_global(point, pa, pej, pve, out_dir)
             else:
@@ -688,7 +709,7 @@ def run_global(
                     "periode",
                     "nb_controles",
                     "nb_controles_non_conformes",
-                    "taux_infraction_controles",
+                    "taux_non_conformite_controles",
                     "nb_pej",
                     "nb_pa",
                     "nb_pve",

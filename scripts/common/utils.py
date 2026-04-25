@@ -410,7 +410,8 @@ def agg_resultat_counts_par_type_usager(
 ) -> pd.DataFrame:
     """
     Compte les contrôles par type d'usager et par résultat explicite
-    (Conforme / Infraction / Manquement ; le reste → Autre).
+    (Conforme / Infraction / Manquement ; le reste → colonne ``Autre_resultat``,
+    distinct du libellé de type d'usager « Autre » lorsque le champ est vide).
 
     Une ligne de point peut contribuer à plusieurs types d'usager si le champ
     source est multi-catégories (même logique que les autres ``agg_*_par_type_usager``).
@@ -422,12 +423,12 @@ def agg_resultat_counts_par_type_usager(
                 "Conforme",
                 "Infraction",
                 "Manquement",
-                "Autre",
+                "Autre_resultat",
                 "Total",
             ]
         )
 
-    buckets = ("Conforme", "Infraction", "Manquement", "Autre")
+    buckets = ("Conforme", "Infraction", "Manquement", "Autre_resultat")
     counts: dict[str, dict[str, int]] = {}
 
     for _, row in df.iterrows():
@@ -439,7 +440,7 @@ def agg_resultat_counts_par_type_usager(
         elif res == "Conforme":
             b = "Conforme"
         else:
-            b = "Autre"
+            b = "Autre_resultat"
 
         toks = _parse_type_usager_tokens(row.get(source_champ))
         if not toks:
@@ -636,67 +637,75 @@ def contient_natinf(s: str, natinf_list: List[str]) -> bool:
     return False
 
 
+def count_controles_non_conformes_oscean(resultat: pd.Series) -> int:
+    """
+    Compte les contrôles non conformes OSCEAN : résultat « Infraction » ou « Manquement ».
+
+    Aligné sur la logique métier : un contrôle non conforme peut révéler l'un ou l'autre ;
+    le total des non-conformes est la somme des deux catégories (une ligne = un contrôle).
+    """
+    r = resultat.astype(str).str.strip().str.lower()
+    return int(r.isin(("infraction", "manquement")).sum())
+
+
 def _zone_summary(
     df: pd.DataFrame,
     col_insee: str,
     tub_codes: set,
     pnf_codes: set,
 ) -> pd.DataFrame:
-    """Calcule nb_total, nb_conforme, nb_infraction pour dept / TUB / PNF."""
+    """Calcule nb_total, nb_conforme, nb_non_conforme pour dept / TUB / PNF."""
     insee = df[col_insee].astype(str).str.zfill(5)
     rows = []
 
     total = len(df)
-    nb_inf_dept = (
-        (df["resultat"].str.lower() == "infraction").sum()
-        if "resultat" in df.columns
-        else total
-    )
-    nb_conf_dept = total - nb_inf_dept
+    if "resultat" in df.columns:
+        nb_nc_dept = count_controles_non_conformes_oscean(df["resultat"])
+    else:
+        nb_nc_dept = 0
+    nb_conf_dept = total - nb_nc_dept
     rows.append(
         {
             "zone": "Département",
             "nb_total": total,
             "nb_conforme": nb_conf_dept,
-            "nb_infraction": nb_inf_dept,
+            "nb_non_conforme": nb_nc_dept,
         }
     )
 
     mask_tub = insee.isin(tub_codes)
     sub_tub = df[mask_tub]
-    nb_inf_tub = (
-        (sub_tub["resultat"].str.lower() == "infraction").sum()
-        if "resultat" in sub_tub.columns
-        else len(sub_tub)
-    )
+    if "resultat" in sub_tub.columns and not sub_tub.empty:
+        nb_nc_tub = count_controles_non_conformes_oscean(sub_tub["resultat"])
+    else:
+        nb_nc_tub = 0
     rows.append(
         {
             "zone": "Zone TUB",
             "nb_total": len(sub_tub),
-            "nb_conforme": len(sub_tub) - nb_inf_tub,
-            "nb_infraction": nb_inf_tub,
+            "nb_conforme": len(sub_tub) - nb_nc_tub,
+            "nb_non_conforme": nb_nc_tub,
         }
     )
 
     mask_pnf = insee.isin(pnf_codes)
     sub_pnf = df[mask_pnf]
-    nb_inf_pnf = (
-        (sub_pnf["resultat"].str.lower() == "infraction").sum()
-        if "resultat" in sub_pnf.columns
-        else len(sub_pnf)
-    )
+    if "resultat" in sub_pnf.columns and not sub_pnf.empty:
+        nb_nc_pnf = count_controles_non_conformes_oscean(sub_pnf["resultat"])
+    else:
+        nb_nc_pnf = 0
     rows.append(
         {
             "zone": "PNF",
             "nb_total": len(sub_pnf),
-            "nb_conforme": len(sub_pnf) - nb_inf_pnf,
-            "nb_infraction": nb_inf_pnf,
+            "nb_conforme": len(sub_pnf) - nb_nc_pnf,
+            "nb_non_conforme": nb_nc_pnf,
         }
     )
 
     summary = pd.DataFrame(rows)
-    summary["taux_infraction"] = (
-        summary["nb_infraction"] / summary["nb_total"].replace(0, pd.NA)
+    summary["taux_non_conformite"] = (
+        summary["nb_non_conforme"] / summary["nb_total"].replace(0, pd.NA)
     )
     return summary
 
