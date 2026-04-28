@@ -1,0 +1,45 @@
+# Bilan d'activité limité aux communes du périmètre PNF (Parc national de forêts)
+schema_version: 2
+id: pnf_foret
+label: "Activité du service dans le périmètre du PNF"
+title_label: "Parc national de forêts"
+out_subdir: bilan_pnf_foret
+
+restrict_geo: pnf
+
+filter:
+  type: all
+
+natinf_pve: []
+natinf_pej: []
+
+analyse_PVe: true
+
+sources:
+  point_ctrl: true
+  pej: true
+  pa: true
+  pve: true
+
+periode_analyse:
+  ventilation:
+    type: auto
+    seuil_jours: 366
+
+options:
+  pnf:
+    label: "Analyse PNF / hors PNF (après restriction périmètre)"
+    default: true
+    ask: false
+  tub:
+    label: "Analyse zones TUB"
+    default: false
+    ask: false
+  cartes:
+    label: "Intégration des cartes"
+    default: true
+    ask: false
+  par_commune:
+    label: "Indicateurs par commune"
+    default: true
+    ask: false

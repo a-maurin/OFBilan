@@ -1,0 +1,30 @@
+# Profil bilan types d'usagers (global)
+schema_version: 2
+id: types_usager
+label: "Bilan types d'usagers"
+out_subdir: bilan_types_usager
+
+filter:
+  type: all
+
+analyse_PVe: true
+
+sources:
+  point_ctrl: true
+  pej: true
+  pa: true
+  pve: true
+
+periode_analyse:
+  ventilation:
+    type: auto
+    seuil_jours: 366
+
+analyses:
+  type_usager: true
+
+options:
+  cartes:
+    label: "Intégration des cartes"
+    default: true
+    ask: false

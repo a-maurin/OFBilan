@@ -1,0 +1,32 @@
+# Profil par défaut - Contrôles espaces protégés
+schema_version: 2
+id: controles_espaces_proteges
+label: "Contrôles espaces protégés et protection des milieux et du cadre de vie (hors SNC)"
+out_subdir: bilan_controles_espaces_proteges
+
+filter:
+  type: keywords
+  keywords: ["espaces protégés", "espaces proteges", "milieux", "cadre de vie"]
+  columns: [theme, type_actio, nom_dossie]
+
+natinf_pve: []
+natinf_pej: []
+
+analyse_PVe: true
+
+sources:
+  point_ctrl: true
+  pej: true
+  pa: true
+  pve: true
+
+periode_analyse:
+  ventilation:
+    type: auto
+    seuil_jours: 366
+
+options:
+  cartes:
+    label: "Intégration des cartes"
+    default: true
+    ask: false

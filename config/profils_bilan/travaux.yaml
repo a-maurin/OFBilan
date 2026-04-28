@@ -1,0 +1,32 @@
+# Profil par défaut - Travaux
+schema_version: 2
+id: travaux
+label: "Travaux"
+out_subdir: bilan_travaux
+
+filter:
+  type: keywords
+  keywords: ["travaux"]
+  columns: [theme, type_actio, nom_dossie]
+
+natinf_pve: []
+natinf_pej: []
+
+analyse_PVe: true
+
+sources:
+  point_ctrl: true
+  pej: true
+  pa: true
+  pve: true
+
+periode_analyse:
+  ventilation:
+    type: auto
+    seuil_jours: 366
+
+options:
+  cartes:
+    label: "Intégration des cartes"
+    default: true
+    ask: false

@@ -1,0 +1,49 @@
+# Profil bilan agrainage
+schema_version: 2
+id: agrainage
+label: "Bilan agrainage"
+out_subdir: bilan_agrainage
+
+filter:
+  type: agrainage
+  keywords: ["agrain"]
+  columns: [nom_dossie, type_actio]
+  exclude_patterns: ["tubercul", "grippe", "pi[eé]geage"]
+
+natinf_pve: ["27742", "25001"]
+natinf_pej: ["27742", "25001"]
+
+analyse_PVe: true
+
+sources:
+  point_ctrl: true
+  pej: true
+  pa: true
+  pve: true
+
+periode_analyse:
+  ventilation:
+    type: auto
+    seuil_jours: 366
+
+options:
+  pnf:
+    label: "Analyse PNF / hors PNF"
+    default: true
+    ask: true
+  tub:
+    label: "Analyse zones TUB"
+    default: true
+    ask: true
+  cartes:
+    label: "Intégration des cartes"
+    default: true
+    ask: false
+  par_commune:
+    label: "Indicateurs par commune"
+    default: true
+    ask: false
+  synthese_croisee:
+    label: "Synthèse croisée par zone (Ctrl × PVe × PEJ)"
+    default: true
+    ask: true

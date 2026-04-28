@@ -1,10 +1,11 @@
 @echo off
 setlocal enabledelayedexpansion
 cd /d "%~dp0\..\.."
+set "PYTHONPATH=%CD%\src;%PYTHONPATH%"
 
 REM Si des arguments CLI sont fournis, mode non interactif direct.
 if not "%~1"=="" (
-  python scripts\generer_cartes.py %*
+  python src\bilans\cartographie\generer_cartes.py %*
   exit /b %errorlevel%
 )
 
@@ -35,7 +36,7 @@ echo.
 echo Periode : !DATE_DEB! au !DATE_FIN! - Departement !DEPT! - Carte(s) : !MAP!
 echo.
 
-call scripts\generateur_de_cartes\lancer_production_cartographique.bat !MAP! --date-deb "!DATE_DEB!" --date-fin "!DATE_FIN!" --dept-code "!DEPT!"
+call src\bilans\cartographie\lancer_production_cartographique.bat !MAP! --date-deb "!DATE_DEB!" --date-fin "!DATE_FIN!" --dept-code "!DEPT!"
 echo.
 echo ===== Termine =====
 pause

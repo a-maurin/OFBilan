@@ -22,5 +22,5 @@ existent encore localement.
 ## Hors du scope `config/`
 
 - `ref/` : referentiels (SIG, tables de correspondance, assets OFB) ;
-- `sources/` / `data/` : donnees d'entree locales non versionnees ;
-- `out/` : sorties de run non versionnees.
+- `data/sources/` / `data/` : donnees d'entree locales non versionnees ;
+- `data/out/` : sorties de run non versionnees.

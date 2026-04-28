@@ -1,0 +1,32 @@
+# Profil par défaut - Réglementation sanitaire (inactif)
+schema_version: 2
+id: reglementation_sanitaire
+label: "Inactif-Réglementation sanitaire"
+out_subdir: bilan_reglementation_sanitaire
+
+filter:
+  type: keywords
+  keywords: ["réglementation sanitaire", "reglementation sanitaire"]
+  columns: [theme, type_actio, nom_dossie]
+
+natinf_pve: []
+natinf_pej: []
+
+analyse_PVe: true
+
+sources:
+  point_ctrl: true
+  pej: true
+  pa: true
+  pve: true
+
+periode_analyse:
+  ventilation:
+    type: auto
+    seuil_jours: 366
+
+options:
+  cartes:
+    label: "Intégration des cartes"
+    default: true
+    ask: false

@@ -1,0 +1,23 @@
+# Profil bilan procédures judiciaires et PVe
+schema_version: 2
+id: procedures_pve
+label: "Bilan procédures judiciaires et PVe"
+out_subdir: bilan_procedures
+
+filter:
+  type: procedures
+
+analyse_PVe: true
+
+sources:
+  point_ctrl: false
+  pej: false
+  pa: false
+  pve: true
+
+periode_analyse:
+  ventilation:
+    type: auto
+    seuil_jours: 366
+
+options: {}

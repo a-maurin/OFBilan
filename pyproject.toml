@@ -31,5 +31,5 @@ bilans = "bilans.cli:main"
 include-package-data = true
 
 [tool.setuptools.packages.find]
-where = ["."]
-include = ["bilans*", "scripts*"]
+where = ["src"]
+include = ["bilans*"]

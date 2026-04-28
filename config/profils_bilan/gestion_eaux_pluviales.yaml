@@ -1,0 +1,32 @@
+# Profil par défaut - Gestion des eaux pluviales
+schema_version: 2
+id: gestion_eaux_pluviales
+label: "Gestion des eaux pluviales"
+out_subdir: bilan_gestion_eaux_pluviales
+
+filter:
+  type: keywords
+  keywords: ["eaux pluviales", "pluviales"]
+  columns: [theme, type_actio, nom_dossie]
+
+natinf_pve: []
+natinf_pej: []
+
+analyse_PVe: true
+
+sources:
+  point_ctrl: true
+  pej: true
+  pa: true
+  pve: true
+
+periode_analyse:
+  ventilation:
+    type: auto
+    seuil_jours: 366
+
+options:
+  cartes:
+    label: "Intégration des cartes"
+    default: true
+    ask: false

@@ -1,0 +1,32 @@
+# Profil par défaut - Pollutions urbaines
+schema_version: 2
+id: pollutions_urbaines
+label: "Lutter contre les pollutions urbaines"
+out_subdir: bilan_pollutions_urbaines
+
+filter:
+  type: keywords
+  keywords: ["pollution", "urbaine"]
+  columns: [theme, type_actio, nom_dossie]
+
+natinf_pve: []
+natinf_pej: []
+
+analyse_PVe: true
+
+sources:
+  point_ctrl: true
+  pej: true
+  pa: true
+  pve: true
+
+periode_analyse:
+  ventilation:
+    type: auto
+    seuil_jours: 366
+
+options:
+  cartes:
+    label: "Intégration des cartes"
+    default: true
+    ask: false

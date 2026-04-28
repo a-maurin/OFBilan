@@ -1,0 +1,47 @@
+# Profil thématique PNF : activité du service à l'intérieur du parc
+schema_version: 2
+id: pnf
+label: "PNF"
+title_label: "Parc national de forêts"
+out_subdir: bilan_pnf
+
+# Restreindre l'analyse à toutes les communes du périmètre du parc
+# (aire d'adhésion + cœur), selon le référentiel PNF chargé par load_pnf.
+restrict_geo: pnf
+
+filter:
+  type: all
+
+natinf_pve: []
+natinf_pej: []
+
+analyse_PVe: true
+
+sources:
+  point_ctrl: true
+  pej: true
+  pa: true
+  pve: true
+
+periode_analyse:
+  ventilation:
+    type: auto
+    seuil_jours: 366
+
+options:
+  pnf:
+    label: "Analyse PNF (ensemble + cœur)"
+    default: true
+    ask: false
+  tub:
+    label: "Analyse zones TUB"
+    default: false
+    ask: false
+  cartes:
+    label: "Intégration des cartes"
+    default: true
+    ask: false
+  par_commune:
+    label: "Indicateurs par commune"
+    default: true
+    ask: false

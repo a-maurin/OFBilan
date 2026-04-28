@@ -1,0 +1,32 @@
+# Profil par défaut - Contrôles aires protégées
+schema_version: 2
+id: controles_aires_protegees
+label: "Contrôles aires protégées (SNC 5.1)"
+out_subdir: bilan_controles_aires_protegees
+
+filter:
+  type: keywords
+  keywords: ["aires protégées", "aires protegees", "SNC 5.1"]
+  columns: [theme, type_actio, nom_dossie]
+
+natinf_pve: []
+natinf_pej: []
+
+analyse_PVe: true
+
+sources:
+  point_ctrl: true
+  pej: true
+  pa: true
+  pve: true
+
+periode_analyse:
+  ventilation:
+    type: auto
+    seuil_jours: 366
+
+options:
+  cartes:
+    label: "Intégration des cartes"
+    default: true
+    ask: false

@@ -1,0 +1,32 @@
+# Profil par défaut - Espèces protégées
+schema_version: 2
+id: especes_protegees
+label: "Espèces protégées"
+out_subdir: bilan_especes_protegees
+
+filter:
+  type: keywords
+  keywords: ["espèces protégées", "especes protegees"]
+  columns: [theme, type_actio, nom_dossie]
+
+natinf_pve: []
+natinf_pej: []
+
+analyse_PVe: true
+
+sources:
+  point_ctrl: true
+  pej: true
+  pa: true
+  pve: true
+
+periode_analyse:
+  ventilation:
+    type: auto
+    seuil_jours: 366
+
+options:
+  cartes:
+    label: "Intégration des cartes"
+    default: true
+    ask: false

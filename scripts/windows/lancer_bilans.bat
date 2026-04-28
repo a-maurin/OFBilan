@@ -1,6 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
 cd /d "%~dp0\..\.."
+set "PYTHONPATH=%CD%\src;%PYTHONPATH%"
 
 REM Si des arguments CLI sont fournis, mode non interactif direct.
 if not "%~1"=="" (
