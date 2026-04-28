@@ -7,4 +7,3 @@ Ce dossier centralise les **configurations versionnées** du projet :
 - fichiers CSV/JSON de référence (thèmes, listes de NATINF, types d'usagers, etc.).
 
 Les données sources volumineuses restent dans `sources/` ou `data/` (non versionnés) et les sorties générées dans `out/` (non versionné).
-

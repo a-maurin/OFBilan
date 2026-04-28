@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from reportlab.lib import colors as rl_colors
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
@@ -26,10 +27,10 @@ from reportlab.platypus import (
     Paragraph,
     Spacer,
 )
+from reportlab.platypus.tableofcontents import TableOfContents
 from PIL import Image as PILImage
 
 from scripts.common.ofb_charte import (
-    COLOR_GREY,
     COLOR_PRIMARY,
     COLOR_SECONDARY,
     FONT_FAMILY,
@@ -74,6 +75,25 @@ class PDFReportBuilder:
         self.footer_line2 = footer_line2
 
         self.styles = _get_styles()
+        # Compaction globale renforcée pour limiter les blancs inter-sections.
+        self.styles["Heading1"] = ParagraphStyle(
+            "OFBH1_compact",
+            parent=self.styles["Heading1"],
+            spaceBefore=max(0, self.styles["Heading1"].spaceBefore - 7 * mm),
+            spaceAfter=max(0, self.styles["Heading1"].spaceAfter - 2 * mm),
+        )
+        self.styles["Heading2"] = ParagraphStyle(
+            "OFBH2_compact",
+            parent=self.styles["Heading2"],
+            spaceBefore=max(0, self.styles["Heading2"].spaceBefore - 5 * mm),
+            spaceAfter=max(0, self.styles["Heading2"].spaceAfter - 2 * mm),
+        )
+        self.styles["Heading3"] = ParagraphStyle(
+            "OFBH3_compact",
+            parent=self.styles["Heading3"],
+            spaceBefore=max(0, self.styles["Heading3"].spaceBefore - 4 * mm),
+            spaceAfter=max(0, self.styles["Heading3"].spaceAfter - 2 * mm),
+        )
         self.avail_w = PAGE_W - MARGIN_LEFT - MARGIN_RIGHT
 
         self._tmp_dir = Path(tempfile.mkdtemp(prefix="bilan_pdf_"))
@@ -87,7 +107,22 @@ class PDFReportBuilder:
         )
         title_frame = Frame(0, 0, PAGE_W, PAGE_H, id="title_full")
 
-        self.doc = BaseDocTemplate(
+        class _OFBBaseDocTemplate(BaseDocTemplate):
+            def afterFlowable(doc_self, flowable):
+                if hasattr(flowable, "_bookmarkName"):
+                    doc_self.canv.bookmarkPage(flowable._bookmarkName)
+                if hasattr(flowable, "_toc_title") and hasattr(flowable, "_toc_level"):
+                    doc_self.notify(
+                        "TOCEntry",
+                        (
+                            int(flowable._toc_level),
+                            str(flowable._toc_title),
+                            doc_self.page,
+                            getattr(flowable, "_bookmarkName", None),
+                        ),
+                    )
+
+        self.doc = _OFBBaseDocTemplate(
             str(self.pdf_path),
             pagesize=A4,
             title=title or header_title,
@@ -110,6 +145,7 @@ class PDFReportBuilder:
         # Titre de section en attente : gardé avec le prochain bloc (tableau, chiffres clés…)
         # pour éviter un titre seul en bas de page et le tableau en haut de la suivante.
         self._pending_section: Optional[List] = None
+        self._toc_allowed_anchors: set[str] = set()
 
     @property
     def tmp_dir(self) -> Path:
@@ -147,9 +183,19 @@ class PDFReportBuilder:
         canvas.setLineWidth(2)
         y_header = PAGE_H - 16 * mm
         canvas.line(MARGIN_LEFT, y_header, PAGE_W - MARGIN_RIGHT, y_header)
-        canvas.setFont(f"{FONT_FAMILY}-Bold", 8)
+        header_lines = [ln.strip() for ln in str(self.header_title).splitlines() if ln.strip()]
+        if not header_lines:
+            header_lines = [""]
+        font_size = 7 if len(header_lines) > 1 else 8
+        canvas.setFont(f"{FONT_FAMILY}-Bold", font_size)
         canvas.setFillColor(rl_colors.HexColor(COLOR_PRIMARY))
-        canvas.drawString(MARGIN_LEFT, y_header + 3, self.header_title)
+        if len(header_lines) == 1:
+            canvas.drawString(MARGIN_LEFT, y_header + 3, header_lines[0])
+        else:
+            base_y = y_header + 14
+            step = 5
+            for idx, line in enumerate(header_lines[:3]):
+                canvas.drawString(MARGIN_LEFT, base_y - idx * step, line)
 
         y_foot = 8 * mm
         canvas.setFont(f"{FONT_FAMILY}", 7)
@@ -167,30 +213,89 @@ class PDFReportBuilder:
         title_lines: List[str],
         period_str: str,
         subtitle: str = "",
+        title_page_config: dict | None = None,
     ) -> None:
         """Add a title page (uses TitlePage template)."""
         s = self.styles
-        self.story.append(Spacer(1, PAGE_H * 0.30))
-        for line in title_lines:
+        cfg = title_page_config or {}
+
+        alignment_raw = str(cfg.get("alignment", "center")).strip().lower()
+        alignment = TA_CENTER
+        if alignment_raw == "right":
+            alignment = TA_RIGHT
+        elif alignment_raw == "left":
+            alignment = TA_LEFT
+
+        main_font_size = int(cfg.get("main_title_font_size", 28))
+        secondary_font_size = int(cfg.get("profile_department_font_size", 28))
+        meta_font_size = int(cfg.get("meta_font_size", 16))
+        paragraph_space_after = float(cfg.get("paragraph_space_after", 0))
+        top_spacer_ratio = float(cfg.get("top_spacer_ratio", 0.30))
+        meta_block_space_before = float(cfg.get("meta_block_space_before", 12))
+        meta_block_space_between = float(cfg.get("meta_block_space_between", 8))
+        right_indent_mm = float(cfg.get("right_indent_mm", 0))
+
+        title_main_style = ParagraphStyle(
+            "TitlePageMain",
+            parent=s["Title"],
+            alignment=alignment,
+            spaceAfter=paragraph_space_after,
+            rightIndent=right_indent_mm * mm,
+        )
+        title_secondary_style = ParagraphStyle(
+            "TitlePageSecondary",
+            parent=s["Title"],
+            alignment=alignment,
+            spaceAfter=paragraph_space_after,
+            rightIndent=right_indent_mm * mm,
+        )
+        meta_style = ParagraphStyle(
+            "TitlePageMeta",
+            parent=s["Title"],
+            alignment=alignment,
+            rightIndent=right_indent_mm * mm,
+        )
+
+        self.story.append(Spacer(1, PAGE_H * max(0.0, top_spacer_ratio)))
+        paragraphs: list[list[str]] = []
+        current_lines: list[str] = []
+        for raw_line in title_lines:
+            txt = str(raw_line or "").strip()
+            if not txt:
+                if current_lines:
+                    paragraphs.append(current_lines)
+                    current_lines = []
+                continue
+            current_lines.append(txt)
+        if current_lines:
+            paragraphs.append(current_lines)
+
+        for p_idx, lines in enumerate(paragraphs):
+            is_main = p_idx == 0
+            size = main_font_size if is_main else secondary_font_size
+            style = title_main_style if is_main else title_secondary_style
+            weight_open = "<b>" if is_main else ""
+            weight_close = "</b>" if is_main else ""
+            txt = "<br/>".join(lines)
             self.story.append(
                 Paragraph(
-                    f'<font color="{COLOR_PRIMARY}" size="28"><b>{line}</b></font>',
-                    s["Title"],
+                    f'<font color="{COLOR_PRIMARY}" size="{size}">{weight_open}{txt}{weight_close}</font>',
+                    style,
                 )
             )
-        self.story.append(Spacer(1, 12))
+        self.story.append(Spacer(1, meta_block_space_before))
         self.story.append(
             Paragraph(
-                f'<font color="{COLOR_SECONDARY}" size="16">{period_str}</font>',
-                s["Title"],
+                f'<font color="{COLOR_SECONDARY}" size="{meta_font_size}">{period_str}</font>',
+                meta_style,
             )
         )
         if subtitle:
-            self.story.append(Spacer(1, 8))
+            self.story.append(Spacer(1, meta_block_space_between))
             self.story.append(
                 Paragraph(
-                    f'<font color="{COLOR_GREY}" size="12">{subtitle}</font>',
-                    s["Title"],
+                    f'<font color="{COLOR_SECONDARY}" size="{meta_font_size}">{subtitle}</font>',
+                    meta_style,
                 )
             )
         self.story.append(Spacer(1, PAGE_H * 0.15))
@@ -207,14 +312,40 @@ class PDFReportBuilder:
     # Table of contents
     # ------------------------------------------------------------------
     def add_toc(self, sections: List[Tuple[str, str]]) -> None:
-        """Add a table of contents.  sections = [(anchor, title), ...]"""
+        """Add a table of contents with page numbers."""
         s = self.styles
+        self._toc_allowed_anchors = {a for a, _ in sections}
         self.story.append(Paragraph("Sommaire", s["Title"]))
-        self.story.append(Spacer(1, 6 * mm))
-        for anchor, title in sections:
-            self.story.append(
-                Paragraph(f'<a href="#{anchor}" color="{COLOR_PRIMARY}">{title}</a>', s["TOCEntry"])
-            )
+        self.story.append(Spacer(1, 3 * mm))
+        # dotsMinLevel=0 : pointillés aussi pour les entrées de niveau principal (1., 2., …).
+        toc = TableOfContents(dotsMinLevel=0)
+        toc.levelStyles = [
+            ParagraphStyle(
+                "TOCLevel0",
+                parent=s["TOCEntry"],
+                fontSize=12,
+                leading=16,
+                leftIndent=5 * mm,
+                firstLineIndent=0,
+            ),
+            ParagraphStyle(
+                "TOCLevel1",
+                parent=s["TOCEntry"],
+                fontSize=11,
+                leading=14,
+                leftIndent=12 * mm,
+                firstLineIndent=0,
+            ),
+            ParagraphStyle(
+                "TOCLevel2",
+                parent=s["TOCEntry"],
+                fontSize=10,
+                leading=13,
+                leftIndent=18 * mm,
+                firstLineIndent=0,
+            ),
+        ]
+        self.story.append(toc)
         self.story.append(PageBreak())
 
     # ------------------------------------------------------------------
@@ -227,10 +358,14 @@ class PDFReportBuilder:
         level: int = 1,
         *,
         compact: bool = False,
+        toc_level: int | None = None,
+        start_on_new_page: bool = False,
     ) -> None:
         if self._pending_section is not None:
             self.story.extend(self._pending_section)
             self._pending_section = None
+        if start_on_new_page and self.story:
+            self.story.append(PageBreak())
         heading = {1: "Heading1", 2: "Heading2", 3: "Heading3"}.get(level, "Heading1")
         anchor_para = Paragraph(f'<a name="{anchor}"/>', self.styles["BodyText"])
         heading_style = self.styles[heading]
@@ -241,7 +376,11 @@ class PDFReportBuilder:
                 spaceBefore=max(0, heading_style.spaceBefore - 8 * mm),
             )
         title_para = Paragraph(title, heading_style)
-        spacer = Spacer(1, 2 * mm)
+        if anchor in self._toc_allowed_anchors:
+            title_para._bookmarkName = anchor
+            title_para._toc_title = title
+            title_para._toc_level = max((toc_level if toc_level is not None else level - 1), 0)
+        spacer = Spacer(1, 0.5 * mm)
         self._pending_section = [anchor_para, title_para, spacer]
 
     # ------------------------------------------------------------------
@@ -252,7 +391,7 @@ class PDFReportBuilder:
         if not figures:
             return
         kf_table = key_figures_table(figures, self.styles)
-        spacer = Spacer(1, 6 * mm)
+        spacer = Spacer(1, 4 * mm)
         if self._pending_section is not None:
             self.story.append(KeepTogether(self._pending_section + [kf_table, spacer]))
             self._pending_section = None
@@ -272,7 +411,7 @@ class PDFReportBuilder:
         if not figures:
             return
         kf_table = key_figures_table(figures, self.styles)
-        spacer = Spacer(1, 6 * mm)
+        spacer = Spacer(1, 4 * mm)
         block: List = [kf_table, spacer]
         if caption:
             block.append(Paragraph(caption, self.styles["TableCaption"]))
@@ -301,9 +440,9 @@ class PDFReportBuilder:
         if not figures:
             return
         kf_table = key_figures_table(figures, self.styles)
-        gap_kf = 3 * mm if compact else 6 * mm
+        gap_kf = 2 * mm if compact else 4 * mm
         gap_cap = 1 * mm if compact else 2 * mm
-        gap_after_tbl = 2 * mm if compact else 6 * mm
+        gap_after_tbl = 2 * mm if compact else 4 * mm
         block: List = [kf_table, Spacer(1, gap_kf)]
         n_tables = len(tables)
         for i, t in enumerate(tables):
@@ -344,7 +483,7 @@ class PDFReportBuilder:
         block: List = []
         if caption:
             block.append(Paragraph(caption, self.styles["TableCaption"]))
-            block.append(Spacer(1, 2 * mm))
+            block.append(Spacer(1, 1 * mm))
         if wide_headers:
             tbl = ofb_table_wide(
                 data_rows,
@@ -360,7 +499,7 @@ class PDFReportBuilder:
                 header_font_size=header_font_size,
             )
         block.append(tbl)
-        block.append(Spacer(1, 6 * mm))
+        block.append(Spacer(1, 4 * mm))
         if keep_together:
             self.story.append(KeepTogether(block))
         elif self._pending_section is not None:
@@ -395,7 +534,7 @@ class PDFReportBuilder:
             ofb_table(data_rows, col_widths=col_widths, col_aligns=col_aligns)
         )
         if image_path is not None and Path(image_path).exists():
-            block.append(Spacer(1, 2 * mm))
+            block.append(Spacer(1, 1 * mm))
             w = self.avail_w * image_width_ratio
             try:
                 with PILImage.open(str(image_path)) as im:
@@ -406,7 +545,7 @@ class PDFReportBuilder:
             img = RLImage(str(image_path), width=w, height=w * ratio)
             img.hAlign = "CENTER"
             block.append(img)
-        block.append(Spacer(1, 2 * mm))
+        block.append(Spacer(1, 1 * mm))
         self.story.append(KeepTogether(block))
 
     # ------------------------------------------------------------------
@@ -441,7 +580,7 @@ class PDFReportBuilder:
         if caption:
             block.append(Spacer(1, 2 * mm))
             block.append(Paragraph(f"<i>{caption}</i>", self.styles["BodySmall"]))
-        block.append(Spacer(1, 4 * mm))
+        block.append(Spacer(1, 2 * mm))
         if self._pending_section is not None:
             self.story.append(KeepTogether(self._pending_section + block))
             self._pending_section = None
@@ -458,7 +597,7 @@ class PDFReportBuilder:
     # ------------------------------------------------------------------
     def add_paragraph(self, text: str, style: str = "BodyText") -> None:
         para = Paragraph(text, self.styles[style])
-        spacer = Spacer(1, 3 * mm)
+        spacer = Spacer(1, 2 * mm)
         if self._pending_section is not None:
             self.story.append(KeepTogether(self._pending_section + [para, spacer]))
             self._pending_section = None
@@ -483,7 +622,7 @@ class PDFReportBuilder:
             Paragraph("Méthodologie", self.styles["Heading2"]),
             Spacer(1, 2 * mm),
             Paragraph(html_text, self.styles["BodyText"]),
-            Spacer(1, 6 * mm),
+            Spacer(1, 4 * mm),
         ]
         if self._pending_section is not None:
             self.story.append(KeepTogether(self._pending_section + block))
@@ -495,15 +634,22 @@ class PDFReportBuilder:
     # ------------------------------------------------------------------
     # Glossary
     # ------------------------------------------------------------------
-    def add_glossary(self, rows: List[List[str]]) -> None:
+    def add_glossary(
+        self,
+        rows: List[List[str]],
+        *,
+        col_widths: Optional[list] = None,
+        col_aligns: Optional[list] = None,
+    ) -> None:
         """rows = [["Terme", "Définition"], ...]  (first row = header)"""
         if not rows:
             return
+        tbl = ofb_table(rows, col_widths=col_widths, col_aligns=col_aligns)
         block = [
             Paragraph("Glossaire", self.styles["Heading2"]),
             Spacer(1, 2 * mm),
-            ofb_table(rows),
-            Spacer(1, 6 * mm),
+            tbl,
+            Spacer(1, 4 * mm),
         ]
         if self._pending_section is not None:
             self.story.append(KeepTogether(self._pending_section + block))
@@ -521,7 +667,7 @@ class PDFReportBuilder:
             self.story.extend(self._pending_section)
             self._pending_section = None
         try:
-            self.doc.build(self.story)
+            self.doc.multiBuild(self.story)
         finally:
             shutil.rmtree(self._tmp_dir, ignore_errors=True)
         return self.pdf_path

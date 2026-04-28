@@ -477,7 +477,8 @@ def load_pnf(root: Path) -> pd.DataFrame:
     for base in ("ref", "sources"):
         path = root / base / "communes_PNF.csv"
         if path.exists():
-            df = pd.read_csv(path, sep=",", dtype=str)
+            # index_col=False : pandas 3.x peut sinon prendre « NOM » comme index et décaler les colonnes.
+            df = pd.read_csv(path, sep=",", dtype=str, index_col=False)
             df["CODE_INSEE"] = df["CODE_INSEE"].astype(str).str.zfill(5)
             return df
 
@@ -734,6 +735,98 @@ def enrich_with_pnforet_sig_zones(
     return out
 
 
+def _coalesced_insee_for_pnf_overlay(df: pd.DataFrame) -> pd.Series:
+    """
+    Code INSEE normalisé (5 chiffres) par ligne, en combinant les colonnes usuelles.
+    Aligné sur bilan_thematique_engine._coalesced_insee_for_pnf_mask.
+    """
+    if df is None or df.empty:
+        return pd.Series(pd.NA, index=df.index, dtype="string")
+    out = pd.Series(pd.NA, index=df.index, dtype="string")
+    for col in ("insee_comm", "insee_commun", "INSEE_COM", "INF-INSEE"):
+        if col not in df.columns:
+            continue
+        raw = df[col]
+        cand = (
+            raw.astype(str)
+            .str.extract(r"(\d{1,5})", expand=False)
+            .fillna("")
+            .str.zfill(5)
+        )
+        cand = cand.mask(~cand.str.fullmatch(r"\d{5}", na=False), pd.NA)
+        out = out.fillna(cand)
+    return out
+
+
+def load_pnf_commune_zone_by_insee(root: Path) -> dict[str, str]:
+    """
+    {code INSEE 5 car.} -> « Coeur_PNF » ou « Aire_adhesion_PNF » depuis ref/communes_PNF.csv.
+    Règle métier:
+    - Cœur si `Coeur` == oui
+    - sinon Aire d'adhésion si `perimetre_parc` == oui
+    La colonne `Adhesion` n'est pas utilisée.
+    """
+    path = root / "ref" / "communes_PNF.csv"
+    if not path.exists():
+        return {}
+    df = pd.read_csv(path, dtype=str, index_col=False).fillna("")
+    if "CODE_INSEE" not in df.columns:
+        return {}
+    out: dict[str, str] = {}
+    for _, r in df.iterrows():
+        raw = str(r.get("CODE_INSEE", "")).strip()
+        m = re.search(r"(\d{1,5})", raw)
+        if not m:
+            continue
+        code = m.group(1).zfill(5)
+        coeur = str(r.get("Coeur", "")).strip().lower() == "oui"
+        in_perimetre = str(r.get("perimetre_parc", "")).strip().lower() == "oui"
+        if coeur:
+            out[code] = "Coeur_PNF"
+        elif in_perimetre:
+            out[code] = "Aire_adhesion_PNF"
+    return out
+
+
+def overlay_pnf_zone_from_communes_pnf_csv(
+    df: pd.DataFrame,
+    root: Path,
+    *,
+    out_col: str = "pnf_zone_sig",
+    log: Optional[logging.Logger] = None,
+) -> pd.DataFrame:
+    """
+    Après enrichissement SIG (`pnf_zone_sig`), recale la zone à partir de l'INSEE
+    lorsque ref/communes_PNF.csv définit explicitement Cœur ou adhésion.
+    Sinon conserve la valeur SIG existante.
+    """
+    lg = log or logger
+    if df is None or df.empty:
+        return df
+    zone_map = load_pnf_commune_zone_by_insee(root)
+    if not zone_map:
+        return df
+    insee = _coalesced_insee_for_pnf_overlay(df)
+    if insee.isna().all():
+        return df
+    mapped = insee.map(zone_map)
+    has = mapped.notna()
+    if not bool(has.any()):
+        return df
+    out = df.copy()
+    if out_col not in out.columns:
+        out[out_col] = pd.NA
+    out.loc[has, out_col] = mapped[has]
+    n = int(has.sum())
+    lg.info(
+        "Réf. communes PNF (CSV) : %s ligne(s) — zone INSEE appliquée pour %s ligne(s) (%s).",
+        len(df),
+        n,
+        out_col,
+    )
+    return out
+
+
 def load_communes_noms(root: Path) -> dict:
     """
     Charge la table de correspondance code INSEE → nom de commune.
@@ -841,6 +934,8 @@ def enrich_with_commune_from_geometry(
         left[insee_col] = pd.NA
     if nom_col not in left.columns:
         left[nom_col] = pd.NA
+    # Préserve l'index d'origine pour éviter tout désalignement après jointure.
+    left["_orig_index_tmp"] = left.index
     left["_row_id_tmp"] = range(len(left))
 
     # Évite les collisions de noms de colonnes pendant la jointure.
@@ -867,7 +962,12 @@ def enrich_with_commune_from_geometry(
     left[insee_col] = left[insee_col].astype("string").str.strip().str.zfill(5)
     left[nom_col] = left[nom_col].astype("string").str.strip()
 
-    left = left.reset_index(drop=True)
+    # Restaure l'index d'origine (important pour les reindex ultérieurs).
+    left = left.sort_index()
+    orig_index = left["_orig_index_tmp"]
+    left = left.drop(columns=["_orig_index_tmp"], errors="ignore")
+    left.index = orig_index
+    left.index.name = df.index.name
     if isinstance(df, gpd.GeoDataFrame):
         return gpd.GeoDataFrame(left, geometry=geometry_col, crs=gdf.crs)
     return pd.DataFrame(left)
@@ -1425,15 +1525,30 @@ def merge_pej_faits_locations(
         lg.warning("Couche FAITS : colonnes de coordonnées introuvables.")
         return pej.copy()
 
-    loc = gdf[[doss_col, xcol, ycol]].copy()
+    commune_col = next(
+        (c for c in ("commune_fait", "commune_fa", "NOM_COM", "commune", "COMMUNE") if c in gdf.columns),
+        None,
+    )
+    keep_cols = [doss_col, xcol, ycol] + ([commune_col] if commune_col else [])
+    loc = gdf[keep_cols].copy()
     loc["_doss"] = loc[doss_col].astype(str).str.strip()
     loc = loc.drop_duplicates(subset="_doss", keep="first")
-    loc = loc.rename(columns={xcol: "x_faits", ycol: "y_faits"}).drop(columns=[doss_col], errors="ignore")
+    rename_map = {xcol: "x_faits", ycol: "y_faits"}
+    if commune_col is not None:
+        rename_map[commune_col] = "NOM_COM_FAITS"
+    loc = loc.rename(columns=rename_map).drop(columns=[doss_col], errors="ignore")
 
     out = pej.copy()
     out["_dc"] = out["DC_ID"].astype(str).str.strip()
     out = out.merge(loc, left_on="_dc", right_on="_doss", how="left")
     out = out.drop(columns=["_dc", "_doss"], errors="ignore")
+    # Expose un nom de commune exploitable pour les tableaux PDF quand l'ODS ne le fournit pas.
+    if "NOM_COM_FAITS" in out.columns:
+        if "NOM_COM" in out.columns:
+            out["NOM_COM"] = out["NOM_COM"].fillna(out["NOM_COM_FAITS"])
+            out["NOM_COM"] = out["NOM_COM"].astype(str).str.strip().replace({"": pd.NA})
+        else:
+            out["NOM_COM"] = out["NOM_COM_FAITS"].astype(str).str.strip().replace({"": pd.NA})
     n = int(out["x_faits"].notna().sum())
     if n:
         lg.info("PEJ : %s ligne(s) avec localisation FAITS (jointure dossier).", n)

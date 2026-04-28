@@ -39,6 +39,7 @@ from scripts.common.loaders import (
     load_communes_noms,
     ensure_insee_from_communes_shp,
     enrich_with_pnforet_sig_zones,
+    overlay_pnf_zone_from_communes_pnf_csv,
     pnf_sig_union_membership_mask,
 )
 from scripts.common.percent_format import (
@@ -67,6 +68,13 @@ from scripts.common.utils import (
 from scripts.common.ofb_charte import Spinner
 from scripts.common.pdf_report_builder import (
     PDFReportBuilder,
+)
+from scripts.common.pdf_presentation_config import (
+    resolve_title_page_config,
+    resolve_pdf_presentation_config,
+    resolve_sections_for_toc,
+    is_block_enabled,
+    should_show_placeholder,
 )
 from scripts.common.chart_display_config import load_chart_display_config, compute_pdf_ratios
 from scripts.common.charts import (
@@ -118,6 +126,7 @@ def _normalize_profile(data: dict, profil_id: str) -> dict:
     """Assure la présence de toutes les clés attendues par le moteur."""
     data.setdefault("id", profil_id)
     data.setdefault("label", profil_id)
+    data.setdefault("title_label", data.get("label", profil_id))
     data.setdefault("out_subdir", f"bilan_{profil_id}")
     # Activation par défaut de l'analyse PVe (comportement historique).
     # Peut être désactivée par profil via analyse_PVe: false dans le YAML.
@@ -298,6 +307,51 @@ def _copy_to_clipboard(text: str) -> None:
     except Exception:
         # En cas d'échec (clip absent, droits, etc.), on ne bloque pas le bilan.
         pass
+
+
+def _normalize_dept_typography(name: str) -> str:
+    """Harmonise la typographie des noms de département (apostrophe/hyphens)."""
+    s = str(name or "").strip()
+    s = s.replace("-d'", " d’").replace("-D'", " D’")
+    s = s.replace("d'", "d’").replace("D'", "D’")
+    return " ".join(s.split())
+
+
+def _build_title_lines_from_cfg(
+    effective_cfg: dict,
+    *,
+    profile_label: str,
+    dept_name_typo: str,
+) -> tuple[list[str], list[str]]:
+    """Construit les lignes de titre (page de garde + en-tête) via la config YAML."""
+    title_cfg = effective_cfg.get("title", {}) if isinstance(effective_cfg, dict) else {}
+    if not isinstance(title_cfg, dict):
+        title_cfg = {}
+
+    line1 = str(
+        title_cfg.get(
+            "line1",
+            "Bilan des activités de police administrative et judiciaire",
+        )
+    ).strip() or "Bilan des activités de police administrative et judiciaire"
+
+    line2_mode = str(title_cfg.get("line2_mode", "profile_label")).strip().lower()
+    if line2_mode == "none":
+        line2 = ""
+    elif line2_mode == "fixed":
+        line2 = str(title_cfg.get("line2_fixed", "")).strip()
+    else:
+        line2 = str(profile_label).strip()
+
+    line3_mode = str(title_cfg.get("line3_mode", "department")).strip().lower()
+    if line3_mode == "fixed":
+        line3 = str(title_cfg.get("line3_fixed", "")).strip()
+    else:
+        line3 = f"Département de la {dept_name_typo}"
+
+    header_lines = [x for x in [line1, line2, line3] if x]
+    cover_lines = [line1, "", *([line2] if line2 else []), line3]
+    return cover_lines, header_lines
 
 
 def resolve_options(profile: dict, cli_opts: dict | None = None) -> dict:
@@ -949,27 +1003,12 @@ def _run_spatial_analyses(
         ].replace(0, pd.NA)
         results["agg_pnf"] = agg_pnf
         results["point_with_pnf"] = pt
-        # Bilan thématique PNF : présenter "Ensemble PNF" + "Cœur de parc"
-        # (sur périmètre déjà restreint au PNF : aire d'adhésion + cœur).
+        # Bilan PNF : présenter Cœur/Hors-cœur (hors-cœur = aire d'adhésion).
         if str(profil_id or "").strip().lower() in {"pnf", "pnf_foret"}:
-            nb_total = int(len(pt))
-            nb_nc_total = (
-                count_controles_non_conformes_oscean(pt["resultat"])
-                if "resultat" in pt.columns
-                else 0
-            )
-            rows = [
-                {
-                    "PNF": "Ensemble PNF",
-                    "nb_controles": nb_total,
-                    "nb_non_conforme": nb_nc_total,
-                    "taux_non_conformite": (nb_nc_total / nb_total)
-                    if nb_total > 0
-                    else pd.NA,
-                }
-            ]
+            rows = []
             if "pnf_zone_sig" in pt.columns:
                 coeur = pt[pt["pnf_zone_sig"] == "Coeur_PNF"].copy()
+                hors = pt[pt["pnf_zone_sig"] != "Coeur_PNF"].copy()
                 nb_c = int(len(coeur))
                 nb_nc_c = (
                     count_controles_non_conformes_oscean(coeur["resultat"])
@@ -978,10 +1017,24 @@ def _run_spatial_analyses(
                 )
                 rows.append(
                     {
-                        "PNF": "Cœur de parc",
+                        "PNF": "Cœur",
                         "nb_controles": nb_c,
                         "nb_non_conforme": nb_nc_c,
                         "taux_non_conformite": (nb_nc_c / nb_c) if nb_c > 0 else pd.NA,
+                    }
+                )
+                nb_h = int(len(hors))
+                nb_nc_h = (
+                    count_controles_non_conformes_oscean(hors["resultat"])
+                    if "resultat" in hors.columns
+                    else 0
+                )
+                rows.append(
+                    {
+                        "PNF": "Hors-cœur (aire d'adhésion)",
+                        "nb_controles": nb_h,
+                        "nb_non_conforme": nb_nc_h,
+                        "taux_non_conformite": (nb_nc_h / nb_h) if nb_h > 0 else pd.NA,
                     }
                 )
             results["agg_pnf_detail"] = pd.DataFrame(rows)
@@ -1008,9 +1061,8 @@ def _run_spatial_analyses(
                 # PDF / exports : uniquement le découpage PNF (pas département ni TUB).
                 results["zone_pve"] = pd.DataFrame(
                     [
-                        {"zone": "Ensemble PNF", "nb": nb_ensemble},
-                        {"zone": "Cœur de parc", "nb": nb_coeur},
-                        {"zone": "Aire d'adhésion", "nb": nb_aire},
+                        {"zone": "Cœur", "nb": nb_coeur},
+                        {"zone": "Hors-cœur (aire d'adhésion)", "nb": nb_aire},
                     ]
                 )
             else:
@@ -1073,6 +1125,45 @@ def _run_aggregations(
         )
         tab["taux"] = tab["nb"] / float(nb_ctrl or 1)
         results["tab_resultats"] = tab
+        # Référence de cohérence : maximum observé entre totaux de contrôles
+        # calculés dans les sections structurantes des contrôles.
+        total_from_resultats = int(tab["nb"].sum()) if "nb" in tab.columns else 0
+        total_controles_reference = max(int(nb_ctrl), total_from_resultats)
+        results["total_controles_reference"] = total_controles_reference
+
+        # Tableau synthétique « résultats contrôles » avec Non-conforme / dont
+        # et catégorie « En attente » si résultat manquant.
+        nb_conf = int(tab.loc[tab["resultat"] == "Conforme", "nb"].sum())
+        nb_inf = int(tab.loc[tab["resultat"] == "Infraction", "nb"].sum())
+        nb_manq = int(tab.loc[tab["resultat"] == "Manquement", "nb"].sum())
+        nb_nc = nb_inf + nb_manq
+        nb_en_attente = max(total_controles_reference - (nb_conf + nb_nc), 0)
+        z = (
+            point_filtered["pnf_zone_sig"].astype(str)
+            if "pnf_zone_sig" in point_filtered.columns
+            else pd.Series([""] * len(point_filtered), index=point_filtered.index)
+        )
+        r = point_filtered["resultat"].astype(str).str.strip()
+        is_coeur = z.eq("Coeur_PNF")
+        is_hors = ~is_coeur
+        def _coeur_hors_txt(mask: pd.Series) -> str:
+            c = int((mask & is_coeur).sum())
+            h = int((mask & is_hors).sum())
+            return f"Cœur: {c} / Hors-cœur: {h}"
+        details_rows: list[dict[str, Any]] = [
+            {"resultat": "Conforme", "nb": nb_conf, "coeur_hors_coeur": _coeur_hors_txt(r.eq("Conforme"))},
+            {"resultat": "Non-conforme", "nb": nb_nc, "coeur_hors_coeur": _coeur_hors_txt(r.isin(["Infraction", "Manquement"]))},
+            {"resultat": "    Dont infraction", "nb": nb_inf, "coeur_hors_coeur": _coeur_hors_txt(r.eq("Infraction"))},
+            {"resultat": "    Dont manquement", "nb": nb_manq, "coeur_hors_coeur": _coeur_hors_txt(r.eq("Manquement"))},
+        ]
+        if nb_en_attente > 0:
+            details_rows.append({"resultat": "En attente", "nb": nb_en_attente, "coeur_hors_coeur": "n.d."})
+        res_ctrl = pd.DataFrame(details_rows)
+        if not res_ctrl.empty:
+            res_ctrl["taux"] = res_ctrl["nb"] / float(total_controles_reference or 1)
+        results["tab_resultats_controles"] = res_ctrl
+    else:
+        results["total_controles_reference"] = int(nb_ctrl)
 
     # Par thème
     if not point_filtered.empty and "theme" in point_filtered.columns:
@@ -1278,6 +1369,25 @@ def _run_aggregations(
             )
             if not top_pve.empty:
                 results["pve_top_infractions"] = top_pve
+                natinf_ref = load_natinf_ref(PROJECT_ROOT)
+                ana = top_pve.copy()
+                ana["numero_natinf"] = ana["natinf"].astype(str).str.extract(r"(\d+)", expand=False)
+                if not natinf_ref.empty:
+                    ana = ana.merge(natinf_ref, on="numero_natinf", how="left")
+                th_col = "INF-TYP-INF-STAT-LIB" if "INF-TYP-INF-STAT-LIB" in pve_filtered.columns else None
+                if th_col:
+                    m_theme = (
+                        pve_filtered.assign(_n=pve_filtered[natinf_col].astype(str).str.strip())
+                        .groupby("_n")[th_col]
+                        .agg(lambda s: s.dropna().astype(str).mode().iloc[0] if not s.dropna().empty else "")
+                        .to_dict()
+                    )
+                    ana["thematique"] = ana["natinf"].astype(str).map(m_theme).fillna("")
+                else:
+                    ana["thematique"] = ""
+                ana["nature_infraction"] = ana.get("nature_infraction", "")
+                ana["libelle_natinf"] = ana.get("libelle_natinf", ana["natinf"])
+                results["pve_natinf_analysis"] = ana[["thematique", "libelle_natinf", "nature_infraction", "nb"]]
 
     # PEJ : infractions (par NATINF) pour le tableau PDF.
     # Si le volume PEJ est faible (< 10), on conserve toute la liste.
@@ -1300,6 +1410,259 @@ def _run_aggregations(
                     results["pej_top_infractions"] = pej_counts
                 else:
                     results["pej_top_infractions"] = pej_counts.head(10)
+                natinf_ref = load_natinf_ref(PROJECT_ROOT)
+                ana = pej_counts.copy()
+                ana["numero_natinf"] = ana["natinf"].astype(str).str.extract(r"(\d+)", expand=False)
+                if not natinf_ref.empty:
+                    ana = ana.merge(natinf_ref, on="numero_natinf", how="left")
+                th_col_pej = "theme" if "theme" in pej_filtered.columns else ("THEME" if "THEME" in pej_filtered.columns else None)
+                if th_col_pej:
+                    m_theme_pej = (
+                        pej_filtered.assign(_n=pej_filtered[natinf_col].astype(str).str.strip())
+                        .groupby("_n")[th_col_pej]
+                        .agg(lambda s: s.dropna().astype(str).mode().iloc[0] if not s.dropna().empty else "")
+                        .to_dict()
+                    )
+                    ana["thematique"] = ana["natinf"].astype(str).map(m_theme_pej).fillna("")
+                else:
+                    ana["thematique"] = ""
+                ana["nature_infraction"] = ana.get("nature_infraction", "")
+                ana["libelle_natinf"] = ana.get("libelle_natinf", ana["natinf"])
+                results["pej_natinf_analysis"] = ana[["thematique", "libelle_natinf", "nature_infraction", "nb"]]
+
+    # Détails procédures (format unifié PVe/PEJ/PA) + colonne Cœur/Hors-cœur
+    def _coeur_hors_coeur_from_zone(v: Any) -> str:
+        if v is None or pd.isna(v):
+            return "n.d."
+        s = str(v).strip()
+        if not s or s.lower() in {"nan", "none", "<na>"}:
+            return "n.d."
+        if s == "Coeur_PNF":
+            return "Cœur"
+        if s in {"Aire_adhesion_PNF", "Hors_perimetres_sig"}:
+            return "Hors-cœur"
+        return "n.d."
+
+    pnf_by_dc: dict[str, str] = {}
+    nom_commune_by_dc: dict[str, str] = {}
+    dc_col_points = "DC_ID" if "DC_ID" in point_filtered.columns else ("dc_id" if "dc_id" in point_filtered.columns else None)
+    if not point_filtered.empty and dc_col_points is not None:
+        point_cols = [dc_col_points]
+        if "pnf_zone_sig" in point_filtered.columns:
+            point_cols.append("pnf_zone_sig")
+        for c in ("nom_commune", "nom_commun", "NOM_COM"):
+            if c in point_filtered.columns:
+                point_cols.append(c)
+        tmp_p = point_filtered[point_cols].dropna(subset=[dc_col_points]).copy()
+        if not tmp_p.empty:
+            tmp_p["DC_ID"] = tmp_p[dc_col_points].astype(str).str.strip()
+            commune = pd.Series(pd.NA, index=tmp_p.index, dtype="string")
+            for c in ("nom_commune", "nom_commun", "NOM_COM"):
+                if c in tmp_p.columns:
+                    cand = (
+                        tmp_p[c]
+                        .astype("string")
+                        .str.strip()
+                        .replace("", pd.NA)
+                    )
+                    commune = commune.fillna(cand)
+            if commune.notna().any():
+                tmp_n = tmp_p[["DC_ID"]].copy()
+                tmp_n["commune"] = commune
+                nom_commune_by_dc = (
+                    tmp_n.dropna(subset=["commune"])
+                    .drop_duplicates("DC_ID")
+                    .set_index("DC_ID")["commune"]
+                    .astype(str)
+                    .to_dict()
+                )
+            if "pnf_zone_sig" in tmp_p.columns:
+                tmp_p["_prio"] = (tmp_p["pnf_zone_sig"] == "Coeur_PNF").astype(int)
+                tmp_p = tmp_p.sort_values(["DC_ID", "_prio"], ascending=[True, False])
+                pnf_by_dc = (
+                    tmp_p.drop_duplicates("DC_ID")
+                    .set_index("DC_ID")["pnf_zone_sig"]
+                    .astype(str)
+                    .to_dict()
+                )
+    pnf_zone_by_commune_nom: dict[str, str] = {}
+    pnf_zone_by_insee: dict[str, str] = {}
+    try:
+        # Référentiel prioritaire demandé : ref/communes_PNF.csv
+        csv_comm = PROJECT_ROOT / "ref" / "communes_PNF.csv"
+        if csv_comm.exists():
+            cdf = pd.read_csv(csv_comm, dtype=str, encoding="utf-8", index_col=False)
+            if not cdf.empty and "NOM" in cdf.columns:
+                nom = cdf["NOM"].astype(str).str.strip().str.lower()
+                insee_series = (
+                    cdf["CODE_INSEE"].astype(str).str.strip().str.extract(r"(\d{1,5})", expand=False).fillna("").str.zfill(5)
+                    if "CODE_INSEE" in cdf.columns
+                    else pd.Series([""] * len(cdf))
+                )
+                c_flag_col = "Coeur" if "Coeur" in cdf.columns else ("coeur" if "coeur" in cdf.columns else None)
+                a_flag_col = "perimetre_parc" if "perimetre_parc" in cdf.columns else None
+                c_flag = (
+                    cdf[c_flag_col].astype(str).str.strip().str.lower()
+                    if c_flag_col is not None
+                    else pd.Series([""] * len(cdf))
+                )
+                a_flag = (
+                    cdf[a_flag_col].astype(str).str.strip().str.lower()
+                    if a_flag_col is not None
+                    else pd.Series([""] * len(cdf))
+                )
+                for n, code_insee, c, a in zip(nom, insee_series, c_flag, a_flag):
+                    if not n:
+                        continue
+                    if c == "oui":
+                        pnf_zone_by_commune_nom[n] = "Coeur_PNF"
+                        if code_insee:
+                            pnf_zone_by_insee[code_insee] = "Coeur_PNF"
+                    elif a == "oui":
+                        pnf_zone_by_commune_nom[n] = "Aire_adhesion_PNF"
+                        if code_insee:
+                            pnf_zone_by_insee[code_insee] = "Aire_adhesion_PNF"
+        # Fallback historique : shapefile communes_pnf
+        if not pnf_zone_by_commune_nom:
+            shp_comm = PROJECT_ROOT / "ref" / "sig" / "communes_pnf" / "communes_pnf.shp"
+            if shp_comm.exists():
+                g_comm = gpd.read_file(shp_comm)
+                if not g_comm.empty and "NOM_COM" in g_comm.columns:
+                    nom = g_comm["NOM_COM"].astype(str).str.strip().str.lower()
+                    c_flag = (
+                        g_comm["communes_c"].astype(str).str.strip().str.lower()
+                        if "communes_c" in g_comm.columns
+                        else pd.Series([""] * len(g_comm))
+                    )
+                    a_flag = (
+                        g_comm["communes_a"].astype(str).str.strip().str.lower()
+                        if "communes_a" in g_comm.columns
+                        else pd.Series([""] * len(g_comm))
+                    )
+                    for n, c, a in zip(nom, c_flag, a_flag):
+                        if not n:
+                            continue
+                        if c == "oui":
+                            pnf_zone_by_commune_nom[n] = "Coeur_PNF"
+                        elif a == "oui":
+                            pnf_zone_by_commune_nom[n] = "Aire_adhesion_PNF"
+    except Exception:
+        pnf_zone_by_commune_nom = {}
+
+    def _build_proc_detail(
+        df: pd.DataFrame,
+        proc_type: str,
+        num_candidates: list[str],
+        date_candidates: list[str],
+        commune_candidates: list[str],
+        theme_candidates: list[str],
+    ) -> pd.DataFrame:
+        if df is None or df.empty:
+            return pd.DataFrame(
+                columns=["numero", "date", "commune", "thematique", "coeur_hors_coeur", "type_procedure"]
+            )
+        d = df.copy()
+        num_col = next((c for c in num_candidates if c in d.columns), None)
+        dt_col = next((c for c in date_candidates if c in d.columns), None)
+        com_col = next((c for c in commune_candidates if c in d.columns), None)
+        th_col = next((c for c in theme_candidates if c in d.columns), None)
+        out = pd.DataFrame(
+            {
+                "numero": d[num_col].astype(str) if num_col else "",
+                "date": d[dt_col].astype(str) if dt_col else "",
+                "commune": d[com_col].astype(str) if com_col else "",
+                "thematique": d[th_col].astype(str) if th_col else "",
+            }
+        )
+        out["commune"] = out["commune"].astype(str).str.strip().replace({"": pd.NA, "nan": pd.NA, "None": pd.NA})
+        if "NOM_COM_FAITS" in d.columns:
+            out["commune"] = out["commune"].fillna(
+                d["NOM_COM_FAITS"].astype(str).str.strip().replace({"": pd.NA, "nan": pd.NA, "None": pd.NA})
+            )
+        if "DC_ID" in d.columns and nom_commune_by_dc:
+            out["commune"] = out["commune"].fillna(
+                d["DC_ID"].astype(str).str.strip().map(nom_commune_by_dc)
+            )
+        if proc_type == "PVe" and com_col == "INF-INSEE" and pnf_zone_by_insee:
+            out["coeur_hors_coeur"] = (
+                d[com_col]
+                .astype(str)
+                .str.strip()
+                .str.extract(r"(\d{1,5})", expand=False)
+                .fillna("")
+                .str.zfill(5)
+                .map(pnf_zone_by_insee)
+                .apply(_coeur_hors_coeur_from_zone)
+            )
+            # Si un code INSEE n'est pas présent dans le référentiel, on retombe
+            # sur la zone SIG lorsqu'elle existe.
+            if "pnf_zone_sig" in d.columns:
+                fallback = d["pnf_zone_sig"].apply(_coeur_hors_coeur_from_zone)
+                out["coeur_hors_coeur"] = out["coeur_hors_coeur"].where(
+                    out["coeur_hors_coeur"].ne("n.d."), fallback
+                )
+        elif "pnf_zone_sig" in d.columns:
+            out["coeur_hors_coeur"] = d["pnf_zone_sig"].apply(_coeur_hors_coeur_from_zone)
+        elif "DC_ID" in d.columns and pnf_by_dc:
+            out["coeur_hors_coeur"] = (
+                d["DC_ID"].astype(str).str.strip().map(pnf_by_dc).apply(_coeur_hors_coeur_from_zone)
+            )
+        else:
+            out["coeur_hors_coeur"] = "n.d."
+        # PEJ / PA : la commune affichée peut venir de NOM_COM_FAITS ou des points (DC_ID) alors que
+        # NOM_COM reste vide — aligner le libellé Cœur/Hors-cœur sur `out["commune"]`, pas sur la seule
+        # colonne candidate d'origine.
+        if proc_type in ("PEJ", "PA") and pnf_zone_by_commune_nom:
+            zc = (
+                out["commune"]
+                .astype(str)
+                .str.strip()
+                .str.lower()
+                .replace({"": pd.NA, "nan": pd.NA, "none": pd.NA, "<na>": pd.NA})
+            )
+            from_nom = zc.map(pnf_zone_by_commune_nom).apply(_coeur_hors_coeur_from_zone)
+            out["coeur_hors_coeur"] = from_nom.where(from_nom.ne("n.d."), out["coeur_hors_coeur"])
+        out["type_procedure"] = proc_type
+        return out.fillna("")
+
+    results["pve_detail"] = _build_proc_detail(
+        pve_filtered,
+        "PVe",
+        ["INF-ID", "id", "numero"],
+        ["INF-DATE-INTG", "date", "DATE_REF"],
+        ["INF-INSEE", "nom_commun", "nom_comm", "commune", "INSEE_NOM"],
+        ["INF-TYP-INF-STAT-LIB", "theme", "THEME", "type_actio", "type_action"],
+    )
+    results["pej_detail"] = _build_proc_detail(
+        pej_filtered,
+        "PEJ",
+        ["DC_ID", "NUM_DOSSIER", "dossier", "numero"],
+        ["DATE_REF", "date_ref", "date"],
+        ["NOM_COM", "nom_commun", "commune", "INSEE_NOM"],
+        ["THEME", "theme", "DOMAINE", "domaine"],
+    )
+    results["pa_detail"] = _build_proc_detail(
+        pa_filtered,
+        "PA",
+        ["DC_ID", "NUM_DOSSIER", "numero"],
+        ["DATE_REF", "date_ref", "date"],
+        ["nom_commun", "commune", "INSEE_NOM"],
+        ["THEME", "theme", "DOMAINE", "domaine"],
+    )
+
+    # Bilan PNF : export / PDF « PEJ par zone » = Cœur vs hors-cœur (comme PVe), dérivé du détail.
+    if str(profil_id or "").strip().lower() in {"pnf", "pnf_foret"}:
+        pej_det = results.get("pej_detail")
+        if isinstance(pej_det, pd.DataFrame) and not pej_det.empty and "coeur_hors_coeur" in pej_det.columns:
+            ch = pej_det["coeur_hors_coeur"].astype(str).str.strip()
+            nb_coeur = int((ch == "Cœur").sum())
+            nb_hors = int((ch == "Hors-cœur").sum())
+            results["zone_pej"] = pd.DataFrame(
+                [
+                    {"zone": "Cœur", "nb": nb_coeur},
+                    {"zone": "Hors-cœur (aire d'adhésion)", "nb": nb_hors},
+                ]
+            )
 
     # Agrégation annuelle, trimestrielle ou mensuelle (selon la durée de la période)
     if ventilation_mode == "annuelle":
@@ -1714,6 +2077,8 @@ def _pdf_section_activite_par_types_usagers(
             "Répartition des contrôles par type d'usager",
             tmp_dir,
             "pie_controles_par_type_usager.png",
+            legend_fontsize=6,
+            legend_ncol=min(len(pie_data), 4),
         )
         builder.add_image(Path(pie_path), width_ratio=pie_ratio)
 
@@ -1849,30 +2214,19 @@ def _pdf_section_activite_par_types_usagers(
                 row_cells.extend([str(a), pc_a])
             row_cells.extend([str(t), _pct_table_cell(t, total_global)])
             tbl_res.append(row_cells)
-        if has_autre:
-            col_widths = [
-                avail_w * 0.20,
-                avail_w * 0.08, avail_w * 0.10,
-                avail_w * 0.08, avail_w * 0.10,
-                avail_w * 0.08, avail_w * 0.10,
-                avail_w * 0.07, avail_w * 0.08,
-                avail_w * 0.06, avail_w * 0.05,
-            ]
-        else:
-            col_widths = [
-                avail_w * 0.21,
-                avail_w * 0.09, avail_w * 0.11,
-                avail_w * 0.09, avail_w * 0.11,
-                avail_w * 0.09, avail_w * 0.11,
-                avail_w * 0.09, avail_w * 0.10,
-            ]
+        # Harmonisation visuelle : même largeur pour toutes les colonnes numériques.
+        first_col_w = avail_w * 0.20
+        n_other_cols = len(tbl_res[0]) - 1
+        other_w = (avail_w - first_col_w) / float(max(1, n_other_cols))
+        col_widths = [first_col_w] + [other_w] * n_other_cols
         builder.add_table(
             tbl_res,
-            caption="Résultats des contrôles par types d'usagers",
+            caption="Résultats des contrôles par type d'usager",
             col_widths=col_widths,
             col_aligns=["LEFT"] + ["RIGHT"] * (len(tbl_res[0]) - 1),
             keep_together=True,
             header_font_size=8,
+            wide_headers=False,
         )
 
 
@@ -1888,6 +2242,7 @@ def _generate_pdf(
     label = profile["label"]
     sources = profile.get("sources", {}) or {}
     dept_name = cfg.dept_name
+    dept_name_typo = _normalize_dept_typography(dept_name)
     period_str = f"du {cfg.date_deb.date():%d/%m/%Y} au {cfg.date_fin.date():%d/%m/%Y}"
 
     # Pour le bilan usager ciblé (mono-usager), nommage Bilan_{type_usager} et titres avec le libellé
@@ -1896,6 +2251,24 @@ def _generate_pdf(
     single_label = str(single_cfg.get("label", "")).strip()
     export_prefix = profile.get("_export_prefix") or profil_id
     display_label = single_label if (is_single_usager and single_label) else label
+    resolved_presentation_cfg = resolve_pdf_presentation_config(
+        PROJECT_ROOT,
+        scope="thematique",
+        profile_id=profil_id,
+    )
+    presentation_cfg = (
+        resolved_presentation_cfg.get("effective", {})
+        if isinstance(resolved_presentation_cfg, dict)
+        else {}
+    )
+    behavior_cfg = (
+        resolved_presentation_cfg.get("behavior", {})
+        if isinstance(resolved_presentation_cfg, dict)
+        else {}
+    )
+    show_placeholder = should_show_placeholder(
+        behavior_cfg if isinstance(behavior_cfg, dict) else None
+    )
 
     safe_name = dept_name.replace(" ", "_").replace("'", "")
     pdf_path = out_dir / f"{export_prefix}_{safe_name}.pdf"
@@ -1927,80 +2300,23 @@ def _generate_pdf(
     is_procedures = profile["filter"]["type"] == "procedures"
     # single_cfg / is_single_usager / single_label déjà définis plus haut
 
-    # Sommaire dynamique
-    sections = []
-    sec_num = 0
-
-    def _next_sec(title: str) -> tuple[str, str]:
-        nonlocal sec_num
-        sec_num += 1
-        anchor = f"sec{sec_num}"
-        sections.append((anchor, f"{_roman(sec_num)}. {title}"))
-        return anchor, f"{_roman(sec_num)}. {title}"
-
-    # Organisation spécifique du sommaire pour le profil agrainage,
-    # afin de se rapprocher de l'ancien modèle dédié.
-    #
-    # Remarque : l'analyse par zone est une sous-partie logique des contrôles
-    # agrainage, elle ne crée donc pas de section de niveau I/II/III propre
-    # dans le sommaire. Elle apparaît comme sous-titre dans le corps du texte.
-    if profil_id == "agrainage":
-        if nb_ctrl > 0 or not is_procedures:
-            _next_sec("Chiffres clés")
-        if nb_ctrl > 0 and not is_type_usager and not is_procedures:
-            _next_sec("Contrôles agrainage")
-        if results.get("agg_annuelle") is not None:
-            _next_sec("Analyse de l'ensemble de la période du bilan")
-        if is_type_usager and nb_ctrl > 0:
-            _next_sec("Contrôles par type d'usager")
-        if nb_pve > 0:
-            _next_sec("Infractions PVe")
-        if nb_pej > 0:
-            _next_sec("Procédures judiciaires (PEJ)")
-        if nb_pa > 0:
-            _next_sec("Procédures administratives (PA)")
-        if results.get("agg_pnf") is not None:
-            # Pour l'agrainage, la section regroupe les zones PNF et TUB
-            _next_sec("Zones d'intérêt")
-        # Pas de _next_sec(\"Analyse par zone\") ici : l'analyse par zone est
-        # intégrée dans la section \"Contrôles agrainage\".
-        if results.get("synthese_zone") is not None:
-            _next_sec("Synthèse par zone")
-        if results.get("_pdf_show_activite_usagers"):
-            _next_sec("Activité par types d'usagers")
-        if options.get("cartes", False):
-            _next_sec("Cartographie")
-        _next_sec("Annexes")
-    else:
-        if nb_ctrl > 0 or not is_procedures:
-            _next_sec("Chiffres clés")
-        if results.get("agg_annuelle") is not None:
-            _next_sec("Analyse de l'ensemble de la période du bilan")
-        if nb_ctrl > 0 and not is_type_usager and not is_procedures:
-            _next_sec("Résultats des contrôles")
-        if is_type_usager and nb_ctrl > 0:
-            _next_sec("Contrôles par type d'usager")
-        if nb_pve > 0:
-            _next_sec("Procès-verbaux électroniques (PVe)")
-        if nb_pej > 0:
-            _next_sec("Procédures d'enquête judiciaire (PEJ)")
-        if nb_pa > 0:
-            _next_sec("Procédures administratives (PA)")
-        if results.get("agg_pnf") is not None:
-            # Bilan thématique PNF : périmètre déjà restreint au parc — pas de « Hors PNF ».
-            if str(profil_id).strip().lower() in {"pnf", "pnf_foret"}:
-                _next_sec("Contrôles – Ensemble PNF et Cœur de parc")
-            else:
-                _next_sec("PNF / Hors PNF")
-        if results.get("zone_ctrl") is not None and options.get("tub", False):
-            _next_sec("Analyse par zone")
-        if results.get("synthese_zone") is not None:
-            _next_sec("Synthèse croisée par zone")
-        if results.get("_pdf_show_activite_usagers"):
-            _next_sec("Activité par types d'usagers")
-        if options.get("cartes", False):
-            _next_sec("Cartographie")
-        _next_sec("Annexes")
+    # Sommaire cible (numérotation imposée)
+    section_defs = [
+        ("sec1", "1. Chiffres clés"),
+        ("sec2", "2. Contrôles"),
+        ("sec21", "2.1. Indicateurs mensuels"),
+        ("sec22", "2.2. Résultats des contrôles"),
+        ("sec3", "3. Procédures"),
+        ("sec31", "3.1 Procès verbaux électroniques (Pve)"),
+        ("sec32", "3.2 Procédures d’enquêtes judiciaires"),
+        ("sec33", "3.3 Procédures administratives"),
+        ("sec4", "4. Activité de contrôle par type d’usager"),
+        ("sec5", "5. Localisation cartographique des contrôles"),
+        ("sec6", "6. Annexes"),
+    ]
+    sections = section_defs
+    sections_toc = resolve_sections_for_toc(presentation_cfg, section_defs)
+    section_title = {sid: title for sid, title in section_defs}
 
     # Page de garde + sommaire
     # Préparer un libellé de thème sans doublon "Bilan "
@@ -2025,192 +2341,248 @@ def _generate_pdf(
     if nb_pve > 0:
         subtitle_sources += " – MININT/AGC-PVe"
 
+    cover_profile_label = str(profile.get("title_label", main_label)).strip() or str(main_label)
+    if profil_id == "types_usager_cible":
+        cover_profile_label = str(main_label).strip()
+
+    cover_title_lines, header_title_lines = _build_title_lines_from_cfg(
+        presentation_cfg,
+        profile_label=cover_profile_label,
+        dept_name_typo=dept_name_typo,
+    )
+    report_header = " — ".join(line.strip() for line in header_title_lines if line.strip())
+    builder.header_title = report_header
+    builder.doc.title = " — ".join(header_title_lines)
+
+    title_page_cfg = resolve_title_page_config(
+        PROJECT_ROOT,
+        scope="thematique",
+        profile_id=profil_id,
+    )
     builder.add_title_page(
-        title_lines=[f"Bilan thématique : {main_label}", f"pour la {dept_name}"],
+        title_lines=cover_title_lines,
         period_str=f"Période : {period_str}",
         subtitle=subtitle_sources,
+        title_page_config=title_page_cfg,
     )
-    builder.add_toc(sections)
+    builder.add_toc(sections_toc)
+
+    # Notice méthodologique entre sommaire et partie 1
+    builder.add_section("notice_methodo", "Notice méthodologique")
+    builder.add_paragraph(
+        "Les données relatives aux contrôles et aux procédures présentées dans ce document "
+        "sont extraites de la base du logiciel OSCEAN, outil de rapportage des activités "
+        "de police administrative et judiciaire des agents de l’OFB."
+    )
+    builder.add_paragraph(
+        f"Pour ce bilan, les extractions portent sur la période {period_str}."
+    )
+    builder.add_paragraph(
+        "Sauf mention contraire, l’unité de mesure du nombre de contrôles utilisée dans "
+        "la suite du document est la localisation de contrôle : une unité correspond à "
+        "une localisation renseignée."
+    )
+    builder.add_paragraph(
+        "Il convient de distinguer l’activité de police administrative et l’activité de "
+        "police judiciaire. Dans ce document, le terme « contrôle » renvoie exclusivement "
+        "à la police administrative. Le terme « procédure judiciaire » désigne l’activité "
+        "de police judiciaire, qui ne se limite pas aux infractions relevées lors des "
+        "contrôles et peut aussi inclure des saisines extérieures (instruction parquet, "
+        "signalements, plaintes, etc.)."
+    )
+    builder.add_paragraph(
+        "Le total des contrôles par type d’usager peut être supérieur au total des "
+        "contrôles, car une même fiche de contrôle peut renseigner plusieurs types "
+        "d’usagers (contrôle multi-usager). L’analyse par type d’usager comptabilise "
+        "chaque type renseigné afin de refléter au mieux les usagers effectivement "
+        "concernés par l’action de contrôle."
+    )
+    builder.add_page_break()
 
     # ── CHIFFRES CLÉS ──
-    sec_idx = 0
-    if nb_ctrl > 0 or not is_procedures:
-        anchor, title = sections[sec_idx]; sec_idx += 1
-        builder.add_section(anchor, title)
-        kf = []
-        if nb_ctrl > 0:
-            kf.append((str(nb_ctrl), "Localisations de contrôle"))
-        if tab_resultats is not None:
-            nb_nc = 0
-            for _lbl in ("Infraction", "Manquement"):
-                sub = tab_resultats[tab_resultats["resultat"] == _lbl]
-                if not sub.empty and "nb" in sub.columns:
-                    nb_nc += int(sub["nb"].sum())
-            if nb_nc > 0:
-                taux_nc = nb_nc / nb_ctrl if nb_ctrl else 0
-                kf.append((str(nb_nc), "Contrôles non-conformes"))
-                kf.append((format_pct_int_from_rate(taux_nc), "Taux de non-conformité"))
-        if nb_pej > 0:
-            # Procédures judiciaires issues des contrôles
-            kf.append((str(nb_pej), "Nombre de procédures judiciaires"))
-        if nb_pa > 0:
-            kf.append((str(nb_pa), "PA"))
-        if nb_pve > 0:
-            # Infractions relevées par procès-verbal électronique
-            kf.append((str(nb_pve), "Nombre d'infractions relevées par PVe"))
+    builder.add_section("sec1", section_title["sec1"])
+    kf = []
+    if nb_ctrl > 0:
+        kf.append((str(nb_ctrl), "Localisations de contrôle"))
+    if tab_resultats is not None:
+        nb_nc = 0
+        for _lbl in ("Infraction", "Manquement"):
+            sub = tab_resultats[tab_resultats["resultat"] == _lbl]
+            if not sub.empty and "nb" in sub.columns:
+                nb_nc += int(sub["nb"].sum())
+        if nb_nc > 0:
+            taux_nc = nb_nc / nb_ctrl if nb_ctrl else 0
+            kf.append((str(nb_nc), "Contrôles non-conformes"))
+            kf.append((format_pct_int_from_rate(taux_nc), "Taux de non-conformité"))
+    if nb_pej > 0:
+        kf.append((str(nb_pej), "Nombre de procédures judiciaires"))
+    kf.append((str(nb_pa), "Procédure administrative"))
+    if nb_pve > 0:
+        kf.append((str(nb_pve), "Nombre d'infractions relevées par PVe"))
         # En mode \"types d'usagers\", ajouter un indicateur complémentaire :
         # somme des effectifs d'usagers contrôlés (peut dépasser nb_ctrl).
-        if is_type_usager:
-            ue = results.get("usager_effectifs")
-            if ue is not None and not ue.empty and "nb" in ue.columns:
-                total_usagers = int(ue["nb"].sum())
-                if is_single_usager and single_label:
-                    kf.append((str(total_usagers), f"Effectifs – {single_label}"))
-                else:
-                    kf.append((str(total_usagers), "Effectifs d'usagers contrôlés"))
-        if is_procedures and "pej_duree_resume" in results:
-            dr = results["pej_duree_resume"]
-            kf.append((str(dr["nb_pej"]), "PEJ"))
-            kf.append((f"{dr['duree_moy_j']} j", "Durée moyenne"))
-            kf.append((f"{dr['duree_mediane_j']} j", "Durée médiane"))
-        builder.add_key_figures(kf)
+    if is_type_usager:
+        ue = results.get("usager_effectifs")
+        if ue is not None and not ue.empty and "nb" in ue.columns:
+            total_usagers = int(ue["nb"].sum())
+            if is_single_usager and single_label:
+                kf.append((str(total_usagers), f"Effectifs – {single_label}"))
+            else:
+                kf.append((str(total_usagers), "Effectifs d'usagers contrôlés"))
+    if is_procedures and "pej_duree_resume" in results:
+        dr = results["pej_duree_resume"]
+        kf.append((str(dr["nb_pej"]), "PEJ"))
+        kf.append((f"{dr['duree_moy_j']} j", "Durée moyenne"))
+        kf.append((f"{dr['duree_mediane_j']} j", "Durée médiane"))
+    builder.add_key_figures(kf)
 
-    # ── ANALYSE DE L'ENSEMBLE DE LA PÉRIODE DU BILAN ──
+    # 2. Contrôles (chapitre)
+    builder.add_section("sec2", section_title["sec2"])
+
+    # ── ANALYSE DE L'ENSEMBLE DE LA PÉRIODE DU BILAN / RÉSULTATS ──
     agg_annuelle = results.get("agg_annuelle")
     vent_temp_type = results.get("ventilation_temporelle_type", "annuelle")
-    if isinstance(agg_annuelle, pd.DataFrame) and not agg_annuelle.empty:
-        anchor, title = sections[sec_idx]; sec_idx += 1
-        builder.add_section(anchor, title)
-        is_month = vent_temp_type == "mensuelle"
-        is_trim = vent_temp_type == "trimestrielle"
-        texte_vent = "par mois " if is_month else ("par trimestre " if is_trim else "par année ")
-        builder.add_paragraph(
-            "Ventilation des principaux indicateurs " + texte_vent
-            + "sur l'ensemble de la période du bilan."
-        )
-        label_col = "Mois" if is_month else ("Trimestre" if is_trim else "Année")
-        tbl = [[
-            label_col,
-            "Nb contrôles",
-            "Contrôles non-conformes",
-            "Taux de non-conformité",
-            "PEJ",
-            "PA",
-            "PVe",
-        ]]
-        for _, row in agg_annuelle.iterrows():
-            taux = (
-                format_pct_int_from_rate(row.get("taux_non_conformite_controles"))
-                if pd.notna(row.get("taux_non_conformite_controles"))
-                else "n.d."
+
+    def _render_sec21() -> None:
+        builder.add_section("sec21", section_title["sec21"], toc_level=1)
+        if isinstance(agg_annuelle, pd.DataFrame) and not agg_annuelle.empty:
+            is_month = vent_temp_type == "mensuelle"
+            is_trim = vent_temp_type == "trimestrielle"
+            texte_vent = "par mois " if is_month else ("par trimestre " if is_trim else "par année ")
+            builder.add_paragraph(
+                "Ventilation des principaux indicateurs " + texte_vent
+                + "sur l'ensemble de la période du bilan."
             )
-            tbl.append([
-                str(row["periode"]),
-                str(int(row["nb_controles"])),
-                str(int(row["nb_controles_non_conformes"])),
-                taux,
-                str(int(row["nb_pej"])),
-                str(int(row["nb_pa"])),
-                str(int(row["nb_pve"])),
-            ])
-        builder.add_table(
-            tbl,
-            caption="Indicateurs " + ("mensuels" if is_month else ("trimestriels" if is_trim else "annuels")),
-            col_widths=[
-                avail_w * 0.12,
-                avail_w * 0.14,
-                avail_w * 0.18,
-                avail_w * 0.14,
-                avail_w * 0.14,
-                avail_w * 0.14,
-                avail_w * 0.14,
-            ],
-            col_aligns=["RIGHT", "RIGHT", "RIGHT", "RIGHT", "RIGHT", "RIGHT", "RIGHT"],
-        )
-
-        period_labels = [str(v) for v in agg_annuelle["periode"].tolist()]
-        if is_month:
-            titre_ctrl = "Contrôles par mois (conformes / non-conformes)"
-            titre_proc = "Procédures et PVe par mois"
-        elif is_trim:
-            titre_ctrl = "Contrôles par trimestre (conformes / non-conformes)"
-            titre_proc = "Procédures et PVe par trimestre"
-        else:
-            titre_ctrl = "Contrôles par année (conformes / non-conformes)"
-            titre_proc = "Procédures et PVe par année"
-
-        # Graphique 1 : barres empilées — contrôles conformes vs non-conformes
-        conformes = [
-            int(row["nb_controles"]) - int(row["nb_controles_non_conformes"])
-            for _, row in agg_annuelle.iterrows()
-        ]
-        non_conformes = [int(v) for v in agg_annuelle["nb_controles_non_conformes"].tolist()]
-        stacked_ctrl = {
-            "Conformes": conformes,
-            "Non-conformes": non_conformes,
-        }
-        stacked_path = chart_bar_stacked(
-            period_labels, stacked_ctrl,
-            titre_ctrl,
-            "Nombre de contrôles",
-            tmp_dir, "bar_annuel_ctrl_stacked.png",
-        )
-        builder.add_image(Path(stacked_path), width_ratio=chart_ratio_base)
-
-        # Graphique 2 : barres empilées — procédures et PVe par période
-        series_proc = {
-            "PEJ": [int(v) for v in agg_annuelle["nb_pej"].tolist()],
-            "PA": [int(v) for v in agg_annuelle["nb_pa"].tolist()],
-            "PVe": [int(v) for v in agg_annuelle["nb_pve"].tolist()],
-        }
-        has_proc = any(sum(vals) > 0 for vals in series_proc.values())
-        if has_proc:
-            stacked_proc_path = chart_bar_stacked(
-                period_labels, series_proc,
-                titre_proc,
-                "Nombre",
-                tmp_dir, "bar_annuel_proc_stacked.png",
+            label_col = "Mois" if is_month else ("Trimestre" if is_trim else "Année")
+            tbl = [[
+                label_col,
+                "Nb contrôles",
+                "Contrôles non-conformes",
+                "Taux de non-conformité",
+                "PEJ",
+                "PA",
+                "PVe",
+            ]]
+            for _, row in agg_annuelle.iterrows():
+                taux = (
+                    format_pct_int_from_rate(row.get("taux_non_conformite_controles"))
+                    if pd.notna(row.get("taux_non_conformite_controles"))
+                    else "n.d."
+                )
+                tbl.append([
+                    str(row["periode"]),
+                    str(int(row["nb_controles"])),
+                    str(int(row["nb_controles_non_conformes"])),
+                    taux,
+                    str(int(row["nb_pej"])),
+                    str(int(row["nb_pa"])),
+                    str(int(row["nb_pve"])),
+                ])
+            if is_block_enabled(presentation_cfg, "sec21.show_table", True):
+                builder.add_table(
+                    tbl,
+                    caption="Indicateurs " + ("mensuels" if is_month else ("trimestriels" if is_trim else "annuels")),
+                    col_widths=[
+                        avail_w * 0.12,
+                        avail_w * 0.14,
+                        avail_w * 0.18,
+                        avail_w * 0.14,
+                        avail_w * 0.14,
+                        avail_w * 0.14,
+                        avail_w * 0.14,
+                    ],
+                    col_aligns=["RIGHT", "RIGHT", "RIGHT", "RIGHT", "RIGHT", "RIGHT", "RIGHT"],
+                )
+            period_labels = [str(v) for v in agg_annuelle["periode"].tolist()]
+            if is_month:
+                titre_ctrl = "Contrôles par mois (conformes / non-conformes)"
+                titre_proc = "Procédures et PVe par mois"
+            elif is_trim:
+                titre_ctrl = "Contrôles par trimestre (conformes / non-conformes)"
+                titre_proc = "Procédures et PVe par trimestre"
+            else:
+                titre_ctrl = "Contrôles par année (conformes / non-conformes)"
+                titre_proc = "Procédures et PVe par année"
+            conformes = [
+                int(row["nb_controles"]) - int(row["nb_controles_non_conformes"])
+                for _, row in agg_annuelle.iterrows()
+            ]
+            non_conformes = [int(v) for v in agg_annuelle["nb_controles_non_conformes"].tolist()]
+            stacked_ctrl = {"Conformes": conformes, "Non-conformes": non_conformes}
+            stacked_path = chart_bar_stacked(
+                period_labels, stacked_ctrl, titre_ctrl, "Nombre de contrôles", tmp_dir, "bar_annuel_ctrl_stacked.png",
             )
-            builder.add_image(Path(stacked_proc_path), width_ratio=chart_ratio_base)
+            if is_block_enabled(presentation_cfg, "sec21.show_chart_controles", True):
+                builder.add_image(Path(stacked_path), width_ratio=chart_ratio_base)
+            series_proc = {
+                "PEJ": [int(v) for v in agg_annuelle["nb_pej"].tolist()],
+                "PA": [int(v) for v in agg_annuelle["nb_pa"].tolist()],
+                "PVe": [int(v) for v in agg_annuelle["nb_pve"].tolist()],
+            }
+            has_proc = any(sum(vals) > 0 for vals in series_proc.values())
+            if has_proc and is_block_enabled(presentation_cfg, "sec21.show_chart_procedures", True):
+                stacked_proc_path = chart_bar_stacked(
+                    period_labels, series_proc, titre_proc, "Nombre", tmp_dir, "bar_annuel_proc_stacked.png",
+                )
+                builder.add_image(Path(stacked_proc_path), width_ratio=chart_ratio_base)
+            if vent_temp_type != "mensuelle" and is_block_enabled(presentation_cfg, "sec21.show_chart_taux_line", True):
+                taux_values = []
+                for _, row in agg_annuelle.iterrows():
+                    val = row.get("taux_non_conformite_controles")
+                    taux_values.append(int(round(float(val) * 100)) if pd.notna(val) else 0)
+                if any(v > 0 for v in taux_values):
+                    line_path = chart_line_evolution(
+                        period_labels,
+                        {"Taux de non-conformité (%)": taux_values},
+                        "Évolution du taux de non-conformité",
+                        "Taux (%)",
+                        tmp_dir, "line_annuel_taux_inf.png",
+                    )
+                    builder.add_image(Path(line_path), width_ratio=chart_ratio_base)
+        elif show_placeholder:
+            builder.add_paragraph("Aucun indicateur mensuel disponible sur la période.")
 
-        # Graphique 3 : courbe d'évolution — taux de non-conformité des contrôles
-        taux_values = []
-        for _, row in agg_annuelle.iterrows():
-            val = row.get("taux_non_conformite_controles")
-            taux_values.append(int(round(float(val) * 100)) if pd.notna(val) else 0)
-        if any(v > 0 for v in taux_values):
-            line_path = chart_line_evolution(
-                period_labels,
-                {"Taux de non-conformité (%)": taux_values},
-                "Évolution du taux de non-conformité",
-                "Taux (%)",
-                tmp_dir, "line_annuel_taux_inf.png",
-            )
-            # Graphique plus compact pour libérer de la place pour le tableau
-            # et le camembert des résultats sur la même page.
-            builder.add_image(Path(line_path), width_ratio=chart_ratio_base)
-
-    # ── RÉSULTATS DES CONTRÔLES ──
-    if nb_ctrl > 0 and not is_type_usager and not is_procedures:
-        anchor, title = sections[sec_idx]; sec_idx += 1
-        builder.add_section(anchor, title)
+    def _render_sec22() -> None:
+        builder.add_section("sec22", section_title["sec22"], toc_level=1)
+        if not (nb_ctrl > 0 and not is_type_usager and not is_procedures):
+            if show_placeholder:
+                builder.add_paragraph("Aucune donnée de résultat disponible sur la période.")
+            return
         # Pour le profil agrainage, expliciter la source et le filtrage des contrôles.
-        if profil_id == "agrainage":
+        if profil_id == "agrainage" and is_block_enabled(presentation_cfg, "sec22.show_intro_text", True):
             builder.add_paragraph(
                 "Contrôles liés à l’agrainage identifiés dans les points de contrôle OSCEAN "
                 "(champ « nom_dossie » ou « nom_dossier » contenant « agrain »)."
             )
-        if tab_resultats is not None:
-            tr = tab_resultats
-            taux_strs_res = tab_counts_to_pct_strings(tr["nb"].astype(int).tolist())
-            tbl = [["Résultat", "Nombre", "Taux"]]
-            for i, (_, row) in enumerate(tr.iterrows()):
-                tbl.append([str(row["resultat"]), str(int(row["nb"])), taux_strs_res[i]])
+        tab_res_ctrl = results.get("tab_resultats_controles")
+        if tab_res_ctrl is not None and not tab_res_ctrl.empty and is_block_enabled(presentation_cfg, "sec22.show_table", True):
+            tr = tab_res_ctrl
+            tbl = [["Résultat", "Nombre", "Taux", "Cœur/Hors-cœur"]]
+            top_mask = tr["resultat"].isin(["Conforme", "Non-conforme", "En attente"])
+            top_counts = tr.loc[top_mask, "nb"].astype(int).tolist()
+            top_rates = tab_counts_to_pct_strings(top_counts) if top_counts else []
+            j = 0
+            nb_nc = int(tr.loc[tr["resultat"] == "Non-conforme", "nb"].sum())
+            for _, row in tr.iterrows():
+                rlib = str(row["resultat"])
+                nbv = int(row["nb"])
+                if rlib.strip() in ("Dont infraction", "Dont manquement"):
+                    t = format_pct_int_from_rate((nbv / nb_nc) if nb_nc > 0 else None)
+                elif rlib in ("Conforme", "Non-conforme", "En attente"):
+                    t = top_rates[j] if j < len(top_rates) else "n.d."
+                    j += 1
+                else:
+                    t = "n.d."
+                tbl.append([rlib, str(nbv), t, str(row.get("coeur_hors_coeur", "n.d."))])
             builder.add_table(tbl, caption="Résultats des contrôles",
-                              col_widths=[avail_w * 0.50, avail_w * 0.25, avail_w * 0.25],
-                              col_aligns=["LEFT", "RIGHT", "RIGHT"])
-            pie_data = {str(r["resultat"]): int(r["nb"]) for _, r in tab_resultats.iterrows()}
-            if pie_data:
+                              col_widths=[avail_w * 0.42, avail_w * 0.14, avail_w * 0.16, avail_w * 0.28],
+                              col_aligns=["LEFT", "RIGHT", "RIGHT", "LEFT"])
+            pie_data = {
+                str(r["resultat"]): int(r["nb"])
+                for _, r in tr.iterrows()
+                if str(r["resultat"]) in ("Conforme", "Non-conforme", "En attente")
+            }
+            if pie_data and is_block_enabled(presentation_cfg, "sec22.show_pie", True):
                 pie_path = chart_pie(
                     pie_data,
                     "Répartition des résultats",
@@ -2220,26 +2592,22 @@ def _generate_pdf(
                 # Légère augmentation pour un meilleur confort de lecture,
                 # tout en restant assez compact pour tenir sur la même page.
                 builder.add_image(Path(pie_path), width_ratio=chart_ratios["global_resultats_pie"])
-        # Tableau des communes : suite directe sous le camembert (même page si place).
-        if "agg_commune" in results:
-            top = results["agg_commune"].sort_values("nb_controles", ascending=False).head(10)
-            tbl = [["Commune", "Nb contrôles", "Contrôles non-conformes", "Taux de non-conformité"]]
-            for _, row in top.iterrows():
-                t = format_pct_int_from_rate(row.get("taux_non_conformite"))
-                code_insee = row.iloc[0]
-                tbl.append([_nom_commune(code_insee), str(int(row["nb_controles"])),
-                            str(int(row["nb_non_conformes"])), t])
-            builder.add_table(tbl, caption="Communes avec le plus de contrôles",
-                              col_widths=[avail_w * 0.25] * 4,
-                              col_aligns=["LEFT", "RIGHT", "RIGHT", "RIGHT"])
-        # On ne force pas systématiquement un saut de page ici : la section
-        # suivante (types d'usagers ou procédures) pourra commencer sur la
-        # même page si l'espace le permet.
+        elif show_placeholder:
+            builder.add_paragraph("Aucune donnée de résultat disponible sur la période.")
+        # On ne force pas systématiquement un saut de page ici.
 
-    # ── TYPES D'USAGERS ──
+    sec2_order = [sid for sid, _ in sections_toc if sid in {"sec21", "sec22"}]
+    if not sec2_order:
+        sec2_order = ["sec21", "sec22"]
+    for sid in sec2_order:
+        if sid == "sec21":
+            _render_sec21()
+        elif sid == "sec22":
+            _render_sec22()
+
+    # ── TYPES D'USAGERS (hors sec22) ──
     if is_type_usager and nb_ctrl > 0:
-        anchor, title = sections[sec_idx]; sec_idx += 1
-        builder.add_section(anchor, title)
+        builder.add_section("sec_ctrl_type_usager", "Contrôles par type d'usager", level=2)
 
         # Multi-usagers : architecture complète (tableau + camembert + colonnes type_usager)
         if not is_single_usager:
@@ -2352,22 +2720,6 @@ def _generate_pdf(
                 keep_together=True,
             )
 
-        # Communes avec le plus de contrôles (usager ciblé)
-        if options.get("par_commune", True) and "agg_commune" in results and not results["agg_commune"].empty:
-            top = results["agg_commune"].sort_values("nb_controles", ascending=False).head(10)
-            cap_comm = "Communes avec le plus de contrôles (usager ciblé)"
-            if is_single_usager and single_label:
-                cap_comm = f"Communes avec le plus de contrôles – {single_label}"
-            tbl = [["Commune", "Nb contrôles", "Contrôles non-conformes", "Taux de non-conformité"]]
-            for _, row in top.iterrows():
-                t = format_pct_int_from_rate(row.get("taux_non_conformite"))
-                code_insee = row.iloc[0]
-                tbl.append([_nom_commune(code_insee), str(int(row["nb_controles"])),
-                            str(int(row["nb_non_conformes"])), t])
-            builder.add_table(tbl, caption=cap_comm,
-                              col_widths=[avail_w * 0.25] * 4,
-                              col_aligns=["LEFT", "RIGHT", "RIGHT", "RIGHT"])
-
         # Procédures par domaine (PJ, PA, PVe)
         proc_ud = results.get("proc_par_usager_domaine")
         if proc_ud is not None and not proc_ud.empty:
@@ -2400,69 +2752,112 @@ def _generate_pdf(
 
         # Section dense : on conserve un saut de page dédié.
 
-    # ── PVe ──
-    if nb_pve > 0:
-        anchor, title = sections[sec_idx]; sec_idx += 1
-        builder.add_section(anchor, title, compact=True)
-        pve_top = results.get("pve_top_infractions")
-        if pve_top is not None and not pve_top.empty:
-            natinf_ref = load_natinf_ref(PROJECT_ROOT)
-            top_df = pve_top.copy()
-            top_df["numero_natinf"] = top_df["natinf"].astype(str).str.extract(r"(\d+)", expand=False)
-            if not natinf_ref.empty:
-                top_df = top_df.merge(natinf_ref, on="numero_natinf", how="left")
-            def _fmt_natinf_row(r):
-                qualif = str(r.get("qualification_infraction") or "").strip()
-                nature_raw = str(r.get("nature_infraction") or "").strip()
-                # Convertir "Contravention de classe X" en "CX"
-                nature = nature_raw
-                if nature_raw.lower().startswith("contravention de classe "):
-                    num = nature_raw[len("contravention de classe "):].strip()
-                    nature = f"C{num}" if num else nature_raw
-                if qualif and nature:
-                    return f"{qualif} ({nature})"
-                if qualif:
-                    return qualif
-                if nature:
-                    return nature
-                lib = str(r.get("libelle_natinf") or "").strip()
-                return lib if lib else str(r["natinf"])
-            top_df["libelle_affich"] = top_df.apply(_fmt_natinf_row, axis=1)
-            tbl_infractions = [["Infraction (qualification et nature)", "Nombre"]]
-            for _, row in top_df.iterrows():
-                tbl_infractions.append([str(row["libelle_affich"]), str(int(row["nb"]))])
-            builder.add_key_figures_and_table(
-                [(str(nb_pve), "PVe")],
-                tbl_infractions,
-                caption="Infractions les plus relevées",
-                col_widths=[avail_w * 0.75, avail_w * 0.25],
-                col_aligns=["LEFT", "RIGHT"],
-            )
-        else:
-            builder.add_key_figures([(str(nb_pve), "PVe")])
-        zone_pve = results.get("zone_pve")
-        if zone_pve is not None:
-            tbl = [["Zone", "Nombre"]]
-            for _, row in zone_pve.iterrows():
-                tbl.append([str(row["zone"]), str(int(row["nb"]))])
-            cap_pve_zone = "PVe par zone"
-            if str(profil_id).strip().lower() in {"pnf", "pnf_foret"}:
-                cap_pve_zone = "PVe par zone (ensemble PNF, cœur de parc, aire d'adhésion)"
-            builder.add_table(tbl, caption=cap_pve_zone,
-                              col_widths=[avail_w * 0.62, avail_w * 0.38],
-                              col_aligns=["LEFT", "RIGHT"])
-        # Section dense : on conserve un saut de page dédié.
+    # 3. Procédures (chapitre)
+    builder.add_section("sec3", section_title["sec3"], start_on_new_page=True)
 
-    # ── PEJ ──
-    if nb_pej > 0:
-        anchor, title = sections[sec_idx]; sec_idx += 1
-        builder.add_section(anchor, title, compact=True)
+    def _render_sec31() -> None:
+        builder.add_section("sec31", section_title["sec31"], compact=True, toc_level=1)
+        if nb_pve > 0:
+            pve_detail = results.get("pve_detail")
+            pve_top = results.get("pve_top_infractions")
+            if nb_pve >= 10 and pve_top is not None and not pve_top.empty:
+                natinf_ref = load_natinf_ref(PROJECT_ROOT)
+                top_df = pve_top.copy()
+                top_df["numero_natinf"] = top_df["natinf"].astype(str).str.extract(r"(\d+)", expand=False)
+                if not natinf_ref.empty:
+                    top_df = top_df.merge(natinf_ref, on="numero_natinf", how="left")
+                def _fmt_natinf_row(r):
+                    qualif = str(r.get("qualification_infraction") or "").strip()
+                    nature_raw = str(r.get("nature_infraction") or "").strip()
+                    nature = nature_raw
+                    if nature_raw.lower().startswith("contravention de classe "):
+                        num = nature_raw[len("contravention de classe "):].strip()
+                        nature = f"C{num}" if num else nature_raw
+                    if qualif and nature:
+                        return f"{qualif} ({nature})"
+                    if qualif:
+                        return qualif
+                    if nature:
+                        return nature
+                    lib = str(r.get("libelle_natinf") or "").strip()
+                    return lib if lib else str(r["natinf"])
+                top_df["libelle_affich"] = top_df.apply(_fmt_natinf_row, axis=1)
+                tbl_infractions = [["Infraction (qualification et nature)", "Nombre"]]
+                for _, row in top_df.iterrows():
+                    tbl_infractions.append([str(row["libelle_affich"]), str(int(row["nb"]))])
+                if is_block_enabled(presentation_cfg, "sec31.show_top_infractions", True):
+                    builder.add_key_figures_and_table(
+                        [(str(nb_pve), "PVe")],
+                        tbl_infractions,
+                        caption="Infractions les plus relevées",
+                        col_widths=[avail_w * 0.75, avail_w * 0.25],
+                        col_aligns=["LEFT", "RIGHT"],
+                    )
+                else:
+                    builder.add_key_figures([(str(nb_pve), "PVe")])
+            else:
+                builder.add_key_figures([(str(nb_pve), "PVe")])
+            if (
+                is_block_enabled(presentation_cfg, "sec31.show_detail_table", True)
+                and isinstance(pve_detail, pd.DataFrame)
+                and not pve_detail.empty
+            ):
+                tbl_det = [["Numéro", "Date", "Commune", "Thématique", "Cœur/Hors-cœur"]]
+                for _, r in pve_detail.head(25).iterrows():
+                    c_raw = str(r.get("commune", "")).strip()
+                    if c_raw.isdigit():
+                        c_val = _nom_commune(c_raw)
+                    else:
+                        c_val = c_raw
+                    tbl_det.append([
+                        str(r.get("numero", "")),
+                        str(r.get("date", "")),
+                        c_val,
+                        str(r.get("thematique", "")),
+                        str(r.get("coeur_hors_coeur", "")),
+                    ])
+                builder.add_table(
+                    tbl_det,
+                    caption="Détail des PVe",
+                    col_aligns=["LEFT", "LEFT", "LEFT", "LEFT", "LEFT"],
+                )
+            pve_nat = results.get("pve_natinf_analysis")
+            if (
+                is_block_enabled(presentation_cfg, "sec31.show_natinf_analysis", True)
+                and isinstance(pve_nat, pd.DataFrame)
+                and not pve_nat.empty
+            ):
+                tbl_nat = [["Thématique", "Libellé NATINF", "Nature d'infraction", "Nombre"]]
+                for _, r in pve_nat.head(20).iterrows():
+                    tbl_nat.append([
+                        str(r.get("thematique", "")),
+                        str(r.get("libelle_natinf", "")),
+                        str(r.get("nature_infraction", "")),
+                        str(int(r.get("nb", 0))),
+                    ])
+                builder.add_table(tbl_nat, caption="Analyse des NATINF relevées (PVe)")
+            zone_pve = results.get("zone_pve")
+            if is_block_enabled(presentation_cfg, "sec31.show_zone_table", True) and zone_pve is not None:
+                tbl = [["Zone", "Nombre"]]
+                for _, row in zone_pve.iterrows():
+                    tbl.append([str(row["zone"]), str(int(row["nb"]))])
+                cap_pve_zone = "PVe par zone"
+                builder.add_table(tbl, caption=cap_pve_zone,
+                                  col_widths=[avail_w * 0.62, avail_w * 0.38],
+                                  col_aligns=["LEFT", "RIGHT"])
+        elif show_placeholder:
+            builder.add_key_figures([(str(nb_pve), "PVe")])
+            builder.add_paragraph("Aucun procès-verbal électronique sur la période.")
+
+    def _render_sec32() -> None:
+        builder.add_section("sec32", section_title["sec32"], compact=True, toc_level=1)
+        pej_detail = results.get("pej_detail")
         pej_top = results.get("pej_top_infractions")
         pej_theme = results.get("pej_par_theme")
         has_infractions = pej_top is not None and not pej_top.empty
         has_theme = pej_theme is not None and not pej_theme.empty
 
-        if has_infractions and has_theme:
+        if has_infractions and has_theme and is_block_enabled(presentation_cfg, "sec32.show_top_infractions", True):
             # Bandeau + Infractions les plus relevées + PEJ par thème : espacements compacts
             # et hauteur de tableaux limitée pour tenir sur une page.
             natinf_ref = load_natinf_ref(PROJECT_ROOT)
@@ -2525,7 +2920,7 @@ def _generate_pdf(
                 ],
                 compact=True,
             )
-        elif has_infractions:
+        elif has_infractions and is_block_enabled(presentation_cfg, "sec32.show_top_infractions", True):
             natinf_ref = load_natinf_ref(PROJECT_ROOT)
             top_df = pej_top.copy()
             top_df["numero_natinf"] = top_df["natinf"].astype(str).str.extract(r"(\d+)", expand=False)
@@ -2562,7 +2957,7 @@ def _generate_pdf(
                 col_widths=[avail_w * 0.75, avail_w * 0.25],
                 col_aligns=["LEFT", "RIGHT"],
             )
-        elif has_theme:
+        elif has_theme and is_block_enabled(presentation_cfg, "sec32.show_theme_table", True):
             builder.add_key_figures([(str(nb_pej), "PEJ")])
             df = pej_theme.head(10).copy()
             if "nb_pej" in df.columns:
@@ -2582,91 +2977,106 @@ def _generate_pdf(
             )
         else:
             builder.add_key_figures([(str(nb_pej), "PEJ")])
-        if "pej_clotur" in results:
+        if (
+            is_block_enabled(presentation_cfg, "sec32.show_detail_table", True)
+            and isinstance(pej_detail, pd.DataFrame)
+            and not pej_detail.empty
+        ):
+            tbl_det = [["Numéro", "Date", "Commune", "Thématique", "Cœur/Hors-cœur"]]
+            for _, r in pej_detail.head(25).iterrows():
+                tbl_det.append([
+                    str(r.get("numero", "")),
+                    str(r.get("date", "")),
+                    str(r.get("commune", "")),
+                    str(r.get("thematique", "")),
+                    str(r.get("coeur_hors_coeur", "")),
+                ])
+            builder.add_table(
+                tbl_det,
+                caption="Détail des PEJ",
+                col_aligns=["LEFT", "LEFT", "LEFT", "LEFT", "LEFT"],
+            )
+        pej_nat = results.get("pej_natinf_analysis")
+        if (
+            is_block_enabled(presentation_cfg, "sec32.show_natinf_analysis", True)
+            and isinstance(pej_nat, pd.DataFrame)
+            and not pej_nat.empty
+        ):
+            tbl_nat = [["Thématique", "Libellé NATINF", "Nature d'infraction", "Nombre"]]
+            for _, r in pej_nat.head(20).iterrows():
+                tbl_nat.append([
+                    str(r.get("thematique", "")),
+                    str(r.get("libelle_natinf", "")),
+                    str(r.get("nature_infraction", "")),
+                    str(int(r.get("nb", 0))),
+                ])
+            builder.add_table(tbl_nat, caption="Analyse des NATINF relevées (PEJ)")
+        zone_pej = results.get("zone_pej")
+        if is_block_enabled(presentation_cfg, "sec32.show_zone_table", True) and zone_pej is not None:
+            tbl_z = [["Zone", "Nombre"]]
+            for _, row in zone_pej.iterrows():
+                tbl_z.append([str(row["zone"]), str(int(row["nb"]))])
+            builder.add_table(
+                tbl_z,
+                caption="PEJ par zone",
+                col_widths=[avail_w * 0.62, avail_w * 0.38],
+                col_aligns=["LEFT", "RIGHT"],
+            )
+        if is_block_enabled(presentation_cfg, "sec32.show_cloture_table", True) and "pej_clotur" in results:
             tbl = [["Clôture PEJ", "Nombre"]]
             for _, row in results["pej_clotur"].head(10).iterrows():
                 tbl.append([str(row["cloture"]), str(int(row["nb"]))])
             builder.add_table(tbl, caption="PEJ par type de clôture",
                               col_widths=[avail_w * 0.6, avail_w * 0.4],
                               col_aligns=["LEFT", "RIGHT"])
-        if "pej_suite" in results:
+        if is_block_enabled(presentation_cfg, "sec32.show_suite_table", True) and "pej_suite" in results:
             tbl = [["Suite", "Nombre"]]
             for _, row in results["pej_suite"].head(10).iterrows():
                 tbl.append([str(row["suite"]), str(int(row["nb"]))])
             builder.add_table(tbl, caption="PEJ par suite donnée",
                               col_widths=[avail_w * 0.6, avail_w * 0.4],
                               col_aligns=["LEFT", "RIGHT"])
-        # On force un saut de page après la partie V. Procédures judiciaires (PEJ)
-        # pour que la partie VI. Zones d'intérêt (PNF + TUB) soit regroupée sur
-        # la page suivante.
-        builder.add_page_break()
 
-    # ── PA ──
-    if nb_pa > 0:
-        anchor, title = sections[sec_idx]; sec_idx += 1
-        builder.add_section(anchor, title)
-        builder.add_key_figures([(str(nb_pa), "PA")])
-        pa_theme = results.get("pa_par_theme")
-        if pa_theme is not None and not pa_theme.empty:
-            tbl = [list(pa_theme.columns)]
-            for _, row in pa_theme.head(20).iterrows():
-                tbl.append([str(v) for v in row.values])
-            builder.add_table(tbl, caption="PA par thème")
-        # Section dense : on conserve un saut de page dédié.
-
-    # ── Analyse PNF (libellé de section selon le profil, cf. sommaire) ──
-    agg_pnf = results.get("agg_pnf_detail")
-    if agg_pnf is None:
-        agg_pnf = results.get("agg_pnf")
-    if agg_pnf is not None:
-        anchor, title = sections[sec_idx]; sec_idx += 1
-        builder.add_section(anchor, title)
-        tbl = [["Zone", "Nb contrôles", "Contrôles non-conformes", "Taux de non-conformité"]]
-        grp_labels, series_ctrl = [], {"Contrôles": [], "Non conformes": []}
-        for _, row in agg_pnf.iterrows():
-            t = format_pct_int_from_rate(row.get("taux_non_conformite"))
-            tbl.append([str(row["PNF"]), str(int(row["nb_controles"])),
-                        str(int(row["nb_non_conforme"])), t])
-            grp_labels.append(str(row["PNF"]))
-            series_ctrl["Contrôles"].append(int(row["nb_controles"]))
-            series_ctrl["Non conformes"].append(int(row["nb_non_conforme"]))
-        caption_pnf = (
-            "Contrôles – Ensemble PNF et Cœur de parc"
-            if str(profil_id).strip().lower() in {"pnf", "pnf_foret"}
-            else "Contrôles – PNF vs Hors PNF"
-        )
-        col_w_pnf = [avail_w * 0.30, avail_w * 0.23, avail_w * 0.23, avail_w * 0.24]
-        col_a_pnf = ["LEFT", "RIGHT", "RIGHT", "RIGHT"]
-        if grp_labels:
-            bar_path = chart_bar_grouped(
-                grp_labels, series_ctrl,
-                (
-                    "Contrôles : Ensemble PNF et Cœur de parc"
-                    if str(profil_id).strip().lower() in {"pnf", "pnf_foret"}
-                    else "Contrôles : PNF vs Hors PNF"
-                ),
-                "Nombre",
-                tmp_dir, "bar_pnf.png",
-            )
-            builder.add_table_and_image_keep_together(
-                tbl,
-                table_caption=caption_pnf,
-                col_widths=col_w_pnf,
-                col_aligns=col_a_pnf,
-                image_path=Path(bar_path),
-                image_width_ratio=chart_ratio_base * 0.88,
-            )
-        else:
+    def _render_sec33() -> None:
+        builder.add_section("sec33", section_title["sec33"], toc_level=1)
+        if is_block_enabled(presentation_cfg, "sec33.show_key_figures", True):
+            builder.add_key_figures([(str(nb_pa), "PA")])
+        pa_detail = results.get("pa_detail")
+        if (
+            is_block_enabled(presentation_cfg, "sec33.show_detail_table", True)
+            and isinstance(pa_detail, pd.DataFrame)
+            and not pa_detail.empty
+        ):
+            tbl_det = [["Numéro", "Date", "Commune", "Thématique", "Cœur/Hors-cœur"]]
+            for _, r in pa_detail.head(25).iterrows():
+                tbl_det.append([
+                    str(r.get("numero", "")),
+                    str(r.get("date", "")),
+                    str(r.get("commune", "")),
+                    str(r.get("thematique", "")),
+                    str(r.get("coeur_hors_coeur", "")),
+                ])
             builder.add_table(
-                tbl,
-                caption=caption_pnf,
-                col_widths=col_w_pnf,
-                col_aligns=col_a_pnf,
+                tbl_det,
+                caption="Détail des PA",
+                col_aligns=["LEFT", "LEFT", "LEFT", "LEFT", "LEFT"],
             )
-        # Pour l'agrainage, on laisse la place au bloc Zone TUB
-        # sur la même page (pas de saut forcé ici).
-        if profil_id != "agrainage":
-            builder.add_page_break()
+        elif show_placeholder:
+            builder.add_paragraph("Aucune procédure administrative sur la période.")
+
+    sec3_order = [sid for sid, _ in sections_toc if sid in {"sec31", "sec32", "sec33"}]
+    if not sec3_order:
+        sec3_order = ["sec31", "sec32", "sec33"]
+    for sid in sec3_order:
+        if sid == "sec31":
+            _render_sec31()
+        elif sid == "sec32":
+            _render_sec32()
+        elif sid == "sec33":
+            _render_sec33()
+
+    # Le détail Cœur/Hors-cœur des contrôles est désormais intégré au tableau
+    # « Résultats des contrôles » (partie 2.2) pour éviter une sous-partie dédiée.
 
     # ── ZONE TUB / HORS ZONE TUB ─
     # Affichée uniquement si l'option tub est activée dans le profil / YAML.
@@ -2767,8 +3177,7 @@ def _generate_pdf(
             # On ne consomme donc pas de nouvelle entrée du sommaire.
             builder.add_section(f"{sections[1][0]}_zone", "Analyse par zone", level=2)
         else:
-            anchor, title = sections[sec_idx]; sec_idx += 1
-            builder.add_section(anchor, title)
+            builder.add_section("sec_ctrl_zone", "Analyse par zone", level=2)
         tbl = [["Zone", "Nb total", "Nb conforme", "Contrôles non-conformes", "Taux de non-conformité"]]
         for _, row in zone_ctrl.iterrows():
             t = format_pct_int_from_rate(row.get("taux_non_conformite"))
@@ -2798,8 +3207,7 @@ def _generate_pdf(
     # ── SYNTHÈSE CROISÉE ──
     synth = results.get("synthese_zone")
     if synth is not None:
-        anchor, title = sections[sec_idx]; sec_idx += 1
-        builder.add_section(anchor, title)
+        builder.add_section("sec_ctrl_synthese", "Synthèse croisée par zone", level=2)
         # Renommer les colonnes pour expliciter la signification des données
         col_labels = []
         for c in synth.columns:
@@ -2827,9 +3235,8 @@ def _generate_pdf(
         # Section dense : on conserve un saut de page dédié.
 
     # ── ACTIVITÉ PAR TYPES D'USAGERS (hors profil dédié « analyses.type_usager ») ──
+    builder.add_section("sec4", section_title["sec4"], start_on_new_page=True)
     if results.get("_pdf_show_activite_usagers"):
-        anchor, title = sections[sec_idx]; sec_idx += 1
-        builder.add_section(anchor, title)
         _pdf_section_activite_par_types_usagers(
             builder,
             results,
@@ -2839,27 +3246,29 @@ def _generate_pdf(
             bar_ratio=chart_ratios["activite_usagers_resultats_bar"],
         )
         builder.add_spacer(4)
+    elif show_placeholder:
+        builder.add_paragraph("Aucune donnée d'activité par type d'usager pour la période.")
 
     # ── CARTOGRAPHIE ──
+    builder.add_section("sec5", section_title["sec5"], start_on_new_page=True)
     if options.get("cartes", False):
-        anchor, title = sections[sec_idx]; sec_idx += 1
-        builder.add_section(anchor, title)
         map_id = profile.get("_map_id") or profil_id
         carte = find_map(str(map_id))
-        if carte and carte.exists():
+        if carte and carte.exists() and is_block_enabled(presentation_cfg, "sec5.show_map", True):
             # Carte sans légende de sources explicite (les sources sont rappelées
             # en première page / méthodologie).
             builder.add_map(carte)
-        else:
+        elif show_placeholder and is_block_enabled(presentation_cfg, "sec5.show_map_fallback_message", True):
             builder.add_paragraph(
                 f"<i>Carte non disponible. Déposez le fichier "
                 f"<b>carte_{map_id}.png</b> dans le dossier des cartes pour "
                 f"l'intégrer au bilan.</i>"
             )
-        builder.add_page_break()
+    elif show_placeholder:
+        builder.add_paragraph("<i>Cartographie désactivée pour ce bilan.</i>")
 
     # ── ANNEXES ──
-    builder.add_section(sections[-1][0], sections[-1][1])
+    builder.add_section("sec6", section_title["sec6"], start_on_new_page=True)
     src_parts: list[str] = []
     if sources.get("point_ctrl", True):
         src_parts.append("OSCEAN (points de contrôle)")
@@ -2885,8 +3294,9 @@ def _generate_pdf(
 
     if is_pnf_profile and has_pnf:
         method_lines.append(
-            "<b>Analyse par zones :</b> bilan restreint au périmètre PNF ; "
-            "la lecture spatiale distingue l'ensemble du parc et le cœur de parc."
+            "<b>Analyse par zones :</b> bilan restreint au périmètre du PNF ; "
+            "la lecture spatiale distingue le coeur de parc de l'aire d'adhésion "
+            "hors coeur de parc."
         )
     elif has_pnf and has_tub:
         method_lines.append(
@@ -2904,7 +3314,8 @@ def _generate_pdf(
             "contrôles, puis la zone TUB est détaillée séparément."
         )
 
-    builder.add_methodology("<br/>".join(method_lines) + "<br/>")
+    if is_block_enabled(presentation_cfg, "sec6.show_methodology", True):
+        builder.add_methodology("<br/>".join(method_lines) + "<br/>")
 
     # Glossaire dynamique basé sur une configuration YAML exhaustive,
     # filtrée pour ne conserver que les abréviations réellement utiles
@@ -2946,7 +3357,7 @@ def _generate_pdf(
     _add_if_available("PNF", results.get("agg_pnf") is not None)
     _add_if_available("TUB", options.get("tub", False))
 
-    if used_ids:
+    if is_block_enabled(presentation_cfg, "sec6.show_glossary", True) and used_ids:
         rows: List[List[str]] = [
             [
                 str(header_cfg.get("abbr_label", "Abréviation")),
@@ -3195,6 +3606,9 @@ def run_engine(
         point_filtered = enrich_with_pnforet_sig_zones(
             point_filtered, root, context="points de contrôle", log=spatial_log
         )
+        point_filtered = overlay_pnf_zone_from_communes_pnf_csv(
+            point_filtered, root, log=spatial_log
+        )
     if not pve_filtered.empty and (
         resolved_opts.get("pnf")
         or resolved_opts.get("tub")
@@ -3202,6 +3616,9 @@ def run_engine(
     ):
         pve_filtered = enrich_with_pnforet_sig_zones(
             pve_filtered, root, context="PVe", log=spatial_log
+        )
+        pve_filtered = overlay_pnf_zone_from_communes_pnf_csv(
+            pve_filtered, root, log=spatial_log
         )
 
     # ── Analyses spatiales ──

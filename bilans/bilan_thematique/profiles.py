@@ -38,6 +38,7 @@ def _normalize_profile(data: dict, profil_id: str) -> dict:
     """Assure la présence de toutes les clés attendues par le moteur."""
     data.setdefault("id", profil_id)
     data.setdefault("label", profil_id)
+    data.setdefault("title_label", data.get("label", profil_id))
     data.setdefault("out_subdir", f"bilan_{profil_id}")
     # Activation par défaut de l'analyse PVe (comportement historique).
     # Peut être désactivée par profil via analyse_PVe: false dans le YAML.

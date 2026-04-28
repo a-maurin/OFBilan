@@ -37,8 +37,10 @@ def test_analyse_controles_global_minimal(tmp_path: Path) -> None:
 
     for filename in (
         "controles_global_resultats.csv",
+        "controles_global_resultats_controles.csv",
         "controles_global_par_domaine.csv",
         "controles_global_par_theme.csv",
+        "controles_global_resultats_par_type_usager.csv",
     ):
         assert (tmp_path / filename).exists()
 
@@ -63,16 +65,10 @@ def test_run_global_smoke(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(mod, "load_pej", lambda root, date_deb, date_fin: minimal_pej)
     monkeypatch.setattr(mod, "load_pve", lambda root, dept_code, date_deb, date_fin: minimal_pve)
     monkeypatch.setattr(mod, "ensure_insee_from_communes_shp", lambda df, *args, **kwargs: df)
-    monkeypatch.setattr(mod, "enrich_with_pnforet_sig_zones", lambda df, *args, **kwargs: df)
     monkeypatch.setattr(mod, "load_natinf_ref", lambda root: pd.DataFrame())
 
-    # Neutralise les fonctions de rendu PDF/graphique pour ce test.
-    monkeypatch.setattr(mod, "key_figures_table", lambda *args, **kwargs: None)
-    monkeypatch.setattr(mod, "ofb_table", lambda *args, **kwargs: None)
-    monkeypatch.setattr(mod, "chart_pie", lambda *args, **kwargs: None)
-    monkeypatch.setattr(mod, "chart_bar_grouped", lambda *args, **kwargs: None)
-    monkeypatch.setattr(mod, "chart_bar_stacked", lambda *args, **kwargs: None)
-    monkeypatch.setattr(mod, "chart_line_evolution", lambda *args, **kwargs: None)
+    # Neutralise la génération PDF (PDFReportBuilder / graphiques matplotlib).
+    monkeypatch.setattr(mod, "generate_pdf_report", lambda *args, **kwargs: None)
 
     # Redirige les sorties dans un dossier temporaire.
     monkeypatch.setattr(mod, "get_out_dir", lambda programme: tmp_path / programme)

@@ -52,7 +52,7 @@ python scripts/run_bilan.py --mode thematique --profil pnf --date-deb 2025-01-01
 - **Combine** possible : `--combine`
 - **Sorties** : `out/bilan_<profil>/` (ou bilan combine)
 
-## Méthodologie des sources (vue non technique)
+## Méthodologie des sources
 
 Le bilan ne constitue pas une base unique « toute mélangée » : il part de plusieurs jeux de données distincts, qui répondent chacun à une question différente, puis les met en cohérence sur un même cadre (département et période choisis).
 
@@ -66,11 +66,11 @@ Les **référentiels et fonds cartographiques** (communes, zones d’intérêt, 
 
 Le **profil du bilan** (fichier de paramètres) précise quelles sources sont activées ou non pour ce rapport et comment le périmètre métier est restreint (par exemple un thème ou des mots-clés). Ainsi, pour un bilan thématique, on ne « réduit » pas arbitrairement la base : on filtre les points OSCEAN selon les règles du profil, puis on rapproche PEJ, PA et éventuellement PVe sur ce même cadre temporel et territorial, pour que les chiffres et graphiques du PDF restent comparables dans le temps et dans l’espace, tout en respectant la sémantique de chaque source (contrôle d’un côté, procédures et faits PJ d’un autre, PVe d’un troisième). Détail des jointures et des champs : `ref/README_sources.md`, `scripts/common/loaders.py`.
 
-## Architecture (vue simple)
+## Architecture
 
 - `scripts/run_bilan.py` : orchestrateur principal
 - `scripts/bilan_global/analyse_global.py` : moteur global
-- `scripts/bilan_thematique/bilan_thematique_engine.py` : moteur thematique unifie
+- `scripts/bilan_thematique/bilan_thematique_engine.py` : moteur thematique
 - `scripts/bilan_thematique/run_bilan_thematique.py` : lanceur thematique direct
 - `config/profils_bilan/` et `ref/profils_bilan/` : profils YAML de pilotage
 - `scripts/common/` : utilitaires partages (PDF, chartes, loaders, etc.)
@@ -128,3 +128,4 @@ Les cartes attendues sont stockees dans `out/generateur_de_cartes/` sous forme `
 - Licence : voir `LICENSE`
 - Auteur : Aguirre Maurin
 - Service : OFB, SD Cote-d'Or
+

@@ -1,4 +1,7 @@
 """Graphiques matplotlib pour les bilans (camemberts, barres, cartes)."""
+from __future__ import annotations
+
+import math
 from pathlib import Path
 
 import geopandas as gpd
@@ -82,6 +85,8 @@ def chart_pie(
     name: str,
     *,
     figsize: tuple[float, float] | None = None,
+    legend_fontsize: float | None = None,
+    legend_ncol: int | None = None,
 ) -> str:
     apply_mpl_style()
     labels = list(data.keys())
@@ -121,18 +126,41 @@ def chart_pie(
         values, startangle=90, colors=colors_pie
     )
     ax.set_aspect("equal")
-    ncol = min(3, max(1, (len(legend_labels) + 2) // 3))
-    ax.legend(
-        wedges,
-        legend_labels,
-        loc="upper center",
-        bbox_to_anchor=(0.5, -0.08),
-        ncol=ncol,
-        fontsize=9,
-        frameon=False,
-    )
+    if legend_ncol is not None:
+        ncol = max(1, int(legend_ncol))
+    else:
+        ncol = min(3, max(1, (len(legend_labels) + 2) // 3))
+    leg_fs = 9 if legend_fontsize is None else float(legend_fontsize)
+    compact_legend = legend_fontsize is not None or legend_ncol is not None
+    legend_kw: dict = {
+        "loc": "upper center",
+        "bbox_to_anchor": (0.5, -0.06 if compact_legend else -0.08),
+        "ncol": ncol,
+        "fontsize": leg_fs,
+        "frameon": False,
+    }
+    if compact_legend:
+        legend_kw.update(
+            handlelength=1.0,
+            handletextpad=0.45,
+            columnspacing=0.85,
+            borderpad=0.3,
+        )
+    ax.legend(wedges, legend_labels, **legend_kw)
     ax.set_title(title, fontsize=12, fontweight="bold", color=COLOR_PRIMARY, pad=10)
-    bottom = 0.26 if len(legend_labels) > 6 else 0.20
+    n_lbl = len(legend_labels)
+    if compact_legend:
+        rows = math.ceil(n_lbl / ncol) if ncol else 1
+        if rows <= 1:
+            bottom = 0.13
+        elif rows == 2:
+            bottom = 0.17
+        elif rows <= 4:
+            bottom = 0.21
+        else:
+            bottom = 0.24
+    else:
+        bottom = 0.26 if n_lbl > 6 else 0.20
     _tight_with_legend_space(fig, bottom=bottom, top=0.90)
     # DPI un peu plus élevé : le PDF insère le camembert plus étroit que les barres.
     return save_chart(fig, tmp_dir, name, dpi=165)

@@ -10,4 +10,3 @@ Les bilans utilisent désormais :
 
 Les anciens scripts dédiés (`bilan_agrainage`, `bilan_chasse`, `bilan_procedures`, anciens générateurs de cartes, etc.)
 peuvent être déplacés ici lorsqu'ils ne sont plus utilisés, afin de clarifier ce qui est maintenu.
-

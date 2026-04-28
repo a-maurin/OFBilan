@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Tuple
+from typing import Any, Tuple
 
 import pandas as pd
 
@@ -9,10 +9,45 @@ from scripts.common.loaders import load_natinf_ref
 from scripts.common.utils import (
     agg_effectifs_usagers,
     agg_effectifs_usagers_par_domaine,
+    agg_resultat_counts_par_type_usager,
     count_controles_non_conformes_oscean,
 )
 
 _ROOT = Path(__file__).resolve().parents[2]
+
+
+def _tab_resultats_controles_detail(
+    tab_resultats: pd.DataFrame,
+    nb_total: int,
+) -> pd.DataFrame:
+    """
+    Synthèse « Résultats des contrôles » pour le bilan global : Conforme / Non-conforme /
+    Dont infraction / Dont manquement / En attente.
+
+    Sans analyse PNF (pas de zones cœur / hors-cœur) — ces indicateurs sont réservés aux
+    bilans thématiques dédiés (ex. profil PNF).
+    """
+    total_from_resultats = int(tab_resultats["nb"].sum()) if not tab_resultats.empty else 0
+    total_controles_reference = max(int(nb_total), total_from_resultats)
+
+    nb_conf = int(tab_resultats.loc[tab_resultats["resultat"] == "Conforme", "nb"].sum())
+    nb_inf = int(tab_resultats.loc[tab_resultats["resultat"] == "Infraction", "nb"].sum())
+    nb_manq = int(tab_resultats.loc[tab_resultats["resultat"] == "Manquement", "nb"].sum())
+    nb_nc = nb_inf + nb_manq
+    nb_en_attente = max(total_controles_reference - (nb_conf + nb_nc), 0)
+
+    details_rows: list[dict[str, Any]] = [
+        {"resultat": "Conforme", "nb": nb_conf},
+        {"resultat": "Non-conforme", "nb": nb_nc},
+        {"resultat": "    Dont infraction", "nb": nb_inf},
+        {"resultat": "    Dont manquement", "nb": nb_manq},
+    ]
+    if nb_en_attente > 0:
+        details_rows.append({"resultat": "En attente", "nb": nb_en_attente})
+    res_ctrl = pd.DataFrame(details_rows)
+    if not res_ctrl.empty:
+        res_ctrl["taux"] = res_ctrl["nb"] / float(total_controles_reference or 1)
+    return res_ctrl
 
 
 def analyse_controles_global(point: pd.DataFrame, out_dir: Path) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -37,9 +72,14 @@ def analyse_controles_global(point: pd.DataFrame, out_dir: Path) -> Tuple[pd.Dat
         )
         tab_resultats["taux"] = tab_resultats["nb"] / float(nb_total or 1)
         tab_resultats.to_csv(out_dir / "controles_global_resultats.csv", sep=";", index=False)
+        res_ctrl = _tab_resultats_controles_detail(tab_resultats, nb_total)
+        res_ctrl.to_csv(out_dir / "controles_global_resultats_controles.csv", sep=";", index=False)
     else:
         tab_resultats = pd.DataFrame(columns=["resultat", "nb", "taux"])
         tab_resultats.to_csv(out_dir / "controles_global_resultats.csv", sep=";", index=False)
+        pd.DataFrame(columns=["resultat", "nb", "taux"]).to_csv(
+            out_dir / "controles_global_resultats_controles.csv", sep=";", index=False
+        )
 
     # Par domaine
     col_domaine = "domaine" if "domaine" in pt.columns else None
@@ -82,6 +122,14 @@ def analyse_controles_global(point: pd.DataFrame, out_dir: Path) -> Tuple[pd.Dat
         agg_usager["taux"] = agg_usager["nb"] / float(total_effectifs or 1)
         agg_usager.to_csv(out_dir / "controles_global_par_usager.csv", sep=";", index=False)
 
+        # Résultats des contrôles par type d'usager (Conforme / Infraction / Manquement / Autre_resultat / Total)
+        res_type_usager = agg_resultat_counts_par_type_usager(pt)
+        res_type_usager.to_csv(
+            out_dir / "controles_global_resultats_par_type_usager.csv",
+            sep=";",
+            index=False,
+        )
+
         # Tableau croisé Usagers × Domaine (effectifs par catégorie et domaine)
         domaine_col = col_domaine if col_domaine else None
         if domaine_col:
@@ -98,6 +146,20 @@ def analyse_controles_global(point: pd.DataFrame, out_dir: Path) -> Tuple[pd.Dat
     else:
         pd.DataFrame(columns=["type_usager", "nb", "taux"]).to_csv(
             out_dir / "controles_global_par_usager.csv", sep=";", index=False
+        )
+        pd.DataFrame(
+            columns=[
+                "type_usager",
+                "Conforme",
+                "Infraction",
+                "Manquement",
+                "Autre_resultat",
+                "Total",
+            ]
+        ).to_csv(
+            out_dir / "controles_global_resultats_par_type_usager.csv",
+            sep=";",
+            index=False,
         )
         pd.DataFrame(columns=["type_usager"]).to_csv(
             out_dir / "controles_global_usager_par_domaine.csv", sep=";", index=False
