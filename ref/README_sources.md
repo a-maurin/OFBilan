@@ -205,7 +205,7 @@ Le script `scripts/inventaire/inventaire_donnees.py` produit les **valeurs disti
 
 ### 6.4 Bilan procédures PEJ
 
-- **Script :** `scripts/bilan_procedures/analyse_procedures.py`
+- **Script :** `python -m bilans --mode thematique --profil procedures_pve`
 - **Rôle :** Indicateurs **globaux** sur les procédures PEJ : **DUREE_PEJ** (moyenne, médiane, quantiles P25/P75), répartition par **CLOTUR_PEJ** et **SUITE**, et par **THEME** / **DOMAINE**.
 - **Règles :** Pas de filtre thématique ; tous les PEJ de la période. Durée en jours (colonne numérique `DUREE_PEJ`). Complète les sorties par NATINF (bilan_natinf) par une vue agrégée.
 - **Périmètre optionnel :** `--date-deb`, `--date-fin`.

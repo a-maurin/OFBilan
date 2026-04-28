@@ -24,7 +24,7 @@ sélection d’usagers (ex. `carte_Agriculteur_Collectivite.png`).
   - `find_maps_for_bilan("bilan_global")` agrège les cartes standards du bilan
     global : `agrainage`, `chasse`, `global_usagers`, `procedures_pve`.
 
-- Dans `scripts/run_bilan.py` :
+- Dans `python -m bilans` (CLI officielle) :
   - `ensure_maps("bilan_global", ...)` est appelé avant le bilan global,
   - `ensure_maps_for_profiles([...], ...)` est appelé pour les bilans thématiques.
 

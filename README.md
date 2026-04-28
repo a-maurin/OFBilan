@@ -11,7 +11,7 @@ Le depot produit deux types de rapports PDF :
 
 Tout passe par un point d'entree unique :
 
-- `scripts/run_bilan.py`
+- `python -m bilans`
 
 ## Utilisation rapide
 
@@ -23,8 +23,6 @@ Launchers officiels (maintenus) :
 - `scripts/windows/generer_cartes.bat` : generation des cartes PNG
 - `scripts/windows/parametrer_cartes.bat` : parametrage des profils cartographiques
 
-Les scripts racine (`lancer_bilans.bat`, `generer_cartes.bat`, `parametrer_cartes.bat`) restent disponibles en **compatibilite** et deleguent vers les wrappers officiels.
-
 ### Interface Linux (recommande)
 
 Launchers officiels (maintenus) :
@@ -32,8 +30,6 @@ Launchers officiels (maintenus) :
 - `scripts/linux/lancer_bilans.sh`
 - `scripts/linux/generer_cartes.sh`
 - `scripts/linux/parametrer_cartes.sh`
-
-Les scripts racine (`lancer_bilans.sh`, `generer_cartes.sh`, `parametrer_cartes.sh`) restent disponibles en **compatibilite** et deleguent vers les wrappers officiels.
 
 ### CLI (direct)
 
@@ -56,13 +52,13 @@ python -m bilans --mode thematique --profil pnf --date-deb 2025-01-01 --date-fin
 ### 1) Bilan global
 
 - **But** : produire un bilan unique sur une periode et un departement.
-- **Entree recommandee** : `scripts/run_bilan.py --mode global`
+- **Entree recommandee** : `python -m bilans --mode global`
 - **Sorties** : `out/bilan_global/` (PDF + CSV)
 
 ### 2) Bilan thematique
 
 - **But** : produire un ou plusieurs bilans cibles via des profils.
-- **Entree recommandee** : `scripts/run_bilan.py --mode thematique --profil <id>`
+- **Entree recommandee** : `python -m bilans --mode thematique --profil <id>`
 - **Combine** possible : `--combine`
 - **Sorties** : `out/bilan_<profil>/` (ou bilan combine)
 
@@ -83,7 +79,6 @@ Le **profil du bilan** (fichier de paramètres) précise quelles sources sont ac
 ## Architecture
 
 - `python -m bilans` : entree CLI officielle
-- `scripts/run_bilan.py` : shim de compatibilite vers la CLI officielle
 - `scripts/bilan_global/analyse_global.py` : moteur global
 - `scripts/bilan_thematique/bilan_thematique_engine.py` : moteur thematique
 - `scripts/bilan_thematique/run_bilan_thematique.py` : lanceur thematique direct
@@ -103,7 +98,7 @@ Surcharge possible en CLI :
 
 ```bat
 python -m bilans --mode thematique --profil chasse --with-pnf --no-tub
-python scripts/bilan_thematique/run_bilan_thematique.py --profil agrainage --option synthese_croisee=true
+python -m bilans --mode thematique --profil agrainage --option synthese_croisee=true
 ```
 
 ## Taille des graphiques PDF
@@ -128,7 +123,7 @@ python -m bilans --mode thematique --profil pnf --preset large
 
 Ordre recommande :
 
-1. Generer les cartes (`generer_cartes.bat` ou script associe)
+1. Generer les cartes (`scripts/windows/generer_cartes.bat` ou `scripts/linux/generer_cartes.sh`)
 2. Generer les bilans (qui integrent ensuite les cartes disponibles)
 
 Les cartes attendues sont stockees dans `out/generateur_de_cartes/` sous forme `carte_<profil>.png`.

@@ -6,7 +6,7 @@ sans refonte du moteur metier.
 
 ## Sources de verite
 
-- `scripts/` : orchestration et moteurs actifs (`run_bilan.py`, moteur global, moteur thematique, cartographie).
+- `scripts/` : moteurs actifs (global, thematique, cartographie).
 - `bilans/` : point d'entree Python (`python -m bilans`) et composants en cours de convergence.
 - `config/` : configuration de pilotage versionnee (profils, options metier, presentation).
 - `ref/` : referentiels versionnes (glossaires, assets OFB, tables de correspondance, donnees de reference).
@@ -21,15 +21,12 @@ Wrappers maintenus :
 - Windows : `scripts/windows/lancer_bilans.bat`, `scripts/windows/generer_cartes.bat`, `scripts/windows/parametrer_cartes.bat`
 - Linux : `scripts/linux/lancer_bilans.sh`, `scripts/linux/generer_cartes.sh`, `scripts/linux/parametrer_cartes.sh`
 
-Les scripts a la racine (`lancer_bilans.*`, `generer_cartes.*`, `parametrer_cartes.*`)
-sont conserves en compatibilite et deleguent vers les wrappers ci-dessus.
-
 ## CLI et packaging (phase 2)
 
 - Entree CLI officielle : `python -m bilans`
 - Entree script console (apres installation) : `bilans`
 - Fichier de packaging : `pyproject.toml`
-- `scripts/run_bilan.py` est maintenu comme shim de compatibilite.
+- Pas de point d'entree legacy conserve : la CLI officielle est `python -m bilans`.
 
 ## Rationalisation config/ref (phase 3)
 

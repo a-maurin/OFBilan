@@ -13,13 +13,13 @@
 
 À la racine de `Bilans_production`, **trois batch** sont disponibles :
 
-- **parametrer_cartes.bat** — ouvre **directement** la fenêtre de configuration des couches et de la symbologie (équivalent `production_cartographique.py --gui`). Utiliser ce batch pour configurer les profils de cartes avant de générer.
-- **generer_cartes.bat** — demande la période, le département et le type de carte, puis **lance la génération** en mode non interactif à partir des réglages enregistrés. Choix proposés : 1 = agrainage, 2 = chasse, 3 = piégeage, 4 = types usagers, 5 = procédures PVe, 6 = toutes.
+- **scripts/windows/parametrer_cartes.bat** — ouvre **directement** la fenêtre de configuration des couches et de la symbologie (équivalent `production_cartographique.py --gui`). Utiliser ce batch pour configurer les profils de cartes avant de générer.
+- **scripts/windows/generer_cartes.bat** — demande la période, le département et le type de carte, puis **lance la génération** en mode non interactif à partir des réglages enregistrés. Choix proposés : 1 = agrainage, 2 = chasse, 3 = piégeage, 4 = types usagers, 5 = procédures PVe, 6 = toutes.
 - Les scripts du générateur restent dans `old/scripts/generateur_de_cartes/` ; ils sont invoqués par ces batch.
 
 ### 3. Configurer les couches et la symbologie
 
-1. Lancer **parametrer_cartes.bat** pour ouvrir la fenêtre « Configuration des couches – Production cartographique ».
+1. Lancer **scripts/windows/parametrer_cartes.bat** pour ouvrir la fenêtre « Configuration des couches – Production cartographique ».
 2. Dans cette fenêtre :
    - choisir le **profil** en haut à gauche (un profil par type de bilan : agrainage, chasse, piégeage, global, etc.) ;
    - dans la liste de gauche, **cocher les couches à afficher** sur la carte ;
@@ -41,8 +41,8 @@ Exemples de profils possibles (selon la configuration) :
 
 ### 4. Générer les cartes
 
-1. Vérifier que la configuration a été enregistrée via **parametrer_cartes.bat**.
-2. Lancer **generer_cartes.bat** : saisir la période, le département et le type de carte (1 = agrainage, 2 = chasse, 3 = piégeage, 4 = types usagers, 5 = procédures PVe, 6 = toutes). La génération s’exécute sans ouvrir la fenêtre de paramétrage.
+1. Vérifier que la configuration a été enregistrée via **scripts/windows/parametrer_cartes.bat**.
+2. Lancer **scripts/windows/generer_cartes.bat** : saisir la période, le département et le type de carte (1 = agrainage, 2 = chasse, 3 = piégeage, 4 = types usagers, 5 = procédures PVe, 6 = toutes). La génération s’exécute sans ouvrir la fenêtre de paramétrage.
 3. Les cartes sont exportées dans `Bilans_production/out/generateur_de_cartes/` au format PNG ou JPEG selon le paramétrage.
 
 ### 5. Messages et diagnostics
