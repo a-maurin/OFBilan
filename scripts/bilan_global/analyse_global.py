@@ -182,12 +182,17 @@ def _build_title_lines_from_cfg(
 
 def _load_glossary_config(root: Path) -> dict:
     """
-    Charge la configuration du glossaire depuis ref/glossaire.yaml.
+    Charge la configuration du glossaire depuis config/presentation/glossaire.yaml
+    puis, en fallback, depuis ref/glossaire.yaml.
 
     Aligne le moteur global sur la logique du moteur thématique, tout en
     excluant explicitement les entrées PNF/TUB (non pertinentes pour le bilan global).
     """
-    cfg_path = root / "ref" / "glossaire.yaml"
+    cfg_candidates = [
+        root / "config" / "presentation" / "glossaire.yaml",
+        root / "ref" / "glossaire.yaml",
+    ]
+    cfg_path = next((p for p in cfg_candidates if p.exists()), None)
     default_cfg: dict = {
         "header": {
             "abbr_label": "Abréviation",
@@ -210,7 +215,7 @@ def _load_glossary_config(root: Path) -> dict:
             {"id": "PVe", "label": "PVe", "definition": "Procès-verbal électronique"},
         ],
     }
-    if not cfg_path.exists():
+    if cfg_path is None:
         return default_cfg
     try:
         import yaml  # type: ignore[import]

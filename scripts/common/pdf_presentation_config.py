@@ -82,12 +82,17 @@ def _normalize_config(data: dict[str, Any]) -> dict[str, Any]:
 
 def load_pdf_presentation_raw_config(root: Path) -> dict[str, Any]:
     """
-    Charge la configuration brute depuis ref/pdf_presentation.yaml.
+    Charge la configuration brute depuis config/presentation/pdf_presentation.yaml
+    puis, en fallback de compatibilite, depuis ref/pdf_presentation.yaml.
 
     Retourne toujours une config valide (fallback sur DEFAULT).
     """
-    cfg_path = root / "ref" / "pdf_presentation.yaml"
-    if not cfg_path.exists():
+    cfg_candidates = [
+        root / "config" / "presentation" / "pdf_presentation.yaml",
+        root / "ref" / "pdf_presentation.yaml",
+    ]
+    cfg_path = next((p for p in cfg_candidates if p.exists()), None)
+    if cfg_path is None:
         return deepcopy(DEFAULT_PDF_PRESENTATION_CONFIG)
 
     try:

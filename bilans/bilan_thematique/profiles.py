@@ -100,13 +100,18 @@ def _normalize_profile(data: dict, profil_id: str) -> dict:
 
 def _load_glossary_config(root: Path) -> dict:
     """
-    Charge la configuration du glossaire depuis ref/glossaire.yaml.
+    Charge la configuration du glossaire depuis config/presentation/glossaire.yaml
+    puis, en fallback, depuis ref/glossaire.yaml.
 
     Si le fichier n'existe pas ou si PyYAML n'est pas disponible, on
     retourne une configuration par défaut équivalente à l'ancien
     glossaire codé en dur.
     """
-    cfg_path = root / "ref" / "glossaire.yaml"
+    cfg_candidates = [
+        root / "config" / "presentation" / "glossaire.yaml",
+        root / "ref" / "glossaire.yaml",
+    ]
+    cfg_path = next((p for p in cfg_candidates if p.exists()), None)
 
     default_cfg: dict = {
         "header": {
@@ -146,7 +151,7 @@ def _load_glossary_config(root: Path) -> dict:
     except ImportError:
         return default_cfg
 
-    if not cfg_path.exists():
+    if cfg_path is None:
         return default_cfg
 
     with cfg_path.open("r", encoding="utf-8") as f:

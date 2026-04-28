@@ -10,13 +10,14 @@ Ce dossier contient les **configurations de pilotage versionnees**.
 
 ## Situation actuelle (transition)
 
-Une partie du pilotage est encore lue dans `ref/` pour compatibilite historique :
+Le pilotage de presentation est desormais centralise ici :
 
-- `ref/pdf_presentation.yaml`
-- `ref/charts_config.yaml`
-- `ref/glossaire.yaml`
+- `config/presentation/pdf_presentation.yaml`
+- `config/charts/charts_config.yaml`
+- `config/presentation/glossaire.yaml`
 
-Ces fichiers restent supportes. La migration vers `config/` se fera progressivement.
+Compatibilite conservee par le code : fallback vers `ref/` si ces fichiers y
+existent encore localement.
 
 ## Hors du scope `config/`
 

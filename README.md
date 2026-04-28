@@ -110,7 +110,7 @@ python scripts/bilan_thematique/run_bilan_thematique.py --profil agrainage --opt
 
 Configuration centralisee via :
 
-- `ref/charts_config.yaml`
+- `config/charts/charts_config.yaml`
 
 Presets disponibles :
 

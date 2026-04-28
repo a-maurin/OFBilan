@@ -9,9 +9,9 @@ from scripts.common.pdf_presentation_config import (
 
 
 def _write_yaml(root: Path, content: str) -> None:
-    ref = root / "ref"
-    ref.mkdir(parents=True, exist_ok=True)
-    (ref / "pdf_presentation.yaml").write_text(content, encoding="utf-8")
+    presentation = root / "config" / "presentation"
+    presentation.mkdir(parents=True, exist_ok=True)
+    (presentation / "pdf_presentation.yaml").write_text(content, encoding="utf-8")
 
 
 def test_resolve_config_merges_defaults_scope_and_profile(tmp_path: Path) -> None:

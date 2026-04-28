@@ -58,13 +58,18 @@ def _clamp_ratio(value: float) -> float:
 
 def load_chart_display_config(root: Path, preset: str | None = None) -> dict[str, Any]:
     """
-    Charge la config d'affichage des graphiques depuis ref/charts_config.yaml.
+    Charge la config d'affichage des graphiques depuis
+    config/charts/charts_config.yaml puis, en fallback, ref/charts_config.yaml.
 
     Si le fichier est absent (ou invalide), retourne les valeurs par défaut.
     """
     cfg = DEFAULT_CHART_DISPLAY_CONFIG.copy()
-    path = root / "ref" / "charts_config.yaml"
-    if not path.exists():
+    candidates = [
+        root / "config" / "charts" / "charts_config.yaml",
+        root / "ref" / "charts_config.yaml",
+    ]
+    path = next((p for p in candidates if p.exists()), None)
+    if path is None:
         return cfg
     try:
         import yaml

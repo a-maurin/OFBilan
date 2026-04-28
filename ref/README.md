@@ -6,7 +6,7 @@
 
 - referentiels SIG (perimetres, couches d'appui cartographique) ;
 - tables de correspondance (themes, domaines, NATINF, usagers) ;
-- assets de mise en forme (modele OFB, glossaires, documentation source).
+- assets de mise en forme (modele OFB) et documentation source.
 
 ## Regle d'usage
 
@@ -16,10 +16,6 @@
 
 ## Note de transition
 
-Certains fichiers de pilotage restent encore lus depuis `ref/` pour compatibilite :
-
-- `pdf_presentation.yaml`
-- `charts_config.yaml`
-- `glossaire.yaml`
-
-La cible est de regrouper progressivement ces reglages dans `config/`.
+Les fichiers de pilotage ont ete deplaces dans `config/` (presentation/charts).
+Le code garde un fallback de compatibilite si un environnement local contient
+encore les anciens fichiers dans `ref/`.

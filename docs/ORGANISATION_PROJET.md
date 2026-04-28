@@ -1,6 +1,6 @@
-# Organisation du projet (Phases 1-2)
+# Organisation du projet (Phases 1-3)
 
-Ce document fixe les conventions de structure appliquees en phases 1-2
+Ce document fixe les conventions de structure appliquees en phases 1-3
 (hygiene + clarifications + stabilisation CLI/packaging)
 sans refonte du moteur metier.
 
@@ -34,8 +34,11 @@ sont conserves en compatibilite et deleguent vers les wrappers ci-dessus.
 ## Rationalisation config/ref (phase 3)
 
 - Cible : `config/` porte le pilotage, `ref/` porte les referentiels.
-- Transition assumee : certains fichiers de pilotage restent charges depuis `ref/`
-  (`pdf_presentation.yaml`, `charts_config.yaml`, `glossaire.yaml`).
+- Etat actuel : les fichiers de pilotage sont places dans `config/`
+  (`config/presentation/pdf_presentation.yaml`, `config/charts/charts_config.yaml`,
+  `config/presentation/glossaire.yaml`).
+- Compatibilite : fallback vers `ref/` uniquement si un environnement local
+  conserve encore les anciens emplacements.
 - Regle pratique : toute nouvelle cle de pilotage doit etre pensee pour `config/`
   et documenter explicitement le fallback si `ref/` est encore utilise.
 
@@ -47,5 +50,5 @@ sont conserves en compatibilite et deleguent vers les wrappers ci-dessus.
 
 ## Portee
 
-Les phases 1-2 ne modifient pas le rendu metier des bilans PDF.
+Les phases 1-3 ne modifient pas le rendu metier des bilans PDF.
 Elles clarifient l'usage, la navigation et la stabilite d'execution.
