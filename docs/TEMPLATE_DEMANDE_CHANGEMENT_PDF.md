@@ -40,12 +40,12 @@ Copier-coller ce template dans le chat, puis remplir les champs.
 ## 6) Validation attendue
 
 - **Cas minimum à tester**:
-  - [ ] Global
-  - [ ] Thématique profil principal:
-  - [ ] Non-régression profil secondaire:
+  - Global
+  - Thématique profil principal:
+  - Non-régression profil secondaire:
 - **Mise à jour de la matrice visuelle**:
-  - [ ] Oui
-  - [ ] Non
+  - Oui
+  - Non
 
 ## 7) Sortie souhaitée
 

@@ -1,0 +1,150 @@
+version: 1
+
+# -----------------------------------------------------------------------------
+# Documentation rapide
+# -----------------------------------------------------------------------------
+# Résolution de la config:
+# 1) defaults
+# 2) scopes.<global|thematique>
+# 3) profiles.<id_profil> (si scope compatible)
+#
+# behavior.missing_data_policy:
+# - hide_silently   -> n'affiche pas les messages "Aucune donnée..."
+# - show_placeholder -> affiche ces messages
+#
+# sections:
+# - order   : ordre souhaité des sections du PDF
+# - enabled : activation/désactivation d'une section
+#
+# blocks:
+# - activation fine des sous-blocs (tableaux, graphiques, cartes, etc.)
+# - supporte des clés imbriquées (ex: sec22res.show_pie)
+# -----------------------------------------------------------------------------
+
+behavior:
+  missing_data_policy: show_placeholder
+  unknown_block_policy: ignore
+
+defaults:
+  title:
+    model: three_lines
+    line1: "Bilan des activités de police administrative et judiciaire"
+    line2_mode: profile_label   # profile_label | fixed | none
+    line2_fixed: ""
+    line3_mode: department      # department | fixed
+    line3_fixed: ""
+    typography:
+      normalize_department_name: true
+      apostrophe_style: typographic
+
+  title_page:
+    alignment: right
+    right_indent_mm: 25
+    paragraph_space_after: 8
+    main_title_font_size: 24
+    profile_department_font_size: 20
+    meta_font_size: 12
+    top_spacer_ratio: 0.30
+    meta_block_space_before: 12
+    meta_block_space_between: 8
+
+  sections:
+    order: ["sec1", "sec2", "sec3", "sec4", "sec5", "sec6"]
+    enabled: {}
+
+  blocks:
+    sec21:
+      show_table: true
+      show_chart_controles: true
+      show_chart_procedures: true
+      show_chart_taux_line: true
+    sec22:
+      show_intro_text: true
+      show_table: true
+      show_pie: true
+    sec22dom:
+      show_pie: true
+      show_overflow_note: true
+    sec22res:
+      show_table: true
+      show_pie: true
+    sec31:
+      show_table: true
+      show_key_figures: true
+      show_top_infractions: true
+      show_detail_table: true
+      show_natinf_analysis: true
+      show_zone_table: true
+    sec32:
+      show_table: true
+      show_key_figures: true
+      show_top_infractions: true
+      show_theme_table: true
+      show_detail_table: true
+      show_natinf_analysis: true
+      show_zone_table: true
+      show_cloture_table: true
+      show_suite_table: true
+    sec33:
+      show_table: true
+      show_key_figures: true
+      show_detail_table: true
+    sec4:
+      show_intro_text: true
+      show_key_figures: true
+      show_table_usagers: true
+      show_pie_usagers: true
+      show_table_usagers_x_domaine: true
+      show_resultats_par_type_usager_chart: true
+      show_resultats_par_type_usager_table: true
+    sec5:
+      show_map: true
+      show_map_fallback_message: true
+    sec6:
+      show_methodology: true
+      show_glossary: true
+
+scopes:
+  global:
+    title:
+      line2_mode: none
+    sections:
+      order: ["sec1", "sec2_chap", "sec21", "sec22dom", "sec22theme", "sec22res", "sec3", "sec31", "sec32", "sec33", "sec4", "sec5map", "sec6"]
+
+  thematique:
+    title:
+      line2_mode: profile_label
+    sections:
+      order: ["sec1", "sec2", "sec21", "sec22", "sec3", "sec31", "sec32", "sec33", "sec4", "sec5", "sec6"]
+
+profiles:
+  # Exemple: profil thématique PNF
+  pnf:
+    scope: thematique
+    blocks:
+      sec5:
+        show_map: true
+
+  # Exemple: profil avec PDF plus compact
+  compact:
+    blocks:
+      sec21:
+        show_chart_procedures: false
+        show_chart_taux_line: false
+      sec4:
+        show_pie_usagers: false
+        show_resultats_par_type_usager_chart: false
+
+feature_registry:
+  sec21: both
+  sec22: thematique
+  sec22dom: global
+  sec22theme: global
+  sec22res: global
+  sec31: both
+  sec32: both
+  sec33: both
+  sec4: both
+  sec5: thematique
+  sec5map: global
+  sec6: both

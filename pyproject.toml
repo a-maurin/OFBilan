@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bilans-production"
+version = "0.1.0"
+description = "Generation des bilans PDF globaux et thematiques"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [{ name = "Aguirre Maurin" }]
+dependencies = [
+  "pyyaml>=6.0",
+  "pandas>=2.0",
+  "geopandas>=1.0",
+  "reportlab>=4.0",
+  "matplotlib>=3.8",
+  "odfpy>=1.4.1",
+  "openpyxl>=3.1",
+  "Pillow>=10.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+bilans = "bilans.cli:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["bilans*", "scripts*"]

@@ -17,24 +17,38 @@ Tout passe par un point d'entree unique :
 
 ### Interface Windows (recommande)
 
-- `lancer_bilans.bat` : generation des bilans (global/thematique)
-- `generer_cartes.bat` : generation des cartes PNG
-- `parametrer_cartes.bat` : parametrage des profils cartographiques
+Launchers officiels (maintenus) :
+
+- `scripts/windows/lancer_bilans.bat` : generation des bilans (global/thematique)
+- `scripts/windows/generer_cartes.bat` : generation des cartes PNG
+- `scripts/windows/parametrer_cartes.bat` : parametrage des profils cartographiques
+
+Les scripts racine (`lancer_bilans.bat`, `generer_cartes.bat`, `parametrer_cartes.bat`) restent disponibles en **compatibilite** et deleguent vers les wrappers officiels.
+
+### Interface Linux (recommande)
+
+Launchers officiels (maintenus) :
+
+- `scripts/linux/lancer_bilans.sh`
+- `scripts/linux/generer_cartes.sh`
+- `scripts/linux/parametrer_cartes.sh`
+
+Les scripts racine (`lancer_bilans.sh`, `generer_cartes.sh`, `parametrer_cartes.sh`) restent disponibles en **compatibilite** et deleguent vers les wrappers officiels.
 
 ### CLI (direct)
 
 ```bat
 REM Lister les themes disponibles
-python scripts/run_bilan.py --list-themes
+python -m bilans --list-themes
 
 REM Bilan global
-python scripts/run_bilan.py --mode global --date-deb 2025-01-01 --date-fin 2025-12-31 --dept-code 21
+python -m bilans --mode global --date-deb 2025-01-01 --date-fin 2025-12-31 --dept-code 21
 
 REM Bilan thematique (un ou plusieurs profils)
-python scripts/run_bilan.py --mode thematique --profil chasse --profil agrainage --date-deb 2025-01-01 --date-fin 2025-12-31 --dept-code 21
+python -m bilans --mode thematique --profil chasse --profil agrainage --date-deb 2025-01-01 --date-fin 2025-12-31 --dept-code 21
 
 REM Bilan thematique avec preset de taille graphique
-python scripts/run_bilan.py --mode thematique --profil pnf --date-deb 2025-01-01 --date-fin 2025-12-31 --dept-code 21 --preset standard
+python -m bilans --mode thematique --profil pnf --date-deb 2025-01-01 --date-fin 2025-12-31 --dept-code 21 --preset standard
 ```
 
 ## Objectifs fonctionnels
@@ -68,11 +82,13 @@ Le **profil du bilan** (fichier de paramètres) précise quelles sources sont ac
 
 ## Architecture
 
-- `scripts/run_bilan.py` : orchestrateur principal
+- `python -m bilans` : entree CLI officielle
+- `scripts/run_bilan.py` : shim de compatibilite vers la CLI officielle
 - `scripts/bilan_global/analyse_global.py` : moteur global
 - `scripts/bilan_thematique/bilan_thematique_engine.py` : moteur thematique
 - `scripts/bilan_thematique/run_bilan_thematique.py` : lanceur thematique direct
-- `config/profils_bilan/` et `ref/profils_bilan/` : profils YAML de pilotage
+- `config/` : configurations versionnees de pilotage (profils, presentation PDF, chartes)
+- `ref/` : referentiels versionnes (carto, glossaires, tables de correspondance, assets OFB)
 - `scripts/common/` : utilitaires partages (PDF, chartes, loaders, etc.)
 
 ## Profils et options
@@ -86,7 +102,7 @@ Chaque profil YAML definit :
 Surcharge possible en CLI :
 
 ```bat
-python scripts/run_bilan.py --mode thematique --profil chasse --with-pnf --no-tub
+python -m bilans --mode thematique --profil chasse --with-pnf --no-tub
 python scripts/bilan_thematique/run_bilan_thematique.py --profil agrainage --option synthese_croisee=true
 ```
 
@@ -105,7 +121,7 @@ Presets disponibles :
 Utilisation :
 
 ```bat
-python scripts/run_bilan.py --mode thematique --profil pnf --preset large
+python -m bilans --mode thematique --profil pnf --preset large
 ```
 
 ## Cartographie
@@ -122,6 +138,12 @@ Les cartes attendues sont stockees dans `out/generateur_de_cartes/` sous forme `
 - Python 3.10+
 - dependances Python du projet
 - QGIS (uniquement pour la generation de cartes)
+
+Installation recommandee :
+
+```bat
+pip install -e .
+```
 
 ## Licence et contact
 

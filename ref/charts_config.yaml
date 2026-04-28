@@ -1,0 +1,40 @@
+# Configuration de présentation des graphiques dans les PDF.
+# Les ratios sont bornés automatiquement dans l'intervalle [0.1 ; 1.0].
+#
+# Profils prêts à l'emploi (copiez les valeurs du profil voulu dans la section `pdf:`) :
+# - COMPACT :
+#     pie_width_ratio_base: 0.30
+#     chart_width_ratio_base: 0.62
+#     activite_usagers_controles_pie_scale: 2.0
+#     activite_usagers_resultats_bar_scale: 0.55
+#     global_resultats_pie_scale: 0.90
+#     global_usagers_pie_scale: 0.90
+# - STANDARD :
+#     pie_width_ratio_base: 0.34
+#     chart_width_ratio_base: 0.72
+#     activite_usagers_controles_pie_scale: 3.0
+#     activite_usagers_resultats_bar_scale: 1.20
+#     global_resultats_pie_scale: 1.00
+#     global_usagers_pie_scale: 1.00
+# - LARGE :
+#     pie_width_ratio_base: 0.40
+#     chart_width_ratio_base: 0.85
+#     activite_usagers_controles_pie_scale: 3.0
+#     activite_usagers_resultats_bar_scale: 0.90
+#     global_resultats_pie_scale: 1.10
+#     global_usagers_pie_scale: 1.10
+#
+# Profil actif actuel : STANDARD
+pdf:
+  # Ratios de base utilisés dans les bilans (thématique + global).
+  pie_width_ratio_base: 0.34
+  chart_width_ratio_base: 0.72
+
+  # Section "Activité par types d'usagers" (bilan thématique).
+  # Taille finale = ratio_base * scale.
+  activite_usagers_controles_pie_scale: 3.0
+  activite_usagers_resultats_bar_scale: 1.20
+
+  # Bilan global.
+  global_resultats_pie_scale: 1.0
+  global_usagers_pie_scale: 1.0

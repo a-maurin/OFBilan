@@ -42,7 +42,8 @@ def _check_deps() -> None:
         from PIL import Image  # noqa: F401
     except ImportError as e:
         print(f"Erreur : Une dépendance requise est manquante : {e}", file=sys.stderr)
-        print("Veuillez installer les dépendances avec : pip install -r requirements.txt", file=sys.stderr)
+        print("Veuillez installer les dépendances avec : pip install -e .", file=sys.stderr)
+        print("(Alternative legacy : pip install -r tools/requirements.txt)", file=sys.stderr)
         sys.exit(1)
     _DEPS_CHECKED = True
 

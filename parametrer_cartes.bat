@@ -1,6 +1,7 @@
 @echo off
+setlocal
 cd /d "%~dp0"
 
-echo Ouverture de la configuration des profils de cartes...
-call scripts\generateur_de_cartes\lancer_production_cartographique.bat --gui
-pause
+echo [Compat] Utilisez de preference scripts\windows\parametrer_cartes.bat
+call scripts\windows\parametrer_cartes.bat %*
+exit /b %errorlevel%
