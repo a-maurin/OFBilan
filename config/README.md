@@ -1,26 +1,19 @@
-# Configurations du projet
+# Configuration applicative
 
-Ce dossier contient les **configurations de pilotage versionnees**.
+Ce dossier contient la configuration versionnée du programme.
 
-## Convention cible
+## Structure
 
-- `config/profils_bilan/` : profils YAML des bilans thematiques ;
-- `config/presentation/` : regles de presentation PDF (ordre/sections/blocs) ;
-- `config/charts/` : reglages de charts.
+- `config/profils_bilan/` : profils thématiques (`*.yaml`) ;
+- `config/presentation/` : règles de présentation PDF ;
+- `config/charts/` : paramètres d’affichage des graphiques.
 
-## Situation actuelle (transition)
+## Principe
 
-Le pilotage de presentation est desormais centralise ici :
+Toute nouvelle clé de pilotage doit être ajoutée dans `config/`.
 
-- `config/presentation/pdf_presentation.yaml`
-- `config/charts/charts_config.yaml`
-- `config/presentation/glossaire.yaml`
+## Hors périmètre
 
-Compatibilite conservee par le code : fallback vers `ref/` si ces fichiers y
-existent encore localement.
-
-## Hors du scope `config/`
-
-- `ref/` : referentiels (SIG, tables de correspondance, assets OFB) ;
-- `data/sources/` / `data/` : donnees d'entree locales non versionnees ;
-- `data/out/` : sorties de run non versionnees.
+- `ref/` : référentiels ;
+- `data/sources/` : données d’entrée locales ;
+- `data/out/` : sorties générées.
