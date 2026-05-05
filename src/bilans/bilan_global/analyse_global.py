@@ -1172,7 +1172,7 @@ def run_global(
                 chart_preset=chart_preset,
             )
 
-        print("Bilan global généré dans out/bilan_global.")
+        print("Bilan global généré dans data/out/bilan_global.")
         return 0
     except Exception as e:
         print(f"Erreur bilan global : {e}", file=sys.stderr)

@@ -1,148 +1,84 @@
-# Bilans de production 2025-2026
+# Bilans Production
 
-Projet de generation des bilans d'activite de controle (SD Cote-d'Or) a partir des donnees OSCEAN et PVe.
+Application de génération de bilans PDF d’activité de contrôle à partir de sources OSCEAN et PVe.
 
-## A quoi sert ce depot
+## Finalité
 
-Le depot produit deux types de rapports PDF :
+Le programme produit :
 
-- **Bilan global** : vue complete de l'activite du service (controles, resultats, PEJ, PA, PVe).
-- **Bilans thematiques** : rapports cibles par profil (ex. `agrainage`, `chasse`, `types_usager`, `procedures_pve`, `pnf`).
+- un **bilan global** (vision consolidée d’un département et d’une période) ;
+- des **bilans thématiques** (profils métier paramétrables).
 
-Tout passe par un point d'entree unique :
+## Prérequis
 
-- `python -m bilans`
+- Python 3.10 ou supérieur ;
+- dépendances Python du projet ;
+- QGIS uniquement pour la production cartographique.
 
-## Utilisation rapide
+Installation :
 
-### Interface Windows (recommande)
-
-Launchers officiels (maintenus) :
-
-- `scripts/windows/lancer_bilans.bat` : generation des bilans (global/thematique)
-- `scripts/windows/generer_cartes.bat` : generation des cartes PNG
-- `scripts/windows/parametrer_cartes.bat` : parametrage des profils cartographiques
-
-### Interface Linux (recommande)
-
-Launchers officiels (maintenus) :
-
-- `scripts/linux/lancer_bilans.sh`
-- `scripts/linux/generer_cartes.sh`
-- `scripts/linux/parametrer_cartes.sh`
-
-### CLI (direct)
-
-```bat
-REM Lister les themes disponibles
-python -m bilans --list-themes
-
-REM Bilan global
-python -m bilans --mode global --date-deb 2025-01-01 --date-fin 2025-12-31 --dept-code 21
-
-REM Bilan thematique (un ou plusieurs profils)
-python -m bilans --mode thematique --profil chasse --profil agrainage --date-deb 2025-01-01 --date-fin 2025-12-31 --dept-code 21
-
-REM Bilan thematique avec preset de taille graphique
-python -m bilans --mode thematique --profil pnf --date-deb 2025-01-01 --date-fin 2025-12-31 --dept-code 21 --preset standard
-```
-
-## Objectifs fonctionnels
-
-### 1) Bilan global
-
-- **But** : produire un bilan unique sur une periode et un departement.
-- **Entree recommandee** : `python -m bilans --mode global`
-- **Sorties** : `data/out/bilan_global/` (PDF + CSV)
-
-### 2) Bilan thematique
-
-- **But** : produire un ou plusieurs bilans cibles via des profils.
-- **Entree recommandee** : `python -m bilans --mode thematique --profil <id>`
-- **Combine** possible : `--combine`
-- **Sorties** : `data/out/bilan_<profil>/` (ou bilan combine)
-
-## Méthodologie des sources
-
-Le bilan ne repose pas sur une base de données unique : il s’appuie sur plusieurs jeux de données distincts, qui répondent chacun à une question différente, puis les met en cohérence sur un même cadre (département et période choisis).
-
-Les points de contrôle OSCEAN sont la colonne vertébrale lorsqu’ils sont utilisés : ils décrivent l’activité de contrôle sur le terrain (où, quand, sur quel thème ou domaine, avec quel résultat, parfois avec un lien vers des suites administratives ou judiciaires lorsque l’information est présente dans le point). C’est la référence pour parler de contrôles et de résultats de contrôle au sens « point de contrôle ».
-
-Les procédures judiciaires (PEJ) et les procédures administratives (PA) sont lues comme des suites possibles de l’activité, mais pas seulement comme la suite d’un contrôle : une infraction peut faire suite à un contrôle ou être constatée en dehors d’un contrôle (autre saisine, enquête, etc.). Pour le volet judiciaire, le bilan s’appuie en pratique sur deux entrées complémentaires : le classeur de suivi des PEJ (`data/sources/suivi_procedure_enq_judiciaire_YYYYMMDD.ods`, par exemple `data/sources/suivi_procedure_enq_judiciaire_20260206.ods`), qui porte le contenu procédural et le filtrage temporel, et la couche de localisation des faits PJ (`data/sources/sig/points_infractions_pj/localisation_infrac_FAITS_YYYYMMDD` en GeoPackage ou shapefile, par exemple les fichiers `localisation_infrac_FAITS_20260403.shp` / `.shx` / `.dbf`, etc.), qui apporte la géolocalisation des faits lorsque le classeur ne suffit pas seul. Ces sources complètent les points de contrôle sans les remplacer : elles décrivent ce qui existe côté dossiers PEJ/PA et côté faits localisés, avec des recoupements possibles lorsque les données le permettent (par exemple repères communs entre un point OSCEAN, un dossier PEJ et un fait géolocalisé).
-
-Les infractions relevées par procès-verbal électronique (PVe) sont comprises comme une autre voie de constat des infractions, issue d’un circuit différent d’OSCEAN et distincte du couple PEJ / faits PJ ci-dessus. Elles sont donc traitées en source parallèle : utiles pour le volume et le profil des infractions « PVe », sans être confondues avec le seul décompte des contrôles OSCEAN ni avec le périmètre PEJ + localisation des faits. Le bilan peut les présenter à côté des contrôles pour donner une vision plus large de l’activité répressive ou de constat, en rappelant qu’il ne s’agit pas du même périmètre métier.
-
-Les référentiels et fonds cartographiques (communes, zones d’intérêt, libellés d’infractions, etc.) ne sont pas des « sources d’événements » au même titre : ils servent à interpréter ou situer les lignes des sources ci-dessus (libellés lisibles, regroupements par commune ou par zone lorsque l’option est activée), sans créer de nouveaux faits.
-
-Le profil du bilan (fichier de paramètres) précise quelles sources sont activées ou non pour ce rapport et comment le périmètre métier est restreint (par exemple un thème ou des mots-clés). Ainsi, pour un bilan thématique, on ne « réduit » pas arbitrairement la base : on filtre les points OSCEAN selon les règles du profil, puis on rapproche PEJ, PA et éventuellement PVe sur ce même cadre temporel et territorial, pour que les chiffres et graphiques du PDF restent comparables dans le temps et dans l’espace, tout en respectant la sémantique de chaque source (contrôle d’un côté, procédures et faits PJ d’un autre, PVe d’un troisième). Détail des jointures et des champs : `docs/architecture/README_sources.md`, `src/bilans/common/loaders.py`.
-
-## Architecture
-
-- `python -m bilans` : entree CLI officielle
-- `src/bilans/bilan_global/analyse_global.py` : moteur global
-- `src/bilans/bilan_thematique/bilan_thematique_engine.py` : moteur thematique
-- `src/bilans/bilan_thematique/run_bilan_thematique.py` : lanceur thematique direct
-- `config/` : configurations versionnees de pilotage (profils, presentation PDF, chartes)
-- `ref/` : referentiels versionnes (carto, glossaires, tables de correspondance, assets OFB)
-- `src/bilans/common/` : utilitaires partages (PDF, chartes, loaders, etc.)
-
-## Profils et options
-
-Chaque profil YAML definit :
-
-- le filtre metier,
-- les sources actives (`point_ctrl`, `pej`, `pa`, `pve`),
-- les options activables (`pnf`, `tub`, `cartes`, `synthese_croisee`, etc.).
-
-Surcharge possible en CLI :
-
-```bat
-python -m bilans --mode thematique --profil chasse --with-pnf --no-tub
-python -m bilans --mode thematique --profil agrainage --option synthese_croisee=true
-```
-
-## Taille des graphiques PDF
-
-Configuration centralisee via :
-
-- `config/charts/charts_config.yaml`
-
-Presets disponibles :
-
-- `compact`
-- `standard`
-- `large`
-
-Utilisation :
-
-```bat
-python -m bilans --mode thematique --profil pnf --preset large
-```
-
-## Cartographie
-
-Ordre recommande :
-
-1. Generer les cartes (`scripts/windows/generer_cartes.bat` ou `scripts/linux/generer_cartes.sh`)
-2. Generer les bilans (qui integrent ensuite les cartes disponibles)
-
-Les cartes attendues sont stockees dans `data/out/generateur_de_cartes/` sous forme `carte_<profil>.png`.
-
-## Prerequis
-
-- Python 3.10+
-- dependances Python du projet
-- QGIS (uniquement pour la generation de cartes)
-
-Installation recommandee :
-
-```bat
+```bash
 pip install -e .
 ```
 
-## Licence et contact
+## Exécution
 
-- Licence : voir `LICENSE`
-- Auteur : Aguirre Maurin
-- Service : OFB, SD Cote-d'Or
+Entrée officielle :
+
+```bash
+python -m bilans
+```
+
+Exemples :
+
+```bash
+# Lister les profils thématiques
+python -m bilans --list-themes
+
+# Bilan global
+python -m bilans --mode global --date-deb 2025-01-01 --date-fin 2025-12-31 --dept-code 21
+
+# Bilans thématiques
+python -m bilans --mode thematique --profil chasse --profil agrainage --date-deb 2025-01-01 --date-fin 2025-12-31 --dept-code 21
+```
+
+Lanceurs :
+
+- Windows : `scripts/windows/lancer_bilans.bat`, `scripts/windows/generer_cartes.bat`, `scripts/windows/parametrer_cartes.bat`
+- Linux : `scripts/linux/lancer_bilans.sh`, `scripts/linux/generer_cartes.sh`, `scripts/linux/parametrer_cartes.sh`
+
+## Données attendues
+
+Le programme lit les entrées dans `data/sources/`.
+
+Jeux principaux :
+
+- points de contrôle OSCEAN : `data/sources/sig/points_de_ctrl_OSCEAN_*/`
+- procédures judiciaires : `data/sources/suivi_procedure_enq_judiciaire_*.ods`
+- procédures administratives : `data/sources/suivi_procedure_administrative_*.ods`
+- PVe : `data/sources/Stats_PVe_OFB*`
+- faits PJ géolocalisés : `data/sources/sig/points_infractions_pj/localisation_infrac_FAITS_*`
+
+## Sorties
+
+Les résultats sont écrits dans `data/out/` :
+
+- `data/out/bilan_global/`
+- `data/out/bilan_<profil>/`
+- `data/out/generateur_de_cartes/`
+
+## Organisation du dépôt
+
+- `src/bilans/` : code applicatif ;
+- `config/` : configuration de pilotage (profils, présentation PDF, charts) ;
+- `ref/` : référentiels versionnés ;
+- `data/` : entrées locales et sorties ;
+- `docs/` : documentation d’architecture, d’usage et de migration ;
+- `tests/` : tests unitaires et smoke.
+
+## Références
+
+- Description des sources : `docs/architecture/README_sources.md`
+- Schéma des données : `docs/architecture/data_schema.md`
+- Licence : `LICENSE`
 
