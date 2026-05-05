@@ -82,3 +82,8 @@ Les résultats sont écrits dans `data/out/` :
 - Schéma des données : `docs/architecture/data_schema.md`
 - Licence : `LICENSE`
 
+## Contact
+
+- Auteur : Aguirre Maurin
+- Service : OFB, SD Côte-d'Or
+
