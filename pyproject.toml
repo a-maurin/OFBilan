@@ -25,7 +25,7 @@ dependencies = [
 dev = ["pytest>=8.0"]
 
 [project.scripts]
-bilans = "bilans.cli:main"
+bilans = "bilans.point_entree_cli:main"
 
 [tool.setuptools]
 include-package-data = true

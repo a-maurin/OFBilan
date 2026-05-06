@@ -5,8 +5,8 @@ from typing import Any, Tuple
 
 import pandas as pd
 
-from bilans.common.loaders import load_natinf_ref
-from bilans.common.utils import (
+from bilans.common.chargeurs_donnees import load_natinf_ref
+from bilans.common.utilitaires_metier import (
     agg_effectifs_usagers,
     agg_effectifs_usagers_par_domaine,
     agg_resultat_counts_par_type_usager,
@@ -501,4 +501,45 @@ __all__ = [
     "analyse_annuelle_global",
     "analyse_trimestrielle_global",
     "analyse_mensuelle_global",
+    "run_profile_aggregations",
 ]
+
+
+def run_profile_aggregations(
+    *,
+    profile: dict,
+    root: Path,
+    point: pd.DataFrame,
+    pa: pd.DataFrame,
+    pej: pd.DataFrame,
+    pve: pd.DataFrame,
+    out_dir: Path,
+    dept_code: str,
+    ventilation_mode: str,
+    date_deb: pd.Timestamp,
+    date_fin: pd.Timestamp,
+) -> None:
+    """Adapter d'agrégations piloté par profil YAML."""
+    analyse_controles_global(point, out_dir)
+    analyse_pej_pa_global(root, point, pa, pej, out_dir, dept_code=dept_code)
+    analyse_pve_global(pve, out_dir)
+    if ventilation_mode == "annuelle":
+        analyse_annuelle_global(point, pa, pej, pve, out_dir)
+    elif ventilation_mode == "mensuelle":
+        analyse_mensuelle_global(point, pa, pej, pve, out_dir)
+    elif ventilation_mode == "trimestrielle":
+        analyse_trimestrielle_global(point, pa, pej, pve, out_dir)
+        if int((date_fin - date_deb).days) < 730:
+            analyse_mensuelle_global(point, pa, pej, pve, out_dir)
+    else:
+        pd.DataFrame(
+            columns=[
+                "periode",
+                "nb_controles",
+                "nb_controles_non_conformes",
+                "taux_non_conformite_controles",
+                "nb_pej",
+                "nb_pa",
+                "nb_pve",
+            ]
+        ).to_csv(out_dir / "indicateurs_global_par_annee.csv", sep=";", index=False)

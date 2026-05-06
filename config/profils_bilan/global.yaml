@@ -3,5 +3,14 @@
 id: global
 label: Bilan global
 title_label: Bilan global
-engine_type: global
+pipeline: global
 out_subdir: bilan_global
+output_filename: bilan_global.pdf
+capabilities:
+  combine: false
+  mix_batch: false
+  map_profiles: ["global_usagers", "agrainage", "chasse", "procedures_pve"]
+aggregation:
+  adapter: run_profile_aggregations
+pdf:
+  adapter: generate_profile_pdf_report

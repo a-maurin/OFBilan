@@ -47,10 +47,60 @@ defaults:
     top_spacer_ratio: 0.30
     meta_block_space_before: 12
     meta_block_space_between: 8
+    # Sous-titre de page de garde (pilotage YAML, sans logique codée locale).
+    # - none: pas de sous-titre
+    # - fixed: texte fixe via subtitle_fixed
+    # - sources_auto: "Sources..." + suffixe optionnel si nb_pve > 0
+    subtitle_mode: none
+    subtitle_fixed: ""
+    subtitle_sources_base: "Sources des données : OFB/OSCEAN"
+    subtitle_sources_pve_suffix: " – MININT/AGC-PVe"
 
   sections:
     order: ["sec1", "sec2", "sec3", "sec4", "sec5", "sec6"]
     enabled: {}
+    # Surcharge optionnelle des libellés de sections par identifiant.
+    # Exemple:
+    # titles:
+    #   sec1: "1. Chiffres-clés"
+    titles: {}
+
+  notice_methodology:
+    title: "Notice méthodologique"
+    data_source_paragraph: >
+      Les données relatives aux contrôles et aux procédures présentées dans ce document
+      sont extraites de la base du logiciel OSCEAN, outil de rapportage des activités
+      de police administrative et judiciaire des agents de l'OFB.
+    unit_measure_paragraph: >
+      Sauf mention contraire, l'unité de mesure du nombre de contrôles utilisée dans
+      la suite du document est la localisation de contrôle : une unité correspond à
+      une localisation renseignée.
+    pa_pj_distinction_paragraph: >
+      Il convient de distinguer l'activité de police administrative et l'activité de
+      police judiciaire. Dans ce document, le terme « contrôle » renvoie exclusivement
+      à la police administrative. Le terme « procédure judiciaire » désigne l'activité
+      de police judiciaire, qui ne se limite pas aux infractions relevées lors des
+      contrôles et peut aussi inclure des saisines extérieures (instruction parquet,
+      signalements, plaintes, etc.).
+    multi_usager_paragraph: >
+      Le total des contrôles par type d'usager peut être supérieur au total des
+      contrôles, car une même fiche de contrôle peut renseigner plusieurs types
+      d'usagers (contrôle multi-usager). L'analyse par type d'usager comptabilise
+      chaque type renseigné afin de refléter au mieux les usagers effectivement
+      concernés par l'action de contrôle.
+
+  sec6_methodology:
+    line_period: "<b>Période d'analyse :</b> {period_str}."
+    line_scope: "<b>Périmètre :</b> département {dept_name} ({dept_code})."
+    line_profile: "<b>Profil :</b> {profile_label}."
+    line_sources: "<b>Sources :</b> {sources_text}."
+    line_ventilation: "<b>Ventilation temporelle :</b> {ventilation_mode} (seuil {ventilation_threshold_days} jours en mode auto)."
+    line_filters: "Aucun filtre sur domaine ou thème ; tous NATINF pour PEJ et PVe."
+    line_types_usagers: "<b>Types d’usagers :</b> issus du champ OSCEAN <i>type_usager</i> des points de contrôle ; catégorie « dominante » par contrôle via le mapping ref/types_usagers.csv."
+    zone_line_pnf_only: "<b>Analyse par zones :</b> bilan restreint au périmètre du PNF ; la lecture spatiale distingue le coeur de parc de l'aire d'adhésion hors coeur de parc."
+    zone_line_pnf_and_tub: "<b>Analyse par zones :</b> la zone « Département » inclut l'ensemble des contrôles, puis les zones PNF et TUB sont détaillées séparément."
+    zone_line_pnf_only_department: "<b>Analyse par zones :</b> la zone « Département » inclut l'ensemble des contrôles, puis la zone PNF est détaillée séparément."
+    zone_line_tub_only: "<b>Analyse par zones :</b> la zone « Département » inclut l'ensemble des contrôles, puis la zone TUB est détaillée séparément."
 
   blocks:
     sec21:
@@ -108,12 +158,16 @@ scopes:
   global:
     title:
       line2_mode: none
+    title_page:
+      subtitle_mode: none
     sections:
       order: ["sec1", "sec2_chap", "sec21", "sec22dom", "sec22theme", "sec22res", "sec3", "sec31", "sec32", "sec33", "sec4", "sec5map", "sec6"]
 
   thematique:
     title:
       line2_mode: profile_label
+    title_page:
+      subtitle_mode: sources_auto
     sections:
       order: ["sec1", "sec2", "sec21", "sec22", "sec3", "sec31", "sec32", "sec33", "sec4", "sec5", "sec6"]
 

@@ -2,12 +2,27 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 
 def test_load_profile_config_reads_config_profiles_dir(tmp_path: Path) -> None:
-    import bilans.bilan_thematique.bilan_thematique_engine as engine
+    import bilans.engine.orchestrateur_profils as engine
 
     profils_dir = tmp_path / "config" / "profils_bilan"
     profils_dir.mkdir(parents=True, exist_ok=True)
+    (profils_dir / "_defaults.yaml").write_text(
+        "\n".join(
+            [
+                "pipeline: thematic",
+                "presentation_scope: thematique",
+                "aggregation:",
+                "  adapter: run_profile_aggregations",
+                "pdf:",
+                "  adapter: generate_profile_pdf_report",
+            ]
+        ),
+        encoding="utf-8",
+    )
     (profils_dir / "demo.yaml").write_text(
         "\n".join(
             [
@@ -28,40 +43,43 @@ def test_load_profile_config_reads_config_profiles_dir(tmp_path: Path) -> None:
 
 
 def test_run_engine_accepts_global_profile_via_yaml(monkeypatch) -> None:
-    import bilans.bilan_thematique.bilan_thematique_engine as engine
-    import bilans.engine.global_backend as global_backend
+    import bilans.engine.orchestrateur_profils as engine
 
     called: dict[str, object] = {}
 
-    def _fake_run_global_backend(
-        date_deb: str, date_fin: str, dept_code: str, *, chart_preset: str | None = None
+    def _fake_run_global_profile_via_yaml(
+        profile: dict, date_deb: str, date_fin: str, dept_code: str, options: dict
     ) -> int:
-        called["args"] = (date_deb, date_fin, dept_code, chart_preset)
+        called["args"] = (
+            profile.get("id"),
+            date_deb,
+            date_fin,
+            dept_code,
+            options.get("chart_preset"),
+        )
         return 0
 
-    monkeypatch.setattr(global_backend, "run_global_backend", _fake_run_global_backend)
+    monkeypatch.setattr(engine, "_run_global_profile_via_yaml", _fake_run_global_profile_via_yaml)
     ret = engine.run_engine("global", "2025-01-01", "2025-12-31", "21", options={"chart_preset": "compact"})
     assert ret == 0
-    assert called.get("args") == ("2025-01-01", "2025-12-31", "21", "compact")
+    assert called.get("args") == ("global", "2025-01-01", "2025-12-31", "21", "compact")
 
 
 def test_load_profile_config_does_not_fallback_to_ref(tmp_path: Path) -> None:
-    import bilans.bilan_thematique.bilan_thematique_engine as engine
+    import bilans.engine.orchestrateur_profils as engine
 
     legacy_dir = tmp_path / "ref" / "profils_bilan"
     legacy_dir.mkdir(parents=True, exist_ok=True)
     (legacy_dir / "legacy_only.yaml").write_text("id: legacy_only\nlabel: Legacy\n", encoding="utf-8")
 
-    cfg = engine.load_profile_config(tmp_path, "legacy_only")
-    assert cfg["id"] == "legacy_only"
-    # Sans fallback vers ref/, le profil retourne la config par défaut.
-    assert cfg["label"] == "legacy_only"
+    with pytest.raises(FileNotFoundError):
+        engine.load_profile_config(tmp_path, "legacy_only")
 
 
-def test_run_thematic_combine_uses_data_out_dir(tmp_path: Path, monkeypatch) -> None:
-    import bilans.bilan_thematique.bilan_thematique_engine as engine
+def test_run_profiles_batch_combine_uses_data_out_dir(tmp_path: Path, monkeypatch) -> None:
+    import bilans.engine.orchestrateur_profils as engine
     import bilans.common.carte_helper as carte_helper
-    import bilans.engine.unified_engine as runner
+    import bilans.engine.execution_lots_profils as runner
 
     calls: list[str] = []
 
@@ -75,7 +93,7 @@ def test_run_thematic_combine_uses_data_out_dir(tmp_path: Path, monkeypatch) -> 
     monkeypatch.setattr(carte_helper, "ensure_maps", lambda *a, **k: None)
     monkeypatch.setattr(carte_helper, "ensure_maps_for_profiles", lambda *a, **k: None)
     monkeypatch.setattr(
-        "bilans.engine.unified_engine.get_out_dir", lambda subdir: tmp_path / "data" / "out" / subdir
+        "bilans.engine.execution_lots_profils.get_out_dir", lambda subdir: tmp_path / "data" / "out" / subdir
     )
 
     ret = runner.run_profiles_batch(
@@ -94,8 +112,8 @@ def test_run_thematic_combine_uses_data_out_dir(tmp_path: Path, monkeypatch) -> 
     assert (out_dir / "README.txt").exists()
 
 
-def test_run_thematic_rejects_global_mixed_with_other_profile() -> None:
-    import bilans.engine.unified_engine as eng
+def test_run_profiles_batch_rejects_global_mixed_with_other_profile() -> None:
+    import bilans.engine.execution_lots_profils as eng
 
     ret = eng.run_profiles_batch(
         profils=["global", "chasse"],
@@ -106,5 +124,4 @@ def test_run_thematic_rejects_global_mixed_with_other_profile() -> None:
         cli_options={},
     )
     assert ret == 1
-
 

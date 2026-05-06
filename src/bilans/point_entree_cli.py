@@ -1,7 +1,5 @@
 """
-Point d'entrée unique pour la génération des bilans (profil global ou thématiques).
-
-Tous les bilans passent par ``--profil`` (y compris ``global``).
+Point d'entrée unique pour la génération des bilans par profils YAML.
 """
 
 from __future__ import annotations
@@ -10,7 +8,7 @@ import argparse
 import logging
 import sys
 
-from bilans.logging_config import configure_logging
+from bilans.configuration_journalisation import configure_logging
 from bilans.common.prompt_periode import ask_periode_dept
 
 _DEPS_CHECKED = False
@@ -36,8 +34,8 @@ def _check_deps() -> None:
 
 
 def _list_themes() -> list[str]:
-    """Liste les identifiants de profils disponibles (global en tête si présent)."""
-    from bilans.engine.profiles import list_profiles
+    """Liste les identifiants de profils disponibles."""
+    from bilans.engine.catalogue_profils import list_profiles
 
     return list_profiles()
 
@@ -62,7 +60,7 @@ def main() -> int:
     logger = logging.getLogger("bilans")
 
     parser = argparse.ArgumentParser(
-        description="Génération des bilans : un ou plusieurs profils (--profil global, chasse, …)."
+        description="Génération des bilans : un ou plusieurs profils YAML (--profil <id>)."
     )
     parser.add_argument(
         "--list-themes",
@@ -79,7 +77,7 @@ def main() -> int:
     parser.add_argument(
         "--combine",
         action="store_true",
-        help="Enchaîner plusieurs profils thématiques avec récapitulatif combiné (incompatible avec le profil global).",
+        help="Enchaîner plusieurs profils avec récapitulatif combiné (si autorisé par les capacités de profil).",
     )
     parser.add_argument("--date-deb", type=str, default=None, help="Date début (YYYY-MM-DD).")
     parser.add_argument("--date-fin", type=str, default=None, help="Date fin (YYYY-MM-DD).")
@@ -122,19 +120,10 @@ def main() -> int:
 
     _check_deps()
 
-    from bilans.engine.profiles import resolve_profile_ids
-    from bilans.engine.unified_engine import run_profiles_batch
+    from bilans.engine.catalogue_profils import resolve_profile_ids
+    from bilans.engine.execution_lots_profils import run_profiles_batch
 
     profils_resolus = resolve_profile_ids(profils_raw)
-    if "global" in profils_resolus and len(profils_resolus) > 1:
-        msg = (
-            "Le profil « global » doit être exécuté seul. "
-            "Relancez avec uniquement --profil global."
-        )
-        logger.error(msg)
-        print(msg, file=sys.stderr)
-        return 1
-
     cli_options: dict = {}
     if args.preset:
         cli_options["chart_preset"] = args.preset

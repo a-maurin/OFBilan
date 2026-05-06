@@ -8,7 +8,7 @@ factoriser progressivement les sections sans disperser des ``if profil``.
 
 Usage envisagé :
 
-    from bilans.engine.section_registry import SectionRegistry
+    from bilans.engine.registre_sections_pdf import SectionRegistry
 
     registry = SectionRegistry()
     registry.register("sec4", render_sec4_thematic)

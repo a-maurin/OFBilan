@@ -7,8 +7,8 @@ from typing import Optional
 
 import pandas as pd
 
-from bilans.common.utils import get_dept_name
-from bilans.paths import PROJECT_ROOT, get_out_dir
+from bilans.common.utilitaires_metier import get_dept_name
+from bilans.chemins_projet import PROJECT_ROOT, get_out_dir
 
 
 @dataclass

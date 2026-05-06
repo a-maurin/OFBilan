@@ -153,4 +153,4 @@ pdf:
   # - legend_ncol_max: nombre maximal de colonnes dans les légendes
   figure_scale: 1.00
   legend_fontsize: 8
-  legend_ncol_max: 3
+  legend_ncol_max: 1

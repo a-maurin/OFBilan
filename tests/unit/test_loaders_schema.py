@@ -11,7 +11,7 @@ def test_load_point_ctrl_missing_required_columns(monkeypatch, tmp_path: Path) -
     Vérifie que load_point_ctrl lève une erreur explicite si une colonne
     obligatoire est absente du GPKG.
     """
-    import bilans.common.loaders as loaders
+    import bilans.common.chargeurs_donnees as loaders
 
     root = tmp_path
     sources_sig = root / "data" / "sources" / "sig"
@@ -41,7 +41,7 @@ def test_load_point_ctrl_missing_required_columns(monkeypatch, tmp_path: Path) -
         )
         return gpd.GeoDataFrame(df)
 
-    monkeypatch.setattr("bilans.common.loaders.gpd.read_file", fake_read_file)
+    monkeypatch.setattr("bilans.common.chargeurs_donnees.gpd.read_file", fake_read_file)
 
     # Appel : on s'attend à une KeyError pour date_ctrl manquant.
     with pytest.raises(KeyError):
@@ -53,7 +53,7 @@ def test_load_communes_centroides_missing_insee_column(monkeypatch, tmp_path: Pa
     Vérifie que load_communes_centroides signale proprement l'absence de
     colonne de code INSEE dans le CSV.
     """
-    import bilans.common.loaders as loaders
+    import bilans.common.chargeurs_donnees as loaders
 
     root = tmp_path
     sig_dir = root / "ref" / "sig"
@@ -68,7 +68,7 @@ def test_load_communes_centroides_missing_insee_column(monkeypatch, tmp_path: Pa
 
 def test_enrich_with_commune_from_geometry_adds_insee_and_name(monkeypatch, tmp_path: Path) -> None:
     """Vérifie la jointure spatiale commune -> INSEE + nom."""
-    import bilans.common.loaders as loaders
+    import bilans.common.chargeurs_donnees as loaders
 
     root = tmp_path
     shp_dir = root / "ref" / "sig" / "communes_21"
@@ -92,7 +92,7 @@ def test_enrich_with_commune_from_geometry_adds_insee_and_name(monkeypatch, tmp_
     def fake_read_file(*args: Any, **kwargs: Any) -> gpd.GeoDataFrame:
         return communes
 
-    monkeypatch.setattr("bilans.common.loaders.gpd.read_file", fake_read_file)
+    monkeypatch.setattr("bilans.common.chargeurs_donnees.gpd.read_file", fake_read_file)
 
     out = loaders.enrich_with_commune_from_geometry(point, root)
 
@@ -104,7 +104,7 @@ def test_enrich_with_commune_from_geometry_adds_insee_and_name(monkeypatch, tmp_
 
 def test_enrich_with_commune_from_geometry_requires_geometry_column(tmp_path: Path) -> None:
     """Vérifie le message d'erreur explicite sans géométrie."""
-    import bilans.common.loaders as loaders
+    import bilans.common.chargeurs_donnees as loaders
 
     root = tmp_path
     df = pd.DataFrame({"id": [1]})
@@ -114,7 +114,7 @@ def test_enrich_with_commune_from_geometry_requires_geometry_column(tmp_path: Pa
 
 def test_ensure_insee_from_communes_shp_builds_from_xy(monkeypatch, tmp_path: Path) -> None:
     """Lot 2 : points de contrôle sans insee_comm mais avec x/y -> jointure communes.shp."""
-    import bilans.common.loaders as loaders
+    import bilans.common.chargeurs_donnees as loaders
 
     root = tmp_path
     shp_dir = root / "ref" / "sig" / "communes_21"
@@ -133,7 +133,7 @@ def test_ensure_insee_from_communes_shp_builds_from_xy(monkeypatch, tmp_path: Pa
     def fake_read_file(*args: Any, **kwargs: Any) -> gpd.GeoDataFrame:
         return communes
 
-    monkeypatch.setattr("bilans.common.loaders.gpd.read_file", fake_read_file)
+    monkeypatch.setattr("bilans.common.chargeurs_donnees.gpd.read_file", fake_read_file)
 
     df = pd.DataFrame({"dc_id": ["a"], "x": [5.04], "y": [47.32]})
     out = loaders.ensure_insee_from_communes_shp(df, root, context="test")
@@ -144,7 +144,7 @@ def test_ensure_insee_from_communes_shp_builds_from_xy(monkeypatch, tmp_path: Pa
 
 def test_merge_pej_faits_locations_joins_dossier_to_dc_id(tmp_path: Path) -> None:
     """Jointure PEJ (ODS) ↔ FAITS : DC_ID = dossier, entité SD{dept}, x/y faits."""
-    import bilans.common.loaders as loaders
+    import bilans.common.chargeurs_donnees as loaders
 
     root = tmp_path
     pj = root / "data" / "sources" / "sig" / "points_infractions_pj"
@@ -174,7 +174,7 @@ def test_enrich_pve_positions_from_pnf_commune_centroids_joins_insee(
     monkeypatch, tmp_path: Path
 ) -> None:
     """PVe : INF-INSEE joint au shapefile centroïdes PNF → x/y WGS84."""
-    import bilans.common.loaders as loaders
+    import bilans.common.chargeurs_donnees as loaders
 
     root = tmp_path
     ref_dir = root / "ref" / "sig" / "communes_pnf"
@@ -192,7 +192,7 @@ def test_enrich_pve_positions_from_pnf_commune_centroids_joins_insee(
             crs="EPSG:4326",
         )
 
-    monkeypatch.setattr("bilans.common.loaders.gpd.read_file", fake_read_file)
+    monkeypatch.setattr("bilans.common.chargeurs_donnees.gpd.read_file", fake_read_file)
 
     # Colonnes GPS en chaînes (comme read_excel dtype=str) : doit accepter des floats centroïde.
     df = pd.DataFrame(

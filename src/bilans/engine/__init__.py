@@ -1,22 +1,13 @@
-"""Moteur unique bilans : dispatch profils global / thématiques."""
+"""API publique du moteur profilé des bilans."""
 
-from bilans.engine.profiles import list_profiles, resolve_profile_ids
-from bilans.engine.global_backend import run_global_backend, analyse_controles_global
-from bilans.engine.global_core import analyse_pej_pa_global, analyse_pve_global
-from bilans.engine.global_pdf import generate_global_pdf_report
-from bilans.engine.section_registry import SectionRegistry
-from bilans.engine.unified_engine import run_profiles_batch, run_thematic, run_unified
+from bilans.engine.catalogue_profils import list_profiles, resolve_profile_ids
+from bilans.engine.registre_sections_pdf import SectionRegistry
+from bilans.engine.execution_lots_profils import run_profile, run_profiles_batch
 
 __all__ = [
     "list_profiles",
     "resolve_profile_ids",
+    "run_profile",
     "run_profiles_batch",
-    "run_thematic",
-    "run_unified",
     "SectionRegistry",
-    "run_global_backend",
-    "analyse_controles_global",
-    "analyse_pej_pa_global",
-    "analyse_pve_global",
-    "generate_global_pdf_report",
 ]

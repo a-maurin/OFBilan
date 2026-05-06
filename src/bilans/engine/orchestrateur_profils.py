@@ -1,12 +1,12 @@
 """
-Moteur thématique unifié — remplace tous les scripts de bilan spécifiques.
+Moteur profilé des bilans — pipeline unique piloté par YAML.
 
 Toute la logique (chasse, agrainage, procédures, types d'usagers, mots-clés
 génériques, etc.) est centralisée ici. Le profil YAML pilote le comportement :
 filtres, sources de données, options utilisateur, analyses, PDF.
 
-Usage interne (appelé par le moteur unifié ``bilans.engine`` pour les profils thématiques) :
-    from bilans.bilan_thematique.bilan_thematique_engine import run_engine
+Usage interne (appelé par le runner de profils ``bilans.engine``) :
+    from bilans.engine.orchestrateur_profils import run_engine
     run_engine("chasse", "2025-09-01", "2026-03-01", "21", options={})
 """
 from __future__ import annotations
@@ -24,9 +24,10 @@ _ROOT = Path(__file__).resolve().parents[3]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from bilans.paths import get_out_dir, get_cartes_dir, PROJECT_ROOT
+from bilans.chemins_projet import get_out_dir, get_cartes_dir, PROJECT_ROOT
 from bilans.common.bilan_config import BilanConfig
-from bilans.common.loaders import (
+from bilans.common.chargeurs_donnees import (
+    ensure_insee_from_communes_shp,
     load_point_ctrl,
     load_pej,
     merge_pej_faits_locations,
@@ -37,7 +38,6 @@ from bilans.common.loaders import (
     load_natinf_ref,
     load_tub_pnf_codes,
     load_communes_noms,
-    ensure_insee_from_communes_shp,
     enrich_with_pnforet_sig_zones,
     overlay_pnf_zone_from_communes_pnf_csv,
     pnf_sig_union_membership_mask,
@@ -47,7 +47,7 @@ from bilans.common.percent_format import (
     int_percents_largest_remainder,
     tab_counts_to_pct_strings,
 )
-from bilans.common.utils import (
+from bilans.common.utilitaires_metier import (
     est_chasse_point,
     contient_natinf,
     count_controles_non_conformes_oscean,
@@ -69,15 +69,24 @@ from bilans.common.ofb_charte import Spinner
 from bilans.common.pdf_report_builder import (
     PDFReportBuilder,
 )
+from bilans.common.pdf_shared_sections import (
+    add_standard_cover_and_toc,
+    add_standard_notice_methodology,
+    build_filtered_glossary_rows,
+    build_sec6_methodology_html,
+    load_glossary_config,
+)
 from bilans.common.pdf_presentation_config import (
-    resolve_title_page_config,
+    build_title_lines_from_cfg,
+    normalize_dept_typography,
     resolve_pdf_presentation_config,
+    resolve_section_titles,
     resolve_sections_for_toc,
     is_block_enabled,
     should_show_placeholder,
 )
 from bilans.common.chart_display_config import load_chart_display_config, compute_pdf_ratios
-from bilans.common.charts import (
+from bilans.common.rendus_graphiques import (
     chart_pie,
     chart_bar,
     chart_bar_grouped,
@@ -86,9 +95,7 @@ from bilans.common.charts import (
     chart_line_evolution,
 )
 from bilans.common.carte_helper import find_map
-from bilans.engine.section_registry import SectionRegistry
-
-
+from bilans.engine.registre_sections_pdf import SectionRegistry
 # ═══════════════════════════════════════════════════════════════════════════
 # 1. Chargement du profil YAML
 # ═══════════════════════════════════════════════════════════════════════════
@@ -100,13 +107,24 @@ def load_profile_config(root: Path, profil_id: str) -> dict:
     except ImportError:
         yaml = None
 
-    path = root / "config" / "profils_bilan" / f"{profil_id}.yaml"
+    profiles_dir = root / "config" / "profils_bilan"
+    defaults_path = profiles_dir / "_defaults.yaml"
+    path = profiles_dir / f"{profil_id}.yaml"
     if not path.exists():
-        return _default_profile(profil_id)
+        raise FileNotFoundError(
+            f"Profil introuvable: {profil_id} (attendu: {path})"
+        )
 
     if yaml is not None:
+        defaults_data: dict[str, Any] = {}
+        if defaults_path.exists():
+            with open(defaults_path, "r", encoding="utf-8") as f:
+                loaded_defaults = yaml.safe_load(f) or {}
+                if isinstance(loaded_defaults, dict):
+                    defaults_data = loaded_defaults
         with open(path, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f) or {}
+            loaded_profile = yaml.safe_load(f) or {}
+        data = _deep_merge_dicts(defaults_data, loaded_profile if isinstance(loaded_profile, dict) else {})
     else:
         # Sans PyYAML, l'ancien parseur minimal écrase des clés (ex. plusieurs « label »
         # dans le fichier) et ignore les blocs imbriqués (restrict_geo, filter…).
@@ -119,8 +137,19 @@ def load_profile_config(root: Path, profil_id: str) -> dict:
     return _normalize_profile(data, profil_id)
 
 
-def _default_profile(profil_id: str) -> dict:
-    return _normalize_profile({"id": profil_id}, profil_id)
+def _deep_merge_dicts(base: dict, override: dict) -> dict:
+    """Fusion récursive de dictionnaires (override prioritaire)."""
+    merged: dict[str, Any] = dict(base)
+    for key, value in override.items():
+        if (
+            key in merged
+            and isinstance(merged[key], dict)
+            and isinstance(value, dict)
+        ):
+            merged[key] = _deep_merge_dicts(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
 
 
 def _normalize_profile(data: dict, profil_id: str) -> dict:
@@ -128,7 +157,10 @@ def _normalize_profile(data: dict, profil_id: str) -> dict:
     data.setdefault("id", profil_id)
     data.setdefault("label", profil_id)
     data.setdefault("title_label", data.get("label", profil_id))
-    data.setdefault("engine_type", "thematic")
+    pipeline = str(data.get("pipeline", "")).strip().lower()
+    if not pipeline:
+        raise ValueError(f"Profil {profil_id}: clé YAML requise manquante: pipeline")
+    data["pipeline"] = pipeline
     data.setdefault("out_subdir", f"bilan_{profil_id}")
     # Activation par défaut de l'analyse PVe (comportement historique).
     # Peut être désactivée par profil via analyse_PVe: false dans le YAML.
@@ -185,8 +217,51 @@ def _normalize_profile(data: dict, profil_id: str) -> dict:
 
     # --- options ---
     data.setdefault("options", {})
+    aggregation = data.get("aggregation")
+    if not isinstance(aggregation, dict) or not str(aggregation.get("adapter", "")).strip():
+        raise ValueError(f"Profil {profil_id}: clé YAML requise manquante: aggregation.adapter")
+    pdf = data.get("pdf")
+    if not isinstance(pdf, dict) or not str(pdf.get("adapter", "")).strip():
+        raise ValueError(f"Profil {profil_id}: clé YAML requise manquante: pdf.adapter")
+    if not str(data.get("presentation_scope", "")).strip():
+        raise ValueError(f"Profil {profil_id}: clé YAML requise manquante: presentation_scope")
+    capabilities = data.setdefault("capabilities", {})
+    if not isinstance(capabilities, dict):
+        capabilities = {}
+        data["capabilities"] = capabilities
+    capabilities.setdefault("combine", True)
+    capabilities.setdefault("mix_batch", True)
+    default_map_profiles: list[str] = [] if profil_id == "types_usager_cible" else [profil_id]
+    capabilities.setdefault("map_profiles", default_map_profiles)
 
     return data
+
+
+def _resolve_ventilation_mode_from_profile(
+    profile: dict,
+    *,
+    date_deb_ts: pd.Timestamp,
+    date_fin_ts: pd.Timestamp,
+) -> tuple[str, str, int, int]:
+    """Résout la ventilation temporelle depuis le profil YAML."""
+    period_cfg = profile.get("periode_analyse", {}) or {}
+    vent_cfg = period_cfg.get("ventilation", {}) or {}
+    vent_type = str(vent_cfg.get("type", "auto")).strip().lower()
+    try:
+        seuil_jours = int(vent_cfg.get("seuil_jours", 366))
+    except (TypeError, ValueError):
+        seuil_jours = 366
+    duree_jours = int((date_fin_ts - date_deb_ts).days)
+    if vent_type == "annuelle":
+        ventilation_mode = "annuelle"
+    elif vent_type == "globale":
+        ventilation_mode = "globale"
+    else:
+        if duree_jours < 183:
+            ventilation_mode = "mensuelle"
+        else:
+            ventilation_mode = "annuelle" if duree_jours > seuil_jours else "trimestrielle"
+    return ventilation_mode, vent_type, seuil_jours, duree_jours
 
 
 def _run_global_profile_via_yaml(
@@ -196,127 +271,87 @@ def _run_global_profile_via_yaml(
     dept_code: str,
     options: dict,
 ) -> int:
-    """
-    Exécute le profil global via le même point d'entrée `run_engine`.
+    """Exécute le profil global via le moteur unifié orienté profils (sans délégation backend)."""
+    aggregations_mod = __import__("bilans.engine.agregations_profil", fromlist=["_dummy"])
+    pdf_mod = __import__("bilans.engine.generation_pdf_profil", fromlist=["_dummy"])
+    agg_adapter_name = str((profile.get("aggregation", {}) or {}).get("adapter", "run_profile_aggregations")).strip()
+    pdf_adapter_name = str((profile.get("pdf", {}) or {}).get("adapter", "generate_profile_pdf_report")).strip()
+    run_aggregations = getattr(aggregations_mod, agg_adapter_name)
+    generate_pdf_impl = getattr(pdf_mod, pdf_adapter_name)
 
-    Le backend global reste porté par `bilan_global.analyse_global.run_global`,
-    mais la résolution et l'appel se font désormais depuis le moteur unifié
-    orienté profils (YAML).
-    """
-    chart_preset = options.get("chart_preset")
-    extra = {k: v for k, v in options.items() if k != "chart_preset"}
-    if extra:
-        logging.getLogger("bilans.thematique").debug(
-            "Options ignorées pour engine_type=global : %s", list(extra.keys())
+    resolved_opts = resolve_options(profile, options)
+    chart_preset = resolved_opts.get("chart_preset")
+    root = PROJECT_ROOT
+    out_subdir = str(profile.get("out_subdir", f"bilan_{profile.get('id', 'global')}")).strip()
+    if not out_subdir:
+        out_subdir = "bilan_global"
+    out_dir = get_out_dir(out_subdir)
+    date_deb_ts = pd.to_datetime(date_deb)
+    date_fin_ts = pd.to_datetime(date_fin)
+    dept_code_norm = str(dept_code).strip()
+
+    print(
+        f"Période : {date_deb_ts.date():%d/%m/%Y} au {date_fin_ts.date():%d/%m/%Y} – Département {dept_code_norm}."
+    )
+    ventilation_mode, vent_type, seuil_jours, duree_jours = _resolve_ventilation_mode_from_profile(
+        profile,
+        date_deb_ts=date_deb_ts,
+        date_fin_ts=date_fin_ts,
+    )
+    print(
+        f"Ventilation temporelle : {ventilation_mode} "
+        f"(type={vent_type}, seuil={seuil_jours} j, durée={duree_jours} j)"
+    )
+
+    print("Étape 1/4 : chargement des données...")
+    with Spinner():
+        point = load_point_ctrl(root, dept_code=dept_code_norm, date_deb=date_deb_ts, date_fin=date_fin_ts)
+        pa = load_pa(root, date_deb=date_deb_ts, date_fin=date_fin_ts)
+        pej = load_pej(root, date_deb=date_deb_ts, date_fin=date_fin_ts)
+        pve = load_pve(root, dept_code=dept_code_norm, date_deb=date_deb_ts, date_fin=date_fin_ts)
+
+    spatial_log = logging.getLogger("bilans.spatial")
+    if not point.empty:
+        point = ensure_insee_from_communes_shp(
+            point, root, context="bilan global — points de contrôle", log=spatial_log
         )
-    from bilans.engine.global_backend import run_global_backend
-
-    return run_global_backend(date_deb, date_fin, dept_code, chart_preset=chart_preset)
-
-
-def _load_glossary_config(root: Path) -> dict:
-    """
-    Charge la configuration du glossaire depuis config/presentation/glossaire.yaml
-    puis, en fallback, depuis ref/glossaire.yaml.
-
-    Si le fichier n'existe pas ou si PyYAML n'est pas disponible, on
-    retourne une configuration par défaut équivalente à l'ancien
-    glossaire codé en dur.
-    """
-    cfg_candidates = [
-        root / "config" / "presentation" / "glossaire.yaml",
-        root / "ref" / "glossaire.yaml",
-    ]
-    cfg_path = next((p for p in cfg_candidates if p.exists()), None)
-
-    default_cfg: dict = {
-        "header": {
-            "abbr_label": "Abréviation",
-            "definition_label": "Signification",
-        },
-        "abbreviations": [
-            {"id": "DC", "label": "DC", "definition": "Dossier de contrôle"},
-            {
-                "id": "NATINF",
-                "label": "NATINF",
-                "definition": "Nature d'infraction (nomenclature nationale)",
-            },
-            {
-                "id": "OSCEAN",
-                "label": "OSCEAN",
-                "definition": "Outil de suivi des contrôles en environnement",
-            },
-            {"id": "PA", "label": "PA", "definition": "Procédure administrative"},
-            {"id": "PEJ", "label": "PEJ", "definition": "Procédure d'enquête judiciaire"},
-            {"id": "PNF", "label": "PNF", "definition": "Parc national de forêts"},
-            {
-                "id": "PVe",
-                "label": "PVe",
-                "definition": "Procès-verbal électronique",
-            },
-            {
-                "id": "TUB",
-                "label": "TUB",
-                "definition": "Zone tuberculose bovine",
-            },
-        ],
-    }
-
-    if cfg_path is None:
-        return default_cfg
-
-    try:
-        import yaml  # type: ignore[import]
-    except ImportError:
-        return default_cfg
-
-    try:
-        with cfg_path.open("r", encoding="utf-8") as f:
-            data = yaml.safe_load(f) or {}
-    except Exception:
-        return default_cfg
-
-    # Normalisation minimale
-    if not isinstance(data, dict):
-        return default_cfg
-    header = data.get("header") or {}
-    if not isinstance(header, dict):
-        header = {}
-    abbrs = data.get("abbreviations") or []
-    if not isinstance(abbrs, list):
-        abbrs = []
-
-    result = {
-        "header": {
-            "abbr_label": header.get("abbr_label", "Abréviation"),
-            "definition_label": header.get("definition_label", "Signification"),
-        },
-        "abbreviations": [],
-    }
-
-    for item in abbrs:
-        if not isinstance(item, dict):
-            continue
-        id_ = str(item.get("id", "")).strip()
-        if not id_:
-            continue
-        label = str(item.get("label", id_)).strip() or id_
-        definition = str(item.get("definition", "")).strip()
-        if not definition:
-            continue
-        result["abbreviations"].append(
-            {
-                "id": id_,
-                "label": label,
-                "definition": definition,
-            }
+    if not pve.empty:
+        pve = ensure_insee_from_communes_shp(
+            pve, root, context="bilan global — PVe", log=spatial_log
         )
 
-    # Si aucune abréviation valide, fallback sur le défaut
-    if not result["abbreviations"]:
-        return default_cfg
+    print("Étape 2/4 : agrégations...")
+    with Spinner():
+        run_aggregations(
+            profile=profile,
+            root=root,
+            point=point,
+            pa=pa,
+            pej=pej,
+            pve=pve,
+            out_dir=out_dir,
+            dept_code=dept_code_norm,
+            ventilation_mode=ventilation_mode,
+            date_deb=date_deb_ts,
+            date_fin=date_fin_ts,
+        )
 
-    return result
+    print("Étape 4/4 : génération du PDF...")
+    with Spinner():
+        output_filename = str(profile.get("output_filename", "")).strip() or None
+        generate_pdf_impl(
+            out_dir,
+            profile=profile,
+            date_deb=date_deb_ts,
+            date_fin=date_fin_ts,
+            dept_code=dept_code_norm,
+            ventilation_mode=ventilation_mode,
+            chart_preset=chart_preset,
+            output_filename=output_filename,
+        )
+
+    print(f"Bilan global généré dans data/out/{out_subdir}.")
+    return 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -339,51 +374,6 @@ def _copy_to_clipboard(text: str) -> None:
     except Exception:
         # En cas d'échec (clip absent, droits, etc.), on ne bloque pas le bilan.
         pass
-
-
-def _normalize_dept_typography(name: str) -> str:
-    """Harmonise la typographie des noms de département (apostrophe/hyphens)."""
-    s = str(name or "").strip()
-    s = s.replace("-d'", " d’").replace("-D'", " D’")
-    s = s.replace("d'", "d’").replace("D'", "D’")
-    return " ".join(s.split())
-
-
-def _build_title_lines_from_cfg(
-    effective_cfg: dict,
-    *,
-    profile_label: str,
-    dept_name_typo: str,
-) -> tuple[list[str], list[str]]:
-    """Construit les lignes de titre (page de garde + en-tête) via la config YAML."""
-    title_cfg = effective_cfg.get("title", {}) if isinstance(effective_cfg, dict) else {}
-    if not isinstance(title_cfg, dict):
-        title_cfg = {}
-
-    line1 = str(
-        title_cfg.get(
-            "line1",
-            "Bilan des activités de police administrative et judiciaire",
-        )
-    ).strip() or "Bilan des activités de police administrative et judiciaire"
-
-    line2_mode = str(title_cfg.get("line2_mode", "profile_label")).strip().lower()
-    if line2_mode == "none":
-        line2 = ""
-    elif line2_mode == "fixed":
-        line2 = str(title_cfg.get("line2_fixed", "")).strip()
-    else:
-        line2 = str(profile_label).strip()
-
-    line3_mode = str(title_cfg.get("line3_mode", "department")).strip().lower()
-    if line3_mode == "fixed":
-        line3 = str(title_cfg.get("line3_fixed", "")).strip()
-    else:
-        line3 = f"Département de la {dept_name_typo}"
-
-    header_lines = [x for x in [line1, line2, line3] if x]
-    cover_lines = [line1, "", *([line2] if line2 else []), line3]
-    return cover_lines, header_lines
 
 
 def resolve_options(profile: dict, cli_opts: dict | None = None) -> dict:
@@ -2298,7 +2288,7 @@ def _generate_pdf(
     label = profile["label"]
     sources = profile.get("sources", {}) or {}
     dept_name = cfg.dept_name
-    dept_name_typo = _normalize_dept_typography(dept_name)
+    dept_name_typo = normalize_dept_typography(dept_name)
     period_str = f"du {cfg.date_deb.date():%d/%m/%Y} au {cfg.date_fin.date():%d/%m/%Y}"
 
     # Pour le bilan usager ciblé (mono-usager), nommage Bilan_{type_usager} et titres avec le libellé
@@ -2384,9 +2374,10 @@ def _generate_pdf(
         ("sec5", "5. Localisation cartographique des contrôles"),
         ("sec6", "6. Annexes"),
     ]
-    sections = section_defs
-    sections_toc = resolve_sections_for_toc(presentation_cfg, section_defs)
-    section_title = {sid: title for sid, title in section_defs}
+    resolved_section_defs = resolve_section_titles(presentation_cfg, section_defs)
+    sections = resolved_section_defs
+    sections_toc = resolve_sections_for_toc(presentation_cfg, resolved_section_defs)
+    section_title = {sid: title for sid, title in resolved_section_defs}
 
     # Page de garde + sommaire
     # Préparer un libellé de thème sans doublon "Bilan "
@@ -2407,15 +2398,11 @@ def _generate_pdf(
             else:
                 main_label = ", ".join(targets[:-1]) + f" et {targets[-1]}"
 
-    subtitle_sources = "Sources des données : OFB/OSCEAN"
-    if nb_pve > 0:
-        subtitle_sources += " – MININT/AGC-PVe"
-
     cover_profile_label = str(profile.get("title_label", main_label)).strip() or str(main_label)
     if profil_id == "types_usager_cible":
         cover_profile_label = str(main_label).strip()
 
-    cover_title_lines, header_title_lines = _build_title_lines_from_cfg(
+    cover_title_lines, header_title_lines = build_title_lines_from_cfg(
         presentation_cfg,
         profile_label=cover_profile_label,
         dept_name_typo=dept_name_typo,
@@ -2424,50 +2411,23 @@ def _generate_pdf(
     builder.header_title = report_header
     builder.doc.title = " — ".join(header_title_lines)
 
-    title_page_cfg = resolve_title_page_config(
-        PROJECT_ROOT,
+    add_standard_cover_and_toc(
+        builder,
+        project_root=PROJECT_ROOT,
         scope="thematique",
         profile_id=profil_id,
-    )
-    builder.add_title_page(
-        title_lines=cover_title_lines,
+        cover_title_lines=cover_title_lines,
         period_str=f"Période : {period_str}",
-        subtitle=subtitle_sources,
-        title_page_config=title_page_cfg,
+        sections_toc=sections_toc,
+        nb_pve=nb_pve,
     )
-    builder.add_toc(sections_toc)
 
-    # Notice méthodologique entre sommaire et partie 1
-    builder.add_section("notice_methodo", "Notice méthodologique")
-    builder.add_paragraph(
-        "Les données relatives aux contrôles et aux procédures présentées dans ce document "
-        "sont extraites de la base du logiciel OSCEAN, outil de rapportage des activités "
-        "de police administrative et judiciaire des agents de l’OFB."
+    # Notice méthodologique partagée avec le global.
+    add_standard_notice_methodology(
+        builder,
+        period_sentence=f"Pour ce bilan, les extractions portent sur la période {period_str}.",
+        effective_cfg=presentation_cfg,
     )
-    builder.add_paragraph(
-        f"Pour ce bilan, les extractions portent sur la période {period_str}."
-    )
-    builder.add_paragraph(
-        "Sauf mention contraire, l’unité de mesure du nombre de contrôles utilisée dans "
-        "la suite du document est la localisation de contrôle : une unité correspond à "
-        "une localisation renseignée."
-    )
-    builder.add_paragraph(
-        "Il convient de distinguer l’activité de police administrative et l’activité de "
-        "police judiciaire. Dans ce document, le terme « contrôle » renvoie exclusivement "
-        "à la police administrative. Le terme « procédure judiciaire » désigne l’activité "
-        "de police judiciaire, qui ne se limite pas aux infractions relevées lors des "
-        "contrôles et peut aussi inclure des saisines extérieures (instruction parquet, "
-        "signalements, plaintes, etc.)."
-    )
-    builder.add_paragraph(
-        "Le total des contrôles par type d’usager peut être supérieur au total des "
-        "contrôles, car une même fiche de contrôle peut renseigner plusieurs types "
-        "d’usagers (contrôle multi-usager). L’analyse par type d’usager comptabilise "
-        "chaque type renseigné afin de refléter au mieux les usagers effectivement "
-        "concernés par l’action de contrôle."
-    )
-    builder.add_page_break()
 
     # ── CHIFFRES CLÉS ──
     builder.add_section("sec1", section_title["sec1"])
@@ -3384,98 +3344,40 @@ def _generate_pdf(
         src_parts.append("PVe OFB")
     src_text = ", ".join(src_parts) if src_parts else "sources spécifiques au profil"
 
-    method_lines: list[str] = [
-        f"<b>Période d'analyse :</b> {period_str}.",
-        f"<b>Périmètre :</b> département {dept_name} ({cfg.dept_code}).",
-        f"<b>Profil :</b> {label}.",
-        f"<b>Sources :</b> {src_text}.",
-    ]
-
     has_zone_table = zone_ctrl is not None and not zone_ctrl.empty
     has_pnf = bool(options.get("pnf", False)) and results.get("agg_pnf") is not None
     has_tub = bool(options.get("tub", False)) and has_zone_table
     is_pnf_profile = str(profil_id).strip().lower() in {"pnf", "pnf_foret"}
-
-    if is_pnf_profile and has_pnf:
-        method_lines.append(
-            "<b>Analyse par zones :</b> bilan restreint au périmètre du PNF ; "
-            "la lecture spatiale distingue le coeur de parc de l'aire d'adhésion "
-            "hors coeur de parc."
-        )
-    elif has_pnf and has_tub:
-        method_lines.append(
-            "<b>Analyse par zones :</b> la zone « Département » inclut l'ensemble des "
-            "contrôles, puis les zones PNF et TUB sont détaillées séparément."
-        )
-    elif has_pnf:
-        method_lines.append(
-            "<b>Analyse par zones :</b> la zone « Département » inclut l'ensemble des "
-            "contrôles, puis la zone PNF est détaillée séparément."
-        )
-    elif has_tub:
-        method_lines.append(
-            "<b>Analyse par zones :</b> la zone « Département » inclut l'ensemble des "
-            "contrôles, puis la zone TUB est détaillée séparément."
-        )
+    methodo = build_sec6_methodology_html(
+        effective_cfg=presentation_cfg,
+        period_str=period_str,
+        dept_name=dept_name,
+        dept_code=str(cfg.dept_code),
+        profile_label=label,
+        sources_text=src_text,
+        has_pnf=has_pnf,
+        has_tub=has_tub,
+        is_pnf_profile=is_pnf_profile,
+    )
 
     if is_block_enabled(presentation_cfg, "sec6.show_methodology", True):
-        builder.add_methodology("<br/>".join(method_lines) + "<br/>")
+        builder.add_methodology(methodo)
 
     # Glossaire dynamique basé sur une configuration YAML exhaustive,
     # filtrée pour ne conserver que les abréviations réellement utiles
     # au PDF courant.
-    gloss_cfg = _load_glossary_config(PROJECT_ROOT)
-    header_cfg = gloss_cfg.get("header", {}) or {}
-    abbr_list = gloss_cfg.get("abbreviations", []) or []
+    gloss_cfg = load_glossary_config(PROJECT_ROOT)
+    rows = build_filtered_glossary_rows(
+        gloss_cfg=gloss_cfg,
+        nb_ctrl=nb_ctrl,
+        nb_pej=nb_pej,
+        nb_pa=nb_pa,
+        nb_pve=nb_pve,
+        include_pnf=results.get("agg_pnf") is not None,
+        include_tub=bool(options.get("tub", False)),
+    )
 
-    # Index par id pour un accès rapide
-    abbr_by_id: dict[str, dict] = {}
-    for item in abbr_list:
-        if not isinstance(item, dict):
-            continue
-        id_ = str(item.get("id", "")).strip()
-        if not id_:
-            continue
-        abbr_by_id[id_] = item
-
-    # Sélection des abréviations en fonction du contenu réel du bilan.
-    # On se base sur les sections effectivement présentes : contrôles,
-    # procédures, analyses spatiales…
-    used_ids: list[str] = []
-
-    def _add_if_available(abbr_id: str, condition: bool) -> None:
-        if condition and abbr_id in abbr_by_id and abbr_id not in used_ids:
-            used_ids.append(abbr_id)
-
-    # OSCEAN est toujours cité (page de garde + méthodologie)
-    _add_if_available("OSCEAN", True)
-    # DC : contrôles / dossiers de contrôle présents
-    _add_if_available("DC", nb_ctrl > 0)
-    # NATINF : utilisé dès que des infractions PVe ou PEJ sont exploitées
-    _add_if_available("NATINF", nb_pve > 0 or nb_pej > 0)
-    # PA / PEJ / PVe : sections dédiées
-    _add_if_available("PA", nb_pa > 0)
-    _add_if_available("PEJ", nb_pej > 0)
-    _add_if_available("PVe", nb_pve > 0)
-    # PNF / TUB : analyses spatiales correspondantes
-    _add_if_available("PNF", results.get("agg_pnf") is not None)
-    _add_if_available("TUB", options.get("tub", False))
-
-    if is_block_enabled(presentation_cfg, "sec6.show_glossary", True) and used_ids:
-        rows: List[List[str]] = [
-            [
-                str(header_cfg.get("abbr_label", "Abréviation")),
-                str(header_cfg.get("definition_label", "Signification")),
-            ]
-        ]
-        for abbr_id in used_ids:
-            item = abbr_by_id[abbr_id]
-            rows.append(
-                [
-                    str(item.get("label", abbr_id)),
-                    str(item.get("definition", "")),
-                ]
-            )
+    if is_block_enabled(presentation_cfg, "sec6.show_glossary", True) and rows:
         builder.add_glossary(rows)
 
     builder.build()
@@ -3506,9 +3408,28 @@ def run_engine(
     options = options or {}
     root = PROJECT_ROOT
     profile = load_profile_config(root, profil_id)
-    engine_type = str(profile.get("engine_type", "thematic")).strip().lower()
-    if engine_type == "global":
-        return _run_global_profile_via_yaml(profile, date_deb, date_fin, dept_code, options)
+    pipeline = str(profile.get("pipeline", "thematic")).strip().lower()
+    pipeline_handlers = {
+        "global": _run_global_profile_via_yaml,
+        "thematic": lambda p, d0, d1, dc, opts: _run_engine_thematic_pipeline(
+            str(p.get("id", profil_id)), d0, d1, dc, opts
+        ),
+    }
+    if pipeline not in pipeline_handlers:
+        raise ValueError(f"Pipeline inconnu dans le profil '{profil_id}': {pipeline}")
+    return pipeline_handlers[pipeline](profile, date_deb, date_fin, dept_code, options)
+
+
+def _run_engine_thematic_pipeline(
+    profil_id: str,
+    date_deb: str,
+    date_fin: str,
+    dept_code: str,
+    options: dict | None = None,
+) -> int:
+    options = options or {}
+    root = PROJECT_ROOT
+    profile = load_profile_config(root, profil_id)
     chart_preset = options.pop("chart_preset", None)
     cfg = BilanConfig.from_strings(date_deb, date_fin, dept_code, root=root)
     out_dir = cfg.get_out(profile["out_subdir"])
@@ -3525,23 +3446,11 @@ def run_engine(
     print(f"Période : du {cfg.date_deb.date():%d/%m/%Y} au {cfg.date_fin.date():%d/%m/%Y}")
 
     # Déterminer le mode de ventilation temporelle depuis le profil YAML
-    period_cfg = profile.get("periode_analyse", {}) or {}
-    vent_cfg = period_cfg.get("ventilation", {}) or {}
-    vent_type = str(vent_cfg.get("type", "auto")).strip().lower()
-    try:
-        seuil_jours = int(vent_cfg.get("seuil_jours", 366))
-    except (TypeError, ValueError):
-        seuil_jours = 366
-    duree_jours = int((cfg.date_fin - cfg.date_deb).days)
-    if vent_type == "annuelle":
-        ventilation_mode = "annuelle"
-    elif vent_type == "globale":
-        ventilation_mode = "globale"
-    else:
-        if duree_jours < 183:
-            ventilation_mode = "mensuelle"
-        else:
-            ventilation_mode = "annuelle" if duree_jours > seuil_jours else "trimestrielle"
+    ventilation_mode, vent_type, seuil_jours, duree_jours = _resolve_ventilation_mode_from_profile(
+        profile,
+        date_deb_ts=cfg.date_deb,
+        date_fin_ts=cfg.date_fin,
+    )
     print(
         f"Ventilation temporelle : {ventilation_mode} "
         f"(type={vent_type}, seuil={seuil_jours} j, durée={duree_jours} j)"

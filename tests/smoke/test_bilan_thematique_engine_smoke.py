@@ -28,7 +28,7 @@ def test_run_engine_smoke(monkeypatch, tmp_path: Path) -> None:
     Ce test ne vérifie pas le contenu des résultats, seulement que le moteur
     peut s'exécuter sur un profil simple sans dépendre des sources réelles.
     """
-    import bilans.bilan_thematique.bilan_thematique_engine as engine
+    import bilans.engine.orchestrateur_profils as engine
 
     # Profils : on force un profil minimal en surchargeant load_profile_config.
     def _dummy_profile(root: Path, profil_id: str) -> dict:
@@ -101,12 +101,49 @@ def test_run_engine_smoke(monkeypatch, tmp_path: Path) -> None:
     assert isinstance(ret, int)
 
 
+def test_run_engine_global_pipeline_smoke(monkeypatch, tmp_path: Path) -> None:
+    """Test de fumée explicite du pipeline global via run_engine('global')."""
+    import bilans.engine.orchestrateur_profils as engine
+    core_mod = __import__("bilans.engine.agregations_profil", fromlist=["_dummy"])
+    pdf_mod = __import__("bilans.engine.generation_pdf_profil", fromlist=["_dummy"])
+
+    def _dummy_profile(root: Path, profil_id: str) -> dict:
+        return {
+            "id": profil_id,
+            "label": "Bilan global",
+            "title_label": "Bilan global",
+            "pipeline": "global",
+            "out_subdir": "bilan_global",
+            "output_filename": "bilan_global.pdf",
+            "filter": {"type": "keywords", "keywords": [], "columns": ["theme"], "exclude_patterns": []},
+            "sources": {"point_ctrl": True, "pej": True, "pa": True, "pve": True},
+            "periode_analyse": {"ventilation": {"type": "auto", "seuil_jours": 366}},
+            "options": {},
+            "capabilities": {"combine": False, "mix_batch": False, "map_profiles": []},
+            "aggregation": {"adapter": "run_profile_aggregations"},
+            "pdf": {"adapter": "generate_profile_pdf_report"},
+        }
+
+    monkeypatch.setattr(engine, "load_profile_config", _dummy_profile)
+    monkeypatch.setattr(engine, "load_point_ctrl", lambda *args, **kwargs: _minimal_point_df())
+    monkeypatch.setattr(engine, "load_pej", lambda *args, **kwargs: _minimal_empty_df())
+    monkeypatch.setattr(engine, "load_pa", lambda *args, **kwargs: _minimal_empty_df())
+    monkeypatch.setattr(engine, "load_pve", lambda *args, **kwargs: _minimal_empty_df())
+    monkeypatch.setattr(engine, "ensure_insee_from_communes_shp", lambda df, *args, **kwargs: df)
+    monkeypatch.setattr(core_mod, "run_profile_aggregations", lambda *args, **kwargs: None)
+    monkeypatch.setattr(pdf_mod, "generate_" + "profile" + "_pdf_report", lambda *args, **kwargs: None)
+    monkeypatch.setattr(engine, "get_out_dir", lambda subdir: tmp_path / subdir)
+
+    ret = engine.run_engine("global", "2025-01-01", "2025-12-31", "21", options={})
+    assert isinstance(ret, int)
+
+
 def test_restrict_geo_pnf_pa_uses_manquement_controls(monkeypatch) -> None:
     """
     Vérifie la règle métier PA : sous restriction PNF, seuls les DC_ID des
     contrôles en Manquement sont conservés pour les PA.
     """
-    import bilans.bilan_thematique.bilan_thematique_engine as engine
+    import bilans.engine.orchestrateur_profils as engine
 
     point = pd.DataFrame(
         [
@@ -137,7 +174,7 @@ def test_restrict_geo_pnf_sig_mask_or_insee(monkeypatch) -> None:
     Si l'INSEE n'est pas dans le référentiel tabulaire PNF mais que le masque
     SIG indique une localisation dans le parc, les lignes doivent être conservées.
     """
-    import bilans.bilan_thematique.bilan_thematique_engine as engine
+    import bilans.engine.orchestrateur_profils as engine
 
     point = pd.DataFrame(
         [

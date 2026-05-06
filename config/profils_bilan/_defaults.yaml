@@ -1,0 +1,10 @@
+schema_version: 2
+pipeline: thematic
+presentation_scope: thematique
+aggregation:
+  adapter: run_profile_aggregations
+pdf:
+  adapter: generate_profile_pdf_report
+capabilities:
+  combine: true
+  mix_batch: true

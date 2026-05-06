@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import math
+import textwrap
 from pathlib import Path
 
 import geopandas as gpd
@@ -36,6 +37,9 @@ CHART_FIG_HEIGHT_PIE_COMPACT = 5.0
 # Références typographiques : "Résultats des contrôles par type d'usager".
 CHART_TITLE_FONT_SIZE_REF = 11
 CHART_LEGEND_FONT_SIZE_REF = 8
+# Ajustement demandé : réduire de moitié le disque des camemberts
+# sans modifier la taille des légendes.
+CHART_PIE_DISK_SCALE = 0.5
 # Hauteur des barres / barres groupées-empilées : +50 % vs ancienne base pour lisibilité PDF.
 CHART_FIG_HEIGHT_BAR = 3.5 * 1.5
 CHART_FIG_HEIGHT_WITH_LEGEND = 4.15 * 1.5
@@ -127,13 +131,16 @@ def chart_pie(
     # On conserve la taille de police de référence ; on n'abaisse pas la police
     # quand la légende est dense (on augmente plutôt le nombre de lignes).
     leg_fs = CHART_LEGEND_FONT_SIZE_REF if legend_fontsize is None else float(legend_fontsize)
+    # Wrap explicite des libellés de légende pour éviter toute troncature horizontale.
+    wrap_width = max(42, int(fig_w * 10))
+    legend_labels_wrapped = [textwrap.fill(lbl, width=wrap_width, break_long_words=False) for lbl in legend_labels]
     # Gabarit robuste : zone camembert fixe et zone légende variable.
     # Cela garantit un disque de taille identique, tandis que la hauteur
     # de l'image s'adapte au nombre de lignes de légende.
-    rows = math.ceil(len(legend_labels) / ncol) if legend_labels else 1
-    pie_h_in = CHART_FIG_HEIGHT_PIE_COMPACT * figure_scale
-    legend_row_h_in = 0.30 * (leg_fs / CHART_LEGEND_FONT_SIZE_REF)
-    legend_h_in = 0.44 + rows * legend_row_h_in
+    total_legend_lines = sum((lbl.count("\n") + 1) for lbl in legend_labels_wrapped) or 1
+    pie_h_in = CHART_FIG_HEIGHT_PIE_COMPACT * figure_scale * CHART_PIE_DISK_SCALE
+    legend_row_h_in = 0.20 * (leg_fs / CHART_LEGEND_FONT_SIZE_REF)
+    legend_h_in = 0.42 + total_legend_lines * legend_row_h_in
     top_pad_in = 0.28
     gap_in = 0.08
     bottom_pad_in = 0.14
@@ -162,7 +169,7 @@ def chart_pie(
     ax_leg.axis("off")
     ax_leg.legend(
         wedges,
-        legend_labels,
+        legend_labels_wrapped,
         loc="center",
         ncol=ncol,
         fontsize=leg_fs,
@@ -173,8 +180,8 @@ def chart_pie(
         borderpad=0.2,
     )
     # DPI un peu plus élevé : le PDF insère le camembert plus étroit que les barres.
-    # Pas de "tight bbox" : on conserve le gabarit de bloc calculé.
-    return save_chart(fig, tmp_dir, name, dpi=165, tight=False)
+    # "tight bbox" inclut toute la légende dans le PNG final (pas de troncature).
+    return save_chart(fig, tmp_dir, name, dpi=165, tight=True)
 
 
 def chart_bar(

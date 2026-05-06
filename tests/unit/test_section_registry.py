@@ -2,7 +2,7 @@ from __future__ import annotations
 
 
 def test_section_registry_register_and_render() -> None:
-    from bilans.engine.section_registry import SectionRegistry
+    from bilans.engine.registre_sections_pdf import SectionRegistry
 
     seen: list[str] = []
 
@@ -16,7 +16,7 @@ def test_section_registry_register_and_render() -> None:
 
 
 def test_section_registry_missing_raises() -> None:
-    from bilans.engine.section_registry import SectionRegistry
+    from bilans.engine.registre_sections_pdf import SectionRegistry
 
     reg = SectionRegistry()
     try:
@@ -28,7 +28,7 @@ def test_section_registry_missing_raises() -> None:
 
 
 def test_section_registry_render_many_skips_unknown_by_default() -> None:
-    from bilans.engine.section_registry import SectionRegistry
+    from bilans.engine.registre_sections_pdf import SectionRegistry
 
     seen: list[str] = []
 
@@ -42,7 +42,7 @@ def test_section_registry_render_many_skips_unknown_by_default() -> None:
 
 
 def test_section_registry_render_many_raises_when_requested() -> None:
-    from bilans.engine.section_registry import SectionRegistry
+    from bilans.engine.registre_sections_pdf import SectionRegistry
 
     reg = SectionRegistry()
     try:

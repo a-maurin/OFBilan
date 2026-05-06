@@ -8,7 +8,7 @@
 ## Nouvelles commandes
 
 ```bash
-# Lister les profils (numérotation pour saisie interactive ; « global » en tête si présent)
+# Lister les profils (numérotation pour saisie interactive)
 python -m bilans --list-themes
 
 # Bilan global
@@ -17,13 +17,13 @@ python -m bilans --profil global --date-deb 2025-01-01 --date-fin 2025-12-31 --d
 # Un ou plusieurs bilans thématiques
 python -m bilans --profil chasse --profil agrainage --date-deb 2025-01-01 --date-fin 2025-12-31 --dept-code 21
 
-# Plusieurs thématiques avec récapitulatif combiné (sans le profil global)
+# Plusieurs profils avec récapitulatif combiné (si autorisé par leurs capacités)
 python -m bilans --profil chasse --profil agrainage --combine --date-deb ... --date-fin ... --dept-code 21
 ```
 
 Règles d'usage :
 
-- `global` ne peut être exécuté que seul.
+- Les restrictions batch/combine sont pilotées par `capabilities.combine` et `capabilities.mix_batch` dans les profils YAML.
 - Sans `--profil`, la CLI affiche les profils disponibles et demande une sélection interactive.
 
 ## Points d’entrée historiques
@@ -34,8 +34,10 @@ Règles d'usage :
 
 ## Fichiers de configuration
 
-- Profil global : `config/profils_bilan/global.yaml` (`engine_type: global`).
+- Profil global : `config/profils_bilan/global.yaml` (`pipeline: global`).
 - Profils thématiques : `config/profils_bilan/<id>.yaml` (comportement inchangé côté YAML métier).
+- Chaque profil peut aussi déclarer ses adapters `aggregation.adapter` et `pdf.adapter`.
+- Le socle partagé est déclaré dans `config/profils_bilan/_defaults.yaml` puis fusionné avec chaque profil.
 
 ## Recette de parité (manuelle / données réelles)
 

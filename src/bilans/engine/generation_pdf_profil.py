@@ -7,43 +7,46 @@ from pathlib import Path
 import pandas as pd
 
 from bilans.common.chart_display_config import compute_pdf_ratios, load_chart_display_config
-from bilans.common.charts import (
+from bilans.common.rendus_graphiques import (
     chart_bar_horizontal_stacked,
     chart_bar_stacked,
     chart_line_evolution,
     chart_pie,
 )
 from bilans.common.pdf_presentation_config import (
+    build_title_lines_from_cfg,
     is_block_enabled,
     is_section_enabled,
+    normalize_dept_typography,
     resolve_pdf_presentation_config,
+    resolve_section_titles,
     resolve_sections_for_toc,
-    resolve_title_page_config,
     should_show_placeholder,
 )
 from bilans.common.pdf_report_builder import PDFReportBuilder
+from bilans.common.pdf_shared_sections import (
+    add_standard_cover_and_toc,
+    add_standard_notice_methodology,
+    build_filtered_glossary_rows,
+    build_sec6_methodology_html,
+    load_glossary_config,
+)
 from bilans.common.percent_format import (
     format_pct_int_from_rate,
     int_percents_largest_remainder,
     tab_counts_to_pct_strings,
 )
-from bilans.common.utils import _load_csv_opt
-from bilans.engine.section_registry import SectionRegistry
-from bilans.paths import get_cartes_dir
+from bilans.common.utilitaires_metier import _load_csv_opt, get_dept_name
+from bilans.engine.registre_sections_pdf import SectionRegistry
+from bilans.chemins_projet import get_cartes_dir
 
 _ROOT = Path(__file__).resolve().parents[3]
 
 VENTILATION_SEUIL_JOURS_GLOBAL = 366
 
-DATE_DEB = pd.Timestamp("2025-01-01")
-DATE_FIN = pd.Timestamp("2026-02-05")
-DEPT_CODE = "21"
-
 
 def resolve_ventilation_mode_global(date_deb: pd.Timestamp, date_fin: pd.Timestamp) -> str:
     """Détermine le mode global de ventilation temporelle.
-
-    Dupliqué ici pour éviter une dépendance circulaire avec `global_backend`.
     """
     duree_jours = int((date_fin - date_deb).days)
     if duree_jours < 183:
@@ -53,28 +56,31 @@ def resolve_ventilation_mode_global(date_deb: pd.Timestamp, date_fin: pd.Timesta
     return "trimestrielle"
 
 
-def generate_global_pdf_report(
+def generate_profile_pdf_report(
     out_dir: Path,
     *,
+    profile: dict | None = None,
     date_deb: str | pd.Timestamp | None = None,
     date_fin: str | pd.Timestamp | None = None,
     dept_code: str | None = None,
     ventilation_mode: str = "globale",
     chart_preset: str | None = None,
+    output_filename: str | None = None,
 ) -> None:
-    """Point d’entrée moteur unique pour générer le PDF global."""
-    global DATE_DEB, DATE_FIN, DEPT_CODE
-    if date_deb is not None:
-        DATE_DEB = pd.to_datetime(date_deb)
-    if date_fin is not None:
-        DATE_FIN = pd.to_datetime(date_fin)
-    if dept_code is not None:
-        DEPT_CODE = str(dept_code)
+    """Point d’entrée moteur unique pour générer le PDF d'un profil."""
+    date_deb_ts = pd.to_datetime(date_deb) if date_deb is not None else pd.Timestamp("2025-01-01")
+    date_fin_ts = pd.to_datetime(date_fin) if date_fin is not None else pd.Timestamp("2026-02-05")
+    dept_code_str = str(dept_code) if dept_code is not None else "21"
 
     generate_pdf_report(
         out_dir,
+        profile=profile or {},
+        date_deb=date_deb_ts,
+        date_fin=date_fin_ts,
+        dept_code=dept_code_str,
         ventilation_mode=ventilation_mode,
         chart_preset=chart_preset,
+        output_filename=output_filename,
     )
 
 
@@ -147,129 +153,47 @@ def _chart_pie_compact_legend_kw(
     }
 
 
-def _normalize_dept_typography(name: str) -> str:
-    s = str(name or "").strip()
-    s = s.replace("-d'", " d’").replace("-D'", " D’")
-    s = s.replace("d'", "d’").replace("D'", "D’")
-    return " ".join(s.split())
-
-
-def _build_title_lines_from_cfg(
-    effective_cfg: dict,
-    *,
-    profile_label: str,
-    dept_name_typo: str,
-) -> tuple[list[str], list[str]]:
-    title_cfg = effective_cfg.get("title", {}) if isinstance(effective_cfg, dict) else {}
-    if not isinstance(title_cfg, dict):
-        title_cfg = {}
-
-    line1 = str(
-        title_cfg.get(
-            "line1",
-            "Bilan des activités de police administrative et judiciaire",
-        )
-    ).strip() or "Bilan des activités de police administrative et judiciaire"
-
-    line2_mode = str(title_cfg.get("line2_mode", "none")).strip().lower()
-    if line2_mode == "profile_label":
-        line2 = str(profile_label).strip()
-    elif line2_mode == "fixed":
-        line2 = str(title_cfg.get("line2_fixed", "")).strip()
-    else:
-        line2 = ""
-
-    line3_mode = str(title_cfg.get("line3_mode", "department")).strip().lower()
-    if line3_mode == "fixed":
-        line3 = str(title_cfg.get("line3_fixed", "")).strip()
-    else:
-        line3 = f"Département de la {dept_name_typo}"
-
-    header_lines = [x for x in [line1, line2, line3] if x]
-    cover_line1 = line1.replace("police administrative", "police<br/>administrative", 1)
-    cover_lines = [cover_line1, "", *([line2] if line2 else []), line3]
-    return cover_lines, header_lines
-
-
-def _load_glossary_config(root: Path) -> dict:
-    cfg_candidates = [
-        root / "config" / "presentation" / "glossaire.yaml",
-        root / "ref" / "glossaire.yaml",
-    ]
-    cfg_path = next((p for p in cfg_candidates if p.exists()), None)
-    default_cfg: dict = {
-        "header": {"abbr_label": "Abréviation", "definition_label": "Signification"},
-        "abbreviations": [
-            {"id": "DC", "label": "DC", "definition": "Dossier de contrôle"},
-            {"id": "NATINF", "label": "NATINF", "definition": "Nature d'infraction (nomenclature nationale)"},
-            {"id": "OSCEAN", "label": "OSCEAN", "definition": "Outil de suivi des contrôles en environnement"},
-            {"id": "PA", "label": "PA", "definition": "Procédure administrative"},
-            {"id": "PEJ", "label": "PEJ", "definition": "Procédure d'enquête judiciaire"},
-            {"id": "PVe", "label": "PVe", "definition": "Procès-verbal électronique"},
-        ],
-    }
-    if cfg_path is None:
-        return default_cfg
-    try:
-        import yaml  # type: ignore[import]
-    except ImportError:
-        return default_cfg
-    try:
-        with cfg_path.open("r", encoding="utf-8") as f:
-            data = yaml.safe_load(f) or {}
-    except Exception:
-        return default_cfg
-    if not isinstance(data, dict):
-        return default_cfg
-    header = data.get("header") or {}
-    if not isinstance(header, dict):
-        header = {}
-    abbrs = data.get("abbreviations") or []
-    if not isinstance(abbrs, list):
-        abbrs = []
-    result = {
-        "header": {
-            "abbr_label": header.get("abbr_label", "Abréviation"),
-            "definition_label": header.get("definition_label", "Signification"),
-        },
-        "abbreviations": [],
-    }
-    excluded_ids = {"PNF", "TUB"}
-    for item in abbrs:
-        if not isinstance(item, dict):
-            continue
-        id_ = str(item.get("id", "")).strip()
-        if not id_ or id_.upper() in excluded_ids:
-            continue
-        label = str(item.get("label", id_)).strip() or id_
-        definition = str(item.get("definition", "")).strip()
-        if not definition:
-            continue
-        result["abbreviations"].append({"id": id_, "label": label, "definition": definition})
-    if not result["abbreviations"]:
-        return default_cfg
-    return result
-
-
 def generate_pdf_report(
     out_dir: Path,
+    *,
+    profile: dict,
+    date_deb: pd.Timestamp,
+    date_fin: pd.Timestamp,
+    dept_code: str,
     ventilation_mode: str = "globale",
     chart_preset: str | None = None,
+    output_filename: str | None = None,
 ) -> None:
-    from bilans.common.charts import apply_mpl_style
+    from bilans.common.rendus_graphiques import apply_mpl_style
 
     apply_mpl_style()
-    _generate_pdf_content(out_dir, ventilation_mode, chart_preset=chart_preset)
+    _generate_pdf_content(
+        out_dir,
+        profile=profile,
+        date_deb=date_deb,
+        date_fin=date_fin,
+        dept_code=dept_code,
+        ventilation_mode=ventilation_mode,
+        chart_preset=chart_preset,
+        output_filename=output_filename,
+    )
 
 
 def _generate_pdf_content(
     out_dir: Path,
-    ventilation_mode: str = "globale",
     *,
+    profile: dict,
+    date_deb: pd.Timestamp,
+    date_fin: pd.Timestamp,
+    dept_code: str,
+    ventilation_mode: str = "globale",
     chart_preset: str | None = None,
+    output_filename: str | None = None,
 ) -> None:
     chart_ratios = compute_pdf_ratios(load_chart_display_config(_ROOT, preset=chart_preset))
-    resolved_presentation_cfg = resolve_pdf_presentation_config(_ROOT, scope="global")
+    scope = str((profile or {}).get("presentation_scope", "global")).strip() or "global"
+    profile_id = str((profile or {}).get("id", "")).strip() or None
+    resolved_presentation_cfg = resolve_pdf_presentation_config(_ROOT, scope=scope, profile_id=profile_id)
     presentation_cfg = (
         resolved_presentation_cfg.get("effective", {}) if isinstance(resolved_presentation_cfg, dict) else {}
     )
@@ -303,11 +227,12 @@ def _generate_pdf_content(
     nb_pa = int(pa_resume["nb_pa_global"].iloc[0]) if pa_resume is not None and not pa_resume.empty else 0
     nb_pve = int(pve_resume["nb_pve_global"].iloc[0]) if pve_resume is not None and not pve_resume.empty else 0
 
-    dept_name_typo = _normalize_dept_typography("Côte-d'Or")
+    dept_name_typo = normalize_dept_typography(get_dept_name(dept_code))
     carte_usagers_path = get_cartes_dir() / "carte_global_usagers.png"
     has_carte_usagers = carte_usagers_path.exists()
 
-    pdf_path = out_dir / "bilan_global_Cote_dOr.pdf"
+    resolved_output_name = str(output_filename or "").strip() or "bilan_global.pdf"
+    pdf_path = out_dir / resolved_output_name
     chart_bar_w = chart_ratios["chart_base"]
     legend_fontsize = float(chart_ratios.get("legend_fontsize", 8.0))
     legend_ncol_max = int(chart_ratios.get("legend_ncol_max", 4.0))
@@ -348,9 +273,11 @@ def _generate_pdf_content(
         ("sec5map", "5. Localisation cartographique des contrôles"),
         ("sec6", "6. Annexes"),
     ]
-    sections = resolve_sections_for_toc(presentation_cfg, section_defs)
+    resolved_section_defs = resolve_section_titles(presentation_cfg, section_defs)
+    sections = resolve_sections_for_toc(presentation_cfg, resolved_section_defs)
+    section_title = {sid: title for sid, title in resolved_section_defs}
 
-    cover_title_lines, header_title_lines = _build_title_lines_from_cfg(
+    cover_title_lines, header_title_lines = build_title_lines_from_cfg(
         presentation_cfg, profile_label="", dept_name_typo=dept_name_typo
     )
     report_header = " — ".join(line.strip() for line in header_title_lines if line.strip())
@@ -364,50 +291,28 @@ def _generate_pdf_content(
     avail_w = builder.avail_w
     tmp_dir = builder.tmp_dir
 
-    title_page_cfg = resolve_title_page_config(_ROOT, scope="global")
-    builder.add_title_page(
-        title_lines=cover_title_lines,
-        period_str=f"Période : du {DATE_DEB.date():%d/%m/%Y} au {DATE_FIN.date():%d/%m/%Y}",
-        subtitle="",
-        title_page_config=title_page_cfg,
+    add_standard_cover_and_toc(
+        builder,
+        project_root=_ROOT,
+        scope=scope,
+        cover_title_lines=cover_title_lines,
+        period_str=f"Période : du {date_deb.date():%d/%m/%Y} au {date_fin.date():%d/%m/%Y}",
+        sections_toc=sections,
+        nb_pve=nb_pve,
     )
-    builder.add_toc(sections)
 
-    builder.add_section("notice_methodo", "Notice méthodologique")
-    builder.add_paragraph(
-        "Les données relatives aux contrôles et aux procédures présentées dans ce document "
-        "sont extraites de la base du logiciel OSCEAN, outil de rapportage des activités "
-        "de police administrative et judiciaire des agents de l'OFB."
+    add_standard_notice_methodology(
+        builder,
+        period_sentence=(
+            f"Pour ce bilan, les extractions portent sur la période du {date_deb.date():%d/%m/%Y} "
+            f"au {date_fin.date():%d/%m/%Y}."
+        ),
+        effective_cfg=presentation_cfg,
     )
-    builder.add_paragraph(
-        f"Pour ce bilan, les extractions portent sur la période du {DATE_DEB.date():%d/%m/%Y} "
-        f"au {DATE_FIN.date():%d/%m/%Y}."
-    )
-    builder.add_paragraph(
-        "Sauf mention contraire, l'unité de mesure du nombre de contrôles utilisée dans "
-        "la suite du document est la localisation de contrôle : une unité correspond à "
-        "une localisation renseignée."
-    )
-    builder.add_paragraph(
-        "Il convient de distinguer l'activité de police administrative et l'activité de "
-        "police judiciaire. Dans ce document, le terme « contrôle » renvoie exclusivement "
-        "à la police administrative. Le terme « procédure judiciaire » désigne l'activité "
-        "de police judiciaire, qui ne se limite pas aux infractions relevées lors des "
-        "contrôles et peut aussi inclure des saisines extérieures (instruction parquet, "
-        "signalements, plaintes, etc.)."
-    )
-    builder.add_paragraph(
-        "Le total des contrôles par type d'usager peut être supérieur au total des "
-        "contrôles, car une même fiche de contrôle peut renseigner plusieurs types "
-        "d'usagers (contrôle multi-usager). L'analyse par type d'usager comptabilise "
-        "chaque type renseigné afin de refléter au mieux les usagers effectivement "
-        "concernés par l'action de contrôle."
-    )
-    builder.add_page_break()
 
     def _render_sec1() -> None:
         if is_section_enabled(presentation_cfg, "sec1", True):
-            builder.add_section("sec1", "1. Chiffres clés")
+            builder.add_section("sec1", section_title["sec1"])
         kf: list[tuple[str, str]] = []
         if nb_ctrl > 0:
             kf.append((str(nb_ctrl), "Localisations de contrôle"))
@@ -450,7 +355,7 @@ def _generate_pdf_content(
             )
             builder.add_section(
                 "sec21",
-                "2.1. Indicateurs de la période",
+                section_title["sec21"],
                 toc_level=1,
             )
             builder.add_paragraph(
@@ -558,7 +463,7 @@ def _generate_pdf_content(
                 )
                 builder.add_image(Path(stacked_proc_path), width_ratio=chart_bar_w)
 
-            period_days = int((DATE_FIN - DATE_DEB).days)
+            period_days = int((date_fin - date_deb).days)
             line_source = agg_periode
             line_labels = period_labels
             if period_days < 730:
@@ -594,7 +499,7 @@ def _generate_pdf_content(
         elif is_section_enabled(presentation_cfg, "sec21", True) and show_placeholder:
             builder.add_section(
                 "sec21",
-                "2.1. Indicateurs de la période",
+                section_title["sec21"],
                 toc_level=1,
             )
             builder.add_paragraph("Aucun indicateur disponible sur la période.")
@@ -604,7 +509,7 @@ def _generate_pdf_content(
     top_registry.register(
         "sec2_chap",
         lambda _ctx: (
-            builder.add_section("sec2_chap", "2. Contrôles")
+            builder.add_section("sec2_chap", section_title["sec2_chap"])
             if is_section_enabled(presentation_cfg, "sec2_chap", True)
             else None
         ),
@@ -617,7 +522,7 @@ def _generate_pdf_content(
             return
         builder.add_section(
             "sec22dom",
-            "2.2. Localisations de contrôle par domaine",
+            section_title["sec22dom"],
             toc_level=1,
         )
         if agg_domaine is not None and not agg_domaine.empty:
@@ -661,7 +566,7 @@ def _generate_pdf_content(
             return
         builder.add_section(
             "sec22theme",
-            "2.3. Nombre de contrôles par thèmes",
+            section_title["sec22theme"],
             toc_level=1,
         )
         if agg_theme is not None and not agg_theme.empty:
@@ -684,7 +589,7 @@ def _generate_pdf_content(
             return
         builder.add_section(
             "sec22res",
-            "2.4. Résultats des contrôles",
+            section_title["sec22res"],
             toc_level=1,
         )
         use_detail = tab_resultats_controles is not None and not tab_resultats_controles.empty
@@ -758,7 +663,7 @@ def _generate_pdf_content(
     sec2_registry.render_many(sec2_order, {})
 
     if is_section_enabled(presentation_cfg, "sec3", True):
-        builder.add_section("sec3", "3. Procédures (PEJ, PA, PVe)", start_on_new_page=True)
+        builder.add_section("sec3", section_title["sec3"], start_on_new_page=True)
         builder.add_paragraph(
             f"Sur la période : {nb_pej} procédure(s) d'enquête judiciaire (PEJ), "
             f"{nb_pa} procédure(s) administrative(s) (PA), {nb_pve} procès-verbal(aux) électronique(s) (PVe).",
@@ -770,7 +675,7 @@ def _generate_pdf_content(
             return
         builder.add_section(
             "sec31",
-            "3.1 Procès-verbaux électroniques (PVe)",
+            section_title["sec31"],
             level=2,
             toc_level=1,
         )
@@ -804,7 +709,7 @@ def _generate_pdf_content(
             return
         builder.add_section(
             "sec32",
-            "3.2 Procédures d’enquête judiciaire (PEJ)",
+            section_title["sec32"],
             level=2,
             toc_level=1,
         )
@@ -832,7 +737,7 @@ def _generate_pdf_content(
             return
         builder.add_section(
             "sec33",
-            "3.3 Procédures administratives (PA)",
+            section_title["sec33"],
             level=2,
             toc_level=1,
         )
@@ -869,7 +774,7 @@ def _generate_pdf_content(
         if is_section_enabled(presentation_cfg, "sec4", True):
             builder.add_section(
                 "sec4",
-                "4. Activité de contrôle par type d’usager",
+                section_title["sec4"],
                 start_on_new_page=True,
             )
         if is_section_enabled(presentation_cfg, "sec4", True) and (agg_usager is None or agg_usager.empty):
@@ -1078,7 +983,7 @@ def _generate_pdf_content(
         if is_section_enabled(presentation_cfg, "sec5map", True):
             builder.add_section(
                 "sec5map",
-                "5. Localisation cartographique des contrôles",
+                section_title["sec5map"],
                 start_on_new_page=True,
             )
         show_map_block = is_block_enabled(presentation_cfg, "sec5.show_map", True)
@@ -1098,57 +1003,32 @@ def _generate_pdf_content(
     def _render_sec6() -> None:
         if not is_section_enabled(presentation_cfg, "sec6", True):
             return
-        builder.add_section("sec6", "6. Annexes", start_on_new_page=True)
-        methodo = (
-            f"<b>Période :</b> du {DATE_DEB.date():%d/%m/%Y} au {DATE_FIN.date():%d/%m/%Y}.<br/>"
-            f"<b>Périmètre :</b> département de la {dept_name_typo} (21).<br/>"
-            "<b>Sources :</b> OSCEAN (points de contrôle, PEJ, PA) et PVe OFB.<br/>"
-            f"<b>Ventilation temporelle :</b> {resolve_ventilation_mode_global(DATE_DEB, DATE_FIN)} "
-            f"(seuil {VENTILATION_SEUIL_JOURS_GLOBAL} jours en mode auto).<br/>"
-            "Aucun filtre sur domaine ou thème ; tous NATINF pour PEJ et PVe.<br/>"
-            "<b>Types d’usagers :</b> issus du champ OSCEAN <i>type_usager</i> des points de contrôle ; "
-            "catégorie « dominante » par contrôle via le mapping ref/types_usagers.csv."
+        builder.add_section("sec6", section_title["sec6"], start_on_new_page=True)
+        methodo = build_sec6_methodology_html(
+            effective_cfg=presentation_cfg,
+            period_str=f"du {date_deb.date():%d/%m/%Y} au {date_fin.date():%d/%m/%Y}",
+            dept_name=f"de la {dept_name_typo}",
+            dept_code=str(dept_code),
+            profile_label="Global",
+            sources_text="OSCEAN (points de contrôle, PEJ, PA) et PVe OFB",
+            ventilation_mode=resolve_ventilation_mode_global(date_deb, date_fin),
+            ventilation_threshold_days=VENTILATION_SEUIL_JOURS_GLOBAL,
+            include_filters_line=True,
+            include_types_usagers_line=True,
         )
         if is_block_enabled(presentation_cfg, "sec6.show_methodology", True):
             builder.add_methodology(methodo)
 
-        gloss_cfg = _load_glossary_config(_ROOT)
-        header_cfg = gloss_cfg.get("header", {}) or {}
-        abbr_list = gloss_cfg.get("abbreviations", []) or []
-        abbr_by_id: dict[str, dict] = {}
-        for item in abbr_list:
-            if not isinstance(item, dict):
-                continue
-            id_ = str(item.get("id", "")).strip()
-            if not id_:
-                continue
-            abbr_by_id[id_] = item
+        gloss_cfg = load_glossary_config(_ROOT)
+        glossaire_rows = build_filtered_glossary_rows(
+            gloss_cfg=gloss_cfg,
+            nb_ctrl=nb_ctrl,
+            nb_pej=nb_pej,
+            nb_pa=nb_pa,
+            nb_pve=nb_pve,
+        )
 
-        used_ids: list[str] = []
-
-        def _add_if_available(abbr_id: str, condition: bool) -> None:
-            if condition and abbr_id in abbr_by_id and abbr_id not in used_ids:
-                used_ids.append(abbr_id)
-
-        _add_if_available("OSCEAN", True)
-        _add_if_available("DC", nb_ctrl > 0)
-        _add_if_available("NATINF", nb_pve > 0 or nb_pej > 0)
-        _add_if_available("PA", nb_pa > 0)
-        _add_if_available("PEJ", nb_pej > 0)
-        _add_if_available("PVe", nb_pve > 0)
-
-        if is_block_enabled(presentation_cfg, "sec6.show_glossary", True) and used_ids:
-            glossaire_rows: list[list[str]] = [
-                [
-                    str(header_cfg.get("abbr_label", "Abréviation")),
-                    str(header_cfg.get("definition_label", "Signification")),
-                ]
-            ]
-            for abbr_id in used_ids:
-                item = abbr_by_id[abbr_id]
-                glossaire_rows.append(
-                    [str(item.get("label", abbr_id)), str(item.get("definition", ""))]
-                )
+        if is_block_enabled(presentation_cfg, "sec6.show_glossary", True) and glossaire_rows:
             builder.add_glossary(
                 glossaire_rows,
                 col_widths=[avail_w * 0.25, avail_w * 0.75],

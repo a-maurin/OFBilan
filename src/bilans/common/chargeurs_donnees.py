@@ -8,7 +8,7 @@ import geopandas as gpd
 import pandas as pd
 import re
 
-from bilans.common.utils import filtre_periode
+from bilans.common.utilitaires_metier import filtre_periode
 
 logger = logging.getLogger(__name__)
 

@@ -12,7 +12,7 @@ import logging
 from pathlib import Path
 from typing import List, Optional
 
-from bilans.paths import PROJECT_ROOT, get_cartes_dir
+from bilans.chemins_projet import PROJECT_ROOT, get_cartes_dir
 
 logger = logging.getLogger(__name__)
 

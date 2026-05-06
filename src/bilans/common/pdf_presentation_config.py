@@ -40,6 +40,65 @@ DEFAULT_PDF_PRESENTATION_CONFIG: dict[str, Any] = {
             "order": ["sec1", "sec2", "sec3", "sec4", "sec5", "sec6"],
             "enabled": {},
         },
+        "notice_methodology": {
+            "title": "Notice méthodologique",
+            "data_source_paragraph": (
+                "Les données relatives aux contrôles et aux procédures présentées dans ce document "
+                "sont extraites de la base du logiciel OSCEAN, outil de rapportage des activités "
+                "de police administrative et judiciaire des agents de l'OFB."
+            ),
+            "unit_measure_paragraph": (
+                "Sauf mention contraire, l'unité de mesure du nombre de contrôles utilisée dans "
+                "la suite du document est la localisation de contrôle : une unité correspond à "
+                "une localisation renseignée."
+            ),
+            "pa_pj_distinction_paragraph": (
+                "Il convient de distinguer l'activité de police administrative et l'activité de "
+                "police judiciaire. Dans ce document, le terme « contrôle » renvoie exclusivement "
+                "à la police administrative. Le terme « procédure judiciaire » désigne l'activité "
+                "de police judiciaire, qui ne se limite pas aux infractions relevées lors des "
+                "contrôles et peut aussi inclure des saisines extérieures (instruction parquet, "
+                "signalements, plaintes, etc.)."
+            ),
+            "multi_usager_paragraph": (
+                "Le total des contrôles par type d'usager peut être supérieur au total des "
+                "contrôles, car une même fiche de contrôle peut renseigner plusieurs types "
+                "d'usagers (contrôle multi-usager). L'analyse par type d'usager comptabilise "
+                "chaque type renseigné afin de refléter au mieux les usagers effectivement "
+                "concernés par l'action de contrôle."
+            ),
+        },
+        "sec6_methodology": {
+            "line_period": "<b>Période d'analyse :</b> {period_str}.",
+            "line_scope": "<b>Périmètre :</b> département {dept_name} ({dept_code}).",
+            "line_profile": "<b>Profil :</b> {profile_label}.",
+            "line_sources": "<b>Sources :</b> {sources_text}.",
+            "line_ventilation": (
+                "<b>Ventilation temporelle :</b> {ventilation_mode} "
+                "(seuil {ventilation_threshold_days} jours en mode auto)."
+            ),
+            "line_filters": "Aucun filtre sur domaine ou thème ; tous NATINF pour PEJ et PVe.",
+            "line_types_usagers": (
+                "<b>Types d’usagers :</b> issus du champ OSCEAN <i>type_usager</i> des points de contrôle ; "
+                "catégorie « dominante » par contrôle via le mapping ref/types_usagers.csv."
+            ),
+            "zone_line_pnf_only": (
+                "<b>Analyse par zones :</b> bilan restreint au périmètre du PNF ; "
+                "la lecture spatiale distingue le coeur de parc de l'aire d'adhésion hors coeur de parc."
+            ),
+            "zone_line_pnf_and_tub": (
+                "<b>Analyse par zones :</b> la zone « Département » inclut l'ensemble des contrôles, "
+                "puis les zones PNF et TUB sont détaillées séparément."
+            ),
+            "zone_line_pnf_only_department": (
+                "<b>Analyse par zones :</b> la zone « Département » inclut l'ensemble des contrôles, "
+                "puis la zone PNF est détaillée séparément."
+            ),
+            "zone_line_tub_only": (
+                "<b>Analyse par zones :</b> la zone « Département » inclut l'ensemble des contrôles, "
+                "puis la zone TUB est détaillée séparément."
+            ),
+        },
         "blocks": {},
     },
     "scopes": {
@@ -169,6 +228,28 @@ def resolve_title_page_config(
     return _deep_merge(default_title_page, title_page)
 
 
+def resolve_notice_methodology_config(effective_cfg: dict[str, Any]) -> dict[str, Any]:
+    """Retourne la configuration effective de la notice méthodologique."""
+    default_notice = DEFAULT_PDF_PRESENTATION_CONFIG["defaults"]["notice_methodology"]
+    if not isinstance(effective_cfg, dict):
+        return deepcopy(default_notice)
+    notice = effective_cfg.get("notice_methodology", {})
+    if not isinstance(notice, dict):
+        return deepcopy(default_notice)
+    return _deep_merge(default_notice, notice)
+
+
+def resolve_sec6_methodology_config(effective_cfg: dict[str, Any]) -> dict[str, Any]:
+    """Retourne la configuration effective de la méthodologie d'annexe (sec6)."""
+    default_cfg = DEFAULT_PDF_PRESENTATION_CONFIG["defaults"]["sec6_methodology"]
+    if not isinstance(effective_cfg, dict):
+        return deepcopy(default_cfg)
+    cfg = effective_cfg.get("sec6_methodology", {})
+    if not isinstance(cfg, dict):
+        return deepcopy(default_cfg)
+    return _deep_merge(default_cfg, cfg)
+
+
 def get_effective_pdf_presentation(
     root: Path,
     *,
@@ -254,6 +335,30 @@ def resolve_sections_for_toc(
     return ordered
 
 
+def resolve_section_titles(
+    effective_cfg: dict[str, Any],
+    section_defs: list[tuple[str, str]],
+) -> list[tuple[str, str]]:
+    """
+    Surcharge les libellés de sections via effective.sections.titles.<section_id>.
+
+    Ne modifie pas l'ordre : l'ordre reste géré par `resolve_sections_for_toc`.
+    """
+    sections_cfg = effective_cfg.get("sections", {})
+    if not isinstance(sections_cfg, dict):
+        return section_defs
+    titles_cfg = sections_cfg.get("titles", {})
+    if not isinstance(titles_cfg, dict):
+        return section_defs
+
+    out: list[tuple[str, str]] = []
+    for sid, default_title in section_defs:
+        custom = titles_cfg.get(sid, default_title)
+        title = str(custom).strip() if custom is not None else ""
+        out.append((sid, title or default_title))
+    return out
+
+
 def should_show_placeholder(
     behavior_cfg: dict[str, Any] | None,
 ) -> bool:
@@ -267,4 +372,67 @@ def should_show_placeholder(
         return False
     policy = str(behavior_cfg.get("missing_data_policy", "hide_silently")).strip().lower()
     return policy == "show_placeholder"
+
+
+def normalize_dept_typography(name: str) -> str:
+    """Harmonise la typographie des noms de département (apostrophe/hyphens)."""
+    s = str(name or "").strip()
+    s = s.replace("-d'", " d’").replace("-D'", " D’")
+    s = s.replace("d'", "d’").replace("D'", "D’")
+    return " ".join(s.split())
+
+
+def build_title_lines_from_cfg(
+    effective_cfg: dict[str, Any],
+    *,
+    profile_label: str,
+    dept_name_typo: str,
+) -> tuple[list[str], list[str]]:
+    """Construit les lignes de titre de garde + en-tête depuis la config effective."""
+    title_cfg = effective_cfg.get("title", {}) if isinstance(effective_cfg, dict) else {}
+    if not isinstance(title_cfg, dict):
+        title_cfg = {}
+
+    line1 = str(
+        title_cfg.get(
+            "line1",
+            "Bilan des activités de police administrative et judiciaire",
+        )
+    ).strip() or "Bilan des activités de police administrative et judiciaire"
+
+    line2_mode = str(title_cfg.get("line2_mode", "profile_label")).strip().lower()
+    if line2_mode == "none":
+        line2 = ""
+    elif line2_mode == "fixed":
+        line2 = str(title_cfg.get("line2_fixed", "")).strip()
+    else:
+        line2 = str(profile_label).strip()
+
+    line3_mode = str(title_cfg.get("line3_mode", "department")).strip().lower()
+    if line3_mode == "fixed":
+        line3 = str(title_cfg.get("line3_fixed", "")).strip()
+    else:
+        line3 = f"Département de la {dept_name_typo}"
+
+    header_lines = [x for x in [line1, line2, line3] if x]
+    cover_lines = [line1, "", *([line2] if line2 else []), line3]
+    return cover_lines, header_lines
+
+
+def resolve_cover_subtitle(
+    title_page_cfg: dict[str, Any],
+    *,
+    nb_pve: int = 0,
+) -> str:
+    """Résout le sous-titre de page de garde selon la config YAML."""
+    mode = str(title_page_cfg.get("subtitle_mode", "none")).strip().lower()
+    if mode == "fixed":
+        return str(title_page_cfg.get("subtitle_fixed", "")).strip()
+    if mode == "sources_auto":
+        base = str(title_page_cfg.get("subtitle_sources_base", "Sources des données : OFB/OSCEAN")).strip()
+        suffix = str(title_page_cfg.get("subtitle_sources_pve_suffix", " – MININT/AGC-PVe")).strip()
+        if nb_pve > 0 and suffix:
+            return f"{base}{suffix}"
+        return base
+    return ""
 

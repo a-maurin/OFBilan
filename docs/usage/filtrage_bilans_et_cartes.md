@@ -2,7 +2,7 @@
 
 Ce document résume les grandes catégories de filtres appliquées :
 
-- côté **bilans thématiques** (`src/bilans/bilan_thematique/bilan_thematique_engine.py`),
+- côté **moteur profils** (`src/bilans/engine/profile_engine.py`),
 - côté **cartes** (`scripts/generateur_de_cartes/production_cartographique.py`).
 
 L’objectif est de garantir une lecture cohérente entre les tableaux / PDF et les cartes.

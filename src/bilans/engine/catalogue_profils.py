@@ -1,27 +1,23 @@
 """
-Liste et résolution des profils bilans (global + thématiques).
+Liste et résolution des profils bilans.
 
 Source de vérité : fichiers YAML dans config/profils_bilan/ et ref_themes_ctrl.
 """
 from __future__ import annotations
 
-from bilans.common.loaders import load_ref_themes_ctrl
-from bilans.paths import PROJECT_ROOT
+from bilans.common.chargeurs_donnees import load_ref_themes_ctrl
+from bilans.chemins_projet import PROJECT_ROOT
 
-_HIDDEN_PROFILES: frozenset[str] = frozenset({"pnf_foret"})
+_HIDDEN_PROFILES: frozenset[str] = frozenset({"pnf_foret", "_defaults"})
 
 
 def list_profiles() -> list[str]:
     """
     Identifiants de profils disponibles, avec ordre console :
-    global, chasse, agrainage, types_usager, types_usager_cible, puis alphabétique, hors_theme en dernier.
+    chasse, agrainage, types_usager, types_usager_cible, puis alphabétique, hors_theme en dernier.
     """
     profils_dir = PROJECT_ROOT / "config" / "profils_bilan"
     id_to_label: dict[str, str] = {}
-
-    global_yaml = profils_dir / "global.yaml"
-    if global_yaml.exists():
-        id_to_label["global"] = "Bilan global"
 
     themes = load_ref_themes_ctrl(PROJECT_ROOT)
     if themes:
@@ -31,7 +27,7 @@ def list_profiles() -> list[str]:
                 continue
             label = str(t.get("label", pid)).strip() or pid
             id_to_label[pid] = label
-    elif profils_dir.exists():
+    if profils_dir.exists():
         for p in profils_dir.glob("*.yaml"):
             pid = p.stem
             if pid in _HIDDEN_PROFILES:
@@ -48,7 +44,6 @@ def list_profiles() -> list[str]:
             id_to_label[types_usager_cible_id] = "Types d'usagers – ciblé"
 
     priority_order: dict[str, int] = {
-        "global": -1,
         "chasse": 0,
         "agrainage": 1,
         "types_usager": 2,

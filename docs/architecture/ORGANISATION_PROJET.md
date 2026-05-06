@@ -7,7 +7,7 @@ sans refonte du moteur metier.
 ## Sources de verite
 
 - `scripts/` : wrappers d'execution (Windows/Linux).
-- `src/bilans/` : code applicatif principal (global, thematique, cartographie, common).
+- `src/bilans/` : code applicatif principal (moteur profilé, cartographie, common).
 - `config/` : configuration de pilotage versionnee (profils, options metier, presentation).
 - `ref/` : referentiels versionnes (glossaires, assets OFB, tables de correspondance, donnees de reference).
 - `data/sources/` : donnees locales d'entree non versionnees.
