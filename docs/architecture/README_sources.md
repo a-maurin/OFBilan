@@ -19,6 +19,6 @@ Ce document résume les sources exploitées par le programme.
 
 ## Références techniques
 
-- chargement des données : `src/bilans/common/loaders.py`
-- utilitaires de transformation : `src/bilans/common/utils.py`
+- chargement des données : `src/bilans/common/chargeurs_donnees.py`
+- utilitaires de transformation : `src/bilans/common/utilitaires_metier.py`
 - schéma synthétique : `docs/architecture/data_schema.md`

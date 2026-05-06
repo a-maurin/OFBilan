@@ -1,3 +1,4 @@
-# Ce fichier vide permet de versionner le dossier `config/profils_bilan/`
-# dans Git avant le déplacement effectif des profils YAML.
+# Ce fichier documente le dossier `config/profils_bilan/`.
+# Les profils YAML sont désormais la source de vérité pour le pilotage
+# du moteur (pipeline, capacités, adapters d'agrégation et PDF).
 
