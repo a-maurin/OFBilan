@@ -33,6 +33,9 @@ def _pick_mpl_font() -> str:
 CHART_FIG_WIDTH = 7.2
 # Camemberts : base harmonisée pour tous les camemberts PDF.
 CHART_FIG_HEIGHT_PIE_COMPACT = 5.0
+# Références typographiques : "Résultats des contrôles par type d'usager".
+CHART_TITLE_FONT_SIZE_REF = 11
+CHART_LEGEND_FONT_SIZE_REF = 8
 # Hauteur des barres / barres groupées-empilées : +50 % vs ancienne base pour lisibilité PDF.
 CHART_FIG_HEIGHT_BAR = 3.5 * 1.5
 CHART_FIG_HEIGHT_WITH_LEGEND = 4.15 * 1.5
@@ -71,9 +74,12 @@ def _tight_with_legend_space(fig, *, bottom: float = 0.20, top: float = 0.92) ->
     fig.tight_layout(rect=(0.04, bottom, 0.96, top))
 
 
-def save_chart(fig, tmp_dir: Path, name: str, *, dpi: int = 150) -> str:
+def save_chart(fig, tmp_dir: Path, name: str, *, dpi: int = 150, tight: bool = True) -> str:
     path = str(tmp_dir / name)
-    fig.savefig(path, dpi=dpi, bbox_inches="tight", facecolor="white")
+    save_kw = {"dpi": dpi, "facecolor": "white"}
+    if tight:
+        save_kw["bbox_inches"] = "tight"
+    fig.savefig(path, **save_kw)
     plt.close(fig)
     return path
 
@@ -92,14 +98,7 @@ def chart_pie(
     apply_mpl_style()
     labels = list(data.keys())
     values = list(data.values())
-    if figsize is not None:
-        fig_w, fig_h = (figsize[0] * figure_scale, figsize[1] * figure_scale)
-    else:
-        fig_w = CHART_FIG_WIDTH * figure_scale
-        # Modèle harmonisé : tous les camemberts utilisent la même hauteur
-        # pour éviter les disparités visuelles d'une section à l'autre.
-        fig_h = CHART_FIG_HEIGHT_PIE_COMPACT * figure_scale
-    fig, ax = plt.subplots(figsize=(fig_w, fig_h))
+    fig_w = CHART_FIG_WIDTH * figure_scale if figsize is None else (figsize[0] * figure_scale)
     # Palette : on force une couleur rouge douce (COLOR_CHART_4) pour les parts
     # correspondant aux infractions / non-conformes, les autres utilisent la
     # palette standard CHART_PIE_COLORS.
@@ -121,43 +120,61 @@ def chart_pie(
         ]
     else:
         legend_labels = [f"{lb} : {v} (0 %)" for lb, v in zip(labels, values)]
-    wedges, _ = ax.pie(
-        values, startangle=90, colors=colors_pie
-    )
-    ax.set_aspect("equal")
-    # Modèle légende harmonisé : aligné sur le rendu de référence
-    # "Résultats des contrôles" (compact, lisible, multi-colonnes).
     if legend_ncol is not None:
         ncol = max(1, int(legend_ncol))
     else:
         ncol = min(len(legend_labels), 4) if legend_labels else 1
-    leg_fs = 6 if legend_fontsize is None else float(legend_fontsize)
-    legend_kw: dict = {
-        "loc": "upper center",
-        "bbox_to_anchor": (0.5, -0.06),
-        "ncol": ncol,
-        "fontsize": leg_fs,
-        "frameon": False,
-        "handlelength": 1.0,
-        "handletextpad": 0.45,
-        "columnspacing": 0.85,
-        "borderpad": 0.3,
-    }
-    ax.legend(wedges, legend_labels, **legend_kw)
-    ax.set_title(title, fontsize=12, fontweight="bold", color=COLOR_PRIMARY, pad=10)
-    n_lbl = len(legend_labels)
-    rows = math.ceil(n_lbl / ncol) if ncol else 1
-    if rows <= 1:
-        bottom = 0.13
-    elif rows == 2:
-        bottom = 0.17
-    elif rows <= 4:
-        bottom = 0.21
-    else:
-        bottom = 0.24
-    _tight_with_legend_space(fig, bottom=bottom, top=0.90)
+    # On conserve la taille de police de référence ; on n'abaisse pas la police
+    # quand la légende est dense (on augmente plutôt le nombre de lignes).
+    leg_fs = CHART_LEGEND_FONT_SIZE_REF if legend_fontsize is None else float(legend_fontsize)
+    # Gabarit robuste : zone camembert fixe et zone légende variable.
+    # Cela garantit un disque de taille identique, tandis que la hauteur
+    # de l'image s'adapte au nombre de lignes de légende.
+    rows = math.ceil(len(legend_labels) / ncol) if legend_labels else 1
+    pie_h_in = CHART_FIG_HEIGHT_PIE_COMPACT * figure_scale
+    legend_row_h_in = 0.30 * (leg_fs / CHART_LEGEND_FONT_SIZE_REF)
+    legend_h_in = 0.44 + rows * legend_row_h_in
+    top_pad_in = 0.28
+    gap_in = 0.08
+    bottom_pad_in = 0.14
+    fig_h = pie_h_in + legend_h_in + top_pad_in + gap_in + bottom_pad_in
+
+    fig = plt.figure(figsize=(fig_w, fig_h))
+    ax = fig.add_axes(
+        [
+            0.12,
+            (bottom_pad_in + legend_h_in + gap_in) / fig_h,
+            0.76,
+            pie_h_in / fig_h,
+        ]
+    )
+    wedges, _ = ax.pie(values, startangle=90, colors=colors_pie)
+    ax.set_aspect("equal")
+    ax.set_title(
+        title,
+        fontsize=CHART_TITLE_FONT_SIZE_REF,
+        fontweight="bold",
+        color=COLOR_PRIMARY,
+        pad=10,
+    )
+
+    ax_leg = fig.add_axes([0.06, bottom_pad_in / fig_h, 0.88, legend_h_in / fig_h])
+    ax_leg.axis("off")
+    ax_leg.legend(
+        wedges,
+        legend_labels,
+        loc="center",
+        ncol=ncol,
+        fontsize=leg_fs,
+        frameon=False,
+        handlelength=1.0,
+        handletextpad=0.45,
+        columnspacing=0.85,
+        borderpad=0.2,
+    )
     # DPI un peu plus élevé : le PDF insère le camembert plus étroit que les barres.
-    return save_chart(fig, tmp_dir, name, dpi=165)
+    # Pas de "tight bbox" : on conserve le gabarit de bloc calculé.
+    return save_chart(fig, tmp_dir, name, dpi=165, tight=False)
 
 
 def chart_bar(

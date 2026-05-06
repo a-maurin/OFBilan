@@ -139,14 +139,11 @@ def _chart_pie_compact_legend_kw(
     legend_fontsize: float,
     legend_ncol_max: int,
 ) -> dict[str, float | int]:
-    if n_categories <= 4:
-        return {
-            "legend_fontsize": legend_fontsize,
-            "legend_ncol": min(n_categories, legend_ncol_max),
-        }
+    # Colonnes fixes (pilotées par YAML) ; seules les lignes varient.
+    ncol = min(n_categories, max(1, legend_ncol_max))
     return {
         "legend_fontsize": legend_fontsize,
-        "legend_ncol": min(n_categories, max(2, min(legend_ncol_max, 3))),
+        "legend_ncol": max(1, ncol),
     }
 
 
