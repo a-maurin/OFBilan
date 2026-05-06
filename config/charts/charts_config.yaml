@@ -9,6 +9,19 @@
 #     activite_usagers_resultats_bar_scale: 0.55
 #     global_resultats_pie_scale: 0.90
 #     global_usagers_pie_scale: 0.90
+#     global_domaine_pie_scale: 0.90
+#     global_theme_pie_scale: 0.90
+#     global_uniform_pie_scale: 0.90
+#     global_uniform_pie_min_ratio: 0.60
+#     global_uniform_pie_max_ratio: 0.78
+#     global_type_usager_bar_scale: 1.15
+#     thematique_uniform_pie_scale: 0.90
+#     thematique_uniform_pie_min_ratio: 0.60
+#     thematique_uniform_pie_max_ratio: 0.78
+#     thematique_uniform_chart_scale: 0.90
+#     figure_scale: 0.95
+#     legend_fontsize: 7
+#     legend_ncol_max: 3
 # - STANDARD :
 #     pie_width_ratio_base: 0.34
 #     chart_width_ratio_base: 0.72
@@ -16,6 +29,19 @@
 #     activite_usagers_resultats_bar_scale: 1.20
 #     global_resultats_pie_scale: 1.00
 #     global_usagers_pie_scale: 1.00
+#     global_domaine_pie_scale: 1.00
+#     global_theme_pie_scale: 1.00
+#     global_uniform_pie_scale: 1.00
+#     global_uniform_pie_min_ratio: 0.70
+#     global_uniform_pie_max_ratio: 0.82
+#     global_type_usager_bar_scale: 1.25
+#     thematique_uniform_pie_scale: 1.00
+#     thematique_uniform_pie_min_ratio: 0.70
+#     thematique_uniform_pie_max_ratio: 0.82
+#     thematique_uniform_chart_scale: 1.00
+#     figure_scale: 1.00
+#     legend_fontsize: 8
+#     legend_ncol_max: 4
 # - LARGE :
 #     pie_width_ratio_base: 0.40
 #     chart_width_ratio_base: 0.85
@@ -23,8 +49,73 @@
 #     activite_usagers_resultats_bar_scale: 0.90
 #     global_resultats_pie_scale: 1.10
 #     global_usagers_pie_scale: 1.10
+#     global_domaine_pie_scale: 1.10
+#     global_theme_pie_scale: 1.10
+#     global_uniform_pie_scale: 1.10
+#     global_uniform_pie_min_ratio: 0.74
+#     global_uniform_pie_max_ratio: 0.90
+#     global_type_usager_bar_scale: 1.35
+#     thematique_uniform_pie_scale: 1.10
+#     thematique_uniform_pie_min_ratio: 0.74
+#     thematique_uniform_pie_max_ratio: 0.90
+#     thematique_uniform_chart_scale: 1.10
+#     figure_scale: 1.08
+#     legend_fontsize: 9
+#     legend_ncol_max: 4
 #
 # Profil actif actuel : STANDARD
+#
+# --------------------------------------------------------------------
+# Ajustements visuels (presets rapides sans modification du code)
+# --------------------------------------------------------------------
+# Copier-coller l'un des blocs ci-dessous dans `pdf:` pour l'activer.
+#
+# PRESET: strict_uniform
+# Objectif: rendu homogène entre sections (camemberts de taille proche).
+# pdf:
+#   pie_width_ratio_base: 0.36
+#   chart_width_ratio_base: 0.72
+#   activite_usagers_controles_pie_scale: 1.95
+#   activite_usagers_resultats_bar_scale: 1.00
+#   global_resultats_pie_scale: 1.95
+#   global_usagers_pie_scale: 1.95
+#   global_domaine_pie_scale: 1.95
+#   global_theme_pie_scale: 1.95
+#   global_uniform_pie_scale: 1.95
+#   global_uniform_pie_min_ratio: 0.70
+#   global_uniform_pie_max_ratio: 0.82
+#   global_type_usager_bar_scale: 1.25
+#   thematique_uniform_pie_scale: 1.95
+#   thematique_uniform_pie_min_ratio: 0.70
+#   thematique_uniform_pie_max_ratio: 0.82
+#   thematique_uniform_chart_scale: 1.00
+#   figure_scale: 1.00
+#   legend_fontsize: 8
+#   legend_ncol_max: 3
+#
+# PRESET: large_pies
+# Objectif: privilégier des camemberts plus grands (lecture à l'écran).
+# pdf:
+#   pie_width_ratio_base: 0.40
+#   chart_width_ratio_base: 0.72
+#   activite_usagers_controles_pie_scale: 2.05
+#   activite_usagers_resultats_bar_scale: 1.00
+#   global_resultats_pie_scale: 2.05
+#   global_usagers_pie_scale: 2.05
+#   global_domaine_pie_scale: 2.05
+#   global_theme_pie_scale: 2.05
+#   global_uniform_pie_scale: 2.05
+#   global_uniform_pie_min_ratio: 0.74
+#   global_uniform_pie_max_ratio: 0.90
+#   global_type_usager_bar_scale: 1.35
+#   thematique_uniform_pie_scale: 2.05
+#   thematique_uniform_pie_min_ratio: 0.74
+#   thematique_uniform_pie_max_ratio: 0.90
+#   thematique_uniform_chart_scale: 1.05
+#   figure_scale: 1.06
+#   legend_fontsize: 9
+#   legend_ncol_max: 3
+#
 pdf:
   # Ratios de base utilisés dans les bilans (thématique + global).
   pie_width_ratio_base: 0.34
@@ -36,5 +127,30 @@ pdf:
   activite_usagers_resultats_bar_scale: 1.20
 
   # Bilan global.
-  global_resultats_pie_scale: 1.0
-  global_usagers_pie_scale: 1.0
+  global_resultats_pie_scale: 1.45
+  global_usagers_pie_scale: 1.45
+  global_domaine_pie_scale: 1.45
+  global_theme_pie_scale: 1.45
+  # Uniformise la taille de base des camemberts du bilan global.
+  # Ce paramètre est prioritaire pour les 3 graphiques principaux.
+  global_uniform_pie_scale: 1.45
+  # Bornes de sécurité appliquées au ratio uniforme du global.
+  global_uniform_pie_min_ratio: 0.70
+  global_uniform_pie_max_ratio: 0.82
+  # Taille de la barre horizontale "Résultats des contrôles par type d'usager" (global).
+  global_type_usager_bar_scale: 1.25
+  # Uniformisation du moteur thématique.
+  # - pie : camemberts du thématique
+  # - chart : barres/courbes du thématique
+  thematique_uniform_pie_scale: 1.45
+  thematique_uniform_pie_min_ratio: 0.70
+  thematique_uniform_pie_max_ratio: 0.82
+  thematique_uniform_chart_scale: 1.00
+
+  # Taille matplotlib globale et légendes.
+  # - figure_scale: agrandit/réduit la taille native des graphiques (avant insertion PDF)
+  # - legend_fontsize: taille de police des légendes
+  # - legend_ncol_max: nombre maximal de colonnes dans les légendes
+  figure_scale: 1.00
+  legend_fontsize: 8
+  legend_ncol_max: 3

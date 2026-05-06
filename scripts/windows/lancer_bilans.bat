@@ -22,7 +22,7 @@ echo      OFFICE FRANCAIS
 echo    DE LA BIODIVERSITE
 echo.
 echo ================================
-echo   Bilans - Global ou thematiques
+echo   Bilans - Par profil (global ou thematiques)
 echo ================================
 echo.
 set /p "DATE_DEB=Date de debut (YYYY-MM-DD ou YYYY) [2025-01-01] > "
@@ -59,7 +59,7 @@ exit /b 1
 
 :global
 echo === Bilan global ===
-python -m bilans --mode global --date-deb "!DATE_DEB!" --date-fin "!DATE_FIN!" --dept-code "!DEPT!"
+python -m bilans --profil global --date-deb "!DATE_DEB!" --date-fin "!DATE_FIN!" --dept-code "!DEPT!"
 goto fin
 
 :thematiques
@@ -67,12 +67,12 @@ echo.
 echo Profils disponibles :
 python -m bilans --list-themes
 echo.
-set /p PROFILS=Profil(s) a lancer (numero(s) ou id, separes par des espaces) [1 2] ^> 
-if "!PROFILS!"=="" set "PROFILS=1 2"
+set /p PROFILS=Profil(s) a lancer (numero(s) ou id, separes par des espaces) [2 3] ^> 
+if "!PROFILS!"=="" set "PROFILS=2 3"
 set "ARGS="
 for %%p in (!PROFILS!) do set "ARGS=!ARGS! --profil %%p"
 echo === Bilans thematiques ===
-python -m bilans --mode thematique !ARGS! --date-deb "!DATE_DEB!" --date-fin "!DATE_FIN!" --dept-code "!DEPT!"
+python -m bilans !ARGS! --date-deb "!DATE_DEB!" --date-fin "!DATE_FIN!" --dept-code "!DEPT!"
 
 :fin
 echo.

@@ -21,11 +21,11 @@ def _tab_resultats_controles_detail(
     nb_total: int,
 ) -> pd.DataFrame:
     """
-    Synthèse « Résultats des contrôles » pour le bilan global : Conforme / Non-conforme /
+    Synthese "Resultats des controles" pour le bilan global : Conforme / Non-conforme /
     Dont infraction / Dont manquement / En attente.
 
-    Sans analyse PNF (pas de zones cœur / hors-cœur) — ces indicateurs sont réservés aux
-    bilans thématiques dédiés (ex. profil PNF).
+    Sans analyse PNF (pas de zones coeur / hors-coeur) - ces indicateurs sont reserves aux
+    bilans thematiques dedies (ex. profil PNF).
     """
     total_from_resultats = int(tab_resultats["nb"].sum()) if not tab_resultats.empty else 0
     total_controles_reference = max(int(nb_total), total_from_resultats)
@@ -52,15 +52,14 @@ def _tab_resultats_controles_detail(
 
 def analyse_controles_global(point: pd.DataFrame, out_dir: Path) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
-    Contrôles tous domaines/thèmes (point déjà filtré par le loader sur département et période).
-    Produit : effectifs par domaine, par thème, résultats (Conforme/Infraction/Manquement).
+    Controles tous domaines/themes (point deja filtre par le loader sur departement et periode).
+    Produit : effectifs par domaine, par theme, resultats (Conforme/Infraction/Manquement).
     """
     pt = point.copy()
     pt["insee_comm"] = pt["insee_comm"].astype(str).str.zfill(5)
 
     nb_total = len(pt)
 
-    # Résultats
     col_resultat = "resultat" if "resultat" in pt.columns else None
     if col_resultat:
         tab_resultats = (
@@ -81,7 +80,6 @@ def analyse_controles_global(point: pd.DataFrame, out_dir: Path) -> Tuple[pd.Dat
             out_dir / "controles_global_resultats_controles.csv", sep=";", index=False
         )
 
-    # Par domaine
     col_domaine = "domaine" if "domaine" in pt.columns else None
     if col_domaine:
         agg_domaine = (
@@ -98,12 +96,11 @@ def analyse_controles_global(point: pd.DataFrame, out_dir: Path) -> Tuple[pd.Dat
         agg_domaine = pd.DataFrame(columns=["domaine", "nb", "taux"])
         agg_domaine.to_csv(out_dir / "controles_global_par_domaine.csv", sep=";", index=False)
 
-    # Par thème
     col_theme = "theme" if "theme" in pt.columns else "type_actio"
     if col_theme in pt.columns:
         agg_theme = (
             pt[col_theme]
-            .fillna("Hors thème")
+            .fillna("Hors theme")
             .value_counts()
             .rename_axis("theme")
             .to_frame("nb")
@@ -115,14 +112,12 @@ def analyse_controles_global(point: pd.DataFrame, out_dir: Path) -> Tuple[pd.Dat
         agg_theme = pd.DataFrame(columns=["theme", "nb", "taux"])
         agg_theme.to_csv(out_dir / "controles_global_par_theme.csv", sep=";", index=False)
 
-    # Par type d'usagers (si disponible) — logique par effectifs
     if "type_usager" in pt.columns:
         agg_usager = agg_effectifs_usagers(pt, "point_ctrl", "type_usager")
         total_effectifs = int(agg_usager["nb"].sum()) if not agg_usager.empty else 0
         agg_usager["taux"] = agg_usager["nb"] / float(total_effectifs or 1)
         agg_usager.to_csv(out_dir / "controles_global_par_usager.csv", sep=";", index=False)
 
-        # Résultats des contrôles par type d'usager (Conforme / Infraction / Manquement / Autre_resultat / Total)
         res_type_usager = agg_resultat_counts_par_type_usager(pt)
         res_type_usager.to_csv(
             out_dir / "controles_global_resultats_par_type_usager.csv",
@@ -130,7 +125,6 @@ def analyse_controles_global(point: pd.DataFrame, out_dir: Path) -> Tuple[pd.Dat
             index=False,
         )
 
-        # Tableau croisé Usagers × Domaine (effectifs par catégorie et domaine)
         domaine_col = col_domaine if col_domaine else None
         if domaine_col:
             cross = agg_effectifs_usagers_par_domaine(pt, col_domaine=domaine_col)
@@ -138,7 +132,6 @@ def analyse_controles_global(point: pd.DataFrame, out_dir: Path) -> Tuple[pd.Dat
             cross = agg_effectifs_usagers_par_domaine(pt, col_domaine="domaine")
         cross.to_csv(out_dir / "controles_global_usager_par_domaine.csv", sep=";", index=False)
 
-        # Indicateur : localisations multi-usagers (valeur source contient une virgule)
         nb_multi = int(pt["type_usager"].fillna("").astype(str).str.contains(",", regex=False).sum())
         pd.DataFrame([{"nb_controles_multi_usagers": nb_multi}]).to_csv(
             out_dir / "controles_global_usagers_resume.csv", sep=";", index=False
@@ -177,14 +170,15 @@ def analyse_pej_pa_global(
     pa: pd.DataFrame,
     pej: pd.DataFrame,
     out_dir: Path,
+    dept_code: str = "21",
 ) -> None:
-    """PEJ et PA du département (ENTITE_ORIGINE_PROCEDURE == SD{code} pour les PEJ), tous domaines/thèmes."""
+    """PEJ et PA du departement (ENTITE_ORIGINE_PROCEDURE == SD{code} pour les PEJ), tous domaines/themes."""
     natinf_ref = load_natinf_ref(root)
     dc_ids = set(point["dc_id"].dropna().unique()) if not point.empty and "dc_id" in point.columns else set()
 
-    # PEJ département — filtre uniquement sur ENTITE_ORIGINE_PROCEDURE
+    dept_code = str(dept_code).strip() or "21"
     if "ENTITE_ORIGINE_PROCEDURE" in pej.columns:
-        pej_dept = pej[pej["ENTITE_ORIGINE_PROCEDURE"].astype(str).str.strip() == f"SD{_get_dept_code()}"].copy()
+        pej_dept = pej[pej["ENTITE_ORIGINE_PROCEDURE"].astype(str).str.strip() == f"SD{dept_code}"].copy()
     else:
         pej_dept = pej.copy()
     if "DATE_REF" in pej_dept.columns:
@@ -202,7 +196,7 @@ def analyse_pej_pa_global(
     pej_par_domaine.to_csv(out_dir / "pej_global_par_domaine.csv", sep=";", index=False)
 
     pej_par_theme = (
-        pej_dept.groupby(pej_dept.get("THEME", pd.Series(dtype=object)).fillna("Hors thème"))
+        pej_dept.groupby(pej_dept.get("THEME", pd.Series(dtype=object)).fillna("Hors theme"))
         .size()
         .rename("nb_pej")
         .reset_index()
@@ -210,7 +204,6 @@ def analyse_pej_pa_global(
     pej_par_theme.columns = ["theme", "nb_pej"]
     pej_par_theme.to_csv(out_dir / "pej_global_par_theme.csv", sep=";", index=False)
 
-    # PEJ par NATINF (libellé depuis ref/liste_natinf.csv)
     if "NATINF_PEJ" in pej_dept.columns and not pej_dept.empty:
         codes = (
             pej_dept["NATINF_PEJ"]
@@ -230,10 +223,9 @@ def analyse_pej_pa_global(
 
     pd.DataFrame([{"nb_pej_global": len(pej_dept)}]).to_csv(out_dir / "pej_global_resume.csv", sep=";", index=False)
 
-    # PA département
     pa_mask = pa["DC_ID"].isin(dc_ids)
     if "ENTITE_ORIGINE_PROCEDURE" in pa.columns:
-        pa_mask = pa_mask | (pa["ENTITE_ORIGINE_PROCEDURE"].astype(str).str.strip() == f"SD{_get_dept_code()}")
+        pa_mask = pa_mask | (pa["ENTITE_ORIGINE_PROCEDURE"].astype(str).str.strip() == f"SD{dept_code}")
     pa_dept = pa[pa_mask].copy()
 
     pa_par_domaine = (
@@ -246,7 +238,7 @@ def analyse_pej_pa_global(
     pa_par_domaine.to_csv(out_dir / "pa_global_par_domaine.csv", sep=";", index=False)
 
     pa_par_theme = (
-        pa_dept.groupby(pa_dept.get("THEME", pd.Series(dtype=object)).fillna("Hors thème"))
+        pa_dept.groupby(pa_dept.get("THEME", pd.Series(dtype=object)).fillna("Hors theme"))
         .size()
         .rename("nb_pa")
         .reset_index()
@@ -259,7 +251,7 @@ def analyse_pej_pa_global(
 
 
 def analyse_pve_global(pve: pd.DataFrame, out_dir: Path) -> None:
-    """PVe du département, tous NATINF."""
+    """PVe du departement, tous NATINF."""
     nb_pve = len(pve)
     pd.DataFrame([{"nb_pve_global": nb_pve}]).to_csv(out_dir / "pve_global_resume.csv", sep=";", index=False)
     if "INF-NATINF" in pve.columns:
@@ -285,7 +277,7 @@ def analyse_annuelle_global(
     pve: pd.DataFrame,
     out_dir: Path,
 ) -> None:
-    """Construit les indicateurs annuels globaux pour les périodes multi-annuelles."""
+    """Construit les indicateurs annuels globaux pour les periodes multi-annuelles."""
     years: set[int] = set()
     if not point.empty and "date_ctrl" in point.columns:
         years |= set(point["date_ctrl"].dropna().dt.year.astype(int).tolist())
@@ -349,8 +341,7 @@ def analyse_trimestrielle_global(
     pve: pd.DataFrame,
     out_dir: Path,
 ) -> None:
-    """Construit les indicateurs trimestriels globaux (T1=janv-mars, T2=avr-juin, T3=juil-sept, T4=oct-déc)."""
-    # Trimestre = (mois - 1) // 3 + 1
+    """Construit les indicateurs trimestriels globaux (T1=janv-mars, T2=avr-juin, T3=juil-sept, T4=oct-dec)."""
     periods: set[tuple[int, int]] = set()
 
     if not point.empty and "date_ctrl" in point.columns:
@@ -380,7 +371,6 @@ def analyse_trimestrielle_global(
 
     rows = []
     for (year, quarter) in sorted(periods):
-        # Mois du trimestre : T1=1,2,3 T2=4,5,6 T3=7,8,9 T4=10,11,12
         m1 = (quarter - 1) * 3 + 1
         m2 = quarter * 3
 
@@ -504,18 +494,11 @@ def analyse_mensuelle_global(
         out_dir / "indicateurs_global_par_mois.csv", sep=";", index=False
     )
 
-
-def _get_dept_code() -> str:
-    """
-    Récupère le code département par défaut pour les filtres PEJ/PA lorsqu'il
-    n'est pas injecté explicitement. La logique existante dans le module
-    d'origine repose sur une constante DEPT_CODE ; on conserve ici ce
-    comportement en lisant la valeur depuis le module principal.
-    """
-    try:
-        from bilans.bilan_global import analyse_global as ag  # type: ignore
-
-        return getattr(ag, "DEPT_CODE", "21")
-    except Exception:
-        return "21"
-
+__all__ = [
+    "analyse_controles_global",
+    "analyse_pej_pa_global",
+    "analyse_pve_global",
+    "analyse_annuelle_global",
+    "analyse_trimestrielle_global",
+    "analyse_mensuelle_global",
+]

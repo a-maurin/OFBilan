@@ -25,7 +25,7 @@ def _minimal_point_df() -> pd.DataFrame:
 
 def test_analyse_controles_global_minimal(tmp_path: Path) -> None:
     """Vérifie que l'agrégation des contrôles globaux fonctionne sur un jeu réduit."""
-    from bilans.bilan_global.analyse_global import analyse_controles_global
+    from bilans.engine.global_backend import analyse_controles_global
 
     df = _minimal_point_df()
     tab_resultats, agg_domaine, agg_theme = analyse_controles_global(df, tmp_path)
@@ -52,7 +52,7 @@ def test_run_global_smoke(monkeypatch, tmp_path: Path) -> None:
     L'objectif est uniquement de vérifier que la fonction s'exécute sans erreur
     sur un jeu minimal, sans dépendre des fichiers sources réels.
     """
-    import bilans.bilan_global.analyse_global as mod
+    import bilans.engine.global_backend as mod
 
     # Chargeurs minimaux : renvoient de petits DataFrame ou des DataFrame vides.
     minimal_point = _minimal_point_df()
@@ -60,20 +60,25 @@ def test_run_global_smoke(monkeypatch, tmp_path: Path) -> None:
     minimal_pej = pd.DataFrame([{"DC_ID": "1", "ENTITE_ORIGINE_PROCEDURE": "SD21"}])
     minimal_pve = pd.DataFrame([{"dc_id": 1}])
 
-    monkeypatch.setattr(mod, "load_point_ctrl", lambda root, dept_code, date_deb, date_fin: minimal_point)
-    monkeypatch.setattr(mod, "load_pa", lambda root, date_deb, date_fin: minimal_pa)
-    monkeypatch.setattr(mod, "load_pej", lambda root, date_deb, date_fin: minimal_pej)
-    monkeypatch.setattr(mod, "load_pve", lambda root, dept_code, date_deb, date_fin: minimal_pve)
-    monkeypatch.setattr(mod, "ensure_insee_from_communes_shp", lambda df, *args, **kwargs: df)
-    monkeypatch.setattr(mod, "load_natinf_ref", lambda root: pd.DataFrame())
+    monkeypatch.setattr(
+        "bilans.engine.global_backend.load_point_ctrl",
+        lambda root, dept_code, date_deb, date_fin: minimal_point,
+    )
+    monkeypatch.setattr("bilans.engine.global_backend.load_pa", lambda root, date_deb, date_fin: minimal_pa)
+    monkeypatch.setattr("bilans.engine.global_backend.load_pej", lambda root, date_deb, date_fin: minimal_pej)
+    monkeypatch.setattr(
+        "bilans.engine.global_backend.load_pve",
+        lambda root, dept_code, date_deb, date_fin: minimal_pve,
+    )
+    monkeypatch.setattr("bilans.engine.global_backend.ensure_insee_from_communes_shp", lambda df, *args, **kwargs: df)
 
     # Neutralise la génération PDF (PDFReportBuilder / graphiques matplotlib).
-    monkeypatch.setattr(mod, "generate_pdf_report", lambda *args, **kwargs: None)
+    monkeypatch.setattr("bilans.engine.global_pdf.generate_global_pdf_report", lambda *args, **kwargs: None)
 
     # Redirige les sorties dans un dossier temporaire.
-    monkeypatch.setattr(mod, "get_out_dir", lambda programme: tmp_path / programme)
+    monkeypatch.setattr("bilans.engine.global_backend.get_out_dir", lambda programme: tmp_path / programme)
 
     # Appel : ne doit pas lever d'exception et doit retourner un int.
-    ret = mod.run_global("2025-01-01", "2025-12-31", "21")
+    ret = mod.run_global_backend("2025-01-01", "2025-12-31", "21")
     assert isinstance(ret, int)
 

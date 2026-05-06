@@ -14,7 +14,7 @@ Pour le profil **types_usager_cible**, les CSV exportés dans `data/out/bilan_ty
 
 **À conserver en mémoire :** les propositions de correction détaillées ci‑après (sections 1 et 2) restent la référence pour l’implémentation.
 
-### 0.1 Bilan global (`src/bilans/bilan_global/analyse_global.py`)
+### 0.1 Bilan global (`src/bilans/engine/global_pdf.py`)
 
 - **Génération :** script dédié ; CSV et PDF sont produits dans le même flux. Le PDF est construit en **relisant les CSV** générés (`_generate_pdf_content` charge `controles_global_*.csv`, `pej_global_*.csv`, etc.).
 - **Contenu :** Le PDF inclut toutes les sections correspondant aux CSV (chiffres clés, domaine, thème, **résultats des contrôles**, procédures PEJ/PA/PVe, types d’usagers). Aucune section n’est exclue selon un flag `type_usager`.

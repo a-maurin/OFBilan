@@ -4,7 +4,7 @@ Ce dossier contient la configuration versionnée du programme.
 
 ## Structure
 
-- `config/profils_bilan/` : profils thématiques (`*.yaml`) ;
+- `config/profils_bilan/` : profils bilans (`*.yaml`), dont `global.yaml` pour le bilan global et les profils thématiques ;
 - `config/presentation/` : règles de présentation PDF ;
 - `config/charts/` : paramètres d’affichage des graphiques.
 

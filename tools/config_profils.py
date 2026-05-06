@@ -8,7 +8,7 @@ import yaml
 
 
 BASE_DIR = Path(__file__).resolve().parent
-PROFILS_DIR = BASE_DIR.parent / "ref" / "profils_bilan"
+PROFILS_DIR = BASE_DIR.parent / "config" / "profils_bilan"
 
 
 def lister_profils(directory: Path) -> List[Tuple[str, Path]]:

@@ -31,31 +31,60 @@ class VerticalText(Flowable):
         super().__init__()
         self.text = str(text)
         self.style = style or _CELL_HEADER
+        self._lines: list[str] = [self.text]
+
+    def _split_lines(self, avail_width: float) -> list[str]:
+        txt = " ".join(self.text.split())
+        if not txt:
+            return [""]
+        leading = max(float(getattr(self.style, "leading", 0) or 0), float(self.style.fontSize) + 1.5)
+        # Nombre de lignes verticales qu'on peut afficher dans la largeur de cellule.
+        # Forçage minimal de 2 lignes pour les libellés longs afin d'éviter
+        # un rendu vertical monobloc illisible.
+        max_lines = int(max(1, (avail_width - 6) // leading))
+        if len(txt) > 22:
+            max_lines = max(2, max_lines)
+        max_lines = min(4, max_lines)
+        if max_lines <= 1:
+            return [txt]
+        words = txt.split(" ")
+        lines = [""]
+        for w in words:
+            cur = lines[-1]
+            trial = f"{cur} {w}".strip()
+            # Heuristique de compaction pour répartir sur plusieurs lignes.
+            target = max(8, int(len(txt) / max_lines))
+            if len(cur) > 0 and len(trial) > target and len(lines) < max_lines:
+                lines.append(w)
+            else:
+                lines[-1] = trial
+        return lines
 
     def wrap(self, availWidth: float, availHeight: float):
+        self._lines = self._split_lines(availWidth)
         try:
             font = pdfmetrics.getFont(self.style.fontName)
-            text_width = font.stringWidth(self.text, self.style.fontSize)
+            text_width = max(font.stringWidth(line, self.style.fontSize) for line in self._lines)
         except Exception:
-            text_width = len(self.text) * self.style.fontSize * 0.6
+            text_width = max(len(line) for line in self._lines) * self.style.fontSize * 0.6
+        leading = max(float(getattr(self.style, "leading", 0) or 0), float(self.style.fontSize) + 1.5)
+        self._block_w = len(self._lines) * leading + 6
         # Après rotation -90°, la largeur du texte devient la hauteur nécessaire.
         self._height = min(availHeight, text_width + 8)
         return (availWidth, self._height)
 
     def draw(self):
         canv = self.canv
-        try:
-            font = pdfmetrics.getFont(self.style.fontName)
-            text_width = font.stringWidth(self.text, self.style.fontSize)
-        except Exception:
-            text_width = len(self.text) * self.style.fontSize * 0.6
+        leading = max(float(getattr(self.style, "leading", 0) or 0), float(self.style.fontSize) + 1.5)
         canv.saveState()
         canv.setFont(self.style.fontName, self.style.fontSize)
         canv.setFillColor(self.style.textColor)
         # Rotation -90° : on part du bas de la cellule, on tourne, le texte monte.
         canv.translate(4, self._height - 4)
         canv.rotate(-90)
-        canv.drawString(0, 0, self.text)
+        col_step = leading + 1.0
+        for i, line in enumerate(self._lines):
+            canv.drawString(0, -i * col_step, line)
         canv.restoreState()
 
 

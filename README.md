@@ -23,6 +23,10 @@ pip install -e .
 
 ## Exécution
 
+**Rupture CLI :** plus de `--mode` ; utilisez `--profil` (dont `global`). Voir `docs/migration/cli_moteur_unique.md`.
+`global` doit être lancé seul ; les autres profils peuvent être lancés unitairement ou en groupe.
+Si aucun `--profil` n'est fourni, la CLI propose une sélection interactive.
+
 Entrée officielle :
 
 ```bash
@@ -32,14 +36,14 @@ python -m bilans
 Exemples :
 
 ```bash
-# Lister les profils thématiques
+# Lister les profils (global en tête si configuré, puis thématiques)
 python -m bilans --list-themes
 
 # Bilan global
-python -m bilans --mode global --date-deb 2025-01-01 --date-fin 2025-12-31 --dept-code 21
+python -m bilans --profil global --date-deb 2025-01-01 --date-fin 2025-12-31 --dept-code 21
 
-# Bilans thématiques
-python -m bilans --mode thematique --profil chasse --profil agrainage --date-deb 2025-01-01 --date-fin 2025-12-31 --dept-code 21
+# Un ou plusieurs bilans thématiques
+python -m bilans --profil chasse --profil agrainage --date-deb 2025-01-01 --date-fin 2025-12-31 --dept-code 21
 ```
 
 Lanceurs :
@@ -86,4 +90,5 @@ Les résultats sont écrits dans `data/out/` :
 
 - Auteur : Aguirre Maurin
 - Service : OFB, SD Côte-d'Or
+- Courriel : [aguirre.maurin@ofb.gouv.fr](mailto:aguirre.maurin@ofb.gouv.fr)
 

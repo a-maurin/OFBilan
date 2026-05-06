@@ -5,7 +5,7 @@ Toute la logique (chasse, agrainage, procédures, types d'usagers, mots-clés
 génériques, etc.) est centralisée ici. Le profil YAML pilote le comportement :
 filtres, sources de données, options utilisateur, analyses, PDF.
 
-Usage interne (appelé par run_bilan_thematique.py) :
+Usage interne (appelé par le moteur unifié ``bilans.engine`` pour les profils thématiques) :
     from bilans.bilan_thematique.bilan_thematique_engine import run_engine
     run_engine("chasse", "2025-09-01", "2026-03-01", "21", options={})
 """
@@ -86,6 +86,7 @@ from bilans.common.charts import (
     chart_line_evolution,
 )
 from bilans.common.carte_helper import find_map
+from bilans.engine.section_registry import SectionRegistry
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -93,13 +94,13 @@ from bilans.common.carte_helper import find_map
 # ═══════════════════════════════════════════════════════════════════════════
 
 def load_profile_config(root: Path, profil_id: str) -> dict:
-    """Charge et normalise un profil depuis ref/profils_bilan/<id>.yaml."""
+    """Charge et normalise un profil depuis config/profils_bilan/<id>.yaml."""
     try:
         import yaml
     except ImportError:
         yaml = None
 
-    path = root / "ref" / "profils_bilan" / f"{profil_id}.yaml"
+    path = root / "config" / "profils_bilan" / f"{profil_id}.yaml"
     if not path.exists():
         return _default_profile(profil_id)
 
@@ -110,7 +111,7 @@ def load_profile_config(root: Path, profil_id: str) -> dict:
         # Sans PyYAML, l'ancien parseur minimal écrase des clés (ex. plusieurs « label »
         # dans le fichier) et ignore les blocs imbriqués (restrict_geo, filter…).
         raise ImportError(
-            "PyYAML est requis pour lire les profils bilan (ref/profils_bilan/*.yaml). "
+            "PyYAML est requis pour lire les profils bilan (config/profils_bilan/*.yaml). "
             "Installez les dépendances du projet, par exemple : "
             "pip install -r tools/requirements.txt"
         ) from None
@@ -127,6 +128,7 @@ def _normalize_profile(data: dict, profil_id: str) -> dict:
     data.setdefault("id", profil_id)
     data.setdefault("label", profil_id)
     data.setdefault("title_label", data.get("label", profil_id))
+    data.setdefault("engine_type", "thematic")
     data.setdefault("out_subdir", f"bilan_{profil_id}")
     # Activation par défaut de l'analyse PVe (comportement historique).
     # Peut être désactivée par profil via analyse_PVe: false dans le YAML.
@@ -185,6 +187,31 @@ def _normalize_profile(data: dict, profil_id: str) -> dict:
     data.setdefault("options", {})
 
     return data
+
+
+def _run_global_profile_via_yaml(
+    profile: dict,
+    date_deb: str,
+    date_fin: str,
+    dept_code: str,
+    options: dict,
+) -> int:
+    """
+    Exécute le profil global via le même point d'entrée `run_engine`.
+
+    Le backend global reste porté par `bilan_global.analyse_global.run_global`,
+    mais la résolution et l'appel se font désormais depuis le moteur unifié
+    orienté profils (YAML).
+    """
+    chart_preset = options.get("chart_preset")
+    extra = {k: v for k, v in options.items() if k != "chart_preset"}
+    if extra:
+        logging.getLogger("bilans.thematique").debug(
+            "Options ignorées pour engine_type=global : %s", list(extra.keys())
+        )
+    from bilans.engine.global_backend import run_global_backend
+
+    return run_global_backend(date_deb, date_fin, dept_code, chart_preset=chart_preset)
 
 
 def _load_glossary_config(root: Path) -> dict:
@@ -2057,6 +2084,20 @@ def _pct_table_cell(n: int | float, denom: float) -> str:
     return format_pct_int_from_rate(float(n) / float(denom))
 
 
+def _chart_pie_compact_legend_kw(
+    n_categories: int,
+    *,
+    legend_fontsize: float,
+    legend_ncol_max: int,
+) -> dict[str, float | int]:
+    """
+    Harmonise le rendu des légendes de camembert entre global et thématique.
+    """
+    if n_categories <= 4:
+        return {"legend_fontsize": legend_fontsize, "legend_ncol": min(n_categories, legend_ncol_max)}
+    return {"legend_fontsize": legend_fontsize, "legend_ncol": min(n_categories, max(2, min(legend_ncol_max, 3)))}
+
+
 def _pdf_section_activite_par_types_usagers(
     builder: Any,
     results: dict,
@@ -2065,6 +2106,9 @@ def _pdf_section_activite_par_types_usagers(
     *,
     pie_ratio: float,
     bar_ratio: float,
+    legend_fontsize: float,
+    legend_ncol_max: int,
+    figure_scale: float,
 ) -> None:
     """Section VIII : activité par types d'usagers (camembert, tableaux par type, barres horizontales empilées)."""
     ctrl_ut = results.get("ctrl_par_usager_theme")
@@ -2082,8 +2126,12 @@ def _pdf_section_activite_par_types_usagers(
             "Répartition des contrôles par type d'usager",
             tmp_dir,
             "pie_controles_par_type_usager.png",
-            legend_fontsize=6,
-            legend_ncol=min(len(pie_data), 4),
+            **_chart_pie_compact_legend_kw(
+                len(pie_data),
+                legend_fontsize=legend_fontsize,
+                legend_ncol_max=legend_ncol_max,
+            ),
+            figure_scale=figure_scale,
         )
         builder.add_image(Path(pie_path), width_ratio=pie_ratio)
 
@@ -2152,6 +2200,9 @@ def _pdf_section_activite_par_types_usagers(
             "Nombre",
             tmp_dir,
             "bar_resultats_par_type_usager.png",
+            legend_fontsize=legend_fontsize,
+            legend_ncol_max=legend_ncol_max,
+            figure_scale=figure_scale,
         )
         builder.add_image(Path(bar_path), width_ratio=bar_ratio)
         # Tableau chiffré + pourcentages (part de chaque résultat dans le type,
@@ -2287,7 +2338,21 @@ def _generate_pdf(
     tmp_dir = builder.tmp_dir
     chart_preset = options.get("chart_preset")
     chart_ratios = compute_pdf_ratios(load_chart_display_config(PROJECT_ROOT, preset=chart_preset))
-    chart_ratio_base = chart_ratios["chart_base"]
+    chart_ratio_base = float(chart_ratios.get("thematique_uniform_chart", chart_ratios["chart_base"]))
+    pie_min_ratio = float(chart_ratios.get("thematique_uniform_pie_min_ratio", 0.70))
+    pie_max_ratio = float(chart_ratios.get("thematique_uniform_pie_max_ratio", 0.82))
+    if pie_min_ratio > pie_max_ratio:
+        pie_min_ratio, pie_max_ratio = pie_max_ratio, pie_min_ratio
+    pie_ratio_base = min(
+        pie_max_ratio,
+        max(
+            pie_min_ratio,
+            float(chart_ratios.get("thematique_uniform_pie", chart_ratios.get("pie_base", pie_min_ratio))),
+        ),
+    )
+    legend_fontsize = float(chart_ratios.get("legend_fontsize", 8.0))
+    legend_ncol_max = int(chart_ratios.get("legend_ncol_max", 4.0))
+    figure_scale = float(chart_ratios.get("figure_scale", 1.0))
 
     # Correspondance code INSEE → nom de commune pour les tableaux PDF
     insee_to_nom = load_communes_noms(PROJECT_ROOT)
@@ -2516,6 +2581,9 @@ def _generate_pdf(
             stacked_ctrl = {"Conformes": conformes, "Non-conformes": non_conformes}
             stacked_path = chart_bar_stacked(
                 period_labels, stacked_ctrl, titre_ctrl, "Nombre de contrôles", tmp_dir, "bar_annuel_ctrl_stacked.png",
+                legend_fontsize=legend_fontsize,
+                legend_ncol_max=legend_ncol_max,
+                figure_scale=figure_scale,
             )
             if is_block_enabled(presentation_cfg, "sec21.show_chart_controles", True):
                 builder.add_image(Path(stacked_path), width_ratio=chart_ratio_base)
@@ -2528,6 +2596,9 @@ def _generate_pdf(
             if has_proc and is_block_enabled(presentation_cfg, "sec21.show_chart_procedures", True):
                 stacked_proc_path = chart_bar_stacked(
                     period_labels, series_proc, titre_proc, "Nombre", tmp_dir, "bar_annuel_proc_stacked.png",
+                    legend_fontsize=legend_fontsize,
+                    legend_ncol_max=legend_ncol_max,
+                    figure_scale=figure_scale,
                 )
                 builder.add_image(Path(stacked_proc_path), width_ratio=chart_ratio_base)
             if vent_temp_type != "mensuelle" and is_block_enabled(presentation_cfg, "sec21.show_chart_taux_line", True):
@@ -2542,6 +2613,9 @@ def _generate_pdf(
                         "Évolution du taux de non-conformité",
                         "Taux (%)",
                         tmp_dir, "line_annuel_taux_inf.png",
+                        legend_fontsize=legend_fontsize,
+                        legend_ncol_max=legend_ncol_max,
+                        figure_scale=figure_scale,
                     )
                     builder.add_image(Path(line_path), width_ratio=chart_ratio_base)
         elif show_placeholder:
@@ -2593,22 +2667,28 @@ def _generate_pdf(
                     "Répartition des résultats",
                     tmp_dir,
                     "pie_resultats.png",
+                    **_chart_pie_compact_legend_kw(
+                        len(pie_data),
+                        legend_fontsize=legend_fontsize,
+                        legend_ncol_max=legend_ncol_max,
+                    ),
+                    figure_scale=figure_scale,
                 )
                 # Légère augmentation pour un meilleur confort de lecture,
                 # tout en restant assez compact pour tenir sur la même page.
-                builder.add_image(Path(pie_path), width_ratio=chart_ratios["global_resultats_pie"])
+                builder.add_image(Path(pie_path), width_ratio=pie_ratio_base)
         elif show_placeholder:
             builder.add_paragraph("Aucune donnée de résultat disponible sur la période.")
         # On ne force pas systématiquement un saut de page ici.
 
+    sec2_registry = SectionRegistry()
+    sec2_registry.register("sec21", lambda _ctx: _render_sec21())
+    sec2_registry.register("sec22", lambda _ctx: _render_sec22())
+
     sec2_order = [sid for sid, _ in sections_toc if sid in {"sec21", "sec22"}]
     if not sec2_order:
         sec2_order = ["sec21", "sec22"]
-    for sid in sec2_order:
-        if sid == "sec21":
-            _render_sec21()
-        elif sid == "sec22":
-            _render_sec22()
+    sec2_registry.render_many(sec2_order, {})
 
     # ── TYPES D'USAGERS (hors sec22) ──
     if is_type_usager and nb_ctrl > 0:
@@ -2626,8 +2706,19 @@ def _generate_pdf(
                                   col_aligns=["LEFT", "RIGHT"])
                 pie_data = {str(r["type_usager"]): int(r["nb"]) for _, r in ue.iterrows()}
                 if pie_data:
-                    pie_path = chart_pie(pie_data, "Usagers contrôlés par type", tmp_dir, "pie_usagers.png")
-                    builder.add_image(Path(pie_path), width_ratio=chart_ratios["global_usagers_pie"])
+                    pie_path = chart_pie(
+                        pie_data,
+                        "Usagers contrôlés par type",
+                        tmp_dir,
+                        "pie_usagers.png",
+                        **_chart_pie_compact_legend_kw(
+                            len(pie_data),
+                            legend_fontsize=legend_fontsize,
+                            legend_ncol_max=legend_ncol_max,
+                        ),
+                        figure_scale=figure_scale,
+                    )
+                    builder.add_image(Path(pie_path), width_ratio=pie_ratio_base)
         else:
             # Mono-usager : l'effectif du type ciblé est déjà mis en avant
             # dans les chiffres clés (tuile \"Effectifs – <type>\").
@@ -2679,8 +2770,14 @@ def _generate_pdf(
                     "Répartition des résultats",
                     tmp_dir,
                     "pie_resultats_usager.png",
+                    **_chart_pie_compact_legend_kw(
+                        len(pie_data),
+                        legend_fontsize=legend_fontsize,
+                        legend_ncol_max=legend_ncol_max,
+                    ),
+                    figure_scale=figure_scale,
                 )
-                builder.add_image(Path(pie_path), width_ratio=chart_ratios["global_resultats_pie"])
+                builder.add_image(Path(pie_path), width_ratio=pie_ratio_base)
 
         # Résultats des contrôles par domaine (top 15)
         res_ud = results.get("res_par_usager_domaine")
@@ -3069,16 +3166,15 @@ def _generate_pdf(
         elif show_placeholder:
             builder.add_paragraph("Aucune procédure administrative sur la période.")
 
+    sec3_registry = SectionRegistry()
+    sec3_registry.register("sec31", lambda _ctx: _render_sec31())
+    sec3_registry.register("sec32", lambda _ctx: _render_sec32())
+    sec3_registry.register("sec33", lambda _ctx: _render_sec33())
+
     sec3_order = [sid for sid, _ in sections_toc if sid in {"sec31", "sec32", "sec33"}]
     if not sec3_order:
         sec3_order = ["sec31", "sec32", "sec33"]
-    for sid in sec3_order:
-        if sid == "sec31":
-            _render_sec31()
-        elif sid == "sec32":
-            _render_sec32()
-        elif sid == "sec33":
-            _render_sec33()
+    sec3_registry.render_many(sec3_order, {})
 
     # Le détail Cœur/Hors-cœur des contrôles est désormais intégré au tableau
     # « Résultats des contrôles » (partie 2.2) pour éviter une sous-partie dédiée.
@@ -3247,8 +3343,11 @@ def _generate_pdf(
             results,
             tmp_dir,
             avail_w,
-            pie_ratio=chart_ratios["activite_usagers_controles_pie"],
-            bar_ratio=chart_ratios["activite_usagers_resultats_bar"],
+            pie_ratio=pie_ratio_base,
+            bar_ratio=chart_ratio_base,
+            legend_fontsize=legend_fontsize,
+            legend_ncol_max=legend_ncol_max,
+            figure_scale=figure_scale,
         )
         builder.add_spacer(4)
     elif show_placeholder:
@@ -3405,9 +3504,12 @@ def run_engine(
 ) -> int:
     """Point d'entrée unique du moteur thématique unifié."""
     options = options or {}
-    chart_preset = options.pop("chart_preset", None)
     root = PROJECT_ROOT
     profile = load_profile_config(root, profil_id)
+    engine_type = str(profile.get("engine_type", "thematic")).strip().lower()
+    if engine_type == "global":
+        return _run_global_profile_via_yaml(profile, date_deb, date_fin, dept_code, options)
+    chart_preset = options.pop("chart_preset", None)
     cfg = BilanConfig.from_strings(date_deb, date_fin, dept_code, root=root)
     out_dir = cfg.get_out(profile["out_subdir"])
     label = profile["label"]

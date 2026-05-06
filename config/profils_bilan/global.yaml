@@ -1,0 +1,7 @@
+# Profil « bilan global » — exécuté par le moteur unifié (pipeline global).
+# Ne pas utiliser ce fichier comme un profil thématique classique.
+id: global
+label: Bilan global
+title_label: Bilan global
+engine_type: global
+out_subdir: bilan_global

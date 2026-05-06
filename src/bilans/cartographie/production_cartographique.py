@@ -4,7 +4,7 @@
 Génération des cartes bilans agrainage / chasse-agrainage.
 À exécuter avec l'interpréteur Python de QGIS (pyqgis).
 
-Référence de présentation : la carte dans old/bilan_agrainage_Cote_dOr.pdf (section V. Cartographie).
+Référence de présentation : la carte dans data/out/bilan_agrainage/bilan_agrainage_Cote_dOr.pdf (section V. Cartographie).
 Le layout QGIS doit reproduire cette présentation (bandeau titre, carte, légende, échelle, pied de page).
 
 Usage:
@@ -26,7 +26,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-# Dossier du script (scripts/generateur_de_cartes)
+# Dossier du module cartographie (src/bilans/cartographie)
 SCRIPT_DIR = Path(__file__).resolve().parent
 PARAM_DIR = SCRIPT_DIR / "param"
 PROFILS_CARTES_YAML = PARAM_DIR / "profils_cartes.yaml"
@@ -100,10 +100,10 @@ def _check_qgis() -> None:
         logger.error(
             "PyQGIS non disponible. Ce script doit être exécuté avec l'interpréteur Python de QGIS.\n"
             "Solutions recommandées (Windows OSGeo4W):\n"
-            "  1. Double-cliquer sur scripts/generateur_de_cartes/lancer_osgeo4w.bat (ou lancer_production_cartographique.bat)\n"
+            "  1. Lancer scripts/windows/generer_cartes.bat\n"
             "  2. Ouvrir le shell OSGeo4W (menu Démarrer), puis:\n"
             "     set PYTHONPATH=%OSGEO4W_ROOT%\\apps\\qgis-ltr\\python\n"
-            "     python scripts\\generateur_de_cartes\\production_cartographique.py --interactive\n"
+            "     python src\\bilans\\cartographie\\production_cartographique.py --interactive\n"
             "  3. Depuis QGIS : Outils > Console Python > coller et exécuter le script\n"
         )
         sys.exit(1)
@@ -828,7 +828,7 @@ def _get_logo_bandeau_path() -> Optional[Path]:
 
 
 # Logo RF-OFB horizontal en bas à droite des cartes
-# Référence taille / position : old/Bilan 2025-2026 – Agrainage – SD21.jpg
+# Référence taille / position : docs/usage/README_Production_cartes.md
 # Taille doublée (+100 %), ancrage au bord supérieur gauche (position du coin supérieur gauche fixe).
 LOGO_OFB_HORIZONTAL_FILENAME = "bloc-marque-RF-OFB_horizontal.jpg"
 LOGO_OFB_BAS_DROITE_ID = "logo_ofb_bas_droite"
@@ -1185,7 +1185,7 @@ def run_interactive_wizard(profile_ids: List[str]) -> None:
 
     _save_config_to_file(CONFIG)
     logger.info(
-        "Configuration enregistrée dans scripts/generateur_de_cartes/config_cartes.py "
+        "Configuration enregistrée dans src/bilans/cartographie/config_cartes.py "
         "(profils: %s)",
         ", ".join(profile_ids),
     )

@@ -21,6 +21,22 @@ DEFAULT_CHART_DISPLAY_CONFIG: dict[str, Any] = {
         # Ajustements globaux.
         "global_resultats_pie_scale": 1.0,
         "global_usagers_pie_scale": 1.0,
+        "global_domaine_pie_scale": 1.0,
+        "global_theme_pie_scale": 1.0,
+        # Uniformisation optionnelle : base commune pour les camemberts du global.
+        "global_uniform_pie_scale": 1.0,
+        "global_uniform_pie_min_ratio": 0.70,
+        "global_uniform_pie_max_ratio": 0.82,
+        "global_type_usager_bar_scale": 1.25,
+        # Uniformisation optionnelle du moteur thématique.
+        "thematique_uniform_pie_scale": 1.0,
+        "thematique_uniform_pie_min_ratio": 0.70,
+        "thematique_uniform_pie_max_ratio": 0.82,
+        "thematique_uniform_chart_scale": 1.0,
+        # Taille matplotlib (avant insertion PDF) et légendes.
+        "figure_scale": 1.0,
+        "legend_fontsize": 8.0,
+        "legend_ncol_max": 4.0,
     }
 }
 
@@ -32,6 +48,19 @@ CHART_PRESETS: dict[str, dict[str, float]] = {
         "activite_usagers_resultats_bar_scale": 0.55,
         "global_resultats_pie_scale": 0.90,
         "global_usagers_pie_scale": 0.90,
+        "global_domaine_pie_scale": 0.90,
+        "global_theme_pie_scale": 0.90,
+        "global_uniform_pie_scale": 0.90,
+        "global_uniform_pie_min_ratio": 0.60,
+        "global_uniform_pie_max_ratio": 0.78,
+        "global_type_usager_bar_scale": 1.15,
+        "thematique_uniform_pie_scale": 0.90,
+        "thematique_uniform_pie_min_ratio": 0.60,
+        "thematique_uniform_pie_max_ratio": 0.78,
+        "thematique_uniform_chart_scale": 0.90,
+        "figure_scale": 0.95,
+        "legend_fontsize": 7.0,
+        "legend_ncol_max": 3.0,
     },
     "standard": {
         "pie_width_ratio_base": 0.34,
@@ -40,6 +69,19 @@ CHART_PRESETS: dict[str, dict[str, float]] = {
         "activite_usagers_resultats_bar_scale": 1.20,
         "global_resultats_pie_scale": 1.00,
         "global_usagers_pie_scale": 1.00,
+        "global_domaine_pie_scale": 1.00,
+        "global_theme_pie_scale": 1.00,
+        "global_uniform_pie_scale": 1.00,
+        "global_uniform_pie_min_ratio": 0.70,
+        "global_uniform_pie_max_ratio": 0.82,
+        "global_type_usager_bar_scale": 1.25,
+        "thematique_uniform_pie_scale": 1.00,
+        "thematique_uniform_pie_min_ratio": 0.70,
+        "thematique_uniform_pie_max_ratio": 0.82,
+        "thematique_uniform_chart_scale": 1.00,
+        "figure_scale": 1.00,
+        "legend_fontsize": 8.0,
+        "legend_ncol_max": 4.0,
     },
     "large": {
         "pie_width_ratio_base": 0.40,
@@ -48,6 +90,19 @@ CHART_PRESETS: dict[str, dict[str, float]] = {
         "activite_usagers_resultats_bar_scale": 0.90,
         "global_resultats_pie_scale": 1.10,
         "global_usagers_pie_scale": 1.10,
+        "global_domaine_pie_scale": 1.10,
+        "global_theme_pie_scale": 1.10,
+        "global_uniform_pie_scale": 1.10,
+        "global_uniform_pie_min_ratio": 0.74,
+        "global_uniform_pie_max_ratio": 0.90,
+        "global_type_usager_bar_scale": 1.35,
+        "thematique_uniform_pie_scale": 1.10,
+        "thematique_uniform_pie_min_ratio": 0.74,
+        "thematique_uniform_pie_max_ratio": 0.90,
+        "thematique_uniform_chart_scale": 1.10,
+        "figure_scale": 1.08,
+        "legend_fontsize": 9.0,
+        "legend_ncol_max": 4.0,
     },
 }
 
@@ -118,4 +173,37 @@ def compute_pdf_ratios(cfg: dict[str, Any]) -> dict[str, float]:
         "global_usagers_pie": _clamp_ratio(
             pie_base * float(pdf_cfg.get("global_usagers_pie_scale", 1.0))
         ),
+        "global_domaine_pie": _clamp_ratio(
+            pie_base * float(pdf_cfg.get("global_domaine_pie_scale", 1.0))
+        ),
+        "global_theme_pie": _clamp_ratio(
+            pie_base * float(pdf_cfg.get("global_theme_pie_scale", 1.0))
+        ),
+        "global_uniform_pie": _clamp_ratio(
+            pie_base * float(pdf_cfg.get("global_uniform_pie_scale", 1.0))
+        ),
+        "global_uniform_pie_min_ratio": _clamp_ratio(
+            float(pdf_cfg.get("global_uniform_pie_min_ratio", 0.70))
+        ),
+        "global_uniform_pie_max_ratio": _clamp_ratio(
+            float(pdf_cfg.get("global_uniform_pie_max_ratio", 0.82))
+        ),
+        "global_type_usager_bar_ratio": _clamp_ratio(
+            chart_base * float(pdf_cfg.get("global_type_usager_bar_scale", 1.25))
+        ),
+        "thematique_uniform_pie": _clamp_ratio(
+            pie_base * float(pdf_cfg.get("thematique_uniform_pie_scale", 1.0))
+        ),
+        "thematique_uniform_pie_min_ratio": _clamp_ratio(
+            float(pdf_cfg.get("thematique_uniform_pie_min_ratio", 0.70))
+        ),
+        "thematique_uniform_pie_max_ratio": _clamp_ratio(
+            float(pdf_cfg.get("thematique_uniform_pie_max_ratio", 0.82))
+        ),
+        "thematique_uniform_chart": _clamp_ratio(
+            chart_base * float(pdf_cfg.get("thematique_uniform_chart_scale", 1.0))
+        ),
+        "figure_scale": max(0.7, min(1.6, float(pdf_cfg.get("figure_scale", 1.0)))),
+        "legend_fontsize": max(6.0, min(12.0, float(pdf_cfg.get("legend_fontsize", 8.0)))),
+        "legend_ncol_max": max(1.0, min(6.0, float(pdf_cfg.get("legend_ncol_max", 4.0)))),
     }

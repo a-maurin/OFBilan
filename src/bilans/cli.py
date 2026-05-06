@@ -1,5 +1,7 @@
 """
-Point d'entree unique pour la generation des bilans (global ou thematiques).
+Point d'entrée unique pour la génération des bilans (profil global ou thématiques).
+
+Tous les bilans passent par ``--profil`` (y compris ``global``).
 """
 
 from __future__ import annotations
@@ -15,7 +17,7 @@ _DEPS_CHECKED = False
 
 
 def _check_deps() -> None:
-    """Verifie la disponibilite des dependances lourdes."""
+    """Vérifie la disponibilité des dépendances lourdes."""
     global _DEPS_CHECKED
     if _DEPS_CHECKED:
         return
@@ -26,18 +28,33 @@ def _check_deps() -> None:
         from reportlab.lib.pagesizes import A4  # noqa: F401
         from PIL import Image  # noqa: F401
     except ImportError as e:
-        print(f"Erreur : Une dependance requise est manquante : {e}", file=sys.stderr)
-        print("Veuillez installer les dependances avec : pip install -e .", file=sys.stderr)
+        print(f"Erreur : Une dépendance requise est manquante : {e}", file=sys.stderr)
+        print("Veuillez installer les dépendances avec : pip install -e .", file=sys.stderr)
         print("(Alternative legacy : pip install -r tools/requirements.txt)", file=sys.stderr)
         sys.exit(1)
     _DEPS_CHECKED = True
 
 
 def _list_themes() -> list[str]:
-    """Liste les identifiants de themes disponibles."""
-    from bilans.bilan_thematique.run_bilan_thematique import _list_profiles
+    """Liste les identifiants de profils disponibles (global en tête si présent)."""
+    from bilans.engine.profiles import list_profiles
 
-    return _list_profiles()
+    return list_profiles()
+
+
+def _ask_profils_interactive() -> list[str]:
+    """Demande les profils à exécuter en mode interactif."""
+    profils = _list_themes()
+    if not profils:
+        print("Aucun profil disponible.", file=sys.stderr)
+        return []
+    print("Profils disponibles :")
+    for i, p in enumerate(profils, 1):
+        print(f"{i}. {p}")
+    raw = input("Profil(s) à lancer (numéro(s) ou id, séparés par des espaces) [1] > ").strip()
+    if not raw:
+        raw = "1"
+    return [tok for tok in raw.split() if tok.strip()]
 
 
 def main() -> int:
@@ -45,34 +62,28 @@ def main() -> int:
     logger = logging.getLogger("bilans")
 
     parser = argparse.ArgumentParser(
-        description="Generation des bilans : global ou un/plusieurs bilans thematiques."
-    )
-    parser.add_argument(
-        "--mode",
-        choices=("global", "thematique"),
-        default=None,
-        help="Mode : global (bilan d'activite complet) ou thematique (un ou plusieurs themes).",
+        description="Génération des bilans : un ou plusieurs profils (--profil global, chasse, …)."
     )
     parser.add_argument(
         "--list-themes",
         action="store_true",
-        help="Afficher la liste des themes disponibles (un par ligne) et quitter.",
+        help="Afficher la liste des profils disponibles (un par ligne, numérotés) et quitter.",
     )
     parser.add_argument(
         "--profil",
         action="append",
         dest="profils",
         metavar="ID",
-        help="Theme(s) a executer en mode thematique (repetable).",
+        help="Profil à exécuter (répétable). Ex. --profil global ou --profil chasse --profil agrainage.",
     )
     parser.add_argument(
         "--combine",
         action="store_true",
-        help="En mode thematique : fusionner les themes selectionnes en un seul rapport.",
+        help="Enchaîner plusieurs profils thématiques avec récapitulatif combiné (incompatible avec le profil global).",
     )
-    parser.add_argument("--date-deb", type=str, default=None, help="Date debut (YYYY-MM-DD).")
+    parser.add_argument("--date-deb", type=str, default=None, help="Date début (YYYY-MM-DD).")
     parser.add_argument("--date-fin", type=str, default=None, help="Date fin (YYYY-MM-DD).")
-    parser.add_argument("--dept-code", type=str, default=None, help="Code departement (ex. 21).")
+    parser.add_argument("--dept-code", type=str, default=None, help="Code département (ex. 21).")
     parser.add_argument(
         "--preset",
         choices=("compact", "standard", "large"),
@@ -87,31 +98,11 @@ def main() -> int:
             print(f"{i}. {t}")
         return 0
 
-    if args.mode is None:
-        msg = "Indiquez --mode global ou --mode thematique (ou --list-themes pour afficher les themes)."
-        logger.error(msg)
-        print(msg, file=sys.stderr)
-        print("Usage :", file=sys.stderr)
-        print(
-            "  python -m bilans --mode global [--date-deb YYYY-MM-DD] [--date-fin YYYY-MM-DD] [--dept-code 21]",
-            file=sys.stderr,
-        )
-        print(
-            "  python -m bilans --mode thematique --profil <id> [--profil <id> ...] [--combine] [--date-deb ...] [--date-fin ...] [--dept-code 21]",
-            file=sys.stderr,
-        )
-        return 1
-
-    if args.mode == "thematique" and not (args.profils or []):
-        themes = _list_themes()
-        logger.error("En mode thematique, aucun profil fourni.")
-        print("En mode thematique, indiquez au moins un --profil.", file=sys.stderr)
-        if themes:
-            for i, t in enumerate(themes, 1):
-                print(f"{i}. {t}", file=sys.stderr)
-        else:
-            print("  Aucun theme disponible.", file=sys.stderr)
-        return 1
+    profils_raw = args.profils or []
+    if not profils_raw:
+        profils_raw = _ask_profils_interactive()
+        if not profils_raw:
+            return 1
 
     date_deb = args.date_deb
     date_fin = args.date_fin
@@ -125,43 +116,30 @@ def main() -> int:
             )
             date_deb, date_fin, dept_code = date_deb_str, date_fin_str, dept_str
         except ValueError as e:
-            logger.error("Erreur de saisie periode/departement : %s", e)
+            logger.error("Erreur de saisie période/département : %s", e)
             print(e, file=sys.stderr)
             return 1
 
     _check_deps()
 
-    if args.mode == "global":
-        try:
-            from bilans.common.carte_helper import ensure_maps
+    from bilans.engine.profiles import resolve_profile_ids
+    from bilans.engine.unified_engine import run_profiles_batch
 
-            ensure_maps("bilan_global", date_deb=date_deb, date_fin=date_fin, dept_code=dept_code)
-        except Exception as e:  # pragma: no cover
-            logger.warning("Impossible de generer les cartes pour le bilan global : %s", e)
-            print(f"[WARN] Impossible de generer les cartes pour le bilan global : {e}", file=sys.stderr)
+    profils_resolus = resolve_profile_ids(profils_raw)
+    if "global" in profils_resolus and len(profils_resolus) > 1:
+        msg = (
+            "Le profil « global » doit être exécuté seul. "
+            "Relancez avec uniquement --profil global."
+        )
+        logger.error(msg)
+        print(msg, file=sys.stderr)
+        return 1
 
-        from bilans.bilan_global.analyse_global import run_global
-
-        return run_global(date_deb, date_fin, dept_code, chart_preset=args.preset)
-
-    from bilans.bilan_thematique.run_bilan_thematique import _resolve_profils, run_thematic
-
-    profils_resolus = _resolve_profils(args.profils or [])
-
-    try:
-        from bilans.common.carte_helper import ensure_maps_for_profiles
-
-        ensure_maps_for_profiles(profils_resolus, date_deb=date_deb, date_fin=date_fin, dept_code=dept_code)
-    except Exception as e:  # pragma: no cover
-        profils_str = ", ".join(profils_resolus) or "(aucun)"
-        logger.warning("Impossible de generer les cartes pour les profils [%s] : %s", profils_str, e)
-        print(f"[WARN] Impossible de generer les cartes pour les profils [{profils_str}] : {e}", file=sys.stderr)
-
-    cli_options = {}
+    cli_options: dict = {}
     if args.preset:
         cli_options["chart_preset"] = args.preset
 
-    return run_thematic(
+    return run_profiles_batch(
         profils_resolus,
         date_deb,
         date_fin,
@@ -173,4 +151,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
