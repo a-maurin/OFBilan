@@ -20,12 +20,32 @@ sources:
   pa: true
   pve: true
 
+# Analyses « parc » non pertinentes pour la sécheresse : pas de ventilation
+# Cœur / Hors-cœur (PNF) dans les tableaux, pas d’option spatiale PNF/TUB par défaut.
+analyses:
+  distinction_coeur_hors_coeur: false
+
+# Partie 4 du PDF : pas des tableaux « Thèmes de contrôle — <type d'usager> » (un par catégorie).
+# Réglage effectif : config/presentation/pdf_presentation.yaml → profiles.controles_secheresse
+# → blocks.sec4.show_table_themes_par_type_usager (false pour ce profil).
+# Section 2.2 : pas de camembert « Répartition des résultats » → blocks.sec22.show_pie: false.
+
 periode_analyse:
   ventilation:
     type: auto
+    # Au-delà de 2 ans de période : annuel si durée > seuil, sinon trimestriel.
     seuil_jours: 366
 
 options:
+  # Désactivés : sinon jointures SIG / zones parc et tableaux « par zone » liés au PNF.
+  pnf:
+    label: "Ventilation et indicateurs liés au périmètre PNF (parc national de forêts)"
+    default: false
+    ask: false
+  tub:
+    label: "Ventilation par zone TUB (hors périmètre départemental seul)"
+    default: false
+    ask: false
   cartes:
     label: "Intégration des cartes"
     default: true

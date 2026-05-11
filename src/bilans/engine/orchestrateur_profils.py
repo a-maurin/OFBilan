@@ -81,9 +81,11 @@ from bilans.common.pdf_presentation_config import (
     resolve_pdf_presentation_config,
     resolve_section_titles,
     resolve_sections_for_toc,
+    resolve_tables_layout,
     is_block_enabled,
     should_show_placeholder,
 )
+from bilans.common.pdf_usagers_domaine_table import build_usagers_x_domaine_pdf_rows
 from bilans.common.chart_display_config import load_chart_display_config, compute_pdf_ratios
 from bilans.common.rendus_graphiques import (
     chart_pie,
@@ -244,7 +246,12 @@ def _resolve_ventilation_mode_from_profile(
     date_deb_ts: pd.Timestamp,
     date_fin_ts: pd.Timestamp,
 ) -> tuple[str, str, int, int]:
-    """Résout la ventilation temporelle depuis le profil YAML."""
+    """Résout la ventilation temporelle depuis le profil YAML.
+
+    En mode ``auto``, une étape ultérieure peut remplacer ``mensuelle`` par
+    ``hebdomadaire`` si la période d'analyse est d'au plus un an et que les
+    données ne couvrent qu'une partie de cette période (voir ``_maybe_override_ventilation_hebdomadaire``).
+    """
     period_cfg = profile.get("periode_analyse", {}) or {}
     vent_cfg = period_cfg.get("ventilation", {}) or {}
     vent_type = str(vent_cfg.get("type", "auto")).strip().lower()
@@ -258,11 +265,95 @@ def _resolve_ventilation_mode_from_profile(
     elif vent_type == "globale":
         ventilation_mode = "globale"
     else:
-        if duree_jours < 183:
+        # Règle métier : ventilation mensuelle tant que la période d'analyse est < 2 ans ;
+        # au-delà, annuelle si la durée dépasse le seuil du profil, sinon trimestrielle.
+        if duree_jours < 730:
             ventilation_mode = "mensuelle"
+        elif duree_jours > seuil_jours:
+            ventilation_mode = "annuelle"
         else:
-            ventilation_mode = "annuelle" if duree_jours > seuil_jours else "trimestrielle"
+            ventilation_mode = "trimestrielle"
     return ventilation_mode, vent_type, seuil_jours, duree_jours
+
+
+# Seuil : ventilation hebdomadaire (données concentrées sur une sous-période) uniquement si la période d'analyse ≤ ce nombre de jours.
+VENTILATION_MAX_JOURS_HEBDOMADAIRE = 366
+
+
+def _min_max_dates_donnees_dans_periode(
+    date_deb: pd.Timestamp,
+    date_fin: pd.Timestamp,
+    point: pd.DataFrame,
+    pej: pd.DataFrame,
+    pa: pd.DataFrame,
+    pve: pd.DataFrame,
+) -> tuple[pd.Timestamp, pd.Timestamp] | None:
+    """Min / max des dates d'activité (contrôles, PEJ, PA, PVe) incluses dans [date_deb, date_fin]."""
+    deb = pd.Timestamp(date_deb).normalize()
+    fin = pd.Timestamp(date_fin).normalize()
+    ts: list[pd.Timestamp] = []
+    for df, col in (
+        (point, "date_ctrl"),
+        (pej, "DATE_REF"),
+        (pa, "DATE_REF"),
+        (pve, "INF-DATE-INTG"),
+    ):
+        if df is None or df.empty or col not in df.columns:
+            continue
+        s = pd.to_datetime(df[col], errors="coerce").dropna()
+        for v in s:
+            t = pd.Timestamp(v).normalize()
+            if deb <= t <= fin:
+                ts.append(t)
+    if not ts:
+        return None
+    return min(ts), max(ts)
+
+
+def _donnees_moins_etendues_que_la_periode(
+    date_deb: pd.Timestamp,
+    date_fin: pd.Timestamp,
+    point: pd.DataFrame,
+    pej: pd.DataFrame,
+    pa: pd.DataFrame,
+    pve: pd.DataFrame,
+) -> bool:
+    """
+    Vrai si la période d'analyse est d'au plus un an et que l'étendue temporelle réelle
+    des données est strictement plus courte que l'étendue du périmètre d'analyse.
+    """
+    d_periode = int((pd.Timestamp(date_fin).normalize() - pd.Timestamp(date_deb).normalize()).days)
+    if d_periode > VENTILATION_MAX_JOURS_HEBDOMADAIRE:
+        return False
+    mm = _min_max_dates_donnees_dans_periode(date_deb, date_fin, point, pej, pa, pve)
+    if mm is None:
+        return False
+    t_min, t_max = mm
+    d_donnees = int((t_max.normalize() - t_min.normalize()).days)
+    return d_donnees < d_periode
+
+
+def _maybe_override_ventilation_hebdomadaire(
+    ventilation_mode: str,
+    vent_type: str,
+    date_deb: pd.Timestamp,
+    date_fin: pd.Timestamp,
+    point: pd.DataFrame,
+    pej: pd.DataFrame,
+    pa: pd.DataFrame,
+    pve: pd.DataFrame,
+) -> str:
+    """
+    En mode ``auto``, si la ventilation de base est mensuelle, la période ≤ 1 an et les
+    données ne couvrent qu'une partie de cette période → ventilation par semaines.
+    """
+    if str(vent_type).strip().lower() != "auto":
+        return ventilation_mode
+    if ventilation_mode != "mensuelle":
+        return ventilation_mode
+    if _donnees_moins_etendues_que_la_periode(date_deb, date_fin, point, pej, pa, pve):
+        return "hebdomadaire"
+    return ventilation_mode
 
 
 def _run_global_profile_via_yaml(
@@ -299,10 +390,6 @@ def _run_global_profile_via_yaml(
         date_deb_ts=date_deb_ts,
         date_fin_ts=date_fin_ts,
     )
-    print(
-        f"Ventilation temporelle : {ventilation_mode} "
-        f"(type={vent_type}, seuil={seuil_jours} j, durée={duree_jours} j)"
-    )
 
     print("Étape 1/4 : chargement des données...")
     with Spinner():
@@ -320,6 +407,14 @@ def _run_global_profile_via_yaml(
         pve = ensure_insee_from_communes_shp(
             pve, root, context="bilan global — PVe", log=spatial_log
         )
+
+    ventilation_mode = _maybe_override_ventilation_hebdomadaire(
+        ventilation_mode, vent_type, date_deb_ts, date_fin_ts, point, pej, pa, pve
+    )
+    print(
+        f"Ventilation temporelle : {ventilation_mode} "
+        f"(type={vent_type}, seuil={seuil_jours} j, durée={duree_jours} j)"
+    )
 
     print("Étape 2/4 : agrégations...")
     with Spinner():
@@ -1130,6 +1225,10 @@ def _run_aggregations(
     """Calcule toutes les agrégations et retourne un dict de DataFrames."""
     results: dict[str, Any] = {}
     profil_id = profile["id"]
+    distinction_coeur_hors_coeur = bool(
+        (profile.get("analyses") or {}).get("distinction_coeur_hors_coeur", True)
+    )
+    results["_pdf_show_coeur_hors_coeur"] = distinction_coeur_hors_coeur
 
     nb_ctrl = len(point_filtered)
     nb_pej = len(pej_filtered)
@@ -1164,26 +1263,42 @@ def _run_aggregations(
         nb_manq = int(tab.loc[tab["resultat"] == "Manquement", "nb"].sum())
         nb_nc = nb_inf + nb_manq
         nb_en_attente = max(total_controles_reference - (nb_conf + nb_nc), 0)
-        z = (
-            point_filtered["pnf_zone_sig"].astype(str)
-            if "pnf_zone_sig" in point_filtered.columns
-            else pd.Series([""] * len(point_filtered), index=point_filtered.index)
-        )
         r = point_filtered["resultat"].astype(str).str.strip()
-        is_coeur = z.eq("Coeur_PNF")
-        is_hors = ~is_coeur
-        def _coeur_hors_txt(mask: pd.Series) -> str:
-            c = int((mask & is_coeur).sum())
-            h = int((mask & is_hors).sum())
-            return f"Cœur: {c} / Hors-cœur: {h}"
-        details_rows: list[dict[str, Any]] = [
-            {"resultat": "Conforme", "nb": nb_conf, "coeur_hors_coeur": _coeur_hors_txt(r.eq("Conforme"))},
-            {"resultat": "Non-conforme", "nb": nb_nc, "coeur_hors_coeur": _coeur_hors_txt(r.isin(["Infraction", "Manquement"]))},
-            {"resultat": "    Dont infraction", "nb": nb_inf, "coeur_hors_coeur": _coeur_hors_txt(r.eq("Infraction"))},
-            {"resultat": "    Dont manquement", "nb": nb_manq, "coeur_hors_coeur": _coeur_hors_txt(r.eq("Manquement"))},
-        ]
-        if nb_en_attente > 0:
-            details_rows.append({"resultat": "En attente", "nb": nb_en_attente, "coeur_hors_coeur": "n.d."})
+        if distinction_coeur_hors_coeur:
+            z = (
+                point_filtered["pnf_zone_sig"].astype(str)
+                if "pnf_zone_sig" in point_filtered.columns
+                else pd.Series([""] * len(point_filtered), index=point_filtered.index)
+            )
+            is_coeur = z.eq("Coeur_PNF")
+            is_hors = ~is_coeur
+
+            def _coeur_hors_txt(mask: pd.Series) -> str:
+                c = int((mask & is_coeur).sum())
+                h = int((mask & is_hors).sum())
+                return f"Cœur: {c} / Hors-cœur: {h}"
+
+            details_rows = [
+                {"resultat": "Conforme", "nb": nb_conf, "coeur_hors_coeur": _coeur_hors_txt(r.eq("Conforme"))},
+                {
+                    "resultat": "Non-conforme",
+                    "nb": nb_nc,
+                    "coeur_hors_coeur": _coeur_hors_txt(r.isin(["Infraction", "Manquement"])),
+                },
+                {"resultat": "    Dont infraction", "nb": nb_inf, "coeur_hors_coeur": _coeur_hors_txt(r.eq("Infraction"))},
+                {"resultat": "    Dont manquement", "nb": nb_manq, "coeur_hors_coeur": _coeur_hors_txt(r.eq("Manquement"))},
+            ]
+            if nb_en_attente > 0:
+                details_rows.append({"resultat": "En attente", "nb": nb_en_attente, "coeur_hors_coeur": "n.d."})
+        else:
+            details_rows = [
+                {"resultat": "Conforme", "nb": nb_conf},
+                {"resultat": "Non-conforme", "nb": nb_nc},
+                {"resultat": "    Dont infraction", "nb": nb_inf},
+                {"resultat": "    Dont manquement", "nb": nb_manq},
+            ]
+            if nb_en_attente > 0:
+                details_rows.append({"resultat": "En attente", "nb": nb_en_attente})
         res_ctrl = pd.DataFrame(details_rows)
         if not res_ctrl.empty:
             res_ctrl["taux"] = res_ctrl["nb"] / float(total_controles_reference or 1)
@@ -1587,9 +1702,12 @@ def _run_aggregations(
         theme_candidates: list[str],
     ) -> pd.DataFrame:
         if df is None or df.empty:
-            return pd.DataFrame(
-                columns=["numero", "date", "commune", "thematique", "coeur_hors_coeur", "type_procedure"]
+            cols = (
+                ["numero", "date", "commune", "thematique", "coeur_hors_coeur", "type_procedure"]
+                if distinction_coeur_hors_coeur
+                else ["numero", "date", "commune", "thematique", "type_procedure"]
             )
+            return pd.DataFrame(columns=cols)
         d = df.copy()
         num_col = next((c for c in num_candidates if c in d.columns), None)
         dt_col = next((c for c in date_candidates if c in d.columns), None)
@@ -1612,45 +1730,46 @@ def _run_aggregations(
             out["commune"] = out["commune"].fillna(
                 d["DC_ID"].astype(str).str.strip().map(nom_commune_by_dc)
             )
-        if proc_type == "PVe" and com_col == "INF-INSEE" and pnf_zone_by_insee:
-            out["coeur_hors_coeur"] = (
-                d[com_col]
-                .astype(str)
-                .str.strip()
-                .str.extract(r"(\d{1,5})", expand=False)
-                .fillna("")
-                .str.zfill(5)
-                .map(pnf_zone_by_insee)
-                .apply(_coeur_hors_coeur_from_zone)
-            )
-            # Si un code INSEE n'est pas présent dans le référentiel, on retombe
-            # sur la zone SIG lorsqu'elle existe.
-            if "pnf_zone_sig" in d.columns:
-                fallback = d["pnf_zone_sig"].apply(_coeur_hors_coeur_from_zone)
-                out["coeur_hors_coeur"] = out["coeur_hors_coeur"].where(
-                    out["coeur_hors_coeur"].ne("n.d."), fallback
+        if distinction_coeur_hors_coeur:
+            if proc_type == "PVe" and com_col == "INF-INSEE" and pnf_zone_by_insee:
+                out["coeur_hors_coeur"] = (
+                    d[com_col]
+                    .astype(str)
+                    .str.strip()
+                    .str.extract(r"(\d{1,5})", expand=False)
+                    .fillna("")
+                    .str.zfill(5)
+                    .map(pnf_zone_by_insee)
+                    .apply(_coeur_hors_coeur_from_zone)
                 )
-        elif "pnf_zone_sig" in d.columns:
-            out["coeur_hors_coeur"] = d["pnf_zone_sig"].apply(_coeur_hors_coeur_from_zone)
-        elif "DC_ID" in d.columns and pnf_by_dc:
-            out["coeur_hors_coeur"] = (
-                d["DC_ID"].astype(str).str.strip().map(pnf_by_dc).apply(_coeur_hors_coeur_from_zone)
-            )
-        else:
-            out["coeur_hors_coeur"] = "n.d."
-        # PEJ / PA : la commune affichée peut venir de NOM_COM_FAITS ou des points (DC_ID) alors que
-        # NOM_COM reste vide — aligner le libellé Cœur/Hors-cœur sur `out["commune"]`, pas sur la seule
-        # colonne candidate d'origine.
-        if proc_type in ("PEJ", "PA") and pnf_zone_by_commune_nom:
-            zc = (
-                out["commune"]
-                .astype(str)
-                .str.strip()
-                .str.lower()
-                .replace({"": pd.NA, "nan": pd.NA, "none": pd.NA, "<na>": pd.NA})
-            )
-            from_nom = zc.map(pnf_zone_by_commune_nom).apply(_coeur_hors_coeur_from_zone)
-            out["coeur_hors_coeur"] = from_nom.where(from_nom.ne("n.d."), out["coeur_hors_coeur"])
+                # Si un code INSEE n'est pas présent dans le référentiel, on retombe
+                # sur la zone SIG lorsqu'elle existe.
+                if "pnf_zone_sig" in d.columns:
+                    fallback = d["pnf_zone_sig"].apply(_coeur_hors_coeur_from_zone)
+                    out["coeur_hors_coeur"] = out["coeur_hors_coeur"].where(
+                        out["coeur_hors_coeur"].ne("n.d."), fallback
+                    )
+            elif "pnf_zone_sig" in d.columns:
+                out["coeur_hors_coeur"] = d["pnf_zone_sig"].apply(_coeur_hors_coeur_from_zone)
+            elif "DC_ID" in d.columns and pnf_by_dc:
+                out["coeur_hors_coeur"] = (
+                    d["DC_ID"].astype(str).str.strip().map(pnf_by_dc).apply(_coeur_hors_coeur_from_zone)
+                )
+            else:
+                out["coeur_hors_coeur"] = "n.d."
+            # PEJ / PA : la commune affichée peut venir de NOM_COM_FAITS ou des points (DC_ID) alors que
+            # NOM_COM reste vide — aligner le libellé Cœur/Hors-cœur sur `out["commune"]`, pas sur la seule
+            # colonne candidate d'origine.
+            if proc_type in ("PEJ", "PA") and pnf_zone_by_commune_nom:
+                zc = (
+                    out["commune"]
+                    .astype(str)
+                    .str.strip()
+                    .str.lower()
+                    .replace({"": pd.NA, "nan": pd.NA, "none": pd.NA, "<na>": pd.NA})
+                )
+                from_nom = zc.map(pnf_zone_by_commune_nom).apply(_coeur_hors_coeur_from_zone)
+                out["coeur_hors_coeur"] = from_nom.where(from_nom.ne("n.d."), out["coeur_hors_coeur"])
         out["type_procedure"] = proc_type
         return out.fillna("")
 
@@ -1855,6 +1974,75 @@ def _run_aggregations(
             results["agg_annuelle"] = trimestriel
             results["ventilation_temporelle_type"] = "trimestrielle"
 
+    elif ventilation_mode == "hebdomadaire":
+        periods_w: set[tuple[int, int]] = set()
+
+        def _add_iso_weeks(df: pd.DataFrame, col: str) -> None:
+            if df is None or df.empty or col not in df.columns:
+                return
+            dt = pd.to_datetime(df[col], errors="coerce").dropna()
+            if dt.empty:
+                return
+            iso = dt.dt.isocalendar()
+            for y, w in zip(iso["year"].tolist(), iso["week"].tolist()):
+                periods_w.add((int(y), int(w)))
+
+        _add_iso_weeks(point_filtered, "date_ctrl")
+        _add_iso_weeks(pej_filtered, "DATE_REF")
+        _add_iso_weeks(pa_filtered, "DATE_REF")
+        _add_iso_weeks(pve_filtered, "INF-DATE-INTG")
+
+        rows_week: list[dict[str, Any]] = []
+        for (year, week) in sorted(periods_w):
+            row_w: dict[str, Any] = {"periode": f"{year}-S{week:02d}"}
+            if not point_filtered.empty and "date_ctrl" in point_filtered.columns:
+                dt = point_filtered["date_ctrl"]
+                iso = dt.dt.isocalendar()
+                mask = (iso["year"] == year) & (iso["week"] == week)
+                row_w["nb_controles"] = int(mask.sum())
+                if "resultat" in point_filtered.columns:
+                    row_w["nb_controles_non_conformes"] = count_controles_non_conformes_oscean(
+                        point_filtered.loc[mask, "resultat"]
+                    )
+                else:
+                    row_w["nb_controles_non_conformes"] = 0
+            else:
+                row_w["nb_controles"] = 0
+                row_w["nb_controles_non_conformes"] = 0
+
+            if not pej_filtered.empty and "DATE_REF" in pej_filtered.columns:
+                dt = pej_filtered["DATE_REF"]
+                iso = dt.dt.isocalendar()
+                row_w["nb_pej"] = int(((iso["year"] == year) & (iso["week"] == week)).sum())
+            else:
+                row_w["nb_pej"] = 0
+            if not pa_filtered.empty and "DATE_REF" in pa_filtered.columns:
+                dt = pa_filtered["DATE_REF"]
+                iso = dt.dt.isocalendar()
+                row_w["nb_pa"] = int(((iso["year"] == year) & (iso["week"] == week)).sum())
+            else:
+                row_w["nb_pa"] = 0
+            if not pve_filtered.empty and "INF-DATE-INTG" in pve_filtered.columns:
+                dt = pve_filtered["INF-DATE-INTG"]
+                iso = dt.dt.isocalendar()
+                row_w["nb_pve"] = int(((iso["year"] == year) & (iso["week"] == week)).sum())
+            else:
+                row_w["nb_pve"] = 0
+            rows_week.append(row_w)
+
+        if rows_week:
+            hebdo = pd.DataFrame(rows_week)
+            hebdo["taux_non_conformite_controles"] = hebdo.apply(
+                lambda r: (
+                    (r["nb_controles_non_conformes"] / r["nb_controles"])
+                    if r["nb_controles"] > 0
+                    else pd.NA
+                ),
+                axis=1,
+            )
+            results["agg_annuelle"] = hebdo
+            results["ventilation_temporelle_type"] = "hebdomadaire"
+
     elif ventilation_mode == "mensuelle":
         periods_m: set[tuple[int, int]] = set()
         if not point_filtered.empty and "date_ctrl" in point_filtered.columns:
@@ -2035,6 +2223,10 @@ def _export_csv(
             results["agg_annuelle"].to_csv(
                 out_dir / f"indicateurs_{prefix}_par_trimestre.csv", sep=";", index=False
             )
+        elif vent_type == "hebdomadaire":
+            results["agg_annuelle"].to_csv(
+                out_dir / f"indicateurs_{prefix}_par_semaine.csv", sep=";", index=False
+            )
         else:
             results["agg_annuelle"].to_csv(
                 out_dir / f"indicateurs_{prefix}_par_annee.csv", sep=";", index=False
@@ -2101,6 +2293,7 @@ def _pdf_section_activite_par_types_usagers(
     tmp_dir: Path,
     avail_w: float,
     *,
+    presentation_cfg: dict[str, Any],
     pie_ratio: float,
     bar_ratio: float,
     legend_fontsize: float,
@@ -2130,56 +2323,58 @@ def _pdf_section_activite_par_types_usagers(
             ),
             figure_scale=figure_scale,
         )
-        builder.add_image(Path(pie_path), width_ratio=pie_ratio)
+        builder.add_image(Path(pie_path), width_ratio=pie_ratio, spacer_after_mm=0.8)
 
     # 2) Un tableau par type d'usager : thèmes (nb + % du total général + % du sous-total type)
-    type_order = sum_par_type.sort_values(ascending=False).index
-    first_tbl = True
-    for tu in type_order:
-        tu_s = str(tu)
-        sub = ctrl_ut[ctrl_ut["type_usager"].astype(str) == tu_s].copy()
-        if sub.empty:
-            continue
-        sub = sub.sort_values("nb_controles", ascending=False, kind="stable")
-        st = float(sum_par_type.loc[tu]) if tu in sum_par_type.index else 1.0
-        st = st or 1.0
-        tbl_th = [
-            ["Thème", "Nombre", "% du total général", "% du sous-total (type)"],
-        ]
-        nbs_th = sub["nb_controles"].astype(int).tolist()
-        pct_sous_th = (
-            int_percents_largest_remainder(nbs_th) if st > 0 else [0] * len(nbs_th)
-        )
-        for j, (_, r) in enumerate(sub.iterrows()):
-            nb = int(r["nb_controles"])
-            tbl_th.append(
-                [
-                    str(r["theme"]),
-                    str(nb),
-                    _pct_table_cell(nb, total_ctrl_lignes),
-                    f"{pct_sous_th[j]} %",
-                ]
+    if is_block_enabled(presentation_cfg, "sec4.show_table_themes_par_type_usager", True):
+        type_order = sum_par_type.sort_values(ascending=False).index
+        first_tbl = True
+        for tu in type_order:
+            tu_s = str(tu)
+            sub = ctrl_ut[ctrl_ut["type_usager"].astype(str) == tu_s].copy()
+            if sub.empty:
+                continue
+            sub = sub.sort_values("nb_controles", ascending=False, kind="stable")
+            st = float(sum_par_type.loc[tu]) if tu in sum_par_type.index else 1.0
+            st = st or 1.0
+            tbl_th = [
+                ["Thème", "Nombre", "% du total général", "% du sous-total (type)"],
+            ]
+            nbs_th = sub["nb_controles"].astype(int).tolist()
+            pct_sous_th = (
+                int_percents_largest_remainder(nbs_th) if st > 0 else [0] * len(nbs_th)
             )
-        if not first_tbl:
-            builder.add_spacer(4)
-        first_tbl = False
-        builder.add_table(
-            tbl_th,
-            caption=f"Thèmes de contrôle — {tu_s}",
-            col_widths=[
-                avail_w * 0.40,
-                avail_w * 0.14,
-                avail_w * 0.23,
-                avail_w * 0.23,
-            ],
-            col_aligns=["LEFT", "RIGHT", "RIGHT", "RIGHT"],
-            keep_together=True,
-        )
+            for j, (_, r) in enumerate(sub.iterrows()):
+                nb = int(r["nb_controles"])
+                tbl_th.append(
+                    [
+                        str(r["theme"]),
+                        str(nb),
+                        _pct_table_cell(nb, total_ctrl_lignes),
+                        f"{pct_sous_th[j]} %",
+                    ]
+                )
+            if not first_tbl:
+                builder.add_spacer(1.5)
+            first_tbl = False
+            builder.add_table(
+                tbl_th,
+                caption=f"Thèmes de contrôle — {tu_s}",
+                col_widths=[
+                    avail_w * 0.40,
+                    avail_w * 0.14,
+                    avail_w * 0.23,
+                    avail_w * 0.23,
+                ],
+                col_aligns=["LEFT", "RIGHT", "RIGHT", "RIGHT"],
+                keep_together=True,
+                spacer_after_mm=1.0,
+            )
 
-    # 3) Sous-partie : résultats des contrôles par type d'usager (graphique + tableau)
+    # 3) Sous-partie : résultats des contrôles par type d'usager (titre + graphique + tableau
+    #    regroupés pour éviter un saut de page entre le titre et le contenu).
     rb = results.get("res_bilan_par_type_usager")
     if rb is not None and not rb.empty:
-        builder.add_paragraph("Résultats des contrôles par type d'usager", style="Heading2")
         labels = [str(x) for x in rb["type_usager"].tolist()]
         series: dict[str, list[int]] = {
             "Conforme": [int(x) for x in rb["Conforme"].tolist()],
@@ -2199,9 +2394,9 @@ def _pdf_section_activite_par_types_usagers(
             "bar_resultats_par_type_usager.png",
             legend_fontsize=legend_fontsize,
             legend_ncol_max=legend_ncol_max,
-            figure_scale=figure_scale,
+            figure_scale=max(0.88, float(figure_scale)),
+            show_title=False,
         )
-        builder.add_image(Path(bar_path), width_ratio=bar_ratio)
         # Tableau chiffré + pourcentages (part de chaque résultat dans le type,
         # et poids du type dans le total de cette sous-partie).
         has_autre = int(rb["Autre_resultat"].sum()) > 0
@@ -2272,14 +2467,17 @@ def _pdf_section_activite_par_types_usagers(
         n_other_cols = len(tbl_res[0]) - 1
         other_w = (avail_w - first_col_w) / float(max(1, n_other_cols))
         col_widths = [first_col_w] + [other_w] * n_other_cols
-        builder.add_table(
-            tbl_res,
-            caption="Résultats des contrôles par type d'usager",
+        builder.add_heading_chart_table_keep_together(
+            heading_text="Résultats des contrôles par type d'usager",
+            heading_style="Heading2",
+            chart_path=Path(bar_path),
+            chart_width_ratio=bar_ratio,
+            table_rows=tbl_res,
+            table_caption="Résultats des contrôles par type d'usager",
             col_widths=col_widths,
             col_aligns=["LEFT"] + ["RIGHT"] * (len(tbl_res[0]) - 1),
-            keep_together=True,
-            header_font_size=8,
-            wide_headers=False,
+            header_font_size=7.5,
+            trailing_spacer_mm=1.0,
         )
 
 
@@ -2325,11 +2523,13 @@ def _generate_pdf(
 
     safe_name = dept_name.replace(" ", "_").replace("'", "")
     pdf_path = out_dir / f"{export_prefix}_{safe_name}.pdf"
+    tables_layout = resolve_tables_layout(presentation_cfg)
     builder = PDFReportBuilder(
         pdf_path=pdf_path,
         header_title=f"Bilan thématique – {display_label}",
         title=f"Bilan thématique – {display_label}",
         author="Office français de la biodiversité",
+        tables_layout=tables_layout,
     )
     avail_w = builder.avail_w
     tmp_dir = builder.tmp_dir
@@ -2362,16 +2562,23 @@ def _generate_pdf(
     nb_pej = results.get("nb_pej", 0)
     nb_pa = results.get("nb_pa", 0)
     nb_pve = results.get("nb_pve", 0)
+    show_coeur_hors_pdf = bool(results.get("_pdf_show_coeur_hors_coeur", True))
     tab_resultats = results.get("tab_resultats")
     is_type_usager = profile.get("analyses", {}).get("type_usager", False)
     is_procedures = profile["filter"]["type"] == "procedures"
     # single_cfg / is_single_usager / single_label déjà définis plus haut
 
-    # Sommaire cible (numérotation imposée)
+    # Sommaire cible (numérotation imposée) — libellé 2.1 aligné sur la ventilation temporelle
+    _ventilation_titre_sec21 = str(results.get("ventilation_temporelle_type", "") or "")
+    _sec21_titre_defaut = (
+        "2.1. Indicateurs hebdomadaires"
+        if _ventilation_titre_sec21 == "hebdomadaire"
+        else "2.1. Indicateurs mensuels"
+    )
     section_defs = [
         ("sec1", "1. Chiffres clés"),
         ("sec2", "2. Contrôles"),
-        ("sec21", "2.1. Indicateurs mensuels"),
+        ("sec21", _sec21_titre_defaut),
         ("sec22", "2.2. Résultats des contrôles"),
         ("sec3", "3. Procédures"),
         ("sec31", "3.1 Procès verbaux électroniques (Pve)"),
@@ -2485,12 +2692,25 @@ def _generate_pdf(
         if isinstance(agg_annuelle, pd.DataFrame) and not agg_annuelle.empty:
             is_month = vent_temp_type == "mensuelle"
             is_trim = vent_temp_type == "trimestrielle"
-            texte_vent = "par mois " if is_month else ("par trimestre " if is_trim else "par année ")
+            is_week = vent_temp_type == "hebdomadaire"
+            texte_vent = (
+                "par mois "
+                if is_month
+                else (
+                    "par trimestre "
+                    if is_trim
+                    else ("par semaine " if is_week else "par année ")
+                )
+            )
             builder.add_paragraph(
                 "Ventilation des principaux indicateurs " + texte_vent
                 + "sur l'ensemble de la période du bilan."
             )
-            label_col = "Mois" if is_month else ("Trimestre" if is_trim else "Année")
+            label_col = (
+                "Mois"
+                if is_month
+                else ("Trimestre" if is_trim else ("Semaine" if is_week else "Année"))
+            )
             tbl = [[
                 label_col,
                 "Nb contrôles",
@@ -2518,7 +2738,16 @@ def _generate_pdf(
             if is_block_enabled(presentation_cfg, "sec21.show_table", True):
                 builder.add_table(
                     tbl,
-                    caption="Indicateurs " + ("mensuels" if is_month else ("trimestriels" if is_trim else "annuels")),
+                    caption="Indicateurs "
+                    + (
+                        "mensuels"
+                        if is_month
+                        else (
+                            "trimestriels"
+                            if is_trim
+                            else ("hebdomadaires" if is_week else "annuels")
+                        )
+                    ),
                     col_widths=[
                         avail_w * 0.12,
                         avail_w * 0.14,
@@ -2537,6 +2766,9 @@ def _generate_pdf(
             elif is_trim:
                 titre_ctrl = "Contrôles par trimestre (conformes / non-conformes)"
                 titre_proc = "Procédures et PVe par trimestre"
+            elif is_week:
+                titre_ctrl = "Contrôles par semaine (conformes / non-conformes)"
+                titre_proc = "Procédures et PVe par semaine"
             else:
                 titre_ctrl = "Contrôles par année (conformes / non-conformes)"
                 titre_proc = "Procédures et PVe par année"
@@ -2568,7 +2800,9 @@ def _generate_pdf(
                     figure_scale=figure_scale,
                 )
                 builder.add_image(Path(stacked_proc_path), width_ratio=chart_ratio_base)
-            if vent_temp_type != "mensuelle" and is_block_enabled(presentation_cfg, "sec21.show_chart_taux_line", True):
+            if vent_temp_type not in ("mensuelle", "hebdomadaire") and is_block_enabled(
+                presentation_cfg, "sec21.show_chart_taux_line", True
+            ):
                 taux_values = []
                 for _, row in agg_annuelle.iterrows():
                     val = row.get("taux_non_conformite_controles")
@@ -2586,7 +2820,7 @@ def _generate_pdf(
                     )
                     builder.add_image(Path(line_path), width_ratio=chart_ratio_base)
         elif show_placeholder:
-            builder.add_paragraph("Aucun indicateur mensuel disponible sur la période.")
+            builder.add_paragraph("Aucun indicateur disponible sur la période pour la ventilation retenue.")
 
     def _render_sec22() -> None:
         builder.add_section("sec22", section_title["sec22"], toc_level=1)
@@ -2603,7 +2837,9 @@ def _generate_pdf(
         tab_res_ctrl = results.get("tab_resultats_controles")
         if tab_res_ctrl is not None and not tab_res_ctrl.empty and is_block_enabled(presentation_cfg, "sec22.show_table", True):
             tr = tab_res_ctrl
-            tbl = [["Résultat", "Nombre", "Taux", "Cœur/Hors-cœur"]]
+            show_coeur_col = bool(results.get("_pdf_show_coeur_hors_coeur", True)) and "coeur_hors_coeur" in tr.columns
+            hdr = ["Résultat", "Nombre", "Taux"] + (["Cœur/Hors-cœur"] if show_coeur_col else [])
+            tbl = [hdr]
             top_mask = tr["resultat"].isin(["Conforme", "Non-conforme", "En attente"])
             top_counts = tr.loc[top_mask, "nb"].astype(int).tolist()
             top_rates = tab_counts_to_pct_strings(top_counts) if top_counts else []
@@ -2619,10 +2855,17 @@ def _generate_pdf(
                     j += 1
                 else:
                     t = "n.d."
-                tbl.append([rlib, str(nbv), t, str(row.get("coeur_hors_coeur", "n.d."))])
-            builder.add_table(tbl, caption="Résultats des contrôles",
-                              col_widths=[avail_w * 0.42, avail_w * 0.14, avail_w * 0.16, avail_w * 0.28],
-                              col_aligns=["LEFT", "RIGHT", "RIGHT", "LEFT"])
+                row_cells = [rlib, str(nbv), t]
+                if show_coeur_col:
+                    row_cells.append(str(row.get("coeur_hors_coeur", "n.d.")))
+                tbl.append(row_cells)
+            if show_coeur_col:
+                cw = [avail_w * 0.42, avail_w * 0.14, avail_w * 0.16, avail_w * 0.28]
+                ca = ["LEFT", "RIGHT", "RIGHT", "LEFT"]
+            else:
+                cw = [avail_w * 0.50, avail_w * 0.22, avail_w * 0.28]
+                ca = ["LEFT", "RIGHT", "RIGHT"]
+            builder.add_table(tbl, caption="Résultats des contrôles", col_widths=cw, col_aligns=ca)
             pie_data = {
                 str(r["resultat"]): int(r["nb"])
                 for _, r in tr.iterrows()
@@ -2698,17 +2941,22 @@ def _generate_pdf(
             ud = results.get("usager_par_domaine")
             if ud is not None and not ud.empty:
                 df_ud = ud.copy()
-                tbl = [list(df_ud.columns)]
-                for _, row in df_ud.head(20).iterrows():
-                    tbl.append([str(v) for v in row.values])
-                n_cols = len(df_ud.columns)
-                col_aligns = ["LEFT"] + ["RIGHT"] * (n_cols - 1)
-                builder.add_table(
-                    tbl,
-                    caption="Usagers × Domaine",
-                    col_aligns=col_aligns,
-                    wide_headers=True,
+                tbl, overflow_html = build_usagers_x_domaine_pdf_rows(
+                    df_ud,
+                    tables_layout=tables_layout,
                 )
+                if tbl:
+                    n_cols = len(tbl[0])
+                    col_aligns = ["LEFT"] + ["RIGHT"] * (n_cols - 1)
+                    cap = "Usagers × Domaine"
+                    if overflow_html:
+                        cap = f"{cap}<br/><br/>{overflow_html}"
+                    builder.add_table(
+                        tbl,
+                        caption=cap,
+                        col_aligns=col_aligns,
+                        wide_headers=True,
+                    )
 
         # Résultats des contrôles pour l'usager ciblé (tableau + camembert)
         # (placés avant les tableaux \"par domaine\")
@@ -2871,24 +3119,28 @@ def _generate_pdf(
                 and isinstance(pve_detail, pd.DataFrame)
                 and not pve_detail.empty
             ):
-                tbl_det = [["Numéro", "Date", "Commune", "Thématique", "Cœur/Hors-cœur"]]
+                base_cols = ["Numéro", "Date", "Commune", "Thématique"]
+                hdr_det = base_cols + (["Cœur/Hors-cœur"] if show_coeur_hors_pdf else [])
+                tbl_det = [hdr_det]
                 for _, r in pve_detail.head(25).iterrows():
                     c_raw = str(r.get("commune", "")).strip()
                     if c_raw.isdigit():
                         c_val = _nom_commune(c_raw)
                     else:
                         c_val = c_raw
-                    tbl_det.append([
+                    row_det = [
                         str(r.get("numero", "")),
                         str(r.get("date", "")),
                         c_val,
                         str(r.get("thematique", "")),
-                        str(r.get("coeur_hors_coeur", "")),
-                    ])
+                    ]
+                    if show_coeur_hors_pdf:
+                        row_det.append(str(r.get("coeur_hors_coeur", "")))
+                    tbl_det.append(row_det)
                 builder.add_table(
                     tbl_det,
                     caption="Détail des PVe",
-                    col_aligns=["LEFT", "LEFT", "LEFT", "LEFT", "LEFT"],
+                    col_aligns=["LEFT"] * len(hdr_det),
                 )
             pve_nat = results.get("pve_natinf_analysis")
             if (
@@ -3051,19 +3303,24 @@ def _generate_pdf(
             and isinstance(pej_detail, pd.DataFrame)
             and not pej_detail.empty
         ):
-            tbl_det = [["Numéro", "Date", "Commune", "Thématique", "Cœur/Hors-cœur"]]
+            hdr_pej = ["Numéro", "Date", "Commune", "Thématique"] + (
+                ["Cœur/Hors-cœur"] if show_coeur_hors_pdf else []
+            )
+            tbl_det = [hdr_pej]
             for _, r in pej_detail.head(25).iterrows():
-                tbl_det.append([
+                row_pej = [
                     str(r.get("numero", "")),
                     str(r.get("date", "")),
                     str(r.get("commune", "")),
                     str(r.get("thematique", "")),
-                    str(r.get("coeur_hors_coeur", "")),
-                ])
+                ]
+                if show_coeur_hors_pdf:
+                    row_pej.append(str(r.get("coeur_hors_coeur", "")))
+                tbl_det.append(row_pej)
             builder.add_table(
                 tbl_det,
                 caption="Détail des PEJ",
-                col_aligns=["LEFT", "LEFT", "LEFT", "LEFT", "LEFT"],
+                col_aligns=["LEFT"] * len(hdr_pej),
             )
         pej_nat = results.get("pej_natinf_analysis")
         if (
@@ -3116,19 +3373,24 @@ def _generate_pdf(
             and isinstance(pa_detail, pd.DataFrame)
             and not pa_detail.empty
         ):
-            tbl_det = [["Numéro", "Date", "Commune", "Thématique", "Cœur/Hors-cœur"]]
+            hdr_pa = ["Numéro", "Date", "Commune", "Thématique"] + (
+                ["Cœur/Hors-cœur"] if show_coeur_hors_pdf else []
+            )
+            tbl_det = [hdr_pa]
             for _, r in pa_detail.head(25).iterrows():
-                tbl_det.append([
+                row_pa = [
                     str(r.get("numero", "")),
                     str(r.get("date", "")),
                     str(r.get("commune", "")),
                     str(r.get("thematique", "")),
-                    str(r.get("coeur_hors_coeur", "")),
-                ])
+                ]
+                if show_coeur_hors_pdf:
+                    row_pa.append(str(r.get("coeur_hors_coeur", "")))
+                tbl_det.append(row_pa)
             builder.add_table(
                 tbl_det,
                 caption="Détail des PA",
-                col_aligns=["LEFT", "LEFT", "LEFT", "LEFT", "LEFT"],
+                col_aligns=["LEFT"] * len(hdr_pa),
             )
         elif show_placeholder:
             builder.add_paragraph("Aucune procédure administrative sur la période.")
@@ -3303,18 +3565,19 @@ def _generate_pdf(
         # Section dense : on conserve un saut de page dédié.
 
     # ── ACTIVITÉ PAR TYPES D'USAGERS (hors profil dédié « analyses.type_usager ») ──
-    builder.add_section("sec4", section_title["sec4"], start_on_new_page=True)
+    builder.add_section("sec4", section_title["sec4"], start_on_new_page=True, compact=True)
     if results.get("_pdf_show_activite_usagers"):
         _pdf_section_activite_par_types_usagers(
             builder,
             results,
             tmp_dir,
             avail_w,
-            pie_ratio=pie_ratio_base,
-            bar_ratio=chart_ratio_base,
-            legend_fontsize=legend_fontsize,
+            presentation_cfg=presentation_cfg,
+            pie_ratio=pie_ratio_base * 0.80,
+            bar_ratio=chart_ratio_base * 0.88,
+            legend_fontsize=max(6.5, legend_fontsize - 0.5),
             legend_ncol_max=legend_ncol_max,
-            figure_scale=figure_scale,
+            figure_scale=max(0.88, float(figure_scale) * 0.88),
         )
         builder.add_spacer(4)
     elif show_placeholder:
@@ -3457,10 +3720,6 @@ def _run_engine_thematic_pipeline(
         profile,
         date_deb_ts=cfg.date_deb,
         date_fin_ts=cfg.date_fin,
-    )
-    print(
-        f"Ventilation temporelle : {ventilation_mode} "
-        f"(type={vent_type}, seuil={seuil_jours} j, durée={duree_jours} j)"
     )
 
     # Extraire d'éventuelles cibles de type d'usager depuis les options CLI
@@ -3651,6 +3910,21 @@ def _run_engine_thematic_pipeline(
             point_filtered, pej_filtered, pve_filtered,
             resolved_opts, cfg, profil_id=profil_id,
         )
+
+    ventilation_mode = _maybe_override_ventilation_hebdomadaire(
+        ventilation_mode,
+        vent_type,
+        cfg.date_deb,
+        cfg.date_fin,
+        point_filtered,
+        pej_filtered,
+        pa_filtered,
+        pve_filtered,
+    )
+    print(
+        f"Ventilation temporelle : {ventilation_mode} "
+        f"(type={vent_type}, seuil={seuil_jours} j, durée={duree_jours} j)"
+    )
 
     # ── Agrégations ──
     print("  Agrégations...")

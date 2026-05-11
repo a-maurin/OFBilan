@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
+from PIL import Image as PILImage
 
 from bilans.common.chart_display_config import compute_pdf_ratios, load_chart_display_config
 from bilans.common.rendus_graphiques import (
@@ -12,6 +13,7 @@ from bilans.common.rendus_graphiques import (
     chart_bar_stacked,
     chart_line_evolution,
     chart_pie,
+    chart_stackplot_resultats_domaine,
 )
 from bilans.common.pdf_presentation_config import (
     build_title_lines_from_cfg,
@@ -21,9 +23,12 @@ from bilans.common.pdf_presentation_config import (
     resolve_pdf_presentation_config,
     resolve_section_titles,
     resolve_sections_for_toc,
+    resolve_tables_layout,
     should_show_placeholder,
 )
 from bilans.common.pdf_report_builder import PDFReportBuilder
+from bilans.common.pdf_utils import ofb_table
+from bilans.common.pdf_usagers_domaine_table import build_usagers_x_domaine_pdf_rows
 from bilans.common.pdf_shared_sections import (
     add_standard_cover_and_toc,
     add_standard_notice_methodology,
@@ -39,6 +44,8 @@ from bilans.common.percent_format import (
 from bilans.common.utilitaires_metier import _load_csv_opt, get_dept_name
 from bilans.engine.registre_sections_pdf import SectionRegistry
 from bilans.chemins_projet import get_cartes_dir
+from reportlab.lib.units import mm
+from reportlab.platypus import Image as RLImage, Paragraph, Spacer
 
 _ROOT = Path(__file__).resolve().parents[3]
 
@@ -46,10 +53,13 @@ VENTILATION_SEUIL_JOURS_GLOBAL = 366
 
 
 def resolve_ventilation_mode_global(date_deb: pd.Timestamp, date_fin: pd.Timestamp) -> str:
-    """Détermine le mode global de ventilation temporelle.
+    """Détermine le mode global de ventilation temporelle (aligné sur les profils thématiques).
+
+    Mensuelle si la période est strictement inférieure à 2 ans ; sinon annuelle au-delà du
+    seuil ``VENTILATION_SEUIL_JOURS_GLOBAL``, trimestrielle entre les deux.
     """
     duree_jours = int((date_fin - date_deb).days)
-    if duree_jours < 183:
+    if duree_jours < 730:
         return "mensuelle"
     if duree_jours > int(VENTILATION_SEUIL_JOURS_GLOBAL):
         return "annuelle"
@@ -214,6 +224,8 @@ def _generate_pdf_content(
         agg_periode = _load_csv_opt(out_dir, "indicateurs_global_par_mois.csv")
     elif ventilation_mode == "trimestrielle":
         agg_periode = _load_csv_opt(out_dir, "indicateurs_global_par_trimestre.csv")
+    elif ventilation_mode == "hebdomadaire":
+        agg_periode = _load_csv_opt(out_dir, "indicateurs_global_par_semaine.csv")
     else:
         agg_periode = _load_csv_opt(out_dir, "indicateurs_global_par_annee.csv")
     pej_resume = _load_csv_opt(out_dir, "pej_global_resume.csv")
@@ -258,11 +270,16 @@ def _generate_pdf_content(
     res_usager = _sort_desc(res_usager, ["Total", "Conforme", "Infraction", "Manquement"])
     cross_usager_dom = _sort_desc(cross_usager_dom, ["total"])
 
+    sec21_titre = (
+        "2.1. Indicateurs hebdomadaires"
+        if ventilation_mode == "hebdomadaire"
+        else "2.1. Indicateurs de la période"
+    )
     section_defs = [
         ("sec1", "1. Chiffres clés"),
         ("sec2_chap", "2. Contrôles"),
-        ("sec21", "2.1. Indicateurs de la période"),
-        ("sec22dom", "2.2. Localisations de contrôle par domaine"),
+        ("sec21", sec21_titre),
+        ("sec22dom", "2.2. Nombre de localisations de contrôles par domaines"),
         ("sec22theme", "2.3. Nombre de contrôles par thèmes"),
         ("sec22res", "2.4. Résultats des contrôles"),
         ("sec3", "3. Procédures (PEJ, PA, PVe)"),
@@ -282,11 +299,13 @@ def _generate_pdf_content(
     )
     report_header = " — ".join(line.strip() for line in header_title_lines if line.strip())
 
+    tables_layout = resolve_tables_layout(presentation_cfg)
     builder = PDFReportBuilder(
         pdf_path=pdf_path,
         header_title=report_header,
         title=" — ".join(header_title_lines),
         author="Office français de la biodiversité",
+        tables_layout=tables_layout,
     )
     avail_w = builder.avail_w
     tmp_dir = builder.tmp_dir
@@ -347,11 +366,20 @@ def _generate_pdf_content(
         ):
             is_mensuel = ventilation_mode == "mensuelle"
             is_trimestriel = ventilation_mode == "trimestrielle"
-            label_periode = "Mois" if is_mensuel else ("Trimestre" if is_trimestriel else "Année")
+            is_hebdo = ventilation_mode == "hebdomadaire"
+            label_periode = (
+                "Mois"
+                if is_mensuel
+                else ("Trimestre" if is_trimestriel else ("Semaine" if is_hebdo else "Année"))
+            )
             texte_ventilation = (
                 "par mois "
                 if is_mensuel
-                else ("par trimestre " if is_trimestriel else "par année ")
+                else (
+                    "par trimestre "
+                    if is_trimestriel
+                    else ("par semaine " if is_hebdo else "par année ")
+                )
             )
             builder.add_section(
                 "sec21",
@@ -394,7 +422,11 @@ def _generate_pdf_content(
             cap = (
                 "Indicateurs mensuels"
                 if is_mensuel
-                else ("Indicateurs trimestriels" if is_trimestriel else "Indicateurs annuels")
+                else (
+                    "Indicateurs trimestriels"
+                    if is_trimestriel
+                    else ("Indicateurs hebdomadaires" if is_hebdo else "Indicateurs annuels")
+                )
             )
             if is_block_enabled(presentation_cfg, "sec21.show_table", True):
                 builder.add_table(
@@ -419,6 +451,9 @@ def _generate_pdf_content(
             elif ventilation_mode == "trimestrielle":
                 titre_ctrl = "Contrôles par trimestre (conformes / non-conformes)"
                 titre_proc = "Procédures et PVe par trimestre"
+            elif ventilation_mode == "hebdomadaire":
+                titre_ctrl = "Contrôles par semaine (conformes / non-conformes)"
+                titre_proc = "Procédures et PVe par semaine"
             else:
                 titre_ctrl = "Contrôles par année (conformes / non-conformes)"
                 titre_proc = "Procédures et PVe par année"
@@ -466,7 +501,7 @@ def _generate_pdf_content(
             period_days = int((date_fin - date_deb).days)
             line_source = agg_periode
             line_labels = period_labels
-            if period_days < 730:
+            if period_days < 730 and ventilation_mode != "hebdomadaire":
                 agg_line_month = _load_csv_opt(out_dir, "indicateurs_global_par_mois.csv")
                 if agg_line_month is not None and not agg_line_month.empty:
                     line_source = agg_line_month
@@ -532,7 +567,7 @@ def _generate_pdf_content(
                 tbl.append([str(row["domaine"]), str(int(row["nb"])), taux_str])
             builder.add_table(
                 tbl,
-                caption="Localisations de contrôle par domaine",
+                caption="Nombre de localisations de contrôles par domaines",
                 col_widths=[avail_w * 0.55, avail_w * 0.22, avail_w * 0.23],
                 col_aligns=["LEFT", "RIGHT", "RIGHT"],
             )
@@ -546,7 +581,7 @@ def _generate_pdf_content(
                 if is_block_enabled(presentation_cfg, "sec22dom.show_pie", True) and pie_data:
                     pie_path = chart_pie(
                         pie_data,
-                        "Localisations de contrôle par domaine",
+                        "Nombre de localisations de contrôles par domaines",
                         tmp_dir,
                         "pie_domaine.png",
                         **_chart_pie_compact_legend_kw(
@@ -595,61 +630,127 @@ def _generate_pdf_content(
         use_detail = tab_resultats_controles is not None and not tab_resultats_controles.empty
         show_res_table = is_block_enabled(presentation_cfg, "sec22res.show_table", True)
         show_res_pie = is_block_enabled(presentation_cfg, "sec22res.show_pie", True)
+        show_chart_domaine = is_block_enabled(
+            presentation_cfg, "sec22res.show_chart_resultats_domaine", True
+        )
+        res_par_dom = _load_csv_opt(out_dir, "controles_global_resultats_par_domaine.csv")
+        split_by_row = bool(tables_layout.get("split_by_row"))
+
+        def _mk_centered_image(chart_path: Path, width_ratio: float) -> RLImage:
+            w = avail_w * width_ratio
+            try:
+                with PILImage.open(str(chart_path)) as im:
+                    width_px, height_px = im.size
+                ratio = (height_px / float(width_px)) if width_px > 0 else 0.45
+            except OSError:
+                ratio = 0.45
+            img = RLImage(str(chart_path), width=w, height=w * ratio)
+            img.hAlign = "CENTER"
+            return img
+
+        block: list = []
+        pie_res: dict[str, int] | None = None
+
         if use_detail and show_res_table:
             tbl_pdf = _build_rows_resultats_controles_pdf(tab_resultats_controles)
-            builder.add_table(
-                tbl_pdf,
-                caption="Résultats des contrôles",
-                col_widths=[avail_w * 0.44, avail_w * 0.18, avail_w * 0.38],
-                col_aligns=["LEFT", "RIGHT", "RIGHT"],
+            block.append(Paragraph("Résultats des contrôles", builder.styles["TableCaption"]))
+            block.append(Spacer(1, 1 * mm))
+            block.append(
+                ofb_table(
+                    tbl_pdf,
+                    col_widths=[avail_w * 0.44, avail_w * 0.18, avail_w * 0.38],
+                    col_aligns=["LEFT", "RIGHT", "RIGHT"],
+                    split_by_row=split_by_row,
+                )
             )
+            block.append(Spacer(1, 2 * mm))
             strip_res = tab_resultats_controles["resultat"].astype(str).str.strip()
             pie_mask = strip_res.isin(["Conforme", "Non-conforme", "En attente"])
-            pie_res: dict[str, int] = {}
+            pie_res = {}
             for _, row in tab_resultats_controles.loc[pie_mask].iterrows():
                 pie_res[str(row["resultat"]).strip()] = int(row["nb"])
-            if show_res_pie and pie_res:
-                pie_path = chart_pie(
-                    pie_res,
-                    "Répartition des résultats",
-                    tmp_dir,
-                    "pie_global_resultats.png",
-                    **_chart_pie_compact_legend_kw(
-                        len(pie_res),
-                        legend_fontsize=legend_fontsize,
-                        legend_ncol_max=legend_ncol_max,
-                    ),
-                    figure_scale=figure_scale,
-                )
-                builder.add_image(Path(pie_path), width_ratio=pie_ratio_resultats)
         elif tab_resultats is not None and not tab_resultats.empty and show_res_table:
             tbl = [["Résultat", "Nombre", "Taux"]]
             tr_pct = tab_counts_to_pct_strings(tab_resultats["nb"].astype(int).tolist())
             for i, (_, row) in enumerate(tab_resultats.iterrows()):
                 tbl.append([str(row["resultat"]), str(int(row["nb"])), tr_pct[i]])
-            builder.add_table(
-                tbl,
-                caption="Résultats des contrôles (libellés OSCEAN)",
-                col_widths=[avail_w * 0.50, avail_w * 0.25, avail_w * 0.25],
-                col_aligns=["LEFT", "RIGHT", "RIGHT"],
-            )
-            pie_res = {str(r["resultat"]): int(r["nb"]) for _, r in tab_resultats.iterrows()}
-            if show_res_pie and pie_res:
-                pie_path = chart_pie(
-                    pie_res,
-                    "Répartition des résultats",
-                    tmp_dir,
-                    "pie_global_resultats.png",
-                    **_chart_pie_compact_legend_kw(
-                        len(pie_res),
-                        legend_fontsize=legend_fontsize,
-                        legend_ncol_max=legend_ncol_max,
-                    ),
-                    figure_scale=figure_scale,
+            block.append(
+                Paragraph(
+                    "Résultats des contrôles (libellés OSCEAN)",
+                    builder.styles["TableCaption"],
                 )
-                builder.add_image(Path(pie_path), width_ratio=pie_ratio_resultats)
+            )
+            block.append(Spacer(1, 1 * mm))
+            block.append(
+                ofb_table(
+                    tbl,
+                    col_widths=[avail_w * 0.50, avail_w * 0.25, avail_w * 0.25],
+                    col_aligns=["LEFT", "RIGHT", "RIGHT"],
+                    split_by_row=split_by_row,
+                )
+            )
+            block.append(Spacer(1, 2 * mm))
+            pie_res = {str(r["resultat"]): int(r["nb"]) for _, r in tab_resultats.iterrows()}
+
+        pie_scale = figure_scale * 0.82
+        pie_width_ratio = pie_ratio_resultats * 0.88
+        if show_res_pie and pie_res:
+            pie_path = chart_pie(
+                pie_res,
+                "Répartition des résultats",
+                tmp_dir,
+                "pie_global_resultats.png",
+                **_chart_pie_compact_legend_kw(
+                    len(pie_res),
+                    legend_fontsize=legend_fontsize,
+                    legend_ncol_max=legend_ncol_max,
+                ),
+                figure_scale=pie_scale,
+            )
+            block.append(Spacer(1, 1 * mm))
+            block.append(_mk_centered_image(Path(pie_path), pie_width_ratio))
+            block.append(Spacer(1, 1.5 * mm))
+
+        if (
+            show_chart_domaine
+            and res_par_dom is not None
+            and not res_par_dom.empty
+            and {"Conforme", "Non-conforme", "En attente"}.issubset(res_par_dom.columns)
+        ):
+            df_dom = res_par_dom.head(10).copy()
+            dom_lbl = [str(v)[:34] for v in df_dom["domaine"].tolist()]
+            y1 = [float(v) for v in df_dom["Conforme"].tolist()]
+            y2 = [float(v) for v in df_dom["Non-conforme"].tolist()]
+            y3 = [float(v) for v in df_dom["En attente"].tolist()]
+            if sum(y1) + sum(y2) + sum(y3) > 0:
+                stack_path = chart_stackplot_resultats_domaine(
+                    dom_lbl,
+                    y1,
+                    y2,
+                    y3,
+                    "Résultats des contrôles par domaine",
+                    "Nombre de localisations",
+                    tmp_dir,
+                    "stack_global_resultats_domaine.png",
+                    legend_fontsize=max(6.5, legend_fontsize - 1.0),
+                    figure_scale=figure_scale * 0.72,
+                )
+                block.append(Spacer(1, 1 * mm))
+                block.append(_mk_centered_image(Path(stack_path), chart_bar_w * 0.94))
+
+        if block:
+            builder.add_keep_together_block(block)
         elif show_placeholder:
-            builder.add_paragraph("Aucune donnée de résultat disponible.")
+            builder.add_keep_together_block(
+                [
+                    Paragraph(
+                        "Aucune donnée de résultat disponible.",
+                        builder.styles["BodyText"],
+                    )
+                ]
+            )
+        else:
+            builder.add_keep_together_block([])
         builder.add_spacer(4)
 
     sec2_registry = SectionRegistry()
@@ -657,9 +758,12 @@ def _generate_pdf_content(
     sec2_registry.register("sec22theme", lambda _ctx: _render_sec22theme())
     sec2_registry.register("sec22res", lambda _ctx: _render_sec22res())
 
-    sec2_order = [sid for sid, _ in sections if sid in {"sec22dom", "sec22theme", "sec22res"}]
-    if not sec2_order:
-        sec2_order = ["sec22dom", "sec22theme", "sec22res"]
+    # Ordre canonique des sous-parties 2.x (indépendant du YAML) pour éviter tout décalage titre / contenu.
+    sec2_order = [
+        sid
+        for sid in ("sec22dom", "sec22theme", "sec22res")
+        if is_section_enabled(presentation_cfg, sid, True)
+    ]
     sec2_registry.render_many(sec2_order, {})
 
     if is_section_enabled(presentation_cfg, "sec3", True):
@@ -759,23 +863,39 @@ def _generate_pdf_content(
             )
         elif show_placeholder:
             builder.add_paragraph("Aucune procédure administrative sur la période.")
+        elif nb_pa > 0:
+            builder.add_paragraph(
+                "<i>Ventilation par domaine indisponible pour les procédures administratives "
+                f"({nb_pa} procédure(s) sur la période). Vérifier la présence de la colonne DOMAINE "
+                "dans les exports OSCEAN.</i>",
+                style="BodySmall",
+            )
 
     sec3_registry = SectionRegistry()
     sec3_registry.register("sec31", lambda _ctx: _render_sec31())
     sec3_registry.register("sec32", lambda _ctx: _render_sec32())
     sec3_registry.register("sec33", lambda _ctx: _render_sec33())
 
-    sec3_order = [sid for sid, _ in sections if sid in {"sec31", "sec32", "sec33"}]
-    if not sec3_order:
-        sec3_order = ["sec31", "sec32", "sec33"]
+    sec3_order = [
+        sid
+        for sid in ("sec31", "sec32", "sec33")
+        if is_section_enabled(presentation_cfg, sid, True)
+    ]
     sec3_registry.render_many(sec3_order, {})
 
     def _render_sec4() -> None:
+        # Gabarit resserré : viser une section 4 sur une page A4 (hors cas extrêmes).
+        sec4_figure_scale = figure_scale * 0.64
+        sec4_pie_w = pie_ratio_usagers * 0.74
+        sec4_bar_w = float(chart_ratios.get("global_type_usager_bar_ratio", chart_bar_w)) * 0.86
+        sec4_tbl_sp = 1.0
+        sec4_img_sp = 0.8
         if is_section_enabled(presentation_cfg, "sec4", True):
             builder.add_section(
                 "sec4",
                 section_title["sec4"],
                 start_on_new_page=True,
+                compact=True,
             )
         if is_section_enabled(presentation_cfg, "sec4", True) and (agg_usager is None or agg_usager.empty):
             if show_placeholder:
@@ -800,7 +920,8 @@ def _generate_pdf_content(
                     [
                         (str(total_usagers), "Total effectifs usagers"),
                         (str(nb_multi), "Localisations multi-usagers"),
-                    ]
+                    ],
+                    spacer_after_mm=2.0,
                 )
             if is_block_enabled(presentation_cfg, "sec4.show_table_usagers", True):
                 tbl_u = [["Type d’usagers", "Nombre", "Taux"]]
@@ -813,6 +934,7 @@ def _generate_pdf_content(
                     caption="Usagers contrôlés par type",
                     col_widths=[avail_w * 0.58, avail_w * 0.21, avail_w * 0.21],
                     col_aligns=["LEFT", "RIGHT", "RIGHT"],
+                    spacer_after_mm=sec4_tbl_sp,
                 )
 
             if is_block_enabled(presentation_cfg, "sec4.show_pie_usagers", True):
@@ -825,38 +947,53 @@ def _generate_pdf_content(
                         "pie_usagers.png",
                         **_chart_pie_compact_legend_kw(
                             len(pie_data),
-                            legend_fontsize=legend_fontsize,
+                            legend_fontsize=max(6.5, legend_fontsize - 0.5),
                             legend_ncol_max=legend_ncol_max,
                         ),
-                        figure_scale=figure_scale,
+                        figure_scale=sec4_figure_scale,
                     )
-                    builder.add_image(Path(pie_path), width_ratio=pie_ratio_usagers)
+                    builder.add_image(
+                        Path(pie_path),
+                        width_ratio=sec4_pie_w,
+                        spacer_after_mm=sec4_img_sp,
+                    )
 
             if (
                 is_block_enabled(presentation_cfg, "sec4.show_table_usagers_x_domaine", True)
                 and cross_usager_dom is not None
                 and not cross_usager_dom.empty
             ):
-                domain_cols = [c for c in cross_usager_dom.columns if c != "type_usager"]
                 temp_cross = cross_usager_dom.copy()
-                if "total" not in temp_cross.columns:
+                domain_cols = [
+                    c
+                    for c in temp_cross.columns
+                    if c not in ("type_usager", "total", "Total")
+                ]
+                if "total" not in temp_cross.columns and domain_cols:
                     temp_cross["total"] = temp_cross[domain_cols].sum(axis=1)
-                temp_cross = temp_cross.sort_values(by="total", ascending=False, kind="stable")
-                header = ["Type d’usagers"] + [str(c) for c in domain_cols]
-                tbl_cross = [header]
-                for _, row in temp_cross.iterrows():
-                    tbl_cross.append([str(row["type_usager"])] + [str(int(row[c])) for c in domain_cols])
-                other_w = (avail_w * 0.76) / max(1, len(domain_cols))
-                col_widths = [avail_w * 0.24] + [other_w] * len(domain_cols)
-                col_aligns = ["LEFT"] + ["RIGHT"] * len(domain_cols)
-                builder.add_table(
-                    tbl_cross,
-                    caption="Usagers × Domaine (contrôles)",
-                    col_widths=col_widths,
-                    col_aligns=col_aligns,
-                    wide_headers=True,
-                    keep_together=True,
+                if "total" in temp_cross.columns:
+                    temp_cross = temp_cross.sort_values(by="total", ascending=False, kind="stable")
+                tbl_cross, overflow_html = build_usagers_x_domaine_pdf_rows(
+                    temp_cross,
+                    tables_layout=tables_layout,
                 )
+                if tbl_cross:
+                    n_dom = len(tbl_cross[0]) - 1
+                    other_w = (avail_w * 0.76) / max(1, n_dom)
+                    col_widths = [avail_w * 0.24] + [other_w] * n_dom
+                    col_aligns = ["LEFT"] + ["RIGHT"] * n_dom
+                    cap = "Usagers × Domaine (contrôles)"
+                    if overflow_html:
+                        cap = f"{cap}<br/><br/>{overflow_html}"
+                    builder.add_table(
+                        tbl_cross,
+                        caption=cap,
+                        col_widths=col_widths,
+                        col_aligns=col_aligns,
+                        wide_headers=True,
+                        keep_together=True,
+                        spacer_after_mm=sec4_tbl_sp,
+                    )
 
             if (
                 (
@@ -899,13 +1036,14 @@ def _generate_pdf_content(
                             "Nombre",
                             tmp_dir,
                             "bar_resultats_par_type_usager_global.png",
-                            legend_fontsize=legend_fontsize,
+                            legend_fontsize=max(6.5, legend_fontsize - 0.5),
                             legend_ncol_max=legend_ncol_max,
-                            figure_scale=figure_scale,
+                            figure_scale=max(0.88, float(figure_scale) * 0.88),
                         )
                         builder.add_image(
                             Path(bar_path),
-                            width_ratio=float(chart_ratios.get("global_type_usager_bar_ratio", chart_bar_w)),
+                            width_ratio=sec4_bar_w,
+                            spacer_after_mm=sec4_img_sp,
                         )
 
                     total_global = float(
@@ -971,8 +1109,9 @@ def _generate_pdf_content(
                             col_widths=col_widths,
                             col_aligns=["LEFT"] + ["RIGHT"] * (len(tbl_res[0]) - 1),
                             keep_together=True,
-                            header_font_size=8,
+                            header_font_size=7.5,
                             wide_headers=False,
+                            spacer_after_mm=sec4_tbl_sp,
                         )
 
     sec4_registry = SectionRegistry()

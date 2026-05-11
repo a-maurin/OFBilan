@@ -27,10 +27,11 @@ _AVail_W = PAGE_W - MARGIN_LEFT - MARGIN_RIGHT
 class VerticalText(Flowable):
     """Texte affiché verticalement (-90°) pour en-têtes de colonnes étroites."""
 
-    def __init__(self, text: str, style=None):
+    def __init__(self, text: str, style=None, *, pad_x_pt: float = 0.0):
         super().__init__()
         self.text = str(text)
         self.style = style or _CELL_HEADER
+        self.pad_x_pt = float(pad_x_pt)
         self._lines: list[str] = [self.text]
 
     def _split_lines(self, avail_width: float) -> list[str]:
@@ -69,22 +70,36 @@ class VerticalText(Flowable):
             text_width = max(len(line) for line in self._lines) * self.style.fontSize * 0.6
         leading = max(float(getattr(self.style, "leading", 0) or 0), float(self.style.fontSize) + 1.5)
         self._block_w = len(self._lines) * leading + 6
-        # Après rotation -90°, la largeur du texte devient la hauteur nécessaire.
-        self._height = min(availHeight, text_width + 8)
+        # Après rotation -90°, l'encombrement vertical du libellé suit surtout la longueur du texte.
+        # Ne pas plafonner trop bas sur availHeight (première passe ReportLab) pour éviter la coupe.
+        stack_extra = max(0, len(self._lines) - 1) * 6.0
+        need_h = text_width + 26.0 + stack_extra
+        cap = float(availHeight) if (availHeight and float(availHeight) > 1.0) else 10_000.0
+        self._height = max(float(self.style.fontSize) * 5.0, min(cap, need_h))
         return (availWidth, self._height)
 
     def draw(self):
         canv = self.canv
         leading = max(float(getattr(self.style, "leading", 0) or 0), float(self.style.fontSize) + 1.5)
-        canv.saveState()
-        canv.setFont(self.style.fontName, self.style.fontSize)
-        canv.setFillColor(self.style.textColor)
-        # Rotation -90° : on part du bas de la cellule, on tourne, le texte monte.
-        canv.translate(4, self._height - 4)
-        canv.rotate(-90)
+        fs = float(self.style.fontSize)
+        fn = self.style.fontName
         col_step = leading + 1.0
+        n = len(self._lines)
+        total_stack = (n - 1) * col_step if n > 1 else 0.0
+
+        canv.saveState()
+        canv.setFont(fn, fs)
+        canv.setFillColor(self.style.textColor)
+        # Centre géométrique dans la cellule (largeur / hauteur allouées par le Table).
+        cx = self.width / 2.0 + self.pad_x_pt
+        cy = self.height / 2.0
+        canv.translate(cx, cy)
+        canv.rotate(-90)
+        # Après rotation : empiler les segments le long de Y, centrés sur l’axe de la colonne.
+        start_y = total_stack / 2.0
         for i, line in enumerate(self._lines):
-            canv.drawString(0, -i * col_step, line)
+            y = start_y - i * col_step
+            canv.drawCentredString(0, y, line)
         canv.restoreState()
 
 
@@ -93,6 +108,9 @@ def ofb_table_wide(
     col_widths=None,
     col_aligns=None,
     avail_w: float = None,
+    *,
+    split_by_row: bool = False,
+    vertical_header_pad_x_pt: float = 0.0,
 ):
     """Tableau OFB avec en-têtes de colonnes 1..n en texte vertical (lisibles quand beaucoup de colonnes).
 
@@ -101,6 +119,14 @@ def ofb_table_wide(
     """
     if not data_rows:
         return Table([], colWidths=[])
+
+    # Police légèrement réduite pour les en-têtes verticaux (libellés longs, colonnes étroites).
+    cell_header_vert = ParagraphStyle(
+        "CellHeaderVert",
+        parent=_CELL_HEADER,
+        fontSize=7.5,
+        leading=9.5,
+    )
 
     avail_w = avail_w or _AVail_W
     n_cols = max(len(r) for r in data_rows)
@@ -139,7 +165,13 @@ def ofb_table_wide(
                 if ci == 0:
                     new_row.append(Paragraph(cell_str, _CELL_HEADER))
                 else:
-                    new_row.append(VerticalText(cell_str, _CELL_HEADER))
+                    new_row.append(
+                        VerticalText(
+                            cell_str,
+                            cell_header_vert,
+                            pad_x_pt=vertical_header_pad_x_pt,
+                        )
+                    )
             else:
                 is_right = col_aligns[ci] == "RIGHT" if ci < len(col_aligns) else False
                 style = _CELL_RIGHT if is_right else _CELL_NORMAL
@@ -147,7 +179,13 @@ def ofb_table_wide(
         # Compléter la ligne si nécessaire
         while len(new_row) < n_cols:
             if ri == 0:
-                new_row.append(VerticalText("", _CELL_HEADER))
+                new_row.append(
+                    VerticalText(
+                        "",
+                        cell_header_vert,
+                        pad_x_pt=vertical_header_pad_x_pt,
+                    )
+                )
             else:
                 new_row.append(Paragraph("", _CELL_NORMAL))
         wrapped.append(new_row)
@@ -170,11 +208,14 @@ def ofb_table_wide(
         if i % 2 == 0:
             style_cmds.append(("BACKGROUND", (0, i), (-1, i), COLOR_TABLE_ALT_ROW))
 
-    tbl = Table(wrapped, colWidths=col_widths, repeatRows=1)
+    tbl = Table(
+        wrapped,
+        colWidths=col_widths,
+        repeatRows=1,
+        splitByRow=1 if split_by_row else 0,
+    )
     tbl.setStyle(TableStyle(style_cmds))
     return tbl
-
-
 
 
 def ofb_table(
@@ -183,6 +224,7 @@ def ofb_table(
     col_aligns=None,
     *,
     header_font_size: float | None = None,
+    split_by_row: bool = False,
 ):
     """Crée un Table reportlab stylisé charte OFB (en-tête bleu, lignes alternées).
 
@@ -279,7 +321,12 @@ def ofb_table(
         if i % 2 == 0:
             style_cmds.append(("BACKGROUND", (0, i), (-1, i), COLOR_TABLE_ALT_ROW))
 
-    tbl = Table(wrapped, colWidths=col_widths, repeatRows=1)
+    tbl = Table(
+        wrapped,
+        colWidths=col_widths,
+        repeatRows=1,
+        splitByRow=1 if split_by_row else 0,
+    )
     tbl.setStyle(TableStyle(style_cmds))
     return tbl
 

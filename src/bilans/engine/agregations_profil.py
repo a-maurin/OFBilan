@@ -50,6 +50,41 @@ def _tab_resultats_controles_detail(
     return res_ctrl
 
 
+def _resultats_par_domaine_pour_pdf(pt: pd.DataFrame) -> pd.DataFrame:
+    """
+    Comptages par domaine : Conforme / Non-conforme (Infraction+Manquement) / En attente (résiduel).
+
+    Aligné sur la logique du tableau « résultats des contrôles » global (pas de ventilation PNF).
+    """
+    col_d = "domaine" if "domaine" in pt.columns else None
+    col_r = "resultat" if "resultat" in pt.columns else None
+    if not col_d or not col_r:
+        return pd.DataFrame(columns=["domaine", "Conforme", "Non-conforme", "En attente"])
+    dom_s = pt[col_d].fillna("Hors domaine").astype(str)
+    r_s = pt[col_r].astype(str).str.strip()
+    gdf = pt.assign(_d=dom_s, _r=r_s)
+    rows: list[dict[str, Any]] = []
+    for dom, g in gdf.groupby("_d", sort=False):
+        m = g["_r"]
+        n_c = int(m.eq("Conforme").sum())
+        n_nc = int(m.isin(["Infraction", "Manquement"]).sum())
+        n_a = max(0, len(g) - n_c - n_nc)
+        rows.append(
+            {
+                "domaine": str(dom),
+                "Conforme": n_c,
+                "Non-conforme": n_nc,
+                "En attente": n_a,
+            }
+        )
+    out = pd.DataFrame(rows)
+    if out.empty:
+        return out
+    out["_vol"] = out["Conforme"] + out["Non-conforme"] + out["En attente"]
+    out = out.sort_values("_vol", ascending=False, kind="stable").drop(columns=["_vol"])
+    return out.reset_index(drop=True)
+
+
 def analyse_controles_global(point: pd.DataFrame, out_dir: Path) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Controles tous domaines/themes (point deja filtre par le loader sur departement et periode).
@@ -73,12 +108,17 @@ def analyse_controles_global(point: pd.DataFrame, out_dir: Path) -> Tuple[pd.Dat
         tab_resultats.to_csv(out_dir / "controles_global_resultats.csv", sep=";", index=False)
         res_ctrl = _tab_resultats_controles_detail(tab_resultats, nb_total)
         res_ctrl.to_csv(out_dir / "controles_global_resultats_controles.csv", sep=";", index=False)
+        res_dom = _resultats_par_domaine_pour_pdf(pt)
+        res_dom.to_csv(out_dir / "controles_global_resultats_par_domaine.csv", sep=";", index=False)
     else:
         tab_resultats = pd.DataFrame(columns=["resultat", "nb", "taux"])
         tab_resultats.to_csv(out_dir / "controles_global_resultats.csv", sep=";", index=False)
         pd.DataFrame(columns=["resultat", "nb", "taux"]).to_csv(
             out_dir / "controles_global_resultats_controles.csv", sep=";", index=False
         )
+        pd.DataFrame(
+            columns=["domaine", "Conforme", "Non-conforme", "En attente"]
+        ).to_csv(out_dir / "controles_global_resultats_par_domaine.csv", sep=";", index=False)
 
     col_domaine = "domaine" if "domaine" in pt.columns else None
     if col_domaine:
@@ -186,8 +226,13 @@ def analyse_pej_pa_global(
     else:
         pej_dept = pej_dept.drop_duplicates(subset="DC_ID", keep="first").copy()
 
+    def _col_or_fallback(df: pd.DataFrame, name: str, fallback: str) -> pd.Series:
+        if name in df.columns:
+            return df[name].fillna(fallback)
+        return pd.Series([fallback] * len(df), index=df.index, dtype=object)
+
     pej_par_domaine = (
-        pej_dept.groupby(pej_dept.get("DOMAINE", pd.Series(dtype=object)).fillna("Hors domaine"))
+        pej_dept.groupby(_col_or_fallback(pej_dept, "DOMAINE", "Hors domaine"))
         .size()
         .rename("nb_pej")
         .reset_index()
@@ -196,7 +241,7 @@ def analyse_pej_pa_global(
     pej_par_domaine.to_csv(out_dir / "pej_global_par_domaine.csv", sep=";", index=False)
 
     pej_par_theme = (
-        pej_dept.groupby(pej_dept.get("THEME", pd.Series(dtype=object)).fillna("Hors theme"))
+        pej_dept.groupby(_col_or_fallback(pej_dept, "THEME", "Hors theme"))
         .size()
         .rename("nb_pej")
         .reset_index()
@@ -229,7 +274,7 @@ def analyse_pej_pa_global(
     pa_dept = pa[pa_mask].copy()
 
     pa_par_domaine = (
-        pa_dept.groupby(pa_dept.get("DOMAINE", pd.Series(dtype=object)).fillna("Hors domaine"))
+        pa_dept.groupby(_col_or_fallback(pa_dept, "DOMAINE", "Hors domaine"))
         .size()
         .rename("nb_pa")
         .reset_index()
@@ -238,7 +283,7 @@ def analyse_pej_pa_global(
     pa_par_domaine.to_csv(out_dir / "pa_global_par_domaine.csv", sep=";", index=False)
 
     pa_par_theme = (
-        pa_dept.groupby(pa_dept.get("THEME", pd.Series(dtype=object)).fillna("Hors theme"))
+        pa_dept.groupby(_col_or_fallback(pa_dept, "THEME", "Hors theme"))
         .size()
         .rename("nb_pa")
         .reset_index()
@@ -494,6 +539,76 @@ def analyse_mensuelle_global(
         out_dir / "indicateurs_global_par_mois.csv", sep=";", index=False
     )
 
+
+def analyse_hebdomadaire_global(
+    point: pd.DataFrame,
+    pa: pd.DataFrame,
+    pej: pd.DataFrame,
+    pve: pd.DataFrame,
+    out_dir: Path,
+) -> None:
+    """Indicateurs par semaine (libellé YYYY-Sww), aligné sur le moteur thématique."""
+    periods: set[tuple[int, int]] = set()
+
+    def _collect(df: pd.DataFrame, col: str) -> None:
+        if df is None or df.empty or col not in df.columns:
+            return
+        dt = pd.to_datetime(df[col], errors="coerce").dropna()
+        if dt.empty:
+            return
+        iso = dt.dt.isocalendar()
+        for y, w in zip(iso["year"].tolist(), iso["week"].tolist()):
+            periods.add((int(y), int(w)))
+
+    _collect(point, "date_ctrl")
+    _collect(pej, "DATE_REF")
+    _collect(pa, "DATE_REF")
+    _collect(pve, "INF-DATE-INTG")
+
+    rows = []
+    for (year, week) in sorted(periods):
+        nb_ctrl = 0
+        nb_ctrl_nc = 0
+        if not point.empty and "date_ctrl" in point.columns:
+            dt = point["date_ctrl"]
+            iso = dt.dt.isocalendar()
+            mask = (iso["year"] == year) & (iso["week"] == week)
+            nb_ctrl = int(mask.sum())
+            if "resultat" in point.columns:
+                nb_ctrl_nc = count_controles_non_conformes_oscean(point.loc[mask, "resultat"])
+        nb_pej = 0
+        if not pej.empty and "DATE_REF" in pej.columns:
+            dt = pej["DATE_REF"]
+            iso = dt.dt.isocalendar()
+            nb_pej = int(((iso["year"] == year) & (iso["week"] == week)).sum())
+        nb_pa = 0
+        if not pa.empty and "DATE_REF" in pa.columns:
+            dt = pa["DATE_REF"]
+            iso = dt.dt.isocalendar()
+            nb_pa = int(((iso["year"] == year) & (iso["week"] == week)).sum())
+        nb_pve = 0
+        if not pve.empty and "INF-DATE-INTG" in pve.columns:
+            dt = pve["INF-DATE-INTG"]
+            iso = dt.dt.isocalendar()
+            nb_pve = int(((iso["year"] == year) & (iso["week"] == week)).sum())
+
+        rows.append(
+            {
+                "periode": f"{year}-S{week:02d}",
+                "nb_controles": nb_ctrl,
+                "nb_controles_non_conformes": nb_ctrl_nc,
+                "taux_non_conformite_controles": (nb_ctrl_nc / nb_ctrl) if nb_ctrl > 0 else pd.NA,
+                "nb_pej": nb_pej,
+                "nb_pa": nb_pa,
+                "nb_pve": nb_pve,
+            }
+        )
+
+    pd.DataFrame(rows).to_csv(
+        out_dir / "indicateurs_global_par_semaine.csv", sep=";", index=False
+    )
+
+
 __all__ = [
     "analyse_controles_global",
     "analyse_pej_pa_global",
@@ -501,6 +616,7 @@ __all__ = [
     "analyse_annuelle_global",
     "analyse_trimestrielle_global",
     "analyse_mensuelle_global",
+    "analyse_hebdomadaire_global",
     "run_profile_aggregations",
 ]
 
@@ -527,6 +643,8 @@ def run_profile_aggregations(
         analyse_annuelle_global(point, pa, pej, pve, out_dir)
     elif ventilation_mode == "mensuelle":
         analyse_mensuelle_global(point, pa, pej, pve, out_dir)
+    elif ventilation_mode == "hebdomadaire":
+        analyse_hebdomadaire_global(point, pa, pej, pve, out_dir)
     elif ventilation_mode == "trimestrielle":
         analyse_trimestrielle_global(point, pa, pej, pve, out_dir)
         if int((date_fin - date_deb).days) < 730:

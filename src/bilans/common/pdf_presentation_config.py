@@ -39,6 +39,9 @@ DEFAULT_PDF_PRESENTATION_CONFIG: dict[str, Any] = {
         "sections": {
             "order": ["sec1", "sec2", "sec3", "sec4", "sec5", "sec6"],
             "enabled": {},
+            "titles": {
+                "sec22dom": "2.2. Nombre de localisations de contrôles par domaines",
+            },
         },
         "notice_methodology": {
             "title": "Notice méthodologique",
@@ -98,6 +101,34 @@ DEFAULT_PDF_PRESENTATION_CONFIG: dict[str, Any] = {
                 "<b>Analyse par zones :</b> la zone « Département » inclut l'ensemble des contrôles, "
                 "puis la zone TUB est détaillée séparément."
             ),
+        },
+        # Mise en page des tableaux PDF (ReportLab) — préférer le pilotage YAML.
+        "tables": {
+            # Si false : le tableau ne se fractionne pas entre deux pages (splitByRow=0).
+            "split_by_row": False,
+            "vertical_header": {
+                # Décalage horizontal fin (pt) après centrage des libellés verticaux.
+                "pad_x_pt": 0.0,
+            },
+            "usagers_x_domaine": {
+                # Nombre maximal de colonnes « domaine » affichées (tri décroissant sur le volume).
+                # null ou <= 0 : pas de limite sur les colonnes.
+                "max_domain_columns": 14,
+                # Nombre maximal de lignes « type d'usager » (tri décroissant sur le volume).
+                # null ou <= 0 : pas de limite sur les lignes.
+                "max_usager_rows": 15,
+                "overflow_note_separator": " ",
+                "overflow_note_column_part": (
+                    "Domaines : {shown} colonnes affichées sur {total} "
+                    "(ordre décroissant du volume de contrôles par domaine)."
+                ),
+                "overflow_note_row_part": (
+                    "Types d’usagers : {rows_shown} lignes affichées sur {rows_total} "
+                    "(ordre décroissant du volume de contrôles sur les colonnes affichées)."
+                ),
+                # Enveloppe HTML ; {note} = parties concaténées (colonnes / lignes).
+                "overflow_note_wrap": "<i>{note}</i>",
+            },
         },
         "blocks": {},
     },
@@ -237,6 +268,19 @@ def resolve_notice_methodology_config(effective_cfg: dict[str, Any]) -> dict[str
     if not isinstance(notice, dict):
         return deepcopy(default_notice)
     return _deep_merge(default_notice, notice)
+
+
+def resolve_tables_layout(effective_cfg: dict[str, Any] | None) -> dict[str, Any]:
+    """Fusionne la section ``tables`` de la config effective avec les valeurs par défaut."""
+    base = deepcopy(
+        (DEFAULT_PDF_PRESENTATION_CONFIG.get("defaults") or {}).get("tables") or {}
+    )
+    if not isinstance(effective_cfg, dict):
+        return base
+    user = effective_cfg.get("tables")
+    if isinstance(user, dict) and user:
+        return _deep_merge(base, user)
+    return base
 
 
 def resolve_sec6_methodology_config(effective_cfg: dict[str, Any]) -> dict[str, Any]:
@@ -388,17 +432,19 @@ def build_title_lines_from_cfg(
     profile_label: str,
     dept_name_typo: str,
 ) -> tuple[list[str], list[str]]:
-    """Construit les lignes de titre de garde + en-tête depuis la config effective."""
+    """Construit les lignes de titre de garde + en-tête depuis la config effective.
+
+    Un caractère ``\\n`` présent dans ``line1`` (ou ``line2``/``line3`` en mode
+    ``fixed``) provoque un retour à la ligne dans le même paragraphe sur la
+    page de garde, mais est aplati en espace dans l'en-tête de page courant.
+    """
+    default_line1 = "Bilan des activités de police administrative et judiciaire"
+
     title_cfg = effective_cfg.get("title", {}) if isinstance(effective_cfg, dict) else {}
     if not isinstance(title_cfg, dict):
         title_cfg = {}
 
-    line1 = str(
-        title_cfg.get(
-            "line1",
-            "Bilan des activités de police administrative et judiciaire",
-        )
-    ).strip() or "Bilan des activités de police administrative et judiciaire"
+    line1 = str(title_cfg.get("line1", default_line1)).strip() or default_line1
 
     line2_mode = str(title_cfg.get("line2_mode", "profile_label")).strip().lower()
     if line2_mode == "none":
@@ -414,8 +460,23 @@ def build_title_lines_from_cfg(
     else:
         line3 = f"Département de la {dept_name_typo}"
 
-    header_lines = [x for x in [line1, line2, line3] if x]
-    cover_lines = [line1, "", *([line2] if line2 else []), line3]
+    def _flatten(text: str) -> str:
+        # En-tête courant: une seule ligne. Les "\n" deviennent des espaces.
+        return " ".join(part.strip() for part in str(text).splitlines() if part.strip())
+
+    def _split(text: str) -> list[str]:
+        # Page de garde: chaque "\n" produit une ligne dans le même paragraphe.
+        return [part.strip() for part in str(text).splitlines() if part.strip()]
+
+    header_lines = [_flatten(x) for x in [line1, line2, line3] if x]
+
+    cover_lines: list[str] = []
+    cover_lines.extend(_split(line1))
+    cover_lines.append("")
+    if line2:
+        cover_lines.extend(_split(line2))
+    cover_lines.extend(_split(line3))
+
     return cover_lines, header_lines
 
 
@@ -424,15 +485,15 @@ def resolve_cover_subtitle(
     *,
     nb_pve: int = 0,
 ) -> str:
-    """Résout le sous-titre de page de garde selon la config YAML."""
+    """Résout le sous-titre de page de garde selon la config YAML.
+
+    Modes supportés :
+    - none   : pas de sous-titre (défaut)
+    - fixed  : texte fixe via `subtitle_fixed`
+    """
+    del nb_pve  # paramètre conservé pour compat. signature, non utilisé
     mode = str(title_page_cfg.get("subtitle_mode", "none")).strip().lower()
     if mode == "fixed":
         return str(title_page_cfg.get("subtitle_fixed", "")).strip()
-    if mode == "sources_auto":
-        base = str(title_page_cfg.get("subtitle_sources_base", "Sources des données : OFB/OSCEAN")).strip()
-        suffix = str(title_page_cfg.get("subtitle_sources_pve_suffix", " – MININT/AGC-PVe")).strip()
-        if nb_pve > 0 and suffix:
-            return f"{base}{suffix}"
-        return base
     return ""
 

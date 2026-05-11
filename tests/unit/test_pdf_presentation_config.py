@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pandas as pd
+
 from bilans.common.pdf_presentation_config import (
     is_block_enabled,
     resolve_pdf_presentation_config,
@@ -7,8 +9,10 @@ from bilans.common.pdf_presentation_config import (
     resolve_sec6_methodology_config,
     resolve_section_titles,
     resolve_sections_for_toc,
+    resolve_tables_layout,
     should_show_placeholder,
 )
+from bilans.common.pdf_usagers_domaine_table import build_usagers_x_domaine_pdf_rows
 
 
 def _write_yaml(root: Path, content: str) -> None:
@@ -105,6 +109,42 @@ def test_notice_methodology_config_resolution() -> None:
     assert resolved["title"] == "Notice personnalisée"
     assert resolved["multi_usager_paragraph"] == "Texte personnalisé."
     assert "data_source_paragraph" in resolved
+
+
+def test_resolve_tables_layout_merges_yaml_over_defaults() -> None:
+    effective = {
+        "tables": {
+            "split_by_row": True,
+            "usagers_x_domaine": {"max_domain_columns": 2},
+        }
+    }
+    resolved = resolve_tables_layout(effective)
+    assert resolved["split_by_row"] is True
+    assert resolved["usagers_x_domaine"]["max_domain_columns"] == 2
+    assert "vertical_header" in resolved
+
+
+def test_build_usagers_x_domaine_truncates_columns_and_note() -> None:
+    df = pd.DataFrame(
+        [
+            {"type_usager": "A", "dom1": 1, "dom2": 100, "dom3": 2},
+            {"type_usager": "B", "dom1": 0, "dom2": 1, "dom3": 50},
+        ]
+    )
+    layout = resolve_tables_layout(
+        {
+            "tables": {
+                "usagers_x_domaine": {
+                    "max_domain_columns": 1,
+                    "max_usager_rows": 10,
+                }
+            }
+        }
+    )
+    tbl, note = build_usagers_x_domaine_pdf_rows(df, tables_layout=layout)
+    assert tbl[0] == ["type_usager", "dom2"]
+    assert note is not None
+    assert "sur 3" in note
 
 
 def test_sec6_methodology_config_resolution() -> None:

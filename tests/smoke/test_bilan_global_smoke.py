@@ -39,6 +39,7 @@ def test_analyse_controles_global_minimal(tmp_path: Path) -> None:
     for filename in (
         "controles_global_resultats.csv",
         "controles_global_resultats_controles.csv",
+        "controles_global_resultats_par_domaine.csv",
         "controles_global_par_domaine.csv",
         "controles_global_par_theme.csv",
         "controles_global_resultats_par_type_usager.csv",

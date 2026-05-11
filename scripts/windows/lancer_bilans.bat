@@ -21,9 +21,9 @@ echo.
 echo      OFFICE FRANCAIS
 echo    DE LA BIODIVERSITE
 echo.
-echo ================================
+echo ===============================================
 echo   Bilans - Par profil (global ou thematiques)
-echo ================================
+echo ===============================================
 echo.
 set /p "DATE_DEB=Date de debut (YYYY-MM-DD ou YYYY) [2025-01-01] > "
 set /p "DATE_FIN=Date de fin   (YYYY-MM-DD ou YYYY) [2026-12-31] > "

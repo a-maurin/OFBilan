@@ -1,6 +1,7 @@
 """Graphiques matplotlib pour les bilans (camemberts, barres, cartes)."""
 from __future__ import annotations
 
+import re
 import textwrap
 from pathlib import Path
 
@@ -9,6 +10,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.ticker import MaxNLocator
 
 from bilans.common.ofb_charte import (
     COLOR_PRIMARY,
@@ -72,9 +74,32 @@ def _legend_below_axis(ax, *, ncol: int | None = None, fontsize: float = 8.0) ->
     )
 
 
-def _tight_with_legend_space(fig, *, bottom: float = 0.20, top: float = 0.92) -> None:
-    """Marges figure après placement de légende sous l'axe."""
-    fig.tight_layout(rect=(0.04, bottom, 0.96, top))
+def _legend_right_of_axis(ax, *, fontsize: float = 8.0) -> None:
+    """Légende à droite du tracé (évite la superposition avec les libellés d'axe X longs / tournés)."""
+    handles, labels = ax.get_legend_handles_labels()
+    if not handles:
+        return
+    ax.legend(
+        handles,
+        labels,
+        loc="center left",
+        bbox_to_anchor=(1.02, 0.5),
+        borderaxespad=0.0,
+        fontsize=fontsize,
+        frameon=False,
+    )
+
+
+def _tight_with_legend_space(
+    fig,
+    *,
+    bottom: float = 0.20,
+    top: float = 0.92,
+    left: float = 0.04,
+    right: float = 0.96,
+) -> None:
+    """Marges figure (légende sous l'axe ou à droite selon le graphique)."""
+    fig.tight_layout(rect=(left, bottom, right, top))
 
 
 def save_chart(fig, tmp_dir: Path, name: str, *, dpi: int = 150, tight: bool = True) -> str:
@@ -85,6 +110,24 @@ def save_chart(fig, tmp_dir: Path, name: str, *, dpi: int = 150, tight: bool = T
     fig.savefig(path, **save_kw)
     plt.close(fig)
     return path
+
+
+_RE_PERIODE_SEMAINE_W_VERS_S = re.compile(r"(\d{4})-W(\d{2})\b")
+
+
+def _sanitize_chart_period_tick_labels(labels: list) -> list[str]:
+    """
+    Libellés d'axe (périodes) : retire toute mention « ISO » et affiche les semaines en YYYY-Sww
+    (même si le CSV contient encore YYYY-Www ou un suffixe « (ISO) »).
+    """
+    out: list[str] = []
+    for raw in labels:
+        s = str(raw).strip()
+        for frag in (" (ISO)", "(ISO)", " (Iso)", "(Iso)"):
+            s = s.replace(frag, "")
+        s = _RE_PERIODE_SEMAINE_W_VERS_S.sub(r"\1-S\2", s)
+        out.append(s.strip())
+    return out
 
 
 def chart_pie(
@@ -271,6 +314,7 @@ def chart_bar_stacked(
 ) -> str:
     """Barres empilées : chaque série est empilée sur la précédente."""
     apply_mpl_style()
+    group_labels = _sanitize_chart_period_tick_labels(list(group_labels))
     n_groups = max(1, len(group_labels))
     fig_w = max(CHART_FIG_WIDTH, min(10.0, n_groups * 0.75)) * figure_scale
     fig, ax = plt.subplots(figsize=(fig_w, CHART_FIG_HEIGHT_WITH_LEGEND * figure_scale))
@@ -316,6 +360,61 @@ def chart_bar_stacked(
     return save_chart(fig, tmp_dir, name)
 
 
+def chart_stackplot_resultats_domaine(
+    domain_labels: list[str],
+    series_conforme: list[float],
+    series_non_conforme: list[float],
+    series_en_attente: list[float],
+    title: str,
+    ylabel: str,
+    tmp_dir: Path,
+    name: str,
+    *,
+    legend_fontsize: float = 7.5,
+    legend_ncol_max: int = 3,
+    figure_scale: float = 0.68,
+) -> str:
+    """
+    Aires empilées (stackplot) par domaine : Conforme, Non-conforme, En attente.
+
+    Gabarit compact pour tenir sur une même page PDF avec tableau + camembert.
+    """
+    apply_mpl_style()
+    n = max(1, len(domain_labels))
+    # Marge droite réservée à la légende (hors zone des libellés X tournés).
+    fig_w = max(6.4, min(7.4, 0.55 * n + 4.2)) * figure_scale
+    fig_h = 2.45 * figure_scale
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h))
+    x = np.arange(n)
+    y1 = np.array(series_conforme, dtype=float)
+    y2 = np.array(series_non_conforme, dtype=float)
+    y3 = np.array(series_en_attente, dtype=float)
+    colors = [CHART_PIE_COLORS[1], COLOR_CHART_4, CHART_PIE_COLORS[2]]
+    ax.stackplot(
+        x,
+        y1,
+        y2,
+        y3,
+        labels=["Conforme", "Non-conforme", "En attente"],
+        colors=colors,
+        alpha=0.92,
+    )
+    ax.set_xticks(x)
+    ax.set_xticklabels(domain_labels, rotation=38, ha="right", fontsize=7)
+    ax.set_ylabel(ylabel, fontsize=8)
+    ax.set_title(title, fontsize=10, fontweight="bold", color=COLOR_PRIMARY, pad=6)
+    if n > 1:
+        ax.set_xlim(x[0] - 0.45, x[-1] + 0.45)
+    else:
+        ax.set_xlim(-0.55, 0.55)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    _legend_right_of_axis(ax, fontsize=legend_fontsize)
+    # bottom : libellés X inclinés ; right : bande réservée à la légende (sans chevauchement).
+    _tight_with_legend_space(fig, bottom=0.30, top=0.90, left=0.07, right=0.72)
+    return save_chart(fig, tmp_dir, name, dpi=150, tight=True)
+
+
 def chart_bar_horizontal_stacked(
     row_labels: list,
     series: dict,
@@ -327,13 +426,13 @@ def chart_bar_horizontal_stacked(
     legend_fontsize: float = 8.0,
     legend_ncol_max: int = 4,
     figure_scale: float = 1.0,
+    show_title: bool = True,
 ) -> str:
     """Barres horizontales empilées : une ligne par catégorie, segments empilés selon les séries."""
     apply_mpl_style()
     n = max(1, len(row_labels))
     y = np.arange(n)
     height = 0.62
-    left = np.zeros(n)
     keywords_inf = (
         "infraction",
         "infractions",
@@ -342,10 +441,36 @@ def chart_bar_horizontal_stacked(
         "non-conforme",
         "non-conformes",
     )
+    # Libellés Y repliés : sinon tight_layout compresse fortement la zone utile de l'axe X.
+    label_wrap = 40
+    display_labels = [
+        textwrap.fill(str(lb).strip(), width=label_wrap, break_long_words=False, break_on_hyphens=False)
+        for lb in row_labels
+    ]
+    longest_line = 1
+    for lbl in display_labels:
+        for line in str(lbl).split("\n"):
+            longest_line = max(longest_line, len(line.strip()))
+
+    scale_eff = max(0.45, float(figure_scale))
+    # Largeur : plancher élevé + croissance modérée avec la longueur des libellés (PDF inch).
+    fig_w = max(
+        CHART_FIG_WIDTH * scale_eff * 1.12,
+        9.2 + min(5.4, max(0, longest_line - 22) * 0.085),
+    )
+    fig_w = min(fig_w, 15.0)
     # Hauteur figure : assez d'espace pour les libellés Y (types d'usager souvent longs).
-    fig_h = max(CHART_FIG_HEIGHT_WITH_LEGEND, min(14.0, 0.55 * n + 2.8)) * figure_scale
-    fig, ax = plt.subplots(figsize=(CHART_FIG_WIDTH * figure_scale, fig_h))
-    for i, (label, vals) in enumerate(series.items()):
+    fig_h = max(CHART_FIG_HEIGHT_WITH_LEGEND, min(14.0, 0.55 * n + 2.8)) * scale_eff
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h))
+
+    series_items = list(series.items())
+    mat = np.column_stack([np.array(vals, dtype=float) for _, vals in series_items])
+    if mat.ndim == 1:
+        mat = mat.reshape(n, 1)
+    row_totals = np.maximum(np.sum(mat, axis=1), 1.0)
+
+    left = np.zeros(n)
+    for i, (label, vals) in enumerate(series_items):
         vals_arr = np.array(vals, dtype=float)
         lbl = str(label).lower()
         if any(k in lbl for k in keywords_inf):
@@ -353,8 +478,8 @@ def chart_bar_horizontal_stacked(
         else:
             color = CHART_BAR_GROUPED_COLORS[i % len(CHART_BAR_GROUPED_COLORS)]
         bars = ax.barh(y, vals_arr, height, left=left, label=label, color=color)
-        for bar, val in zip(bars, vals_arr):
-            if val > 0:
+        for bar, val, rt in zip(bars, vals_arr, row_totals):
+            if val > 0 and bar.get_width() >= max(3.5, 0.042 * float(rt)):
                 ax.text(
                     bar.get_x() + bar.get_width() / 2,
                     bar.get_y() + bar.get_height() / 2,
@@ -366,19 +491,22 @@ def chart_bar_horizontal_stacked(
                     color="white",
                 )
         left += vals_arr
+
     ax.set_yticks(y)
-    ax.set_yticklabels(row_labels, fontsize=9)
+    ax.set_yticklabels(display_labels, fontsize=9)
     ax.invert_yaxis()
     ax.set_xlabel(xlabel, fontsize=9)
-    ax.set_title(title, fontsize=11, fontweight="bold", color=COLOR_PRIMARY, pad=10)
-    _legend_below_axis(
-        ax,
-        ncol=min(max(1, legend_ncol_max), max(2, len(series))),
-        fontsize=legend_fontsize,
-    )
+    xmax = float(np.max(left)) if n else 0.0
+    xmax = max(xmax, 1.0)
+    ax.set_xlim(0, xmax * 1.08)
+    ax.xaxis.set_major_locator(MaxNLocator(nbins=8, integer=True, min_n_ticks=4))
+    if show_title:
+        ax.set_title(title, fontsize=11, fontweight="bold", color=COLOR_PRIMARY, pad=10)
+    # Légende à droite : évite le chevauchement avec les graduations de l'abscisse.
+    _legend_right_of_axis(ax, fontsize=legend_fontsize)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
-    _tight_with_legend_space(fig, bottom=0.18, top=0.92)
+    _tight_with_legend_space(fig, bottom=0.12, top=0.90, left=0.07, right=0.74)
     return save_chart(fig, tmp_dir, name)
 
 
@@ -396,6 +524,7 @@ def chart_line_evolution(
 ) -> str:
     """Courbe d'évolution multi-séries (un trait par indicateur)."""
     apply_mpl_style()
+    x_labels = _sanitize_chart_period_tick_labels(list(x_labels))
     n_x = max(1, len(x_labels))
     fig_w = max(CHART_FIG_WIDTH, min(10.0, n_x * 0.75)) * figure_scale
     fig, ax = plt.subplots(figsize=(fig_w, CHART_FIG_HEIGHT_WITH_LEGEND * figure_scale))
