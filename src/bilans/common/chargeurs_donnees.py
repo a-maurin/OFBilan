@@ -313,13 +313,16 @@ def load_pej(
     prefix = "suivi_procedure_enq_judiciaire_"
     path = _find_latest_dated_file(sources, prefix, (".ods",))
     df = pd.read_excel(path, dtype=str, engine="odf")
+    df.columns = pd.Index([str(c).strip().upper() for c in df.columns])
     # Alias pour compatibilité si le classeur utilise "NATINF" au lieu de "NATINF_PEJ"
     if "NATINF" in df.columns and "NATINF_PEJ" not in df.columns:
         df["NATINF_PEJ"] = df["NATINF"]
     # Alias "type_usager" pour filtrage des bilans usagers ciblés
     # (dans le classeur PEJ, la colonne s'appelle typiquement "USAGER").
+    # Noms ci-dessous après normalisation des en-têtes (majuscules) ; "TYPE USAGER"
+    # couvre l'ancien libellé LibreOffice « Type usager ».
     if "type_usager" not in df.columns:
-        for cand in ("USAGER", "USGAER", "TYPE_USAGER", "Type usager", "type_usager"):
+        for cand in ("TYPE_USAGER", "TYPE USAGER", "USAGER", "USGAER"):
             if cand in df.columns:
                 df["type_usager"] = df[cand]
                 break
@@ -372,6 +375,7 @@ def load_pa(
         sources, "suivi_procedure_administrative_", (".ods",)
     )
     df = pd.read_excel(path, dtype=str, engine="odf")
+    df.columns = pd.Index([str(c).strip().upper() for c in df.columns])
     df["DATE_CONTROLE"] = pd.to_datetime(df["DATE_CONTROLE"], errors="coerce")
     df["DATE_DOSSIER"] = pd.to_datetime(df["DATE_DOSSIER"], errors="coerce")
     df["DATE_REF"] = df["DATE_CONTROLE"].fillna(df["DATE_DOSSIER"])
