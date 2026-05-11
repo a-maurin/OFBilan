@@ -234,7 +234,7 @@ class ConfigProfilsApp(tk.Tk):
             width=50,
         )
         self.profil_combobox.pack(side=tk.LEFT, padx=5)
-        self.profil_combobox.bind("<<ComboboxSelected>>", lambda event: self.on_select_profil())
+        self.profil_combobox.bind("<<ComboboxSelected>>", lambda _event: self.on_select_profil())
 
         self.profile_info_var = tk.StringVar(value="")
         ttk.Label(top_frame, textvariable=self.profile_info_var).pack(side=tk.LEFT, padx=10)

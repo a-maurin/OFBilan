@@ -155,7 +155,7 @@ def load_pdf_presentation_raw_config(root: Path) -> dict[str, Any]:
         return deepcopy(DEFAULT_PDF_PRESENTATION_CONFIG)
 
     try:
-        import yaml  # type: ignore[import]
+        import yaml  # type: ignore[import-untyped]
     except Exception:
         return deepcopy(DEFAULT_PDF_PRESENTATION_CONFIG)
 

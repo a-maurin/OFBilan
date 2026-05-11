@@ -63,7 +63,6 @@ from bilans.common.utilitaires_metier import (
     agg_procedures_par_type_usager_domaine,
     agg_procedures_par_type_usager_theme,
     agg_resultat_counts_par_type_usager,
-    serie_type_usager,
 )
 from bilans.common.ofb_charte import Spinner
 from bilans.common.pdf_report_builder import (
@@ -96,6 +95,8 @@ from bilans.common.rendus_graphiques import (
 )
 from bilans.common.carte_helper import find_map
 from bilans.engine.registre_sections_pdf import SectionRegistry
+
+_log = logging.getLogger(__name__)
 # ═══════════════════════════════════════════════════════════════════════════
 # 1. Chargement du profil YAML
 # ═══════════════════════════════════════════════════════════════════════════
@@ -371,9 +372,9 @@ def _copy_to_clipboard(text: str) -> None:
                 check=False,
                 shell=True,
             )
-    except Exception:
+    except Exception as exc:
         # En cas d'échec (clip absent, droits, etc.), on ne bloque pas le bilan.
-        pass
+        _log.debug("Copie presse-papiers (clip) indisponible: %s", exc)
 
 
 def resolve_options(profile: dict, cli_opts: dict | None = None) -> dict:
@@ -637,7 +638,10 @@ def _safe_type_usager_for_filename(label: str) -> str:
 
     # Sécuriser la longueur des chemins Windows (et éviter des noms de fichiers énormes)
     if len(s) > 120:
-        h = hashlib.md5(label.encode("utf-8", errors="ignore")).hexdigest()[:8]
+        h = hashlib.md5(
+            label.encode("utf-8", errors="ignore"),
+            usedforsecurity=False,
+        ).hexdigest()[:8]
         s = f"{s[:100]}_{h}"
     return s
 
@@ -1548,6 +1552,8 @@ def _run_aggregations(
         if not pnf_zone_by_commune_nom:
             shp_comm = PROJECT_ROOT / "ref" / "sig" / "communes_pnf" / "communes_pnf.shp"
             if shp_comm.exists():
+                import geopandas as gpd
+
                 g_comm = gpd.read_file(shp_comm)
                 if not g_comm.empty and "NOM_COM" in g_comm.columns:
                     nom = g_comm["NOM_COM"].astype(str).str.strip().str.lower()
@@ -1568,7 +1574,8 @@ def _run_aggregations(
                             pnf_zone_by_commune_nom[n] = "Coeur_PNF"
                         elif a == "oui":
                             pnf_zone_by_commune_nom[n] = "Aire_adhesion_PNF"
-    except Exception:
+    except Exception as exc:
+        _log.debug("Chargement zones PNF (CSV/shapefile communes): %s", exc)
         pnf_zone_by_commune_nom = {}
 
     def _build_proc_detail(

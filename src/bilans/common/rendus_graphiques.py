@@ -1,7 +1,6 @@
 """Graphiques matplotlib pour les bilans (camemberts, barres, cartes)."""
 from __future__ import annotations
 
-import math
 import textwrap
 from pathlib import Path
 

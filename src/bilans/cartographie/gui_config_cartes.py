@@ -6,6 +6,7 @@ Lance avec : python gui_config_cartes.py (via Python QGIS)
 """
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from pathlib import Path
@@ -44,6 +45,7 @@ try:
 except ImportError:
     HAS_QT = False
 
+_logger = logging.getLogger(__name__)
 
 FILTER_TYPES = [
     ("", "Aucun"),
@@ -134,8 +136,8 @@ class LayerConfigWidget(QFrame):
                 lyr = lyr_list[0]
                 for f in lyr.fields():
                     self.field_combo.addItem(f.name(), f.name())
-        except Exception:
-            pass
+        except Exception as exc:
+            _logger.debug("Chargement des champs QGIS pour %s: %s", layer_name, exc)
         if lc and getattr(lc, "field", None):
             idx = self.field_combo.findData(lc.field)
             if idx >= 0:
@@ -377,8 +379,8 @@ class ConfigCartesDialog(QDialog):
             for pid, prof in effective.profiles.items():
                 if pid not in CONFIG.profiles:
                     CONFIG.profiles[pid] = prof
-        except Exception:
-            pass
+        except Exception as exc:
+            _logger.debug("Fusion profils effectifs dans CONFIG: %s", exc)
 
     def _init_profiles_combo(self) -> None:
         """Initialise la liste des profils à partir de la configuration."""

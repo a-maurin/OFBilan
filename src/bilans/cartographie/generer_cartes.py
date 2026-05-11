@@ -33,11 +33,11 @@ def main() -> int:
         str(launcher),
         args.profil,
         "--date-deb",
-        args.date-deb,
+        args.date_deb,
         "--date-fin",
-        args.date-fin,
+        args.date_fin,
         "--dept-code",
-        args.dept-code,
+        args.dept_code,
     ]
 
     try:

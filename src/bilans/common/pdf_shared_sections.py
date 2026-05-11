@@ -239,7 +239,7 @@ def load_glossary_config(root: Path) -> dict:
     if cfg_path is None:
         return default_cfg
     try:
-        import yaml  # type: ignore[import]
+        import yaml  # type: ignore[import-untyped]
     except ImportError:
         return default_cfg
     try:

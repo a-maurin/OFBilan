@@ -64,31 +64,24 @@ try:
         QgsProject,
         QgsVectorLayer,
         QgsFeatureRequest,
-        QgsSymbol,
         QgsFillSymbol,
         QgsMarkerSymbol,
         QgsSingleSymbolRenderer,
         QgsGraduatedSymbolRenderer,
         QgsCategorizedSymbolRenderer,
-        QgsRendererRange,
         QgsRendererCategory,
         QgsLayoutExporter,
-        QgsPrintLayout,
-        QgsLayoutManager,
-        QgsReadWriteContext,
-        QgsLayoutItemMap,
         QgsLayoutItemLabel,
         QgsLayoutItemLegend,
         QgsLayoutItemPicture,
         QgsLayoutPoint,
         QgsLayoutSize,
-        QgsSymbolLayerUtils,
+        QgsStyle,
         QgsWkbTypes,
         QgsCentroidFillSymbolLayer,
         QgsField,
     )
     from qgis.core import QgsLayerTreeLayer
-    from qgis.PyQt.QtCore import QByteArray
     from qgis.PyQt.QtGui import QColor
     HAS_QGIS = True
 except ImportError:
@@ -392,9 +385,6 @@ def apply_layer_symbology(layer, config: "LayerSymbologyConfig", geometry_mode_o
             layer.setRenderer(QgsSingleSymbolRenderer(marker))
 
     elif config.renderer_type == "graduated" and config.field:
-        from qgis.core import QgsGraduatedSymbolRenderer
-        from qgis.core import QgsStyle
-
         if is_polygon and geom_mode == "polygon_centroid":
             base_symbol = QgsFillSymbol()
             while base_symbol.symbolLayerCount() > 0:
@@ -431,8 +421,6 @@ def apply_layer_symbology(layer, config: "LayerSymbologyConfig", geometry_mode_o
         layer.setRenderer(renderer)
 
     elif config.renderer_type == "categorized" and config.field:
-        from qgis.core import QgsCategorizedSymbolRenderer
-
         # Palette : si palette contient des hex séparés par virgule, on les utilise ; sinon fallback.
         palette_colors: list[str] = []
         if isinstance(config.palette, str) and "#" in config.palette:
@@ -874,8 +862,8 @@ def _ensure_logo_ofb_bas_droite(layout, prof: "ProfileConfig") -> None:
                 if item.id() == LOGO_OFB_BAS_DROITE_ID:
                     picture_item = item
                     break
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Recherche logo bas droite (id layout): %s", exc)
 
     if picture_item is None:
         picture_item = QgsLayoutItemPicture(layout)
@@ -932,8 +920,8 @@ def _ensure_logo_bandeau(layout, prof: "ProfileConfig") -> None:
                 if item.id() == bandeau_id:
                     picture_item = item
                     break
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Recherche bandeau logos (id layout): %s", exc)
 
     if picture_item is None:
         picture_item = QgsLayoutItemPicture(layout)
