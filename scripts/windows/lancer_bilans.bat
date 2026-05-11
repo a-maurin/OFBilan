@@ -49,13 +49,14 @@ echo.
 echo 1. Bilan global uniquement
 echo 2. Bilan(s) thematique(s) - agrainage, chasse, piegeage, etc.
 echo.
-set /p CHOIX=Choix (1 ou 2) ^> 
 
-if "%CHOIX%"=="1" goto global
-if "%CHOIX%"=="2" goto thematiques
-echo Choix invalide.
-pause
-exit /b 1
+:choix_menu
+set /p CHOIX=Choix (1 ou 2) ^> 
+if "!CHOIX!"=="1" goto global
+if "!CHOIX!"=="2" goto thematiques
+echo Choix invalide. Veuillez saisir 1 ou 2.
+echo.
+goto choix_menu
 
 :global
 echo === Bilan global ===
