@@ -29,7 +29,11 @@ from bilans.common.pdf_presentation_config import (
 from bilans.common.pdf_report_builder import PDFReportBuilder
 from bilans.common.pdf_utils import ofb_table
 from bilans.common.pdf_table_sort import (
+    PDF_LABEL_CTRL_LOCATIONS,
+    PDF_LABEL_CTRL_LOCATIONS_SHORT,
+    PDF_LABEL_NON_CONFORME_LOCATIONS,
     PDF_LABEL_PEJ_COUNT,
+    pdf_metric_caption,
     sort_dataframe_desc as _sort_desc,
 )
 from bilans.common.pdf_usagers_domaine_table import build_usagers_x_domaine_pdf_rows
@@ -336,13 +340,13 @@ def _generate_pdf_content(
             nb_nc = int(nb_nc_row.sum()) if not nb_nc_row.empty else 0
             if nb_nc > 0:
                 taux_nc = nb_nc / nb_ctrl if nb_ctrl else 0
-                kf.append((str(nb_nc), "Contrôles non-conformes"))
+                kf.append((str(nb_nc), PDF_LABEL_NON_CONFORME_LOCATIONS))
                 kf.append((format_pct_int_from_rate(taux_nc), "Taux de non-conformité"))
         elif tab_resultats is not None:
             nb_nc = _nb_non_conformes_brut(tab_resultats)
             if nb_nc > 0:
                 taux_nc = nb_nc / nb_ctrl if nb_ctrl else 0
-                kf.append((str(nb_nc), "Contrôles non-conformes"))
+                kf.append((str(nb_nc), PDF_LABEL_NON_CONFORME_LOCATIONS))
                 kf.append((format_pct_int_from_rate(taux_nc), "Taux de non-conformité"))
         if nb_pej > 0:
             kf.append((str(nb_pej), PDF_LABEL_PEJ_COUNT))
@@ -389,8 +393,8 @@ def _generate_pdf_content(
             tbl = [
                 [
                     label_periode,
-                    "Nb contrôles",
-                    "Contrôles non-conformes",
+                    PDF_LABEL_CTRL_LOCATIONS_SHORT,
+                    PDF_LABEL_NON_CONFORME_LOCATIONS,
                     "Taux de non-conformité",
                     "PEJ",
                     "PA",
@@ -426,7 +430,10 @@ def _generate_pdf_content(
             if is_block_enabled(presentation_cfg, "sec21.show_table", True):
                 builder.add_table(
                     tbl,
-                    caption=cap,
+                    caption=(
+                        f"{cap} "
+                        f"({PDF_LABEL_CTRL_LOCATIONS_SHORT} ; PEJ, PA, PVe : nombre de procédures)"
+                    ),
                     col_widths=[
                         avail_w * 0.12,
                         avail_w * 0.14,
@@ -462,7 +469,7 @@ def _generate_pdf_content(
                 period_labels,
                 {"Conformes": conformes, "Non-conformes": non_conformes},
                 titre_ctrl,
-                "Nombre de contrôles",
+                PDF_LABEL_CTRL_LOCATIONS,
                 tmp_dir,
                 "bar_global_ctrl_stacked.png",
                 legend_fontsize=legend_fontsize,
@@ -606,7 +613,9 @@ def _generate_pdf_content(
                 tbl.append([str(row["theme"])[:45], str(int(row["nb"])), taux_str])
             builder.add_table(
                 tbl,
-                caption="Nombre de contrôles par thèmes (extrait)",
+                caption=pdf_metric_caption(
+                    "Nombre de contrôles par thèmes (extrait)", "ctrl"
+                ),
                 col_widths=[avail_w * 0.55, avail_w * 0.22, avail_w * 0.23],
                 col_aligns=["LEFT", "RIGHT", "RIGHT"],
             )
@@ -648,7 +657,12 @@ def _generate_pdf_content(
 
         if use_detail and show_res_table:
             tbl_pdf = _build_rows_resultats_controles_pdf(tab_resultats_controles)
-            block.append(Paragraph("Résultats des contrôles", builder.styles["TableCaption"]))
+            block.append(
+                Paragraph(
+                    pdf_metric_caption("Résultats des contrôles", "ctrl"),
+                    builder.styles["TableCaption"],
+                )
+            )
             block.append(Spacer(1, 1 * mm))
             block.append(
                 ofb_table(
@@ -671,7 +685,9 @@ def _generate_pdf_content(
                 tbl.append([str(row["resultat"]), str(int(row["nb"])), tr_pct[i]])
             block.append(
                 Paragraph(
-                    "Résultats des contrôles (libellés OSCEAN)",
+                    pdf_metric_caption(
+                        "Résultats des contrôles (libellés OSCEAN)", "ctrl"
+                    ),
                     builder.styles["TableCaption"],
                 )
             )
@@ -977,7 +993,7 @@ def _generate_pdf_content(
                     other_w = (avail_w * 0.76) / max(1, n_dom)
                     col_widths = [avail_w * 0.24] + [other_w] * n_dom
                     col_aligns = ["LEFT"] + ["RIGHT"] * n_dom
-                    cap = "Usagers × Domaine (contrôles)"
+                    cap = pdf_metric_caption("Usagers × Domaine", "effectifs")
                     if overflow_html:
                         cap = f"{cap}<br/><br/>{overflow_html}"
                     builder.add_table(
@@ -1027,8 +1043,10 @@ def _generate_pdf_content(
                         bar_path = chart_bar_horizontal_stacked(
                             labels,
                             series,
-                            "Résultats des contrôles par type d'usager",
-                            "Nombre",
+                            pdf_metric_caption(
+                                "Résultats des contrôles par type d'usager", "ctrl"
+                            ),
+                            PDF_LABEL_CTRL_LOCATIONS_SHORT,
                             tmp_dir,
                             "bar_resultats_par_type_usager_global.png",
                             legend_fontsize=max(6.5, legend_fontsize - 0.5),
@@ -1100,7 +1118,9 @@ def _generate_pdf_content(
                     if is_block_enabled(presentation_cfg, "sec4.show_resultats_par_type_usager_table", True):
                         builder.add_table(
                             tbl_res,
-                            caption="Résultats des contrôles par type d'usager",
+                            caption=pdf_metric_caption(
+                                "Résultats des contrôles par type d'usager", "ctrl"
+                            ),
                             col_widths=col_widths,
                             col_aligns=["LEFT"] + ["RIGHT"] * (len(tbl_res[0]) - 1),
                             keep_together=True,

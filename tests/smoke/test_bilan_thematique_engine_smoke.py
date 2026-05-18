@@ -69,8 +69,8 @@ def test_run_engine_smoke(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(engine, "chart_bar_stacked", lambda *args, **kwargs: None)
     monkeypatch.setattr(engine, "chart_line_evolution", lambda *args, **kwargs: None)
 
-    # Cartes : on neutralise la recherche de cartes.
-    monkeypatch.setattr(engine, "find_map", lambda *args, **kwargs: None)
+    # Cartes : on neutralise la résolution des chemins de cartes.
+    monkeypatch.setattr(engine, "resolve_profile_map_paths", lambda *args, **kwargs: [])
 
     # Dossier de sortie : utilise un répertoire temporaire dédié.
     def _dummy_get_out(subdir: str) -> Path:

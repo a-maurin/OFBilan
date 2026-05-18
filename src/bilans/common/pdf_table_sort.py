@@ -17,6 +17,10 @@ _COUNT_COLUMNS_PRIORITY = (
 # Libellés d'en-têtes de tableaux PDF (ne pas dériver « nb_pej » → « Nb Pej »).
 PDF_LABEL_PEJ = "PEJ"
 PDF_LABEL_PEJ_COUNT = "Nombre de PEJ"
+PDF_LABEL_CTRL_LOCATIONS = "Localisations de contrôle"
+PDF_LABEL_CTRL_LOCATIONS_SHORT = "Loc. de contrôle"
+PDF_LABEL_NON_CONFORME_LOCATIONS = "Loc. non-conformes"
+PDF_LABEL_EFFECTIFS = "Effectifs"
 
 _PDF_COLUMN_LABELS: dict[str, str] = {
     "domaine": "Domaine",
@@ -25,9 +29,30 @@ _PDF_COLUMN_LABELS: dict[str, str] = {
     "nb_pej": PDF_LABEL_PEJ,
     "nb_pa": "PA",
     "nb_pve": "PVe",
-    "nb_controles": "Nombre de contrôles",
+    "nb_controles": PDF_LABEL_CTRL_LOCATIONS_SHORT,
     "resultat": "Résultat",
 }
+
+_METRIC_SUFFIX_CTRL = " (localisations de contrôle)"
+_METRIC_SUFFIX_PROC = " (nombre de procédures)"
+_METRIC_SUFFIX_EFFECTIFS = " (effectifs d'usagers)"
+
+
+def pdf_metric_caption(title: str, metric: str) -> str:
+    """
+    Complète un titre de tableau ou graphique avec la métrique si elle n'y figure pas déjà.
+
+    metric : ``ctrl`` | ``proc`` | ``effectifs``
+    """
+    t = str(title).strip()
+    low = t.lower()
+    if metric == "ctrl" and "localisation" not in low:
+        return t + _METRIC_SUFFIX_CTRL
+    if metric == "proc" and "procédure" not in low and "pej" not in low and "pve" not in low:
+        return t + _METRIC_SUFFIX_PROC
+    if metric == "effectifs" and "effectif" not in low:
+        return t + _METRIC_SUFFIX_EFFECTIFS
+    return t
 
 
 def pdf_column_label(col: str) -> str:
@@ -99,7 +124,7 @@ def prepare_pdf_results_sec23_sorting(results: dict) -> None:
         ("zone_pej", ["nb"]),
         ("pej_clotur", ["nb"]),
         ("pej_suite", ["nb"]),
-        ("res_par_usager_domaine", ["nb_controles"]),
+        ("res_par_usager_domaine", ["nb_controles", "nb_conforme", "nb_manquement", "nb_infraction"]),
         ("zone_ctrl", ["nb_total"]),
         ("agg_theme", ["nb"]),
         ("agg_commune", ["nb_controles", "nb"]),
@@ -119,3 +144,58 @@ def prepare_pdf_results_sec23_sorting(results: dict) -> None:
         value = results.get(key)
         if isinstance(value, pd.DataFrame) and not value.empty:
             results[key] = sort_detail_dataframe_by_date_desc(value)
+
+
+def build_resultats_par_usager_domaine_pdf_rows(
+    df: pd.DataFrame,
+    *,
+    is_single_usager: bool,
+    max_rows: int = 15,
+) -> tuple[list[str], list[list[str]], bool]:
+    """
+    Construit l'en-tête et les lignes du tableau « résultats par domaine ».
+
+    Returns:
+        (header, body_rows, with_type_usager_column)
+    """
+    if df is None or df.empty:
+        return [], [], False
+
+    work = df.copy()
+    for col in ("nb_conforme", "nb_manquement", "nb_infraction", "nb_en_attente"):
+        if col not in work.columns:
+            work[col] = 0
+    work["_sort_res"] = work["nb_controles"].fillna(0).astype(int)
+    work = work.sort_values("_sort_res", ascending=False, kind="stable").head(max_rows)
+
+    res_field_cols: list[tuple[str, str]] = [
+        ("Conforme", "nb_conforme"),
+        ("Manquement", "nb_manquement"),
+        ("Infraction", "nb_infraction"),
+    ]
+    if int(work["nb_en_attente"].fillna(0).sum()) > 0:
+        res_field_cols.append(("En attente", "nb_en_attente"))
+    res_cols = [label for label, _ in res_field_cols]
+
+    with_type_col = not (
+        is_single_usager
+        and "type_usager" in work.columns
+        and work["type_usager"].nunique() == 1
+    )
+    if with_type_col:
+        header = ["Type d'usager", "Domaine", *res_cols]
+    else:
+        work = work.drop(columns=["type_usager"])
+        header = ["Domaine", *res_cols]
+
+    body: list[list[str]] = []
+    for _, row in work.iterrows():
+        base = [str(row.get("domaine", ""))] + [
+            str(int(row.get(field, 0))) for _, field in res_field_cols
+        ]
+        if with_type_col:
+            body.append([str(row.get("type_usager", "")), *base])
+        else:
+            body.append(base)
+
+    return header, body, with_type_col

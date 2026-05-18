@@ -52,6 +52,16 @@ def test_pdf_column_label_pej_not_pj() -> None:
     assert "Pj" not in pdf_column_label("nb_pej")
 
 
+def test_pdf_metric_caption_suffixes() -> None:
+    from bilans.common.pdf_table_sort import pdf_metric_caption
+
+    assert "localisation" in pdf_metric_caption("Résultats des contrôles", "ctrl").lower()
+    assert "procédure" in pdf_metric_caption("Synthèse par domaine", "proc").lower()
+    assert pdf_metric_caption("PEJ par thème", "proc") == "PEJ par thème"
+    assert "effectif" in pdf_metric_caption("Répartition par type", "effectifs").lower()
+    assert pdf_metric_caption("Effectifs par type", "effectifs") == "Effectifs par type"
+
+
 def test_prepare_pdf_results_sec23_sorting() -> None:
     results = {
         "pej_par_theme": pd.DataFrame({"theme": ["a", "b"], "nb_pej": [2, 9]}),

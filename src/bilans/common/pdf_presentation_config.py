@@ -58,17 +58,20 @@ DEFAULT_PDF_PRESENTATION_CONFIG: dict[str, Any] = {
             "pa_pj_distinction_paragraph": (
                 "Il convient de distinguer l'activité de police administrative et l'activité de "
                 "police judiciaire. Dans ce document, le terme « contrôle » renvoie exclusivement "
-                "à la police administrative. Le terme « procédure judiciaire » désigne l'activité "
-                "de police judiciaire, qui ne se limite pas aux infractions relevées lors des "
-                "contrôles et peut aussi inclure des saisines extérieures (instruction parquet, "
-                "signalements, plaintes, etc.)."
+                "à la police administrative. Le sigle « PEJ » (procédure d'enquête judiciaire) "
+                "désigne l'activité de police judiciaire, qui ne se limite pas aux infractions "
+                "relevées lors des contrôles et peut aussi inclure des saisines extérieures "
+                "(infractions constatées hors opération de contrôle au titre de la police "
+                "administrative, instruction parquet, signalements, plaintes, etc.)."
             ),
             "multi_usager_paragraph": (
-                "Le total des contrôles par type d'usager peut être supérieur au total des "
-                "contrôles, car une même fiche de contrôle peut renseigner plusieurs types "
-                "d'usagers (contrôle multi-usager). L'analyse par type d'usager comptabilise "
-                "chaque type renseigné afin de refléter au mieux les usagers effectivement "
-                "concernés par l'action de contrôle."
+                "Lorsque des tableaux ou graphiques affichent des « effectifs » par type "
+                "d'usager, chaque usager renseigné sur une fiche est compté (contrôles "
+                "multi-usagers : plusieurs effectifs pour une même localisation). Les totaux "
+                "d'effectifs peuvent alors dépasser le nombre de localisations de contrôle. "
+                "Les colonnes ou indicateurs PEJ, PA et PVe correspondent à des nombres de "
+                "procédures (dossiers), et non à des localisations de contrôle ; ils sont "
+                "signalés comme tels dans les légendes des tableaux concernés."
             ),
         },
         "sec6_methodology": {

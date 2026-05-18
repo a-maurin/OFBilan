@@ -274,41 +274,31 @@ def agg_controles_par_type_usager_theme(
     return pd.DataFrame(rows)
 
 
-def agg_resultats_par_type_usager_domaine(
+def _agg_resultats_par_type_usager_dimension(
     df: pd.DataFrame,
-    col_domaine: str = "domaine",
+    col_dim: str,
+    col_dim_default: str,
     col_resultat: str = "resultat",
     source_table: str = "point_ctrl",
     source_champ: str = "type_usager",
 ) -> pd.DataFrame:
-    """
-    Résultats des contrôles (Infraction / Manquement / PVe) par type d'usager × domaine.
-
-    - Infraction / Manquement sont déterminés à partir de la chaîne *resultat*
-      (présence des mots-clés, insensible à la casse).
-    - PVe nécessite idéalement un lien explicite avec les données PVe ; en l'absence
-      de colonne dédiée dans point_ctrl, nb_pve restera à 0 par (type_usager, domaine).
-    """
+    """Résultats par type d'usager × dimension (domaine ou thème), via classify_resultat_controle."""
+    base_cols = [
+        "type_usager",
+        col_dim,
+        "nb_conforme",
+        "nb_manquement",
+        "nb_infraction",
+        "nb_en_attente",
+        "nb_controles",
+    ]
     if source_champ not in df.columns or col_resultat not in df.columns:
-        return pd.DataFrame(
-            columns=[
-                "type_usager",
-                "domaine",
-                "nb_controles",
-                "nb_infraction",
-                "nb_manquement",
-                "nb_pve",
-            ]
-        )
+        return pd.DataFrame(columns=base_cols)
 
     counts: dict[tuple[str, str], dict[str, int]] = {}
     for _, row in df.iterrows():
-        dom = str(row.get(col_domaine, "Hors domaine") or "Hors domaine")
-        res = str(row.get(col_resultat, "") or "")
-        s = res.lower()
-        is_inf = "infraction" in s
-        is_manq = "manquement" in s
-        is_pve = "pve" in s  # très conservateur ; la plupart du temps ce sera 0
+        dim_val = str(row.get(col_dim, col_dim_default) or col_dim_default)
+        res_cls = classify_resultat_controle(row.get(col_resultat, ""))
 
         toks = _parse_type_usager_tokens(row.get(source_champ))
         if not toks:
@@ -320,37 +310,59 @@ def agg_resultats_par_type_usager_domaine(
             }
 
         for cat in cats:
-            key = (cat, dom)
+            key = (cat, dim_val)
             d = counts.setdefault(
                 key,
                 {
-                    "nb_controles": 0,
-                    "nb_infraction": 0,
+                    "nb_conforme": 0,
                     "nb_manquement": 0,
-                    "nb_pve": 0,
+                    "nb_infraction": 0,
+                    "nb_en_attente": 0,
+                    "nb_controles": 0,
                 },
             )
             d["nb_controles"] += 1
-            if is_inf:
-                d["nb_infraction"] += 1
-            if is_manq:
+            if res_cls == "Conforme":
+                d["nb_conforme"] += 1
+            elif res_cls == "Manquement":
                 d["nb_manquement"] += 1
-            if is_pve:
-                d["nb_pve"] += 1
+            elif res_cls == "Infraction":
+                d["nb_infraction"] += 1
+            else:
+                d["nb_en_attente"] += 1
 
     rows: list[dict[str, object]] = []
-    for (cat, dom), d in counts.items():
+    for (cat, dim_val), d in counts.items():
         rows.append(
             {
                 "type_usager": cat,
-                "domaine": dom,
-                "nb_controles": int(d["nb_controles"]),
-                "nb_infraction": int(d["nb_infraction"]),
+                col_dim: dim_val,
+                "nb_conforme": int(d["nb_conforme"]),
                 "nb_manquement": int(d["nb_manquement"]),
-                "nb_pve": int(d["nb_pve"]),
+                "nb_infraction": int(d["nb_infraction"]),
+                "nb_en_attente": int(d["nb_en_attente"]),
+                "nb_controles": int(d["nb_controles"]),
             }
         )
     return pd.DataFrame(rows)
+
+
+def agg_resultats_par_type_usager_domaine(
+    df: pd.DataFrame,
+    col_domaine: str = "domaine",
+    col_resultat: str = "resultat",
+    source_table: str = "point_ctrl",
+    source_champ: str = "type_usager",
+) -> pd.DataFrame:
+    """Résultats des contrôles par type d'usager × domaine (Conforme / Manquement / Infraction / En attente)."""
+    return _agg_resultats_par_type_usager_dimension(
+        df,
+        col_domaine,
+        "Hors domaine",
+        col_resultat=col_resultat,
+        source_table=source_table,
+        source_champ=source_champ,
+    )
 
 
 def agg_resultats_par_type_usager_theme(
@@ -360,71 +372,15 @@ def agg_resultats_par_type_usager_theme(
     source_table: str = "point_ctrl",
     source_champ: str = "type_usager",
 ) -> pd.DataFrame:
-    """
-    Résultats des contrôles (Infraction / Manquement / PVe) par type d'usager × thème.
-    """
-    if source_champ not in df.columns or col_resultat not in df.columns:
-        return pd.DataFrame(
-            columns=[
-                "type_usager",
-                "theme",
-                "nb_controles",
-                "nb_infraction",
-                "nb_manquement",
-                "nb_pve",
-            ]
-        )
-
-    counts: dict[tuple[str, str], dict[str, int]] = {}
-    for _, row in df.iterrows():
-        theme = str(row.get(col_theme, "Hors thème") or "Hors thème")
-        res = str(row.get(col_resultat, "") or "")
-        s = res.lower()
-        is_inf = "infraction" in s
-        is_manq = "manquement" in s
-        is_pve = "pve" in s
-
-        toks = _parse_type_usager_tokens(row.get(source_champ))
-        if not toks:
-            cats = ["Autre"]
-        else:
-            cats = {
-                map_type_usager(source_table, source_champ, lab)
-                for lab, _ in toks
-            }
-
-        for cat in cats:
-            key = (cat, theme)
-            d = counts.setdefault(
-                key,
-                {
-                    "nb_controles": 0,
-                    "nb_infraction": 0,
-                    "nb_manquement": 0,
-                    "nb_pve": 0,
-                },
-            )
-            d["nb_controles"] += 1
-            if is_inf:
-                d["nb_infraction"] += 1
-            if is_manq:
-                d["nb_manquement"] += 1
-            if is_pve:
-                d["nb_pve"] += 1
-
-    rows: list[dict[str, object]] = []
-    for (cat, theme), d in counts.items():
-        rows.append(
-            {
-                "type_usager": cat,
-                "theme": theme,
-                "nb_controles": int(d["nb_controles"]),
-                "nb_infraction": int(d["nb_infraction"]),
-                "nb_manquement": int(d["nb_manquement"]),
-                "nb_pve": int(d["nb_pve"]),
-            }
-        )
-    return pd.DataFrame(rows)
+    """Résultats des contrôles par type d'usager × thème (même logique que par domaine)."""
+    return _agg_resultats_par_type_usager_dimension(
+        df,
+        col_theme,
+        "Hors thème",
+        col_resultat=col_resultat,
+        source_table=source_table,
+        source_champ=source_champ,
+    )
 
 
 def agg_resultat_counts_par_type_usager(

@@ -148,22 +148,24 @@ def test_build_usagers_x_domaine_truncates_columns_and_note() -> None:
     assert "sur 3" in note
 
 
-def test_types_usager_cible_desactive_sec4() -> None:
-    """Profil usager ciblé : section 4 absente du sommaire (comparaison inter-usagers)."""
+def test_types_usager_cible_sec4_pression_controle() -> None:
+    """Profil usager ciblé : section 4 = pression de contrôle (effectifs, département)."""
     root = Path(__file__).resolve().parents[2]
     resolved = resolve_pdf_presentation_config(
         root, scope="thematique", profile_id="types_usager_cible"
     )
     effective = resolved["effective"]
-    assert is_section_enabled(effective, "sec4", True) is False
+    assert is_section_enabled(effective, "sec4", True) is True
+    titles = effective.get("sections", {}).get("titles", {})
+    assert "pression" in str(titles.get("sec4", "")).lower()
 
     section_defs = [
         ("sec1", "1. Chiffres clés"),
-        ("sec4", "4. Activité de contrôle par type d'usager"),
+        ("sec4", "4. Pression de contrôle"),
         ("sec5", "5. Localisation cartographique"),
     ]
     toc = resolve_sections_for_toc(effective, section_defs)
-    assert [sid for sid, _ in toc] == ["sec1", "sec5"]
+    assert [sid for sid, _ in toc] == ["sec1", "sec4", "sec5"]
 
     resolved_usager = resolve_pdf_presentation_config(
         root, scope="thematique", profile_id="types_usager"

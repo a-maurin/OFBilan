@@ -63,7 +63,6 @@ from bilans.common.utilitaires_metier import (
     agg_procedures_par_type_usager_domaine,
     agg_procedures_par_type_usager_theme,
     agg_resultat_counts_par_type_usager,
-    agg_nb_controles_par_type_usager,
     build_tab_resultats_controles,
 )
 from bilans.common.ofb_charte import Spinner
@@ -89,8 +88,14 @@ from bilans.common.pdf_presentation_config import (
     should_show_placeholder,
 )
 from bilans.common.pdf_table_sort import (
+    PDF_LABEL_CTRL_LOCATIONS,
+    PDF_LABEL_CTRL_LOCATIONS_SHORT,
+    PDF_LABEL_NON_CONFORME_LOCATIONS,
+    PDF_LABEL_PEJ,
     PDF_LABEL_PEJ_COUNT,
+    build_resultats_par_usager_domaine_pdf_rows,
     pdf_column_label,
+    pdf_metric_caption,
     prepare_pdf_results_sec23_sorting,
     sort_dataframe_desc,
 )
@@ -1367,7 +1372,7 @@ def _run_aggregations(
             not point_ctrl_perimetre.empty
             and "type_usager" in point_ctrl_perimetre.columns
         ):
-            pc = agg_nb_controles_par_type_usager(point_ctrl_perimetre)
+            pc = agg_effectifs_usagers(point_ctrl_perimetre)
             if not pc.empty:
                 total_pc = int(pc["nb"].sum())
                 pc = pc.copy()
@@ -2202,7 +2207,7 @@ def _pdf_section_pression_controle_usagers(
     legend_ncol_max: int,
     figure_scale: float,
 ) -> None:
-    """Section 4 (profil usager ciblé) : nombre de contrôles par type d'usager, département entier."""
+    """Section 4 (profil usager ciblé) : effectifs par type d'usager, département entier."""
     df = results.get("pression_controle_tous_usagers")
     if df is None or df.empty:
         return
@@ -2222,10 +2227,12 @@ def _pdf_section_pression_controle_usagers(
         builder.add_paragraph(
             f"Ce bilan porte sur l'activité de contrôle à l'égard des usagers de type "
             f"{cible_txt}. Le graphique et le tableau ci-dessous situent la pression de "
-            f"contrôle exercée sur ce(s) type(s) d'usager au regard de la répartition des "
-            f"localisations de contrôle par catégorie d'usager sur l'ensemble du département "
-            f"pour la période analysée (une localisation par contrôle, catégorie dominante "
-            f"selon le mapping OSCEAN)."
+            f"contrôle exercée sur ce(s) type(s) d'usager au regard de la répartition, sur "
+            f"l'ensemble du département pour la période analysée, du nombre d'effectifs par "
+            f"type d'usager (et non du seul nombre de localisations de contrôle). Ce total "
+            f"d'effectifs est nécessairement supérieur ou égal au nombre de localisations, "
+            f"car les contrôles multi-usagers répartissent plusieurs effectifs entre les "
+            f"catégories renseignées sur une même fiche."
         )
         builder.add_spacer(2)
 
@@ -2233,7 +2240,7 @@ def _pdf_section_pression_controle_usagers(
     if is_block_enabled(presentation_cfg, "sec4.show_pie_usagers", True) and pie_data:
         pie_path = chart_pie(
             pie_data,
-            "Répartition des localisations de contrôle par type d'usager",
+            "Répartition des effectifs par type d'usager",
             tmp_dir,
             "pie_pression_controle_usagers.png",
             **_chart_pie_compact_legend_kw(
@@ -2249,13 +2256,13 @@ def _pdf_section_pression_controle_usagers(
         total = int(df["nb"].sum())
         nbs = df["nb"].astype(int).tolist()
         pcts = tab_counts_to_pct_strings(nbs) if total else []
-        tbl = [["Type d'usager", "Nombre de contrôles", "Part (%)"]]
+        tbl = [["Type d'usager", "Effectifs", "Part (%)"]]
         for i, (_, row) in enumerate(df.iterrows()):
             tu = str(row["type_usager"])
             suffix = " *" if tu in targets_s else ""
             tbl.append([tu + suffix, str(int(row["nb"])), pcts[i] if pcts else "0 %"])
         caption = (
-            "Localisations de contrôle par type d'usager "
+            "Effectifs d'usagers par catégorie "
             "(ensemble des types, département et période du bilan)."
         )
         if targets_s:
@@ -2341,7 +2348,7 @@ def _pdf_section_activite_par_types_usagers(
             first_tbl = False
             builder.add_table(
                 tbl_th,
-                caption=f"Thèmes de contrôle — {tu_s}",
+                caption=pdf_metric_caption(f"Thèmes de contrôle — {tu_s}", "ctrl"),
                 col_widths=[
                     avail_w * 0.40,
                     avail_w * 0.14,
@@ -2640,11 +2647,11 @@ def _generate_pdf(
                 nb_nc += int(sub["nb"].sum())
         if nb_nc > 0:
             taux_nc = nb_nc / nb_ctrl if nb_ctrl else 0
-            kf.append((str(nb_nc), "Contrôles non-conformes"))
+            kf.append((str(nb_nc), PDF_LABEL_NON_CONFORME_LOCATIONS))
             kf.append((format_pct_int_from_rate(taux_nc), "Taux de non-conformité"))
     if nb_pej > 0:
         kf.append((str(nb_pej), PDF_LABEL_PEJ_COUNT))
-    kf.append((str(nb_pa), "Procédure administrative"))
+    kf.append((str(nb_pa), "Procédures administratives (PA)"))
     if nb_pve > 0:
         kf.append((str(nb_pve), "Nombre d'infractions relevées par PVe"))
         # En mode \"types d'usagers\", ajouter un indicateur complémentaire :
@@ -2697,10 +2704,10 @@ def _generate_pdf(
             )
             tbl = [[
                 label_col,
-                "Nb contrôles",
-                "Contrôles non-conformes",
+                PDF_LABEL_CTRL_LOCATIONS_SHORT,
+                PDF_LABEL_NON_CONFORME_LOCATIONS,
                 "Taux de non-conformité",
-                "PEJ",
+                PDF_LABEL_PEJ,
                 "PA",
                 "PVe",
             ]]
@@ -2720,17 +2727,20 @@ def _generate_pdf(
                     str(int(row["nb_pve"])),
                 ])
             if is_block_enabled(presentation_cfg, "sec21.show_table", True):
+                cap_vent = (
+                    "mensuels"
+                    if is_month
+                    else (
+                        "trimestriels"
+                        if is_trim
+                        else ("hebdomadaires" if is_week else "annuels")
+                    )
+                )
                 builder.add_table(
                     tbl,
-                    caption="Indicateurs "
-                    + (
-                        "mensuels"
-                        if is_month
-                        else (
-                            "trimestriels"
-                            if is_trim
-                            else ("hebdomadaires" if is_week else "annuels")
-                        )
+                    caption=(
+                        f"Indicateurs {cap_vent} "
+                        f"({PDF_LABEL_CTRL_LOCATIONS_SHORT} ; PEJ, PA, PVe : nombre de procédures)"
                     ),
                     col_widths=[
                         avail_w * 0.12,
@@ -2745,16 +2755,16 @@ def _generate_pdf(
                 )
             period_labels = [str(v) for v in agg_annuelle["periode"].tolist()]
             if is_month:
-                titre_ctrl = "Contrôles par mois (conformes / non-conformes)"
+                titre_ctrl = "Localisations de contrôle par mois (conformes / non-conformes)"
                 titre_proc = "Procédures et PVe par mois"
             elif is_trim:
-                titre_ctrl = "Contrôles par trimestre (conformes / non-conformes)"
+                titre_ctrl = "Localisations de contrôle par trimestre (conformes / non-conformes)"
                 titre_proc = "Procédures et PVe par trimestre"
             elif is_week:
-                titre_ctrl = "Contrôles par semaine (conformes / non-conformes)"
+                titre_ctrl = "Localisations de contrôle par semaine (conformes / non-conformes)"
                 titre_proc = "Procédures et PVe par semaine"
             else:
-                titre_ctrl = "Contrôles par année (conformes / non-conformes)"
+                titre_ctrl = "Localisations de contrôle par année (conformes / non-conformes)"
                 titre_proc = "Procédures et PVe par année"
             conformes = [
                 int(row["nb_controles"]) - int(row["nb_controles_non_conformes"])
@@ -2763,7 +2773,12 @@ def _generate_pdf(
             non_conformes = [int(v) for v in agg_annuelle["nb_controles_non_conformes"].tolist()]
             stacked_ctrl = {"Conformes": conformes, "Non-conformes": non_conformes}
             stacked_path = chart_bar_stacked(
-                period_labels, stacked_ctrl, titre_ctrl, "Nombre de contrôles", tmp_dir, "bar_annuel_ctrl_stacked.png",
+                period_labels,
+                stacked_ctrl,
+                titre_ctrl,
+                PDF_LABEL_CTRL_LOCATIONS,
+                tmp_dir,
+                "bar_annuel_ctrl_stacked.png",
                 legend_fontsize=legend_fontsize,
                 legend_ncol_max=legend_ncol_max,
                 figure_scale=figure_scale,
@@ -2806,8 +2821,206 @@ def _generate_pdf(
         elif show_placeholder:
             builder.add_paragraph("Aucun indicateur disponible sur la période pour la ventilation retenue.")
 
+    def _render_proc_usager_domaine_theme() -> None:
+        """Procédures PEJ / PA / PVe par domaine et thème (chapitre 3, usager ciblé)."""
+        proc_ud = results.get("proc_par_usager_domaine")
+        if proc_ud is not None and not proc_ud.empty:
+            max_lignes_domaine = 15
+            df_all = proc_ud.copy()
+            df_proc = df_all.head(max_lignes_domaine).copy()
+            cap_proc = pdf_metric_caption(
+                "Procédures par type d'usager et par domaine", "proc"
+            )
+            if is_single_usager and "type_usager" in df_proc.columns and df_proc["type_usager"].nunique() == 1:
+                df_proc = df_proc.drop(columns=["type_usager"])
+                cap_proc = pdf_metric_caption("Procédures par domaine", "proc")
+            if len(df_all) > len(df_proc):
+                cap_proc = f"{cap_proc} (top {len(df_proc)})"
+            cols = [c for c in ["domaine", "nb_pej", "nb_pa", "nb_pve"] if c in df_proc.columns]
+            if cols:
+                tbl = [[pdf_column_label(c) for c in cols]]
+                for _, row in df_proc.iterrows():
+                    tbl.append([
+                        str(int(row[c])) if c in ("nb_pej", "nb_pa", "nb_pve") else str(row.get(c, ""))
+                        for c in cols
+                    ])
+                builder.add_table(tbl, caption=cap_proc, keep_together=True)
+
+        proc_ut = results.get("proc_par_usager_theme")
+        if proc_ut is not None and not proc_ut.empty:
+            max_lignes_theme = 15
+            df_all = proc_ut.copy()
+            df_proc = df_all.head(max_lignes_theme).copy()
+            cap_proc = pdf_metric_caption(
+                "Procédures par type d'usager et par thème", "proc"
+            )
+            if is_single_usager and "type_usager" in df_proc.columns and df_proc["type_usager"].nunique() == 1:
+                df_proc = df_proc.drop(columns=["type_usager"])
+                cap_proc = pdf_metric_caption("Procédures par thème", "proc")
+            if len(df_all) > len(df_proc):
+                cap_proc = f"{cap_proc} (top {len(df_proc)})"
+            cols = [c for c in ["theme", "nb_pej", "nb_pa", "nb_pve"] if c in df_proc.columns]
+            if cols:
+                tbl = [[pdf_column_label(c) for c in cols]]
+                for _, row in df_proc.iterrows():
+                    tbl.append([
+                        str(int(row[c])) if c in ("nb_pej", "nb_pa", "nb_pve") else str(row.get(c, ""))
+                        for c in cols
+                    ])
+                builder.add_table(tbl, caption=cap_proc, keep_together=True)
+
+    def _render_type_usager_sec22_content() -> None:
+        """Section 2.2 : contrôles et résultats pour le(s) type(s) d'usager ciblé(s)."""
+        if not is_single_usager:
+            ue = results.get("usager_effectifs")
+            if ue is not None and not ue.empty:
+                tbl = [["Type d'usager", "Effectifs"]]
+                for _, row in ue.iterrows():
+                    tbl.append([str(row["type_usager"]), str(int(row["nb"]))])
+                builder.add_table(
+                    tbl,
+                    caption=pdf_metric_caption("Effectifs d'usagers par catégorie", "effectifs"),
+                    col_widths=[avail_w * 0.65, avail_w * 0.35],
+                    col_aligns=["LEFT", "RIGHT"],
+                )
+                pie_data = {str(r["type_usager"]): int(r["nb"]) for _, r in ue.iterrows()}
+                if pie_data:
+                    pie_path = chart_pie(
+                        pie_data,
+                        "Usagers contrôlés par type",
+                        tmp_dir,
+                        "pie_usagers.png",
+                        **_chart_pie_compact_legend_kw(
+                            len(pie_data),
+                            legend_fontsize=legend_fontsize,
+                            legend_ncol_max=legend_ncol_max,
+                        ),
+                        figure_scale=figure_scale,
+                    )
+                    builder.add_image(Path(pie_path), width_ratio=pie_ratio_base)
+
+        if not is_single_usager:
+            ud = results.get("usager_par_domaine")
+            if ud is not None and not ud.empty:
+                df_ud = ud.copy()
+                tbl, overflow_html = build_usagers_x_domaine_pdf_rows(
+                    df_ud,
+                    tables_layout=tables_layout,
+                )
+                if tbl:
+                    n_cols = len(tbl[0])
+                    col_aligns = ["LEFT"] + ["RIGHT"] * (n_cols - 1)
+                    cap = pdf_metric_caption("Usagers × Domaine", "effectifs")
+                    if overflow_html:
+                        cap = f"{cap}<br/><br/>{overflow_html}"
+                    builder.add_table(
+                        tbl,
+                        caption=cap,
+                        col_aligns=col_aligns,
+                        wide_headers=True,
+                    )
+
+        tab_res_ctrl = results.get("tab_resultats_controles")
+        if tab_res_ctrl is not None and not tab_res_ctrl.empty:
+            cap_res = pdf_metric_caption("Résultats des contrôles", "ctrl")
+            if is_single_usager and single_label:
+                cap_res = f"{cap_res} – {single_label}"
+            else:
+                cap_res = f"{cap_res} (usager ciblé)"
+            tr_u = tab_res_ctrl
+            show_coeur_col = (
+                bool(results.get("_pdf_show_coeur_hors_coeur", True))
+                and "coeur_hors_coeur" in tr_u.columns
+            )
+            hdr = ["Résultat", "Nombre", "Taux"] + (["Cœur/Hors-cœur"] if show_coeur_col else [])
+            tbl = [hdr]
+            top_mask = tr_u["resultat"].isin(["Conforme", "Non-conforme", "En attente"])
+            top_counts = tr_u.loc[top_mask, "nb"].astype(int).tolist()
+            top_rates = tab_counts_to_pct_strings(top_counts) if top_counts else []
+            j = 0
+            nb_nc = int(tr_u.loc[tr_u["resultat"] == "Non-conforme", "nb"].sum())
+            for _, row in tr_u.iterrows():
+                rlib = str(row["resultat"])
+                nbv = int(row["nb"])
+                if rlib.strip() in ("Dont infraction", "Dont manquement"):
+                    t = format_pct_int_from_rate((nbv / nb_nc) if nb_nc > 0 else None)
+                elif rlib in ("Conforme", "Non-conforme", "En attente"):
+                    t = top_rates[j] if j < len(top_rates) else "n.d."
+                    j += 1
+                else:
+                    t = "n.d."
+                row_cells = [rlib, str(nbv), t]
+                if show_coeur_col:
+                    row_cells.append(str(row.get("coeur_hors_coeur", "n.d.")))
+                tbl.append(row_cells)
+            if show_coeur_col:
+                cw_res = [avail_w * 0.42, avail_w * 0.14, avail_w * 0.16, avail_w * 0.28]
+                ca_res = ["LEFT", "RIGHT", "RIGHT", "LEFT"]
+            else:
+                cw_res = [avail_w * 0.50, avail_w * 0.22, avail_w * 0.28]
+                ca_res = ["LEFT", "RIGHT", "RIGHT"]
+            builder.add_table(
+                tbl,
+                caption=cap_res,
+                col_widths=cw_res,
+                col_aligns=ca_res,
+            )
+            pie_data = {
+                str(r["resultat"]): int(r["nb"])
+                for _, r in tr_u.iterrows()
+                if str(r["resultat"]) in ("Conforme", "Non-conforme", "En attente")
+            }
+            if pie_data:
+                pie_path = chart_pie(
+                    pie_data,
+                    "Répartition des résultats",
+                    tmp_dir,
+                    "pie_resultats_usager.png",
+                    **_chart_pie_compact_legend_kw(
+                        len(pie_data),
+                        legend_fontsize=legend_fontsize,
+                        legend_ncol_max=legend_ncol_max,
+                    ),
+                    figure_scale=figure_scale,
+                )
+                builder.add_image(Path(pie_path), width_ratio=pie_ratio_base)
+
+        res_ud = results.get("res_par_usager_domaine")
+        if res_ud is not None and not res_ud.empty:
+            hdr, body, with_type_col = build_resultats_par_usager_domaine_pdf_rows(
+                res_ud,
+                is_single_usager=is_single_usager,
+            )
+            if hdr and body:
+                if with_type_col:
+                    caption = pdf_metric_caption(
+                        "Résultats des contrôles par type d'usager et par domaine",
+                        "ctrl",
+                    )
+                else:
+                    caption = pdf_metric_caption("Résultats des contrôles par domaine", "ctrl")
+                if len(res_ud) > len(body):
+                    caption = f"{caption} (top {len(body)})"
+                n_num = len(hdr) - (2 if with_type_col else 1)
+                if with_type_col:
+                    cw = [avail_w * 0.28] + [avail_w * 0.18] * (n_num + 1)
+                    ca = ["LEFT", "LEFT"] + ["RIGHT"] * n_num
+                else:
+                    cw = [avail_w * 0.40] + [avail_w * (0.60 / n_num)] * n_num
+                    ca = ["LEFT"] + ["RIGHT"] * n_num
+                builder.add_table(
+                    [hdr, *body],
+                    caption=caption,
+                    col_widths=cw,
+                    col_aligns=ca,
+                    keep_together=True,
+                )
+
     def _render_sec22() -> None:
         builder.add_section("sec22", section_title["sec22"], toc_level=1)
+        if is_type_usager and nb_ctrl > 0:
+            _render_type_usager_sec22_content()
+            return
         if not (nb_ctrl > 0 and not is_type_usager and not is_procedures):
             if show_placeholder:
                 builder.add_paragraph("Aucune donnée de résultat disponible sur la période.")
@@ -2849,7 +3062,12 @@ def _generate_pdf(
             else:
                 cw = [avail_w * 0.50, avail_w * 0.22, avail_w * 0.28]
                 ca = ["LEFT", "RIGHT", "RIGHT"]
-            builder.add_table(tbl, caption="Résultats des contrôles", col_widths=cw, col_aligns=ca)
+            builder.add_table(
+                tbl,
+                caption=pdf_metric_caption("Résultats des contrôles", "ctrl"),
+                col_widths=cw,
+                col_aligns=ca,
+            )
             pie_data = {
                 str(r["resultat"]): int(r["nb"])
                 for _, r in tr.iterrows()
@@ -2884,193 +3102,11 @@ def _generate_pdf(
         sec2_order = ["sec21", "sec22"]
     sec2_registry.render_many(sec2_order, {})
 
-    # ── TYPES D'USAGERS (hors sec22) ──
-    if is_type_usager and nb_ctrl > 0:
-        builder.add_section("sec_ctrl_type_usager", "Contrôles par type d'usager", level=2)
-
-        # Multi-usagers : architecture complète (tableau + camembert + colonnes type_usager)
-        if not is_single_usager:
-            ue = results.get("usager_effectifs")
-            if ue is not None and not ue.empty:
-                tbl = [["Type d'usager", "Effectifs"]]
-                for _, row in ue.iterrows():
-                    tbl.append([str(row["type_usager"]), str(int(row["nb"]))])
-                builder.add_table(tbl, caption="Effectifs d'usagers par catégorie",
-                                  col_widths=[avail_w * 0.65, avail_w * 0.35],
-                                  col_aligns=["LEFT", "RIGHT"])
-                pie_data = {str(r["type_usager"]): int(r["nb"]) for _, r in ue.iterrows()}
-                if pie_data:
-                    pie_path = chart_pie(
-                        pie_data,
-                        "Usagers contrôlés par type",
-                        tmp_dir,
-                        "pie_usagers.png",
-                        **_chart_pie_compact_legend_kw(
-                            len(pie_data),
-                            legend_fontsize=legend_fontsize,
-                            legend_ncol_max=legend_ncol_max,
-                        ),
-                        figure_scale=figure_scale,
-                    )
-                    builder.add_image(Path(pie_path), width_ratio=pie_ratio_base)
-        else:
-            # Mono-usager : l'effectif du type ciblé est déjà mis en avant
-            # dans les chiffres clés (tuile \"Effectifs – <type>\").
-            # On évite donc un tableau redondant à une seule ligne ici.
-            pass
-
-        # Tableau \"Usagers × Domaine\" (multi uniquement).
-        # En mono-usager, ce tableau n'est pas pertinent visuellement.
-        if not is_single_usager:
-            ud = results.get("usager_par_domaine")
-            if ud is not None and not ud.empty:
-                df_ud = ud.copy()
-                tbl, overflow_html = build_usagers_x_domaine_pdf_rows(
-                    df_ud,
-                    tables_layout=tables_layout,
-                )
-                if tbl:
-                    n_cols = len(tbl[0])
-                    col_aligns = ["LEFT"] + ["RIGHT"] * (n_cols - 1)
-                    cap = "Usagers × Domaine"
-                    if overflow_html:
-                        cap = f"{cap}<br/><br/>{overflow_html}"
-                    builder.add_table(
-                        tbl,
-                        caption=cap,
-                        col_aligns=col_aligns,
-                        wide_headers=True,
-                    )
-
-        # Résultats des contrôles pour l'usager ciblé (tableau + camembert)
-        # (placés avant les tableaux \"par domaine\")
-        tab_resultats = results.get("tab_resultats")
-        if tab_resultats is not None and not tab_resultats.empty:
-            cap_res = "Résultats des contrôles"
-            if is_single_usager and single_label:
-                cap_res = f"{cap_res} – {single_label}"
-            else:
-                cap_res = f"{cap_res} (usager ciblé)"
-            tr_u = tab_resultats
-            taux_strs_u = tab_counts_to_pct_strings(tr_u["nb"].astype(int).tolist())
-            tbl = [["Résultat", "Nombre", "Taux"]]
-            for i, (_, row) in enumerate(tr_u.iterrows()):
-                tbl.append([str(row["resultat"]), str(int(row["nb"])), taux_strs_u[i]])
-            builder.add_table(
-                tbl,
-                caption=cap_res,
-                col_widths=[avail_w * 0.50, avail_w * 0.25, avail_w * 0.25],
-                col_aligns=["LEFT", "RIGHT", "RIGHT"],
-            )
-            pie_data = {str(r["resultat"]): int(r["nb"]) for _, r in tab_resultats.iterrows()}
-            if pie_data:
-                pie_path = chart_pie(
-                    pie_data,
-                    "Répartition des résultats",
-                    tmp_dir,
-                    "pie_resultats_usager.png",
-                    **_chart_pie_compact_legend_kw(
-                        len(pie_data),
-                        legend_fontsize=legend_fontsize,
-                        legend_ncol_max=legend_ncol_max,
-                    ),
-                    figure_scale=figure_scale,
-                )
-                builder.add_image(Path(pie_path), width_ratio=pie_ratio_base)
-
-        # Résultats des contrôles par domaine (troncature PDF seulement si > 15 lignes)
-        res_ud = results.get("res_par_usager_domaine")
-        if res_ud is not None and not res_ud.empty:
-            max_lignes_domaine = 15
-            df_all = res_ud.sort_values("nb_controles", ascending=False, kind="stable")
-            df_res = df_all.head(max_lignes_domaine).copy()
-            if is_single_usager and "type_usager" in df_res.columns and df_res["type_usager"].nunique() == 1:
-                df_res = df_res.drop(columns=["type_usager"])
-                hdr = ["Domaine", "Nb contrôles", "Infractions", "Manquements"]
-                caption = "Résultats des contrôles par domaine"
-            else:
-                hdr = ["Type d'usager", "Domaine", "Nb contrôles", "Infractions", "Manquements"]
-                caption = "Résultats des contrôles par type d'usager et par domaine"
-            if len(df_all) > len(df_res):
-                caption = f"{caption} (top {len(df_res)})"
-            tbl = [hdr]
-            for _, row in df_res.iterrows():
-                base = [
-                    str(row.get("domaine", "")),
-                    str(int(row.get("nb_controles", 0))),
-                    str(int(row.get("nb_infraction", 0))),
-                    str(int(row.get("nb_manquement", 0))),
-                ]
-                if len(hdr) == 5:
-                    tbl.append([str(row.get("type_usager", "")), *base])
-                else:
-                    tbl.append(base)
-            cw = (
-                [avail_w * 0.30, avail_w * 0.23, avail_w * 0.15, avail_w * 0.16, avail_w * 0.16]
-                if len(hdr) == 5
-                else [avail_w * 0.34, avail_w * 0.22, avail_w * 0.22, avail_w * 0.22]
-            )
-            ca = (
-                ["LEFT", "LEFT", "RIGHT", "RIGHT", "RIGHT"]
-                if len(hdr) == 5
-                else ["LEFT", "RIGHT", "RIGHT", "RIGHT"]
-            )
-            builder.add_table(
-                tbl,
-                caption=caption,
-                col_widths=cw,
-                col_aligns=ca,
-                keep_together=True,
-            )
-
-        # Procédures par domaine (PEJ, PA, PVe)
-        proc_ud = results.get("proc_par_usager_domaine")
-        if proc_ud is not None and not proc_ud.empty:
-            max_lignes_domaine = 15
-            df_all = proc_ud.copy()
-            df_proc = df_all.head(max_lignes_domaine).copy()
-            cap_proc = "Procédures par type d'usager et par domaine"
-            if is_single_usager and "type_usager" in df_proc.columns and df_proc["type_usager"].nunique() == 1:
-                df_proc = df_proc.drop(columns=["type_usager"])
-                cap_proc = "Procédures par domaine"
-            if len(df_all) > len(df_proc):
-                cap_proc = f"{cap_proc} (top {len(df_proc)})"
-            cols = [c for c in ["domaine", "nb_pej", "nb_pa", "nb_pve"] if c in df_proc.columns]
-            if cols:
-                tbl = [[pdf_column_label(c) for c in cols]]
-                for _, row in df_proc.iterrows():
-                    tbl.append([
-                        str(int(row[c])) if c in ("nb_pej", "nb_pa", "nb_pve") else str(row.get(c, ""))
-                        for c in cols
-                    ])
-                builder.add_table(tbl, caption=cap_proc, keep_together=True)
-
-        # Procédures par thème (PEJ, PA, PVe)
-        proc_ut = results.get("proc_par_usager_theme")
-        if proc_ut is not None and not proc_ut.empty:
-            max_lignes_theme = 15
-            df_all = proc_ut.copy()
-            df_proc = df_all.head(max_lignes_theme).copy()
-            cap_proc = "Procédures par type d'usager et par thème"
-            if is_single_usager and "type_usager" in df_proc.columns and df_proc["type_usager"].nunique() == 1:
-                df_proc = df_proc.drop(columns=["type_usager"])
-                cap_proc = "Procédures par thème"
-            if len(df_all) > len(df_proc):
-                cap_proc = f"{cap_proc} (top {len(df_proc)})"
-            cols = [c for c in ["theme", "nb_pej", "nb_pa", "nb_pve"] if c in df_proc.columns]
-            if cols:
-                tbl = [[pdf_column_label(c) for c in cols]]
-                for _, row in df_proc.iterrows():
-                    tbl.append([
-                        str(int(row[c])) if c in ("nb_pej", "nb_pa", "nb_pve") else str(row.get(c, ""))
-                        for c in cols
-                    ])
-                builder.add_table(tbl, caption=cap_proc, keep_together=True)
-
-        # Section dense : on conserve un saut de page dédié.
-
     # 3. Procédures (chapitre)
     builder.add_section("sec3", section_title["sec3"], start_on_new_page=True)
+
+    if is_type_usager and nb_ctrl > 0:
+        _render_proc_usager_domaine_theme()
 
     def _render_sec31() -> None:
         builder.add_section("sec31", section_title["sec31"], compact=True, toc_level=1)
@@ -3139,7 +3175,7 @@ def _generate_pdf(
                     tbl_det.append(row_det)
                 builder.add_table(
                     tbl_det,
-                    caption="Détail des PVe",
+                    caption=pdf_metric_caption("Détail des PVe", "proc"),
                     col_aligns=["LEFT"] * len(hdr_det),
                 )
             pve_nat = results.get("pve_natinf_analysis")
@@ -3292,7 +3328,7 @@ def _generate_pdf(
                 col_aligns[idx] = "RIGHT"
             builder.add_table(
                 tbl,
-                caption="PEJ par thème",
+                caption=pdf_metric_caption("PEJ par thème", "proc"),
                 col_aligns=col_aligns,
                 keep_together=True,
             )
@@ -3319,7 +3355,7 @@ def _generate_pdf(
                 tbl_det.append(row_pej)
             builder.add_table(
                 tbl_det,
-                caption="Détail des PEJ",
+                caption=pdf_metric_caption("Détail des PEJ", "proc"),
                 col_aligns=["LEFT"] * len(hdr_pej),
             )
         pej_nat = results.get("pej_natinf_analysis")
@@ -3344,7 +3380,7 @@ def _generate_pdf(
                 tbl_z.append([str(row["zone"]), str(int(row["nb"]))])
             builder.add_table(
                 tbl_z,
-                caption="PEJ par zone",
+                caption=pdf_metric_caption("PEJ par zone", "proc"),
                 col_widths=[avail_w * 0.62, avail_w * 0.38],
                 col_aligns=["LEFT", "RIGHT"],
             )
@@ -3352,14 +3388,18 @@ def _generate_pdf(
             tbl = [["Clôture PEJ", "Nombre"]]
             for _, row in results["pej_clotur"].head(10).iterrows():
                 tbl.append([str(row["cloture"]), str(int(row["nb"]))])
-            builder.add_table(tbl, caption="PEJ par type de clôture",
+            builder.add_table(
+                tbl,
+                caption=pdf_metric_caption("PEJ par type de clôture", "proc"),
                               col_widths=[avail_w * 0.6, avail_w * 0.4],
                               col_aligns=["LEFT", "RIGHT"])
         if is_block_enabled(presentation_cfg, "sec32.show_suite_table", True) and "pej_suite" in results:
             tbl = [["Suite", "Nombre"]]
             for _, row in results["pej_suite"].head(10).iterrows():
                 tbl.append([str(row["suite"]), str(int(row["nb"]))])
-            builder.add_table(tbl, caption="PEJ par suite donnée",
+            builder.add_table(
+                tbl,
+                caption=pdf_metric_caption("PEJ par suite donnée", "proc"),
                               col_widths=[avail_w * 0.6, avail_w * 0.4],
                               col_aligns=["LEFT", "RIGHT"])
 
@@ -3389,7 +3429,7 @@ def _generate_pdf(
                 tbl_det.append(row_pa)
             builder.add_table(
                 tbl_det,
-                caption="Détail des PA",
+                caption=pdf_metric_caption("Détail des PA", "proc"),
                 col_aligns=["LEFT"] * len(hdr_pa),
             )
         elif show_placeholder:
@@ -3475,7 +3515,9 @@ def _generate_pdf(
                 series_ctrl_tub["Non conformes"].append(int(row["nb_non_conforme"]))
             builder.add_table(
                 tbl,
-                caption="Contrôles – Zone TUB vs Hors zone TUB",
+                caption=pdf_metric_caption(
+                    "Contrôles – Zone TUB vs Hors zone TUB", "ctrl"
+                ),
                 col_widths=[
                     avail_w * 0.30,
                     avail_w * 0.23,
@@ -3522,7 +3564,9 @@ def _generate_pdf(
             )
         builder.add_table(
             tbl,
-            caption="Contrôles par zone (Département, TUB, PNF)",
+            caption=pdf_metric_caption(
+                "Contrôles par zone (Département, TUB, PNF)", "ctrl"
+            ),
             col_widths=[
                 avail_w * 0.25,
                 avail_w * 0.18,
@@ -3542,7 +3586,7 @@ def _generate_pdf(
         col_labels = []
         for c in synth.columns:
             if c == "ctrl_total":
-                col_labels.append("Nombre de contrôles")
+                col_labels.append(PDF_LABEL_CTRL_LOCATIONS)
             elif c == "ctrl_infraction":
                 col_labels.append("Contrôles non-conformes")
             elif c == "pve_nb":

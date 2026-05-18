@@ -2,7 +2,7 @@ schema_version: 2
 id: types_usager_cible
 label: Bilan types d'usagers – ciblé
 # Présentation PDF : config/presentation/pdf_presentation.yaml → profiles.types_usager_cible
-# (section 4 = pression de contrôle tous types ; détail par domaine/thème en sec. 2).
+# (section 4 = pression de contrôle tous types ; procédures par domaine/thème en sec. 3).
 out_subdir: bilan_types_usager_cible
 filter:
   type: type_usager
