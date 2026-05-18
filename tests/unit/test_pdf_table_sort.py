@@ -5,6 +5,8 @@ from __future__ import annotations
 import pandas as pd
 
 from bilans.common.pdf_table_sort import (
+    PDF_LABEL_PEJ,
+    pdf_column_label,
     prepare_pdf_results_sec23_sorting,
     sort_dataframe_desc,
     sort_dataframe_desc_by_sum,
@@ -35,13 +37,19 @@ def test_sort_procedures_by_sum_nb_columns() -> None:
     df = pd.DataFrame(
         {
             "domaine": ["X", "Y", "Z"],
-            "nb_pj": [1, 10, 5],
+            "nb_pej": [1, 10, 5],
             "nb_pa": [0, 2, 8],
         }
     )
     out = sort_dataframe_desc_by_sum(df)
     assert out is not None
     assert out["domaine"].tolist() == ["Z", "Y", "X"]
+
+
+def test_pdf_column_label_pej_not_pj() -> None:
+    assert pdf_column_label("nb_pej") == PDF_LABEL_PEJ
+    assert pdf_column_label("nb_pa") == "PA"
+    assert "Pj" not in pdf_column_label("nb_pej")
 
 
 def test_prepare_pdf_results_sec23_sorting() -> None:

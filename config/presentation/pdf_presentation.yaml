@@ -76,7 +76,7 @@ defaults:
     pa_pj_distinction_paragraph: >
       Il convient de distinguer l'activité de police administrative et l'activité de
       police judiciaire. Dans ce document, le terme « contrôle » renvoie exclusivement
-      à la police administrative. Le terme « procédure judiciaire » désigne l'activité
+      à la police administrative. Le sigle « PEJ » (procédure d'enquête judiciaire) désigne l'activité
       de police judiciaire, qui ne se limite pas aux infractions relevées lors des
       contrôles et peut aussi inclure des saisines extérieures (instruction parquet,
       signalements, plaintes, etc.).
@@ -210,12 +210,21 @@ profiles:
         show_pie_usagers: false
         show_resultats_par_type_usager_chart: false
 
-  # Bilan usager(s) ciblé(s) : pas de section 4 (comparaison entre types d'usagers).
+  # Bilan usager(s) ciblé(s) : section 4 = pression de contrôle (tous types, nombre seul).
   types_usager_cible:
     scope: thematique
     sections:
       enabled:
-        sec4: false
+        sec4: true
+      titles:
+        sec4: "4. Pression de contrôle au regard de l'ensemble des types d'usagers"
+    blocks:
+      sec4:
+        show_intro_text: true
+        show_pie_usagers: true
+        show_table_usagers: true
+        show_table_themes_par_type_usager: false
+        show_resultats_par_type_usager_chart: false
 
   # Contrôles sécheresse : pas de tableaux « par zone » PVe/PEJ (découpages type PNF/TUB).
   controles_secheresse:

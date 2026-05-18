@@ -57,6 +57,51 @@ THEMATIC_CHART_WIDTH_RATIO = 0.72
 # export matplotlib un peu plus dense (dpi / polices dans chart_pie) afin de rester nets à l’écran.
 THEMATIC_PIE_CHART_WIDTH_RATIO = 0.34
 
+# Marge réservée au titre de section 5 + espacements dans un KeepTogether cartes.
+_MAPS_SECTION_RESERVE_PT = 28 * mm
+_MAPS_VERTICAL_GAP_PT = 2 * mm
+_MAPS_HORIZONTAL_GAP_PT = 4 * mm
+
+
+def compute_stacked_maps_width(
+    avail_w: float,
+    frame_height: float,
+    aspect_ratios: list[float],
+    *,
+    width_fraction: float = 0.98,
+    vertical_gap_pt: float = _MAPS_VERTICAL_GAP_PT,
+    reserve_pt: float = _MAPS_SECTION_RESERVE_PT,
+) -> float:
+    """Largeur pour empiler des cartes sans dépasser la hauteur utile d'une page."""
+    max_w = avail_w * width_fraction
+    budget = frame_height - reserve_pt
+    total_ratio = sum(max(0.0, r) for r in aspect_ratios)
+    if budget <= 0 or total_ratio <= 0:
+        return max_w
+    gaps = vertical_gap_pt * max(0, len(aspect_ratios) - 1)
+    w_fit = (budget - gaps) / total_ratio
+    return min(max_w, w_fit)
+
+
+def compute_side_by_side_maps_width(
+    avail_w: float,
+    frame_height: float,
+    aspect_ratios: list[float],
+    *,
+    horizontal_gap_pt: float = _MAPS_HORIZONTAL_GAP_PT,
+    reserve_pt: float = _MAPS_SECTION_RESERVE_PT,
+) -> float:
+    """Largeur d'une colonne pour deux cartes côte à côte sur une page."""
+    col_w_max = (avail_w - horizontal_gap_pt) / 2.0
+    budget = frame_height - reserve_pt
+    if not aspect_ratios or budget <= 0:
+        return col_w_max
+    peak_ratio = max(max(0.0, r) for r in aspect_ratios)
+    if peak_ratio <= 0:
+        return col_w_max
+    w_fit = budget / peak_ratio
+    return min(col_w_max, w_fit)
+
 
 class PDFReportBuilder:
     """Builds an OFB-branded PDF report incrementally."""
@@ -100,6 +145,7 @@ class PDFReportBuilder:
             spaceAfter=max(0, self.styles["Heading3"].spaceAfter - 2 * mm),
         )
         self.avail_w = PAGE_W - MARGIN_LEFT - MARGIN_RIGHT
+        self.avail_h = PAGE_H - MARGIN_TOP - MARGIN_BOTTOM
         self._tables_layout = deepcopy(
             tables_layout if tables_layout is not None else resolve_tables_layout({})
         )
@@ -710,13 +756,18 @@ class PDFReportBuilder:
         """Add a map image (full width)."""
         self.add_image(path, width_ratio=1.0, caption=caption)
 
-    def _scaled_image_flowable(self, path: Path, target_width: float) -> RLImage:
+    def _image_aspect_ratio(self, path: Path) -> float:
         try:
             with PILImage.open(str(path)) as im:
                 width_px, height_px = im.size
-            ratio = height_px / float(width_px) if width_px > 0 else 0.65
+            if width_px > 0:
+                return height_px / float(width_px)
         except Exception:
-            ratio = 0.65
+            pass
+        return 0.65
+
+    def _scaled_image_flowable(self, path: Path, target_width: float) -> RLImage:
+        ratio = self._image_aspect_ratio(path)
         img = RLImage(str(path), width=target_width, height=target_width * ratio)
         img.hAlign = "CENTER"
         return img
@@ -744,16 +795,20 @@ class PDFReportBuilder:
         block: list = []
 
         if vertical:
+            ratios = [self._image_aspect_ratio(path) for path in pair]
+            map_w = compute_stacked_maps_width(self.avail_w, self.avail_h, ratios)
             for i, path in enumerate(pair):
-                block.append(self._scaled_image_flowable(path, self.avail_w * 0.98))
+                block.append(self._scaled_image_flowable(path, map_w))
                 cap = caps[i] if i < len(caps) else ""
                 if cap:
                     block.append(Spacer(1, 1 * mm))
                     block.append(Paragraph(f"<i>{cap}</i>", self.styles["BodySmall"]))
-                block.append(Spacer(1, 2 * mm))
+                if i < len(pair) - 1:
+                    block.append(Spacer(1, 2 * mm))
         else:
-            gap = 4 * mm
-            col_w = (self.avail_w - gap) / 2.0
+            gap = _MAPS_HORIZONTAL_GAP_PT
+            ratios = [self._image_aspect_ratio(path) for path in pair]
+            col_w = compute_side_by_side_maps_width(self.avail_w, self.avail_h, ratios)
             cells = [self._scaled_image_flowable(path, col_w) for path in pair]
             table = Table([cells], colWidths=[col_w, col_w])
             table.hAlign = "CENTER"

@@ -28,7 +28,10 @@ from bilans.common.pdf_presentation_config import (
 )
 from bilans.common.pdf_report_builder import PDFReportBuilder
 from bilans.common.pdf_utils import ofb_table
-from bilans.common.pdf_table_sort import sort_dataframe_desc as _sort_desc
+from bilans.common.pdf_table_sort import (
+    PDF_LABEL_PEJ_COUNT,
+    sort_dataframe_desc as _sort_desc,
+)
 from bilans.common.pdf_usagers_domaine_table import build_usagers_x_domaine_pdf_rows
 from bilans.common.pdf_shared_sections import (
     add_standard_cover_and_toc,
@@ -342,7 +345,7 @@ def _generate_pdf_content(
                 kf.append((str(nb_nc), "Contrôles non-conformes"))
                 kf.append((format_pct_int_from_rate(taux_nc), "Taux de non-conformité"))
         if nb_pej > 0:
-            kf.append((str(nb_pej), "Nombre de procédures judiciaires"))
+            kf.append((str(nb_pej), PDF_LABEL_PEJ_COUNT))
         kf.append((str(nb_pa), "Procédure administrative"))
         if nb_pve > 0:
             kf.append((str(nb_pve), "Nombre d'infractions relevées par PVe"))

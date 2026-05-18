@@ -63,6 +63,7 @@ from bilans.common.utilitaires_metier import (
     agg_procedures_par_type_usager_domaine,
     agg_procedures_par_type_usager_theme,
     agg_resultat_counts_par_type_usager,
+    agg_nb_controles_par_type_usager,
     build_tab_resultats_controles,
 )
 from bilans.common.ofb_charte import Spinner
@@ -87,7 +88,12 @@ from bilans.common.pdf_presentation_config import (
     is_section_enabled,
     should_show_placeholder,
 )
-from bilans.common.pdf_table_sort import prepare_pdf_results_sec23_sorting, sort_dataframe_desc
+from bilans.common.pdf_table_sort import (
+    PDF_LABEL_PEJ_COUNT,
+    pdf_column_label,
+    prepare_pdf_results_sec23_sorting,
+    sort_dataframe_desc,
+)
 from bilans.common.pdf_usagers_domaine_table import build_usagers_x_domaine_pdf_rows
 from bilans.common.chart_display_config import load_chart_display_config, compute_pdf_ratios
 from bilans.common.rendus_graphiques import (
@@ -537,6 +543,12 @@ def ask_type_usager_targets(
 # ═══════════════════════════════════════════════════════════════════════════
 # 3. Filtrage des données
 # ═══════════════════════════════════════════════════════════════════════════
+
+def _profile_sans_cible_type_usager(profile: dict) -> dict:
+    """Copie du profil sans filtre sur le(s) type(s) d'usager ciblé(s)."""
+    filt = dict(profile.get("filter") or {})
+    return {**profile, "filter": {**filt, "type_usager_target": []}}
+
 
 def _filter_point_ctrl(point: pd.DataFrame, profile: dict) -> pd.DataFrame:
     """Filtre les points de contrôle selon la configuration du profil."""
@@ -1346,6 +1358,21 @@ def _run_aggregations(
         )
     else:
         results["_pdf_show_activite_usagers"] = False
+
+    # Pression de contrôle (profil usager ciblé) : tous types, hors filtre cible.
+    results["_pdf_show_pression_controle_usagers"] = False
+    if profil_id == "types_usager_cible" and point_ctrl_perimetre is not None:
+        if (
+            not point_ctrl_perimetre.empty
+            and "type_usager" in point_ctrl_perimetre.columns
+        ):
+            pc = agg_nb_controles_par_type_usager(point_ctrl_perimetre)
+            if not pc.empty:
+                total_pc = int(pc["nb"].sum())
+                pc = pc.copy()
+                pc["taux"] = pc["nb"] / float(total_pc or 1)
+                results["pression_controle_tous_usagers"] = pc
+                results["_pdf_show_pression_controle_usagers"] = True
 
     # Synthèse croisée par zone
     if options.get("synthese_croisee", False):
@@ -2161,6 +2188,86 @@ def _chart_pie_compact_legend_kw(
     return {"legend_fontsize": legend_fontsize, "legend_ncol": max(1, ncol)}
 
 
+def _pdf_section_pression_controle_usagers(
+    builder: Any,
+    results: dict,
+    tmp_dir: Path,
+    avail_w: float,
+    targets: list[str],
+    *,
+    presentation_cfg: dict[str, Any],
+    pie_ratio: float,
+    legend_fontsize: float,
+    legend_ncol_max: int,
+    figure_scale: float,
+) -> None:
+    """Section 4 (profil usager ciblé) : nombre de contrôles par type d'usager, département entier."""
+    df = results.get("pression_controle_tous_usagers")
+    if df is None or df.empty:
+        return
+
+    targets_s = [str(t) for t in (targets or []) if str(t).strip()]
+    if len(targets_s) == 1:
+        cible_txt = f"« {targets_s[0]} »"
+    elif len(targets_s) > 1:
+        cible_txt = (
+            ", ".join(f"« {t} »" for t in targets_s[:-1])
+            + f" et « {targets_s[-1]} »"
+        )
+    else:
+        cible_txt = "le type d'usager ciblé par ce bilan"
+
+    if is_block_enabled(presentation_cfg, "sec4.show_intro_text", True):
+        builder.add_paragraph(
+            f"Ce bilan porte sur l'activité de contrôle à l'égard des usagers de type "
+            f"{cible_txt}. Le graphique et le tableau ci-dessous situent la pression de "
+            f"contrôle exercée sur ce(s) type(s) d'usager au regard de la répartition des "
+            f"localisations de contrôle par catégorie d'usager sur l'ensemble du département "
+            f"pour la période analysée (une localisation par contrôle, catégorie dominante "
+            f"selon le mapping OSCEAN)."
+        )
+        builder.add_spacer(2)
+
+    pie_data = {str(r["type_usager"]): int(r["nb"]) for _, r in df.iterrows()}
+    if is_block_enabled(presentation_cfg, "sec4.show_pie_usagers", True) and pie_data:
+        pie_path = chart_pie(
+            pie_data,
+            "Répartition des localisations de contrôle par type d'usager",
+            tmp_dir,
+            "pie_pression_controle_usagers.png",
+            **_chart_pie_compact_legend_kw(
+                len(pie_data),
+                legend_fontsize=legend_fontsize,
+                legend_ncol_max=legend_ncol_max,
+            ),
+            figure_scale=figure_scale,
+        )
+        builder.add_image(Path(pie_path), width_ratio=pie_ratio, spacer_after_mm=0.8)
+
+    if is_block_enabled(presentation_cfg, "sec4.show_table_usagers", True):
+        total = int(df["nb"].sum())
+        nbs = df["nb"].astype(int).tolist()
+        pcts = tab_counts_to_pct_strings(nbs) if total else []
+        tbl = [["Type d'usager", "Nombre de contrôles", "Part (%)"]]
+        for i, (_, row) in enumerate(df.iterrows()):
+            tu = str(row["type_usager"])
+            suffix = " *" if tu in targets_s else ""
+            tbl.append([tu + suffix, str(int(row["nb"])), pcts[i] if pcts else "0 %"])
+        caption = (
+            "Localisations de contrôle par type d'usager "
+            "(ensemble des types, département et période du bilan)."
+        )
+        if targets_s:
+            caption += " * Type(s) faisant l'objet du présent bilan."
+        builder.add_table(
+            tbl,
+            caption=caption,
+            col_widths=[avail_w * 0.50, avail_w * 0.28, avail_w * 0.22],
+            col_aligns=["LEFT", "RIGHT", "RIGHT"],
+            keep_together=True,
+        )
+
+
 def _pdf_section_activite_par_types_usagers(
     builder: Any,
     results: dict,
@@ -2458,7 +2565,7 @@ def _generate_pdf(
         ("sec22", "2.2. Résultats des contrôles"),
         ("sec3", "3. Procédures"),
         ("sec31", "3.1 Procès verbaux électroniques (Pve)"),
-        ("sec32", "3.2 Procédures d’enquêtes judiciaires"),
+        ("sec32", "3.2 Procédures d'enquête judiciaire (PEJ)"),
         ("sec33", "3.3 Procédures administratives"),
         ("sec4", "4. Activité de contrôle par type d’usager"),
         ("sec5", "5. Localisation cartographique des contrôles"),
@@ -2535,7 +2642,7 @@ def _generate_pdf(
             kf.append((str(nb_nc), "Contrôles non-conformes"))
             kf.append((format_pct_int_from_rate(taux_nc), "Taux de non-conformité"))
     if nb_pej > 0:
-        kf.append((str(nb_pej), "Nombre de procédures judiciaires"))
+        kf.append((str(nb_pej), PDF_LABEL_PEJ_COUNT))
     kf.append((str(nb_pa), "Procédure administrative"))
     if nb_pve > 0:
         kf.append((str(nb_pve), "Nombre d'infractions relevées par PVe"))
@@ -2870,19 +2977,21 @@ def _generate_pdf(
                 )
                 builder.add_image(Path(pie_path), width_ratio=pie_ratio_base)
 
-        # Résultats des contrôles par domaine (top 15)
+        # Résultats des contrôles par domaine (troncature PDF seulement si > 15 lignes)
         res_ud = results.get("res_par_usager_domaine")
         if res_ud is not None and not res_ud.empty:
-            # Tableau potentiellement haut : on limite un peu le nombre de lignes
-            # et on le garde en un seul bloc sur la page.
-            df_res = res_ud.sort_values("nb_controles", ascending=False).head(12).copy()
+            max_lignes_domaine = 15
+            df_all = res_ud.sort_values("nb_controles", ascending=False, kind="stable")
+            df_res = df_all.head(max_lignes_domaine).copy()
             if is_single_usager and "type_usager" in df_res.columns and df_res["type_usager"].nunique() == 1:
                 df_res = df_res.drop(columns=["type_usager"])
                 hdr = ["Domaine", "Nb contrôles", "Infractions", "Manquements"]
-                caption = "Résultats des contrôles par domaine (top 15)"
+                caption = "Résultats des contrôles par domaine"
             else:
                 hdr = ["Type d'usager", "Domaine", "Nb contrôles", "Infractions", "Manquements"]
-                caption = "Résultats des contrôles par type d'usager et par domaine (top 15)"
+                caption = "Résultats des contrôles par type d'usager et par domaine"
+            if len(df_all) > len(df_res):
+                caption = f"{caption} (top {len(df_res)})"
             tbl = [hdr]
             for _, row in df_res.iterrows():
                 base = [
@@ -2913,34 +3022,48 @@ def _generate_pdf(
                 keep_together=True,
             )
 
-        # Procédures par domaine (PJ, PA, PVe)
+        # Procédures par domaine (PEJ, PA, PVe)
         proc_ud = results.get("proc_par_usager_domaine")
         if proc_ud is not None and not proc_ud.empty:
-            df_proc = proc_ud.copy()
+            max_lignes_domaine = 15
+            df_all = proc_ud.copy()
+            df_proc = df_all.head(max_lignes_domaine).copy()
             cap_proc = "Procédures par type d'usager et par domaine"
             if is_single_usager and "type_usager" in df_proc.columns and df_proc["type_usager"].nunique() == 1:
                 df_proc = df_proc.drop(columns=["type_usager"])
                 cap_proc = "Procédures par domaine"
-            cols = [c for c in ["domaine", "nb_pj", "nb_pa", "nb_pve"] if c in df_proc.columns]
+            if len(df_all) > len(df_proc):
+                cap_proc = f"{cap_proc} (top {len(df_proc)})"
+            cols = [c for c in ["domaine", "nb_pej", "nb_pa", "nb_pve"] if c in df_proc.columns]
             if cols:
-                tbl = [[c.replace("_", " ").title() for c in cols]]
-                for _, row in df_proc.head(15).iterrows():
-                    tbl.append([str(int(row[c])) if c in ("nb_pj", "nb_pa", "nb_pve") else str(row.get(c, "")) for c in cols])
+                tbl = [[pdf_column_label(c) for c in cols]]
+                for _, row in df_proc.iterrows():
+                    tbl.append([
+                        str(int(row[c])) if c in ("nb_pej", "nb_pa", "nb_pve") else str(row.get(c, ""))
+                        for c in cols
+                    ])
                 builder.add_table(tbl, caption=cap_proc, keep_together=True)
 
-        # Procédures par thème (PJ, PA, PVe)
+        # Procédures par thème (PEJ, PA, PVe)
         proc_ut = results.get("proc_par_usager_theme")
         if proc_ut is not None and not proc_ut.empty:
-            df_proc = proc_ut.copy()
+            max_lignes_theme = 15
+            df_all = proc_ut.copy()
+            df_proc = df_all.head(max_lignes_theme).copy()
             cap_proc = "Procédures par type d'usager et par thème"
             if is_single_usager and "type_usager" in df_proc.columns and df_proc["type_usager"].nunique() == 1:
                 df_proc = df_proc.drop(columns=["type_usager"])
                 cap_proc = "Procédures par thème"
-            cols = [c for c in ["theme", "nb_pj", "nb_pa", "nb_pve"] if c in df_proc.columns]
+            if len(df_all) > len(df_proc):
+                cap_proc = f"{cap_proc} (top {len(df_proc)})"
+            cols = [c for c in ["theme", "nb_pej", "nb_pa", "nb_pve"] if c in df_proc.columns]
             if cols:
-                tbl = [[c.replace("_", " ").title() for c in cols]]
-                for _, row in df_proc.head(15).iterrows():
-                    tbl.append([str(int(row[c])) if c in ("nb_pj", "nb_pa", "nb_pve") else str(row.get(c, "")) for c in cols])
+                tbl = [[pdf_column_label(c) for c in cols]]
+                for _, row in df_proc.iterrows():
+                    tbl.append([
+                        str(int(row[c])) if c in ("nb_pej", "nb_pa", "nb_pve") else str(row.get(c, ""))
+                        for c in cols
+                    ])
                 builder.add_table(tbl, caption=cap_proc, keep_together=True)
 
         # Section dense : on conserve un saut de page dédié.
@@ -3086,13 +3209,13 @@ def _generate_pdf(
             # Limiter le volume pour garantir une section V sur une seule page.
             df_theme = pej_theme.head(8).copy()
             if "nb_pej" in df_theme.columns:
-                df_theme = df_theme.rename(columns={"nb_pej": "Nombre de procédures judiciaires"})
+                df_theme = df_theme.rename(columns={"nb_pej": PDF_LABEL_PEJ_COUNT})
             tbl_theme = [list(df_theme.columns)]
             for _, row in df_theme.iterrows():
                 tbl_theme.append([str(v) for v in row.values])
             col_aligns_theme = ["LEFT"] * len(df_theme.columns)
-            if "Nombre de procédures judiciaires" in df_theme.columns:
-                idx = list(df_theme.columns).index("Nombre de procédures judiciaires")
+            if PDF_LABEL_PEJ_COUNT in df_theme.columns:
+                idx = list(df_theme.columns).index(PDF_LABEL_PEJ_COUNT)
                 col_aligns_theme[idx] = "RIGHT"
             caption_infra_pej = (
                 "Infractions relevées"
@@ -3158,13 +3281,13 @@ def _generate_pdf(
             builder.add_key_figures([(str(nb_pej), "PEJ")])
             df = pej_theme.head(10).copy()
             if "nb_pej" in df.columns:
-                df = df.rename(columns={"nb_pej": "Nombre de procédures judiciaires"})
+                df = df.rename(columns={"nb_pej": PDF_LABEL_PEJ_COUNT})
             tbl = [list(df.columns)]
             for _, row in df.iterrows():
                 tbl.append([str(v) for v in row.values])
             col_aligns = ["LEFT"] * len(df.columns)
-            if "Nombre de procédures judiciaires" in df.columns:
-                idx = list(df.columns).index("Nombre de procédures judiciaires")
+            if PDF_LABEL_PEJ_COUNT in df.columns:
+                idx = list(df.columns).index(PDF_LABEL_PEJ_COUNT)
                 col_aligns[idx] = "RIGHT"
             builder.add_table(
                 tbl,
@@ -3424,7 +3547,7 @@ def _generate_pdf(
             elif c == "pve_nb":
                 col_labels.append("Nombre d'infractions relevées par PVe")
             elif c == "pej_nb":
-                col_labels.append("Nombre de procédures judiciaires")
+                col_labels.append(PDF_LABEL_PEJ_COUNT)
             else:
                 col_labels.append(str(c))
         tbl = [col_labels]
@@ -3435,7 +3558,7 @@ def _generate_pdf(
             tbl,
             caption=(
                 "Synthèse croisée par zone : contrôles non-conformes, "
-                "procédures judiciaires (PEJ) et infractions relevées par PVe."
+                "PEJ et infractions relevées par PVe."
             ),
         )
         # Section dense : on conserve un saut de page dédié.
@@ -3443,7 +3566,21 @@ def _generate_pdf(
     # ── ACTIVITÉ PAR TYPES D'USAGERS (hors profil dédié « analyses.type_usager ») ──
     if is_section_enabled(presentation_cfg, "sec4", True):
         builder.add_section("sec4", section_title["sec4"], start_on_new_page=True, compact=True)
-        if results.get("_pdf_show_activite_usagers"):
+        if results.get("_pdf_show_pression_controle_usagers"):
+            _pdf_section_pression_controle_usagers(
+                builder,
+                results,
+                tmp_dir,
+                avail_w,
+                (profile.get("filter") or {}).get("type_usager_target") or [],
+                presentation_cfg=presentation_cfg,
+                pie_ratio=pie_ratio_base * 0.80,
+                legend_fontsize=max(6.5, legend_fontsize - 0.5),
+                legend_ncol_max=legend_ncol_max,
+                figure_scale=max(0.88, float(figure_scale) * 0.88),
+            )
+            builder.add_spacer(4)
+        elif results.get("_pdf_show_activite_usagers"):
             _pdf_section_activite_par_types_usagers(
                 builder,
                 results,
@@ -3745,6 +3882,12 @@ def _run_engine_thematic_pipeline(
         )
 
     # ── Filtrage ──
+    point_ctrl_perimetre: pd.DataFrame | None = None
+    if profil_id == "types_usager_cible" and not point.empty:
+        point_ctrl_perimetre = _filter_point_ctrl(
+            point, _profile_sans_cible_type_usager(profile)
+        )
+
     print("  Filtrage...")
     with Spinner():
         point_filtered = _filter_point_ctrl(point, profile) if not point.empty else point
@@ -3763,12 +3906,28 @@ def _run_engine_thematic_pipeline(
             point_filtered, pej_filtered, pa_filtered, pve_filtered = _apply_restrict_geo_pnf(
                 point_filtered, pej_filtered, pa_filtered, pve_filtered, root, spatial_log
             )
+            if point_ctrl_perimetre is not None and not point_ctrl_perimetre.empty:
+                point_ctrl_perimetre, _, _, _ = _apply_restrict_geo_pnf(
+                    point_ctrl_perimetre,
+                    pej_filtered,
+                    pa_filtered,
+                    pve_filtered,
+                    root,
+                    spatial_log,
+                )
 
     # ── INSEE commune (jointure communes.shp si besoin) ──
     if resolved_opts.get("pnf") or resolved_opts.get("tub"):
         if not point_filtered.empty:
             point_filtered = ensure_insee_from_communes_shp(
                 point_filtered, root, context="points de contrôle", log=spatial_log
+            )
+        if point_ctrl_perimetre is not None and not point_ctrl_perimetre.empty:
+            point_ctrl_perimetre = ensure_insee_from_communes_shp(
+                point_ctrl_perimetre,
+                root,
+                context="points de contrôle",
+                log=spatial_log,
             )
         if not pve_filtered.empty:
             pve_filtered = ensure_insee_from_communes_shp(
@@ -3785,6 +3944,17 @@ def _run_engine_thematic_pipeline(
         )
         point_filtered = overlay_pnf_zone_from_communes_pnf_csv(
             point_filtered, root, log=spatial_log
+        )
+    if point_ctrl_perimetre is not None and not point_ctrl_perimetre.empty and (
+        resolved_opts.get("pnf")
+        or resolved_opts.get("tub")
+        or str(profile.get("restrict_geo") or "").strip().lower() == "pnf"
+    ):
+        point_ctrl_perimetre = enrich_with_pnforet_sig_zones(
+            point_ctrl_perimetre, root, context="points de contrôle", log=spatial_log
+        )
+        point_ctrl_perimetre = overlay_pnf_zone_from_communes_pnf_csv(
+            point_ctrl_perimetre, root, log=spatial_log
         )
     if not pve_filtered.empty and (
         resolved_opts.get("pnf")
@@ -3817,6 +3987,7 @@ def _run_engine_thematic_pipeline(
         results = _run_aggregations(
             point_filtered, pej_filtered, pa_filtered, pve_filtered,
             profile, resolved_opts, spatial, ventilation_mode=ventilation_mode,
+            point_ctrl_perimetre=point_ctrl_perimetre,
         )
 
     # ── Export CSV ──

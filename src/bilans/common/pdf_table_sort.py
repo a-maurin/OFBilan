@@ -11,9 +11,31 @@ _COUNT_COLUMNS_PRIORITY = (
     "nb_pej",
     "nb_pa",
     "nb_pve",
-    "nb_pj",
     "Total",
 )
+
+# Libellés d'en-têtes de tableaux PDF (ne pas dériver « nb_pej » → « Nb Pej »).
+PDF_LABEL_PEJ = "PEJ"
+PDF_LABEL_PEJ_COUNT = "Nombre de PEJ"
+
+_PDF_COLUMN_LABELS: dict[str, str] = {
+    "domaine": "Domaine",
+    "theme": "Thème",
+    "type_usager": "Type d'usager",
+    "nb_pej": PDF_LABEL_PEJ,
+    "nb_pa": "PA",
+    "nb_pve": "PVe",
+    "nb_controles": "Nombre de contrôles",
+    "resultat": "Résultat",
+}
+
+
+def pdf_column_label(col: str) -> str:
+    """Libellé affiché pour une colonne de tableau PDF."""
+    key = str(col).strip()
+    if key in _PDF_COLUMN_LABELS:
+        return _PDF_COLUMN_LABELS[key]
+    return key.replace("_", " ").title()
 
 
 def sort_dataframe_desc(df: pd.DataFrame | None, columns: list[str]) -> pd.DataFrame | None:

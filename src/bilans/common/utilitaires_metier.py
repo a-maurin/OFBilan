@@ -102,6 +102,31 @@ def serie_type_usager(df: pd.DataFrame, source_table: str, source_champ: str) ->
     return df[source_champ].apply(_dominant)
 
 
+def agg_nb_controles_par_type_usager(
+    df: pd.DataFrame,
+    source_table: str = "point_ctrl",
+    source_champ: str = "type_usager",
+) -> pd.DataFrame:
+    """
+    Nombre de localisations de contrôle par catégorie type d'usager.
+
+    Une ligne de *df* compte pour une localisation ; la catégorie retenue est la
+    catégorie dominante (``serie_type_usager``), et non la somme des effectifs
+    multi-usagers du champ source.
+    """
+    if source_champ not in df.columns or df.empty:
+        return pd.DataFrame(columns=["type_usager", "nb"])
+
+    cats = serie_type_usager(df, source_table, source_champ)
+    return (
+        cats.value_counts()
+        .rename_axis("type_usager")
+        .to_frame("nb")
+        .reset_index()
+        .sort_values("nb", ascending=False, kind="stable")
+    )
+
+
 def agg_effectifs_usagers(
     df: pd.DataFrame,
     source_table: str = "point_ctrl",
@@ -474,15 +499,15 @@ def agg_procedures_par_type_usager_domaine(
     source_champ: str = "type_usager",
 ) -> pd.DataFrame:
     """
-    Procédures (PJ / PA / PVe) par type d'usager × domaine.
+    Procédures (PEJ / PA / PVe) par type d'usager × domaine.
 
-    - PJ : une procédure est comptée si col_code_pej est non vide pour le point.
+    - PEJ : une procédure est comptée si col_code_pej est non vide pour le point.
     - PA : idem pour col_code_pa.
     - PVe : sans lien explicite PVe dans point_ctrl, nb_pve reste à 0.
     """
     if source_champ not in df.columns:
         return pd.DataFrame(
-            columns=["type_usager", "domaine", "nb_pj", "nb_pa", "nb_pve"]
+            columns=["type_usager", "domaine", "nb_pej", "nb_pa", "nb_pve"]
         )
 
     counts: dict[tuple[str, str], dict[str, int]] = {}
@@ -506,13 +531,13 @@ def agg_procedures_par_type_usager_domaine(
             d = counts.setdefault(
                 key,
                 {
-                    "nb_pj": 0,
+                    "nb_pej": 0,
                     "nb_pa": 0,
                     "nb_pve": 0,
                 },
             )
             if has_pej:
-                d["nb_pj"] += 1
+                d["nb_pej"] += 1
             if has_pa:
                 d["nb_pa"] += 1
             if has_pve:
@@ -524,7 +549,7 @@ def agg_procedures_par_type_usager_domaine(
             {
                 "type_usager": cat,
                 "domaine": dom,
-                "nb_pj": int(d["nb_pj"]),
+                "nb_pej": int(d["nb_pej"]),
                 "nb_pa": int(d["nb_pa"]),
                 "nb_pve": int(d["nb_pve"]),
             }
@@ -541,11 +566,11 @@ def agg_procedures_par_type_usager_theme(
     source_champ: str = "type_usager",
 ) -> pd.DataFrame:
     """
-    Procédures (PJ / PA / PVe) par type d'usager × thème.
+    Procédures (PEJ / PA / PVe) par type d'usager × thème.
     """
     if source_champ not in df.columns:
         return pd.DataFrame(
-            columns=["type_usager", "theme", "nb_pj", "nb_pa", "nb_pve"]
+            columns=["type_usager", "theme", "nb_pej", "nb_pa", "nb_pve"]
         )
 
     counts: dict[tuple[str, str], dict[str, int]] = {}
@@ -569,13 +594,13 @@ def agg_procedures_par_type_usager_theme(
             d = counts.setdefault(
                 key,
                 {
-                    "nb_pj": 0,
+                    "nb_pej": 0,
                     "nb_pa": 0,
                     "nb_pve": 0,
                 },
             )
             if has_pej:
-                d["nb_pj"] += 1
+                d["nb_pej"] += 1
             if has_pa:
                 d["nb_pa"] += 1
             if has_pve:
@@ -587,7 +612,7 @@ def agg_procedures_par_type_usager_theme(
             {
                 "type_usager": cat,
                 "theme": theme,
-                "nb_pj": int(d["nb_pj"]),
+                "nb_pej": int(d["nb_pej"]),
                 "nb_pa": int(d["nb_pa"]),
                 "nb_pve": int(d["nb_pve"]),
             }
