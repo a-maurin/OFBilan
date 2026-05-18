@@ -28,6 +28,7 @@ from bilans.common.pdf_presentation_config import (
 )
 from bilans.common.pdf_report_builder import PDFReportBuilder
 from bilans.common.pdf_utils import ofb_table
+from bilans.common.pdf_table_sort import sort_dataframe_desc as _sort_desc
 from bilans.common.pdf_usagers_domaine_table import build_usagers_x_domaine_pdf_rows
 from bilans.common.pdf_shared_sections import (
     add_standard_cover_and_toc,
@@ -43,7 +44,11 @@ from bilans.common.percent_format import (
 )
 from bilans.common.utilitaires_metier import _load_csv_opt, get_dept_name
 from bilans.engine.registre_sections_pdf import SectionRegistry
-from bilans.chemins_projet import get_cartes_dir
+from bilans.common.carte_helper import (
+    expected_map_filenames,
+    resolve_map_layout,
+    resolve_profile_map_paths,
+)
 from reportlab.lib.units import mm
 from reportlab.platypus import Image as RLImage, Paragraph, Spacer
 
@@ -53,17 +58,11 @@ VENTILATION_SEUIL_JOURS_GLOBAL = 366
 
 
 def resolve_ventilation_mode_global(date_deb: pd.Timestamp, date_fin: pd.Timestamp) -> str:
-    """Détermine le mode global de ventilation temporelle (aligné sur les profils thématiques).
+    """Détermine le mode global de ventilation temporelle (aligné sur les profils thématiques)."""
+    from bilans.engine.ventilation_temporelle import resolve_ventilation_auto
 
-    Mensuelle si la période est strictement inférieure à 2 ans ; sinon annuelle au-delà du
-    seuil ``VENTILATION_SEUIL_JOURS_GLOBAL``, trimestrielle entre les deux.
-    """
     duree_jours = int((date_fin - date_deb).days)
-    if duree_jours < 730:
-        return "mensuelle"
-    if duree_jours > int(VENTILATION_SEUIL_JOURS_GLOBAL):
-        return "annuelle"
-    return "trimestrielle"
+    return resolve_ventilation_auto(duree_jours, seuil_jours=int(VENTILATION_SEUIL_JOURS_GLOBAL))
 
 
 def generate_profile_pdf_report(
@@ -92,15 +91,6 @@ def generate_profile_pdf_report(
         chart_preset=chart_preset,
         output_filename=output_filename,
     )
-
-
-def _sort_desc(df: pd.DataFrame | None, columns: list[str]) -> pd.DataFrame | None:
-    if df is None or df.empty:
-        return df
-    for col in columns:
-        if col in df.columns:
-            return df.sort_values(by=col, ascending=False, kind="stable").reset_index(drop=True)
-    return df
 
 
 def _truncate_with_dash(value: str, max_len: int) -> str:
@@ -240,8 +230,10 @@ def _generate_pdf_content(
     nb_pve = int(pve_resume["nb_pve_global"].iloc[0]) if pve_resume is not None and not pve_resume.empty else 0
 
     dept_name_typo = normalize_dept_typography(get_dept_name(dept_code))
-    carte_usagers_path = get_cartes_dir() / "carte_global_usagers.png"
-    has_carte_usagers = carte_usagers_path.exists()
+    global_map_paths = resolve_profile_map_paths(
+        "global_usagers", presentation_cfg=presentation_cfg
+    )
+    global_map_layout = resolve_map_layout(presentation_cfg=presentation_cfg)
 
     resolved_output_name = str(output_filename or "").strip() or "bilan_global.pdf"
     pdf_path = out_dir / resolved_output_name
@@ -1127,16 +1119,17 @@ def _generate_pdf_content(
             )
         show_map_block = is_block_enabled(presentation_cfg, "sec5.show_map", True)
         show_map_fallback = is_block_enabled(presentation_cfg, "sec5.show_map_fallback_message", True)
-        if is_section_enabled(presentation_cfg, "sec5map", True) and has_carte_usagers and show_map_block:
+        if is_section_enabled(presentation_cfg, "sec5map", True) and global_map_paths and show_map_block:
             builder.add_paragraph(
                 "Répartition spatiale des usagers contrôlés par types (générateur cartographique).",
             )
-            builder.add_map(Path(carte_usagers_path))
+            builder.add_maps(global_map_paths, layout=global_map_layout)
         elif is_section_enabled(presentation_cfg, "sec5map", True) and show_map_fallback and show_placeholder:
+            expected = expected_map_filenames("global_usagers", presentation_cfg=presentation_cfg)
+            files_hint = ", ".join(f"<b>{n}</b>" for n in expected) or "<b>carte_global_usagers.png</b>"
             builder.add_paragraph(
-                "<i>Carte non disponible. Déposez le fichier "
-                "<b>carte_global_usagers.png</b> dans le dossier des cartes pour "
-                "l'intégrer au bilan.</i>"
+                f"<i>Carte(s) non disponible(s). Déposez {files_hint} dans le dossier des cartes pour "
+                "les intégrer au bilan.</i>"
             )
 
     def _render_sec6() -> None:

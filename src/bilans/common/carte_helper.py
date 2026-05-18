@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from bilans.chemins_projet import PROJECT_ROOT, get_cartes_dir
 
@@ -31,8 +31,8 @@ def qgis_available() -> bool:
     return _QGIS_AVAILABLE
 
 
-def find_map(profile_id: str) -> Optional[Path]:
-    """Return the path to a pre-generated map PNG for the given profile, or None."""
+def _find_single_map_legacy(profile_id: str) -> Optional[Path]:
+    """Recherche une carte unique (comportement historique, glob partiel)."""
     cartes = get_cartes_dir()
     candidates = [
         cartes / f"carte_{profile_id}.png",
@@ -41,9 +41,134 @@ def find_map(profile_id: str) -> Optional[Path]:
     for p in candidates:
         if p.exists():
             return p
-    for p in cartes.glob(f"*{profile_id}*.png"):
+    for p in sorted(cartes.glob(f"*{profile_id}*.png")):
         return p
     return None
+
+
+def find_map(profile_id: str) -> Optional[Path]:
+    """Return the path to a pre-generated map PNG for the given profile, or None."""
+    paths = resolve_profile_map_paths(profile_id)
+    if paths:
+        return paths[0]
+    return _find_single_map_legacy(profile_id)
+
+
+def _format_map_pattern(pattern: str, map_id: str) -> str:
+    return str(pattern).replace("{map_id}", map_id).strip()
+
+
+def _patterns_from_profile_and_presentation(
+    map_id: str,
+    *,
+    profile: dict | None,
+    presentation_cfg: dict | None,
+) -> list[str]:
+    patterns: list[str] = []
+    carto = (profile or {}).get("cartographie") or {}
+    if isinstance(carto, dict):
+        raw = carto.get("fichiers") or carto.get("files")
+        if isinstance(raw, list):
+            patterns.extend(str(p).strip() for p in raw if str(p).strip())
+
+    if presentation_cfg:
+        blocks = presentation_cfg.get("blocks") or {}
+        sec5 = blocks.get("sec5") if isinstance(blocks, dict) else {}
+        if isinstance(sec5, dict):
+            raw = sec5.get("map_files")
+            if isinstance(raw, list) and raw:
+                patterns = [str(p).strip() for p in raw if str(p).strip()]
+
+    if not patterns:
+        patterns = [f"carte_{map_id}.png", f"carte_{map_id}_2.png"]
+    return patterns
+
+
+def resolve_map_layout(
+    *,
+    profile: dict | None = None,
+    presentation_cfg: dict | None = None,
+) -> str:
+    """Disposition des cartes sur la page : ``horizontal`` ou ``vertical``."""
+    carto = (profile or {}).get("cartographie") or {}
+    if isinstance(carto, dict):
+        mode = str(carto.get("disposition") or carto.get("layout") or "").strip().lower()
+        if mode in ("horizontal", "horizontale", "cote_a_cote", "side_by_side"):
+            return "horizontal"
+        if mode in ("vertical", "verticale", "empilees", "stacked"):
+            return "vertical"
+
+    if presentation_cfg:
+        blocks = presentation_cfg.get("blocks") or {}
+        sec5 = blocks.get("sec5") if isinstance(blocks, dict) else {}
+        if isinstance(sec5, dict):
+            mode = str(sec5.get("map_layout") or "").strip().lower()
+            if mode in ("horizontal", "horizontale", "cote_a_cote", "side_by_side"):
+                return "horizontal"
+            if mode in ("vertical", "verticale", "empilees", "stacked"):
+                return "vertical"
+    return "vertical"
+
+
+def resolve_profile_map_paths(
+    map_id: str,
+    *,
+    profile: dict | None = None,
+    presentation_cfg: dict | None = None,
+) -> list[Path]:
+    """
+    Chemins des cartes PNG à intégrer (ordre conservé, doublons retirés).
+
+    Fichiers cherchés dans ``data/out/generateur_de_cartes/`` :
+    - motifs définis dans le profil ``cartographie.fichiers`` ;
+    - ou ``blocks.sec5.map_files`` (présentation PDF) ;
+    - sinon ``carte_{map_id}.png`` et ``carte_{map_id}_2.png``.
+    """
+    cartes_dir = get_cartes_dir()
+    mid = str(map_id).strip()
+    if not mid:
+        return []
+
+    patterns = _patterns_from_profile_and_presentation(
+        mid, profile=profile, presentation_cfg=presentation_cfg
+    )
+    found: list[Path] = []
+    seen: set[Path] = set()
+    for pattern in patterns:
+        name = _format_map_pattern(pattern, mid)
+        if not name.lower().endswith(".png"):
+            name = f"{name}.png"
+        candidate = cartes_dir / name
+        if candidate.exists() and candidate not in seen:
+            seen.add(candidate)
+            found.append(candidate)
+
+    if found:
+        return found
+
+    legacy = _find_single_map_legacy(mid)
+    return [legacy] if legacy else []
+
+
+def expected_map_filenames(
+    map_id: str,
+    *,
+    profile: dict | None = None,
+    presentation_cfg: dict | None = None,
+) -> list[str]:
+    """Noms de fichiers attendus (pour messages CLI / documentation)."""
+    mid = str(map_id).strip()
+    patterns = _patterns_from_profile_and_presentation(
+        mid, profile=profile, presentation_cfg=presentation_cfg
+    )
+    names: list[str] = []
+    for pattern in patterns:
+        name = _format_map_pattern(pattern, mid)
+        if not name.lower().endswith(".png"):
+            name = f"{name}.png"
+        if name not in names:
+            names.append(name)
+    return names
 
 
 def find_maps_for_bilan(bilan_type: str) -> List[Path]:

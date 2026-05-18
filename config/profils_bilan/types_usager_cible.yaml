@@ -1,6 +1,8 @@
 schema_version: 2
 id: types_usager_cible
 label: Bilan types d'usagers – ciblé
+# Présentation PDF : config/presentation/pdf_presentation.yaml → profiles.types_usager_cible
+# (section 4 « Activité par type d'usager » désactivée ; conservée pour le profil types_usager).
 out_subdir: bilan_types_usager_cible
 filter:
   type: type_usager
@@ -17,6 +19,14 @@ periode_analyse:
     seuil_jours: 366
 analyses:
   type_usager: true
+# Deux cartes externes (même page, côte à côte) : data/out/generateur_de_cartes/
+#   carte_{map_id}.png  et  carte_{map_id}_2.png  (map_id = code court du type, ex. AGR)
+# disposition: verticale  pour les empiler sur la page
+cartographie:
+  fichiers:
+    - carte_{map_id}.png
+    - carte_{map_id}_2.png
+  disposition: verticale
 options:
   cartes:
     label: Intégration des cartes

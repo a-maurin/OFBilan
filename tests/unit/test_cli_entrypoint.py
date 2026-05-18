@@ -63,3 +63,74 @@ def test_bilans_cli_delegates_profile_compatibility_to_engine(monkeypatch) -> No
 
     assert cli.main() == 1
     assert captured.get("called") is True
+
+
+def test_bilans_cli_type_usager_and_cartes_options(monkeypatch) -> None:
+    import bilans.point_entree_cli as cli
+
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "bilans",
+            "--profil",
+            "types_usager_cible",
+            "--date-deb",
+            "2025-01-01",
+            "--date-fin",
+            "2026-03-31",
+            "--dept-code",
+            "21",
+            "--type-usager",
+            "2",
+            "--no-cartes",
+            "--no-pnf",
+        ],
+    )
+    monkeypatch.setattr(cli, "_check_deps", lambda: None)
+    monkeypatch.setattr(
+        cli,
+        "_load_type_usager_labels",
+        lambda: ["Particulier", "Agriculteur et autres acteurs agricoles"],
+    )
+    monkeypatch.setattr(
+        "bilans.engine.catalogue_profils.resolve_profile_ids",
+        lambda ids: ids,
+    )
+
+    def _fake_run_batch(
+        profils: list[str],
+        date_deb: str,
+        date_fin: str,
+        dept_code: str,
+        *,
+        combine: bool = False,
+        cli_options: dict | None = None,
+    ) -> int:
+        captured["cli_options"] = cli_options
+        return 0
+
+    monkeypatch.setattr(
+        "bilans.engine.execution_lots_profils.run_profiles_batch",
+        _fake_run_batch,
+    )
+
+    assert cli.main() == 0
+    opts = captured["cli_options"]
+    assert opts["type_usager_target"] == ["Agriculteur et autres acteurs agricoles"]
+    assert opts["cartes"] is False
+    assert opts["pnf"] is False
+
+
+def test_list_type_usagers(monkeypatch, capsys) -> None:
+    import bilans.point_entree_cli as cli
+
+    monkeypatch.setattr(sys, "argv", ["bilans", "--list-type-usagers"])
+    monkeypatch.setattr(
+        cli,
+        "_load_type_usager_labels",
+        lambda: ["Agriculteur et autres acteurs agricoles"],
+    )
+    assert cli.main() == 0
+    assert "1. Agriculteur" in capsys.readouterr().out

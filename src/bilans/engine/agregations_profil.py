@@ -10,44 +10,17 @@ from bilans.common.utilitaires_metier import (
     agg_effectifs_usagers,
     agg_effectifs_usagers_par_domaine,
     agg_resultat_counts_par_type_usager,
+    build_tab_resultats_controles,
+    classify_resultat_controle_series,
     count_controles_non_conformes_oscean,
 )
 
 _ROOT = Path(__file__).resolve().parents[3]
 
 
-def _tab_resultats_controles_detail(
-    tab_resultats: pd.DataFrame,
-    nb_total: int,
-) -> pd.DataFrame:
-    """
-    Synthese "Resultats des controles" pour le bilan global : Conforme / Non-conforme /
-    Dont infraction / Dont manquement / En attente.
-
-    Sans analyse PNF (pas de zones coeur / hors-coeur) - ces indicateurs sont reserves aux
-    bilans thematiques dedies (ex. profil PNF).
-    """
-    total_from_resultats = int(tab_resultats["nb"].sum()) if not tab_resultats.empty else 0
-    total_controles_reference = max(int(nb_total), total_from_resultats)
-
-    nb_conf = int(tab_resultats.loc[tab_resultats["resultat"] == "Conforme", "nb"].sum())
-    nb_inf = int(tab_resultats.loc[tab_resultats["resultat"] == "Infraction", "nb"].sum())
-    nb_manq = int(tab_resultats.loc[tab_resultats["resultat"] == "Manquement", "nb"].sum())
-    nb_nc = nb_inf + nb_manq
-    nb_en_attente = max(total_controles_reference - (nb_conf + nb_nc), 0)
-
-    details_rows: list[dict[str, Any]] = [
-        {"resultat": "Conforme", "nb": nb_conf},
-        {"resultat": "Non-conforme", "nb": nb_nc},
-        {"resultat": "    Dont infraction", "nb": nb_inf},
-        {"resultat": "    Dont manquement", "nb": nb_manq},
-    ]
-    if nb_en_attente > 0:
-        details_rows.append({"resultat": "En attente", "nb": nb_en_attente})
-    res_ctrl = pd.DataFrame(details_rows)
-    if not res_ctrl.empty:
-        res_ctrl["taux"] = res_ctrl["nb"] / float(total_controles_reference or 1)
-    return res_ctrl
+def _tab_resultats_controles_detail(point: pd.DataFrame) -> pd.DataFrame:
+    """Synthèse « Résultats des contrôles » pour le bilan global (section 2.2)."""
+    return build_tab_resultats_controles(point, distinction_coeur_hors_coeur=False)
 
 
 def _resultats_par_domaine_pour_pdf(pt: pd.DataFrame) -> pd.DataFrame:
@@ -61,14 +34,14 @@ def _resultats_par_domaine_pour_pdf(pt: pd.DataFrame) -> pd.DataFrame:
     if not col_d or not col_r:
         return pd.DataFrame(columns=["domaine", "Conforme", "Non-conforme", "En attente"])
     dom_s = pt[col_d].fillna("Hors domaine").astype(str)
-    r_s = pt[col_r].astype(str).str.strip()
+    r_s = classify_resultat_controle_series(pt[col_r])
     gdf = pt.assign(_d=dom_s, _r=r_s)
     rows: list[dict[str, Any]] = []
     for dom, g in gdf.groupby("_d", sort=False):
         m = g["_r"]
         n_c = int(m.eq("Conforme").sum())
         n_nc = int(m.isin(["Infraction", "Manquement"]).sum())
-        n_a = max(0, len(g) - n_c - n_nc)
+        n_a = int(m.eq("En attente").sum())
         rows.append(
             {
                 "domaine": str(dom),
@@ -106,7 +79,7 @@ def analyse_controles_global(point: pd.DataFrame, out_dir: Path) -> Tuple[pd.Dat
         )
         tab_resultats["taux"] = tab_resultats["nb"] / float(nb_total or 1)
         tab_resultats.to_csv(out_dir / "controles_global_resultats.csv", sep=";", index=False)
-        res_ctrl = _tab_resultats_controles_detail(tab_resultats, nb_total)
+        res_ctrl = _tab_resultats_controles_detail(pt)
         res_ctrl.to_csv(out_dir / "controles_global_resultats_controles.csv", sep=";", index=False)
         res_dom = _resultats_par_domaine_pour_pdf(pt)
         res_dom.to_csv(out_dir / "controles_global_resultats_par_domaine.csv", sep=";", index=False)

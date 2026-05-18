@@ -4,6 +4,7 @@ import pandas as pd
 
 from bilans.common.pdf_presentation_config import (
     is_block_enabled,
+    is_section_enabled,
     resolve_pdf_presentation_config,
     resolve_notice_methodology_config,
     resolve_sec6_methodology_config,
@@ -145,6 +146,29 @@ def test_build_usagers_x_domaine_truncates_columns_and_note() -> None:
     assert tbl[0] == ["type_usager", "dom2"]
     assert note is not None
     assert "sur 3" in note
+
+
+def test_types_usager_cible_desactive_sec4() -> None:
+    """Profil usager ciblé : section 4 absente du sommaire (comparaison inter-usagers)."""
+    root = Path(__file__).resolve().parents[2]
+    resolved = resolve_pdf_presentation_config(
+        root, scope="thematique", profile_id="types_usager_cible"
+    )
+    effective = resolved["effective"]
+    assert is_section_enabled(effective, "sec4", True) is False
+
+    section_defs = [
+        ("sec1", "1. Chiffres clés"),
+        ("sec4", "4. Activité de contrôle par type d'usager"),
+        ("sec5", "5. Localisation cartographique"),
+    ]
+    toc = resolve_sections_for_toc(effective, section_defs)
+    assert [sid for sid, _ in toc] == ["sec1", "sec5"]
+
+    resolved_usager = resolve_pdf_presentation_config(
+        root, scope="thematique", profile_id="types_usager"
+    )
+    assert is_section_enabled(resolved_usager["effective"], "sec4", True) is True
 
 
 def test_sec6_methodology_config_resolution() -> None:

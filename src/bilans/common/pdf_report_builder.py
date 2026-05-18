@@ -27,6 +27,7 @@ from reportlab.platypus import (
     PageTemplate,
     Paragraph,
     Spacer,
+    Table,
 )
 from reportlab.platypus.tableofcontents import TableOfContents
 from PIL import Image as PILImage
@@ -558,6 +559,27 @@ class PDFReportBuilder:
             block.append(Paragraph(caption, self.styles["TableCaption"]))
             block.append(Spacer(1, 1 * mm))
         split_by_row = bool(self._tables_layout.get("split_by_row"))
+        try:
+            max_rows_keep = int(self._tables_layout.get("max_rows_keep_together", 8))
+        except (TypeError, ValueError):
+            max_rows_keep = 8
+        try:
+            max_cell_chars = int(self._tables_layout.get("max_cell_chars_before_split", 100))
+        except (TypeError, ValueError):
+            max_cell_chars = 100
+        n_rows = len(data_rows) if data_rows else 0
+        long_cell = False
+        if n_rows > 1 and max_cell_chars > 0:
+            for row in data_rows[1:]:
+                for cell in row:
+                    if isinstance(cell, str) and len(cell.strip()) > max_cell_chars:
+                        long_cell = True
+                        break
+                if long_cell:
+                    break
+        if n_rows > max_rows_keep or long_cell:
+            split_by_row = True
+            keep_together = False
         vh = self._tables_layout.get("vertical_header")
         pad_x = 0.0
         if isinstance(vh, dict):
@@ -687,6 +709,74 @@ class PDFReportBuilder:
     def add_map(self, path: Path, caption: str = "") -> None:
         """Add a map image (full width)."""
         self.add_image(path, width_ratio=1.0, caption=caption)
+
+    def _scaled_image_flowable(self, path: Path, target_width: float) -> RLImage:
+        try:
+            with PILImage.open(str(path)) as im:
+                width_px, height_px = im.size
+            ratio = height_px / float(width_px) if width_px > 0 else 0.65
+        except Exception:
+            ratio = 0.65
+        img = RLImage(str(path), width=target_width, height=target_width * ratio)
+        img.hAlign = "CENTER"
+        return img
+
+    def add_maps(
+        self,
+        paths: list[Path],
+        *,
+        layout: str = "vertical",
+        captions: list[str] | None = None,
+    ) -> None:
+        """Ajoute une ou deux cartes sur la page courante (côte à côte ou empilées)."""
+        existing = [Path(p) for p in paths if p and Path(p).exists()]
+        if not existing:
+            return
+        if len(existing) == 1:
+            cap = (captions or [""])[0] if captions else ""
+            self.add_map(existing[0], caption=cap)
+            return
+
+        layout_norm = str(layout).strip().lower()
+        vertical = layout_norm in ("vertical", "verticale", "empilees", "stacked")
+        pair = existing[:2]
+        caps = captions or ["", ""]
+        block: list = []
+
+        if vertical:
+            for i, path in enumerate(pair):
+                block.append(self._scaled_image_flowable(path, self.avail_w * 0.98))
+                cap = caps[i] if i < len(caps) else ""
+                if cap:
+                    block.append(Spacer(1, 1 * mm))
+                    block.append(Paragraph(f"<i>{cap}</i>", self.styles["BodySmall"]))
+                block.append(Spacer(1, 2 * mm))
+        else:
+            gap = 4 * mm
+            col_w = (self.avail_w - gap) / 2.0
+            cells = [self._scaled_image_flowable(path, col_w) for path in pair]
+            table = Table([cells], colWidths=[col_w, col_w])
+            table.hAlign = "CENTER"
+            block.append(table)
+            row_caps = [caps[i] if i < len(caps) and caps[i] else "" for i in range(2)]
+            if any(row_caps):
+                cap_cells = []
+                for cap in row_caps:
+                    cap_cells.append(
+                        Paragraph(f"<i>{cap}</i>", self.styles["BodySmall"]) if cap else ""
+                    )
+                block.append(Spacer(1, 1 * mm))
+                cap_table = Table([cap_cells], colWidths=[col_w, col_w])
+                cap_table.hAlign = "CENTER"
+                block.append(cap_table)
+
+        block.append(Spacer(1, 3 * mm))
+        if self._pending_section is not None:
+            self.story.append(KeepTogether(self._pending_section + block))
+            self._pending_section = None
+        else:
+            for el in block:
+                self.story.append(el)
 
     # ------------------------------------------------------------------
     # Text

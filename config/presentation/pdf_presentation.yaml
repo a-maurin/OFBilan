@@ -169,6 +169,8 @@ defaults:
     sec5:
       show_map: true
       show_map_fallback_message: true
+      # map_layout: vertical (défaut, empilées) | horizontal (côte à côte)
+      # map_files: []  # motifs optionnels, ex. ["carte_{map_id}.png", "carte_{map_id}_2.png"]
     sec6:
       show_methodology: true
       show_glossary: true
@@ -207,6 +209,13 @@ profiles:
       sec4:
         show_pie_usagers: false
         show_resultats_par_type_usager_chart: false
+
+  # Bilan usager(s) ciblé(s) : pas de section 4 (comparaison entre types d'usagers).
+  types_usager_cible:
+    scope: thematique
+    sections:
+      enabled:
+        sec4: false
 
   # Contrôles sécheresse : pas de tableaux « par zone » PVe/PEJ (découpages type PNF/TUB).
   controles_secheresse:

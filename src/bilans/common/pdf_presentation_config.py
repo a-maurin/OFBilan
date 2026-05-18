@@ -104,8 +104,11 @@ DEFAULT_PDF_PRESENTATION_CONFIG: dict[str, Any] = {
         },
         # Mise en page des tableaux PDF (ReportLab) — préférer le pilotage YAML.
         "tables": {
-            # Si false : le tableau ne se fractionne pas entre deux pages (splitByRow=0).
+            # Si false : pas de coupure entre pages sauf si le tableau dépasse max_rows_keep_together
+            # (dans ce cas add_table force split_by_row et désactive KeepTogether).
             "split_by_row": False,
+            "max_rows_keep_together": 8,
+            "max_cell_chars_before_split": 100,
             "vertical_header": {
                 # Décalage horizontal fin (pt) après centrage des libellés verticaux.
                 "pad_x_pt": 0.0,

@@ -63,6 +63,7 @@ from bilans.common.utilitaires_metier import (
     agg_procedures_par_type_usager_domaine,
     agg_procedures_par_type_usager_theme,
     agg_resultat_counts_par_type_usager,
+    build_tab_resultats_controles,
 )
 from bilans.common.ofb_charte import Spinner
 from bilans.common.pdf_report_builder import (
@@ -83,8 +84,10 @@ from bilans.common.pdf_presentation_config import (
     resolve_sections_for_toc,
     resolve_tables_layout,
     is_block_enabled,
+    is_section_enabled,
     should_show_placeholder,
 )
+from bilans.common.pdf_table_sort import prepare_pdf_results_sec23_sorting, sort_dataframe_desc
 from bilans.common.pdf_usagers_domaine_table import build_usagers_x_domaine_pdf_rows
 from bilans.common.chart_display_config import load_chart_display_config, compute_pdf_ratios
 from bilans.common.rendus_graphiques import (
@@ -95,7 +98,11 @@ from bilans.common.rendus_graphiques import (
     chart_bar_stacked,
     chart_line_evolution,
 )
-from bilans.common.carte_helper import find_map
+from bilans.common.carte_helper import (
+    expected_map_filenames,
+    resolve_map_layout,
+    resolve_profile_map_paths,
+)
 from bilans.engine.registre_sections_pdf import SectionRegistry
 
 _log = logging.getLogger(__name__)
@@ -246,12 +253,9 @@ def _resolve_ventilation_mode_from_profile(
     date_deb_ts: pd.Timestamp,
     date_fin_ts: pd.Timestamp,
 ) -> tuple[str, str, int, int]:
-    """Résout la ventilation temporelle depuis le profil YAML.
+    """Résout la ventilation temporelle depuis le profil YAML."""
+    from bilans.engine.ventilation_temporelle import resolve_ventilation_auto
 
-    En mode ``auto``, une étape ultérieure peut remplacer ``mensuelle`` par
-    ``hebdomadaire`` si la période d'analyse est d'au plus un an et que les
-    données ne couvrent qu'une partie de cette période (voir ``_maybe_override_ventilation_hebdomadaire``).
-    """
     period_cfg = profile.get("periode_analyse", {}) or {}
     vent_cfg = period_cfg.get("ventilation", {}) or {}
     vent_type = str(vent_cfg.get("type", "auto")).strip().lower()
@@ -264,96 +268,11 @@ def _resolve_ventilation_mode_from_profile(
         ventilation_mode = "annuelle"
     elif vent_type == "globale":
         ventilation_mode = "globale"
+    elif vent_type in ("hebdomadaire", "mensuelle", "trimestrielle"):
+        ventilation_mode = vent_type
     else:
-        # Règle métier : ventilation mensuelle tant que la période d'analyse est < 2 ans ;
-        # au-delà, annuelle si la durée dépasse le seuil du profil, sinon trimestrielle.
-        if duree_jours < 730:
-            ventilation_mode = "mensuelle"
-        elif duree_jours > seuil_jours:
-            ventilation_mode = "annuelle"
-        else:
-            ventilation_mode = "trimestrielle"
+        ventilation_mode = resolve_ventilation_auto(duree_jours, seuil_jours=seuil_jours)
     return ventilation_mode, vent_type, seuil_jours, duree_jours
-
-
-# Seuil : ventilation hebdomadaire (données concentrées sur une sous-période) uniquement si la période d'analyse ≤ ce nombre de jours.
-VENTILATION_MAX_JOURS_HEBDOMADAIRE = 366
-
-
-def _min_max_dates_donnees_dans_periode(
-    date_deb: pd.Timestamp,
-    date_fin: pd.Timestamp,
-    point: pd.DataFrame,
-    pej: pd.DataFrame,
-    pa: pd.DataFrame,
-    pve: pd.DataFrame,
-) -> tuple[pd.Timestamp, pd.Timestamp] | None:
-    """Min / max des dates d'activité (contrôles, PEJ, PA, PVe) incluses dans [date_deb, date_fin]."""
-    deb = pd.Timestamp(date_deb).normalize()
-    fin = pd.Timestamp(date_fin).normalize()
-    ts: list[pd.Timestamp] = []
-    for df, col in (
-        (point, "date_ctrl"),
-        (pej, "DATE_REF"),
-        (pa, "DATE_REF"),
-        (pve, "INF-DATE-INTG"),
-    ):
-        if df is None or df.empty or col not in df.columns:
-            continue
-        s = pd.to_datetime(df[col], errors="coerce").dropna()
-        for v in s:
-            t = pd.Timestamp(v).normalize()
-            if deb <= t <= fin:
-                ts.append(t)
-    if not ts:
-        return None
-    return min(ts), max(ts)
-
-
-def _donnees_moins_etendues_que_la_periode(
-    date_deb: pd.Timestamp,
-    date_fin: pd.Timestamp,
-    point: pd.DataFrame,
-    pej: pd.DataFrame,
-    pa: pd.DataFrame,
-    pve: pd.DataFrame,
-) -> bool:
-    """
-    Vrai si la période d'analyse est d'au plus un an et que l'étendue temporelle réelle
-    des données est strictement plus courte que l'étendue du périmètre d'analyse.
-    """
-    d_periode = int((pd.Timestamp(date_fin).normalize() - pd.Timestamp(date_deb).normalize()).days)
-    if d_periode > VENTILATION_MAX_JOURS_HEBDOMADAIRE:
-        return False
-    mm = _min_max_dates_donnees_dans_periode(date_deb, date_fin, point, pej, pa, pve)
-    if mm is None:
-        return False
-    t_min, t_max = mm
-    d_donnees = int((t_max.normalize() - t_min.normalize()).days)
-    return d_donnees < d_periode
-
-
-def _maybe_override_ventilation_hebdomadaire(
-    ventilation_mode: str,
-    vent_type: str,
-    date_deb: pd.Timestamp,
-    date_fin: pd.Timestamp,
-    point: pd.DataFrame,
-    pej: pd.DataFrame,
-    pa: pd.DataFrame,
-    pve: pd.DataFrame,
-) -> str:
-    """
-    En mode ``auto``, si la ventilation de base est mensuelle, la période ≤ 1 an et les
-    données ne couvrent qu'une partie de cette période → ventilation par semaines.
-    """
-    if str(vent_type).strip().lower() != "auto":
-        return ventilation_mode
-    if ventilation_mode != "mensuelle":
-        return ventilation_mode
-    if _donnees_moins_etendues_que_la_periode(date_deb, date_fin, point, pej, pa, pve):
-        return "hebdomadaire"
-    return ventilation_mode
 
 
 def _run_global_profile_via_yaml(
@@ -408,9 +327,6 @@ def _run_global_profile_via_yaml(
             pve, root, context="bilan global — PVe", log=spatial_log
         )
 
-    ventilation_mode = _maybe_override_ventilation_hebdomadaire(
-        ventilation_mode, vent_type, date_deb_ts, date_fin_ts, point, pej, pa, pve
-    )
     print(
         f"Ventilation temporelle : {ventilation_mode} "
         f"(type={vent_type}, seuil={seuil_jours} j, durée={duree_jours} j)"
@@ -1225,9 +1141,11 @@ def _run_aggregations(
     """Calcule toutes les agrégations et retourne un dict de DataFrames."""
     results: dict[str, Any] = {}
     profil_id = profile["id"]
-    distinction_coeur_hors_coeur = bool(
-        (profile.get("analyses") or {}).get("distinction_coeur_hors_coeur", True)
-    )
+    analyses_cfg = profile.get("analyses") or {}
+    if "distinction_coeur_hors_coeur" in analyses_cfg:
+        distinction_coeur_hors_coeur = bool(analyses_cfg["distinction_coeur_hors_coeur"])
+    else:
+        distinction_coeur_hors_coeur = bool(options.get("pnf", False))
     results["_pdf_show_coeur_hors_coeur"] = distinction_coeur_hors_coeur
 
     nb_ctrl = len(point_filtered)
@@ -1256,53 +1174,10 @@ def _run_aggregations(
         total_controles_reference = max(int(nb_ctrl), total_from_resultats)
         results["total_controles_reference"] = total_controles_reference
 
-        # Tableau synthétique « résultats contrôles » avec Non-conforme / dont
-        # et catégorie « En attente » si résultat manquant.
-        nb_conf = int(tab.loc[tab["resultat"] == "Conforme", "nb"].sum())
-        nb_inf = int(tab.loc[tab["resultat"] == "Infraction", "nb"].sum())
-        nb_manq = int(tab.loc[tab["resultat"] == "Manquement", "nb"].sum())
-        nb_nc = nb_inf + nb_manq
-        nb_en_attente = max(total_controles_reference - (nb_conf + nb_nc), 0)
-        r = point_filtered["resultat"].astype(str).str.strip()
-        if distinction_coeur_hors_coeur:
-            z = (
-                point_filtered["pnf_zone_sig"].astype(str)
-                if "pnf_zone_sig" in point_filtered.columns
-                else pd.Series([""] * len(point_filtered), index=point_filtered.index)
-            )
-            is_coeur = z.eq("Coeur_PNF")
-            is_hors = ~is_coeur
-
-            def _coeur_hors_txt(mask: pd.Series) -> str:
-                c = int((mask & is_coeur).sum())
-                h = int((mask & is_hors).sum())
-                return f"Cœur: {c} / Hors-cœur: {h}"
-
-            details_rows = [
-                {"resultat": "Conforme", "nb": nb_conf, "coeur_hors_coeur": _coeur_hors_txt(r.eq("Conforme"))},
-                {
-                    "resultat": "Non-conforme",
-                    "nb": nb_nc,
-                    "coeur_hors_coeur": _coeur_hors_txt(r.isin(["Infraction", "Manquement"])),
-                },
-                {"resultat": "    Dont infraction", "nb": nb_inf, "coeur_hors_coeur": _coeur_hors_txt(r.eq("Infraction"))},
-                {"resultat": "    Dont manquement", "nb": nb_manq, "coeur_hors_coeur": _coeur_hors_txt(r.eq("Manquement"))},
-            ]
-            if nb_en_attente > 0:
-                details_rows.append({"resultat": "En attente", "nb": nb_en_attente, "coeur_hors_coeur": "n.d."})
-        else:
-            details_rows = [
-                {"resultat": "Conforme", "nb": nb_conf},
-                {"resultat": "Non-conforme", "nb": nb_nc},
-                {"resultat": "    Dont infraction", "nb": nb_inf},
-                {"resultat": "    Dont manquement", "nb": nb_manq},
-            ]
-            if nb_en_attente > 0:
-                details_rows.append({"resultat": "En attente", "nb": nb_en_attente})
-        res_ctrl = pd.DataFrame(details_rows)
-        if not res_ctrl.empty:
-            res_ctrl["taux"] = res_ctrl["nb"] / float(total_controles_reference or 1)
-        results["tab_resultats_controles"] = res_ctrl
+        results["tab_resultats_controles"] = build_tab_resultats_controles(
+            point_filtered,
+            distinction_coeur_hors_coeur=distinction_coeur_hors_coeur,
+        )
     else:
         results["total_controles_reference"] = int(nb_ctrl)
 
@@ -2520,6 +2395,8 @@ def _generate_pdf(
         behavior_cfg if isinstance(behavior_cfg, dict) else None
     )
 
+    prepare_pdf_results_sec23_sorting(results)
+
     safe_name = dept_name.replace(" ", "_").replace("'", "")
     pdf_path = out_dir / f"{export_prefix}_{safe_name}.pdf"
     tables_layout = resolve_tables_layout(presentation_cfg)
@@ -3451,7 +3328,7 @@ def _generate_pdf(
                     ),
                 },
             ]
-            agg_tub = pd.DataFrame(data_tub)
+            agg_tub = sort_dataframe_desc(pd.DataFrame(data_tub), ["nb_controles"])
 
             # Pour l'agrainage, on ne crée pas de nouvelle section de niveau I/II :
             # le bloc Zone TUB fait partie de la section « Zones d'intérêt ».
@@ -3564,38 +3441,43 @@ def _generate_pdf(
         # Section dense : on conserve un saut de page dédié.
 
     # ── ACTIVITÉ PAR TYPES D'USAGERS (hors profil dédié « analyses.type_usager ») ──
-    builder.add_section("sec4", section_title["sec4"], start_on_new_page=True, compact=True)
-    if results.get("_pdf_show_activite_usagers"):
-        _pdf_section_activite_par_types_usagers(
-            builder,
-            results,
-            tmp_dir,
-            avail_w,
-            presentation_cfg=presentation_cfg,
-            pie_ratio=pie_ratio_base * 0.80,
-            bar_ratio=chart_ratio_base * 0.88,
-            legend_fontsize=max(6.5, legend_fontsize - 0.5),
-            legend_ncol_max=legend_ncol_max,
-            figure_scale=max(0.88, float(figure_scale) * 0.88),
-        )
-        builder.add_spacer(4)
-    elif show_placeholder:
-        builder.add_paragraph("Aucune donnée d'activité par type d'usager pour la période.")
+    if is_section_enabled(presentation_cfg, "sec4", True):
+        builder.add_section("sec4", section_title["sec4"], start_on_new_page=True, compact=True)
+        if results.get("_pdf_show_activite_usagers"):
+            _pdf_section_activite_par_types_usagers(
+                builder,
+                results,
+                tmp_dir,
+                avail_w,
+                presentation_cfg=presentation_cfg,
+                pie_ratio=pie_ratio_base * 0.80,
+                bar_ratio=chart_ratio_base * 0.88,
+                legend_fontsize=max(6.5, legend_fontsize - 0.5),
+                legend_ncol_max=legend_ncol_max,
+                figure_scale=max(0.88, float(figure_scale) * 0.88),
+            )
+            builder.add_spacer(4)
+        elif show_placeholder:
+            builder.add_paragraph("Aucune donnée d'activité par type d'usager pour la période.")
 
     # ── CARTOGRAPHIE ──
     builder.add_section("sec5", section_title["sec5"], start_on_new_page=True)
     if options.get("cartes", False):
         map_id = profile.get("_map_id") or profil_id
-        carte = find_map(str(map_id))
-        if carte and carte.exists() and is_block_enabled(presentation_cfg, "sec5.show_map", True):
-            # Carte sans légende de sources explicite (les sources sont rappelées
-            # en première page / méthodologie).
-            builder.add_map(carte)
+        map_paths = resolve_profile_map_paths(
+            str(map_id), profile=profile, presentation_cfg=presentation_cfg
+        )
+        map_layout = resolve_map_layout(profile=profile, presentation_cfg=presentation_cfg)
+        if map_paths and is_block_enabled(presentation_cfg, "sec5.show_map", True):
+            builder.add_maps(map_paths, layout=map_layout)
         elif show_placeholder and is_block_enabled(presentation_cfg, "sec5.show_map_fallback_message", True):
+            expected = expected_map_filenames(
+                str(map_id), profile=profile, presentation_cfg=presentation_cfg
+            )
+            files_hint = ", ".join(f"<b>{name}</b>" for name in expected) or f"<b>carte_{map_id}.png</b>"
             builder.add_paragraph(
-                f"<i>Carte non disponible. Déposez le fichier "
-                f"<b>carte_{map_id}.png</b> dans le dossier des cartes pour "
-                f"l'intégrer au bilan.</i>"
+                f"<i>Carte(s) non disponible(s). Déposez {files_hint} dans le dossier "
+                f"des cartes pour les intégrer au bilan.</i>"
             )
     elif show_placeholder:
         builder.add_paragraph("<i>Cartographie désactivée pour ce bilan.</i>")
@@ -3783,16 +3665,30 @@ def _run_engine_thematic_pipeline(
     # sélection des types d'usagers afin de respecter le nommage carte_{types}.
     if resolved_opts.get("cartes", False) and sys.stdin.isatty():
         cartes_dir = get_cartes_dir()
-        expected_name = f"carte_{map_id}.png"
-        expected_path = cartes_dir / expected_name
+        pres_cfg = resolve_pdf_presentation_config(
+            root, scope="thematique", profile_id=profil_id
+        ).get("effective", {})
+        expected_names = expected_map_filenames(
+            str(map_id), profile=profile, presentation_cfg=pres_cfg if isinstance(pres_cfg, dict) else None
+        )
+        if not expected_names:
+            expected_names = [f"carte_{map_id}.png", f"carte_{map_id}_2.png"]
 
         print("\n--- Cartographie ---")
-        print("Pour que la carte soit intégrée dans le bilan PDF :")
-        print(f"  - nommez le fichier d'image : {expected_name}")
-        print(f"  - placez-le dans le dossier : {expected_path.parent}")
+        print("Pour intégrer les cartes dans le bilan PDF (section 5, même page si deux fichiers) :")
+        print(f"  - dossier : {cartes_dir}")
+        for name in expected_names:
+            print(f"  - fichier : {name}")
+        layout_hint = resolve_map_layout(
+            profile=profile,
+            presentation_cfg=pres_cfg if isinstance(pres_cfg, dict) else None,
+        )
+        if len(expected_names) >= 2:
+            dispo = "côte à côte" if layout_hint == "horizontal" else "l'une au-dessus de l'autre"
+            print(f"  - si les deux PNG sont présents, elles seront affichées {dispo}.")
 
-        _copy_to_clipboard(expected_name)
-        print("(Le nom de fichier attendu a été copié dans le presse-papiers si possible.)")
+        _copy_to_clipboard(expected_names[0])
+        print("(Le premier nom de fichier attendu a été copié dans le presse-papiers si possible.)")
 
         try:
             input("Appuyez sur Entrée une fois la carte prête (renommée et placée au bon endroit)... ")
@@ -3910,16 +3806,6 @@ def _run_engine_thematic_pipeline(
             resolved_opts, cfg, profil_id=profil_id,
         )
 
-    ventilation_mode = _maybe_override_ventilation_hebdomadaire(
-        ventilation_mode,
-        vent_type,
-        cfg.date_deb,
-        cfg.date_fin,
-        point_filtered,
-        pej_filtered,
-        pa_filtered,
-        pve_filtered,
-    )
     print(
         f"Ventilation temporelle : {ventilation_mode} "
         f"(type={vent_type}, seuil={seuil_jours} j, durée={duree_jours} j)"

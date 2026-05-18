@@ -44,6 +44,10 @@ python -m bilans --profil global --date-deb 2025-01-01 --date-fin 2025-12-31 --d
 
 # Un ou plusieurs bilans thématiques
 python -m bilans --profil chasse --profil agrainage --date-deb 2025-01-01 --date-fin 2025-12-31 --dept-code 21
+
+# Bilan types d'usagers ciblé (ex. agriculteurs = n°2 dans --list-type-usagers)
+python -m bilans --list-type-usagers
+python -m bilans --profil types_usager_cible --date-deb 2025-01-01 --date-fin 2026-03-31 --dept-code 21 --type-usager 2 --no-cartes
 ```
 
 Scripts de lancement :

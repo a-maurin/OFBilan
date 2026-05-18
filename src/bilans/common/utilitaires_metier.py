@@ -2,7 +2,7 @@
 import functools
 import re
 from pathlib import Path
-from typing import List
+from typing import Any, List
 
 import geopandas as gpd
 import pandas as pd
@@ -644,8 +644,106 @@ def count_controles_non_conformes_oscean(resultat: pd.Series) -> int:
     Aligné sur la logique métier : un contrôle non conforme peut révéler l'un ou l'autre ;
     le total des non-conformes est la somme des deux catégories (une ligne = un contrôle).
     """
-    r = resultat.astype(str).str.strip().str.lower()
-    return int(r.isin(("infraction", "manquement")).sum())
+    r = classify_resultat_controle_series(resultat)
+    return int(r.isin(("Infraction", "Manquement")).sum())
+
+
+def classify_resultat_controle(value: Any) -> str:
+    """
+    Regroupe le libellé OSCEAN en catégories du tableau « Résultats des contrôles » (2.2).
+
+    Seuls Conforme, Infraction et Manquement sont conservés tels quels ; tout le reste
+    (vide, inconnu, autre libellé) est compté comme « En attente ».
+    """
+    s = str(value or "").strip()
+    if not s or s.lower() in ("nan", "none", "<na>"):
+        return "En attente"
+    key = s.lower()
+    if key == "conforme":
+        return "Conforme"
+    if key == "infraction":
+        return "Infraction"
+    if key == "manquement":
+        return "Manquement"
+    return "En attente"
+
+
+def classify_resultat_controle_series(resultat: pd.Series) -> pd.Series:
+    """Applique :func:`classify_resultat_controle` ligne à ligne."""
+    return resultat.map(classify_resultat_controle)
+
+
+def build_tab_resultats_controles(
+    point: pd.DataFrame,
+    *,
+    distinction_coeur_hors_coeur: bool = False,
+) -> pd.DataFrame:
+    """Construit le tableau synthétique « Résultats des contrôles » (section 2.2)."""
+    nb_total = len(point)
+    if nb_total == 0 or "resultat" not in point.columns:
+        return pd.DataFrame(columns=["resultat", "nb", "taux"])
+
+    r_norm = classify_resultat_controle_series(point["resultat"])
+    nb_conf = int((r_norm == "Conforme").sum())
+    nb_inf = int((r_norm == "Infraction").sum())
+    nb_manq = int((r_norm == "Manquement").sum())
+    nb_en_attente = int((r_norm == "En attente").sum())
+    nb_nc = nb_inf + nb_manq
+
+    if distinction_coeur_hors_coeur:
+        z = (
+            point["pnf_zone_sig"].astype(str)
+            if "pnf_zone_sig" in point.columns
+            else pd.Series([""] * nb_total, index=point.index)
+        )
+        is_coeur = z.eq("Coeur_PNF")
+        is_hors = ~is_coeur
+
+        def _coeur_hors_txt(mask: pd.Series) -> str:
+            c = int((mask & is_coeur).sum())
+            h = int((mask & is_hors).sum())
+            return f"Cœur: {c} / Hors-cœur: {h}"
+
+        details_rows: list[dict[str, Any]] = [
+            {
+                "resultat": "Conforme",
+                "nb": nb_conf,
+                "coeur_hors_coeur": _coeur_hors_txt(r_norm.eq("Conforme")),
+            },
+            {
+                "resultat": "Non-conforme",
+                "nb": nb_nc,
+                "coeur_hors_coeur": _coeur_hors_txt(r_norm.isin(["Infraction", "Manquement"])),
+            },
+            {
+                "resultat": "    Dont infraction",
+                "nb": nb_inf,
+                "coeur_hors_coeur": _coeur_hors_txt(r_norm.eq("Infraction")),
+            },
+            {
+                "resultat": "    Dont manquement",
+                "nb": nb_manq,
+                "coeur_hors_coeur": _coeur_hors_txt(r_norm.eq("Manquement")),
+            },
+        ]
+        if nb_en_attente > 0:
+            details_rows.append(
+                {"resultat": "En attente", "nb": nb_en_attente, "coeur_hors_coeur": "n.d."}
+            )
+    else:
+        details_rows = [
+            {"resultat": "Conforme", "nb": nb_conf},
+            {"resultat": "Non-conforme", "nb": nb_nc},
+            {"resultat": "    Dont infraction", "nb": nb_inf},
+            {"resultat": "    Dont manquement", "nb": nb_manq},
+        ]
+        if nb_en_attente > 0:
+            details_rows.append({"resultat": "En attente", "nb": nb_en_attente})
+
+    res_ctrl = pd.DataFrame(details_rows)
+    if not res_ctrl.empty:
+        res_ctrl["taux"] = res_ctrl["nb"] / float(nb_total or 1)
+    return res_ctrl
 
 
 def _zone_summary(
