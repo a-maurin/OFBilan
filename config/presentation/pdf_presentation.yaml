@@ -94,7 +94,7 @@ defaults:
     line_sources: "<b>Sources :</b> {sources_text}."
     line_ventilation: "<b>Ventilation temporelle :</b> {ventilation_mode} (seuil {ventilation_threshold_days} jours en mode auto)."
     line_filters: "Aucun filtre sur domaine ou thème ; tous NATINF pour PEJ et PVe."
-    line_types_usagers: "<b>Types d’usagers :</b> issus du champ OSCEAN <i>type_usager</i> des points de contrôle ; catégorie « dominante » par contrôle via le mapping ref/types_usagers.csv."
+    line_types_usagers: "<b>Types d’usagers :</b> issus du champ OSCEAN <i>type_usager</i> des points de contrôle ; catégorie « dominante » par contrôle via le mapping ref/programme/tables_reference/types_usagers.csv."
     zone_line_pnf_only: "<b>Analyse par zones :</b> bilan restreint au périmètre du PNF ; la lecture spatiale distingue le coeur de parc de l'aire d'adhésion hors coeur de parc."
     zone_line_pnf_and_tub: "<b>Analyse par zones :</b> la zone « Département » inclut l'ensemble des contrôles, puis les zones PNF et TUB sont détaillées séparément."
     zone_line_pnf_only_department: "<b>Analyse par zones :</b> la zone « Département » inclut l'ensemble des contrôles, puis la zone PNF est détaillée séparément."

@@ -9,7 +9,8 @@ sans refonte du moteur metier.
 - `scripts/` : wrappers d'execution (Windows/Linux).
 - `src/bilans/` : code applicatif principal (moteur profilé, cartographie, common).
 - `config/` : configuration de pilotage versionnee (profils, options metier, presentation).
-- `ref/` : referentiels versionnes (glossaires, assets OFB, tables de correspondance, donnees de reference).
+- `ref/programme/` : referentiels lus par l'application (tables, SIG, charte OFB) ;
+- `ref/hors_programme/` : archives et donnees hors pipeline runtime.
 - `data/sources/` : donnees locales d'entree non versionnees.
 - `data/out/` : sorties generees (PDF/CSV/cartes) non versionnees.
 
@@ -29,14 +30,11 @@ Wrappers maintenus :
 
 ## Rationalisation config/ref (phase 3)
 
-- Cible : `config/` porte le pilotage, `ref/` porte les referentiels.
-- Etat actuel : les fichiers de pilotage sont places dans `config/`
-  (`config/presentation/pdf_presentation.yaml`, `config/charts/charts_config.yaml`,
-  `config/presentation/glossaire.yaml`).
-- Compatibilite : fallback vers `ref/` uniquement si un environnement local
-  conserve encore les anciens emplacements.
-- Regle pratique : toute nouvelle cle de pilotage doit etre pensee pour `config/`
-  et documenter explicitement le fallback si `ref/` est encore utilise.
+- Cible : `config/` porte le pilotage, `ref/programme/` porte les referentiels actifs.
+- Etat actuel : pilotage dans `config/` ; donnees de reference dans `ref/programme/`.
+- Verification locale : `scripts/verify_ref_layout.ps1`.
+- Regle pratique : toute nouvelle cle de pilotage dans `config/` ; tout nouveau referentiel
+  metier dans `ref/programme/` (ou `data/sources/` si donnee operationnelle).
 
 ## Regles hygiene repository
 

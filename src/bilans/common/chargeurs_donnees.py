@@ -389,7 +389,7 @@ def load_pa(
 
 def _load_pnf_from_shp(root: Path) -> Optional[pd.DataFrame]:
     """
-    Lit ref/sig/communes_pnf/communes_pnf.shp et renvoie un DataFrame au format attendu
+    Lit ref/programme/sig/communes_pnf/communes_pnf.shp et renvoie un DataFrame au format attendu
     par load_tub_pnf_codes / merge PNF (colonne CODE_INSEE, optionnellement NOM).
 
     Retourne None si le fichier est absent ; lève une erreur explicite si le fichier
@@ -463,7 +463,7 @@ def load_pnf(root: Path) -> pd.DataFrame:
     Charge la liste des communes PNF (référentiel).
 
     Ordre de priorité :
-    1. Shapefile ref/sig/communes_pnf/communes_pnf.shp (attributs INSEE + optionnellement nom) ;
+    1. Shapefile ref/programme/sig/communes_pnf/communes_pnf.shp (attributs INSEE + optionnellement nom) ;
     2. Fichier communes_PNF.csv dans ref/programme/tables_reference ou data/sources/.
     """
     try:
@@ -490,7 +490,7 @@ def load_pnf(root: Path) -> pd.DataFrame:
             return df
 
     raise FileNotFoundError(
-        "Référentiel PNF introuvable : ni ref/sig/communes_pnf/communes_pnf.shp (non vide), "
+        "Référentiel PNF introuvable : ni ref/programme/sig/communes_pnf/communes_pnf.shp (non vide), "
         "ni communes_PNF.csv dans ref/programme/tables_reference ni data/sources/."
     )
 
@@ -674,7 +674,7 @@ def enrich_with_pnforet_sig_zones(
     """
     Ajoute une colonne (par défaut `pnf_zone_sig`) : « Coeur_PNF », « Aire_adhesion_PNF »,
     « Hors_perimetres_sig » selon la position des points par rapport aux couches
-    `ref/sig/PNF/coeur_pnforets/` et `ref/sig/PNF/aoa_2021_pnforets/`.
+    `ref/programme/sig/PNF/coeur_pnforets/` et `ref/programme/sig/PNF/aoa_2021_pnforets/`.
 
     Nécessite des coordonnées (`x`/`y` en WGS84, ou `geometry`, ou GPS PVe).
     Si les shapefiles sont absents ou sans géométrie exploitable, retourne `df` inchangé.
@@ -840,7 +840,7 @@ def load_communes_noms(root: Path) -> dict:
     """
     Charge la table de correspondance code INSEE → nom de commune.
 
-    Source : ref/sig/communes_21/communes.csv (INSEE_COM, NOM_COM).
+    Source : ref/programme/sig/communes_21/communes.csv (INSEE_COM, NOM_COM).
     Retourne un dictionnaire {code_insee_5chars: nom_commune}.
     Si le fichier est absent, retourne un dict vide (les PDF afficheront le code).
     """
@@ -911,7 +911,7 @@ def enrich_with_commune_from_geometry(
     Règles:
     - si `insee_col`/`nom_col` existent déjà et `fill_only_missing=True`, seules les valeurs
       manquantes sont complétées;
-    - sinon, les colonnes sont (re)calculées à partir de `ref/sig/communes_21/communes.shp`.
+    - sinon, les colonnes sont (re)calculées à partir de `ref/programme/sig/communes_21/communes.shp`.
     """
     if geometry_col not in df.columns:
         raise KeyError(
@@ -1046,7 +1046,7 @@ def ensure_insee_from_communes_shp(
     """
     Garantit une colonne `insee_comm` (et `nom_commune`) pour les analyses par commune
     (PNF, TUB, etc.) : normalise un code INSEE déjà présent ou complète via jointure spatiale
-    avec `ref/sig/communes_21/communes.shp`.
+    avec `ref/programme/sig/communes_21/communes.shp`.
 
     Les points de contrôle sans géométrie mais avec `x`/`y` sont convertis en points WGS84.
     Les PVe peuvent utiliser `inf_gps_lat` / `inf_gps_long` si `INF-INSEE` est absent ou incomplet.
@@ -1121,7 +1121,7 @@ def load_communes_centroides(root: Path) -> pd.DataFrame:
     Charge la table des communes de France avec centroïdes et renvoie un
     DataFrame minimal (code_insee, lat, lon) pour les jointures.
 
-    Source par défaut : ref/sig/communes-france-2025.csv
+    Source par défaut : ref/programme/sig/communes-france-2025.csv
     - code_insee : code INSEE commune (5 caractères, zfill(5))
     - lat / lon : coordonnées du centroïde (colonnes latitude_centre / longitude_centre)
     """
@@ -1206,7 +1206,7 @@ def load_communes_centroides(root: Path) -> pd.DataFrame:
 
     raise FileNotFoundError(
         "Impossible de trouver une table de centroïdes communes : "
-        "ni ref/sig/communes-france-2025.csv ni shapefile/GeoPackage équivalent."
+        "ni ref/programme/sig/communes-france-2025.csv ni shapefile/GeoPackage équivalent."
     )
 
 
@@ -1282,7 +1282,7 @@ def enrich_pve_positions_from_pnf_commune_centroids(
 ) -> pd.DataFrame:
     """
     Attache des coordonnées WGS84 fiables aux PVe : jointure ``INF-INSEE`` avec
-    ``ref/sig/communes_pnf/communes_PNF_centroides.shp`` (colonnes ``long_centr`` /
+    ``ref/programme/sig/communes_pnf/communes_PNF_centroides.shp`` (colonnes ``long_centr`` /
     ``lat_centro`` en degrés).
 
     Les coordonnées ``x`` (longitude) et ``y`` (latitude) sont renseignées ou

@@ -52,21 +52,21 @@ Le filtrage temporel éventuel repose sur la colonne `DATE_REF`.
 
 ### Référentiel PNF (`load_pnf`)
 
-- **Source** : `ref/communes_PNF.csv` ou, en repli, `data/sources/communes_PNF.csv`.
+- **Sources** : `ref/programme/sig/communes_pnf/communes_pnf.shp` (prioritaire), puis `ref/programme/tables_reference/communes_PNF.csv`, ou `data/sources/communes_PNF.csv`.
 - **Colonnes obligatoires** :
   - `CODE_INSEE` (code INSEE sur 5 caractères, `zfill(5)` appliqué).
 
 ### Référentiel TUB (`load_tub`)
 
-- **Source** : `ref/tub_communes.csv` ou, en repli, `data/sources/tub_communes.csv`.
+- **Source** : `ref/programme/tables_reference/tub_communes.csv` ou, en repli, `data/sources/tub_communes.csv`.
 - **Colonnes obligatoires** :
   - `INSEE_COM` (code INSEE sur 5 caractères, `zfill(5)` appliqué).
 
 ### Table des centroïdes communes (`load_communes_centroides`)
 
 - **Sources possibles** :
-  - `ref/sig/communes-france-2025.csv`,
-  - ou, en repli, `ref/sig/communes-france-2025.{gpkg,shp}` / `communes_france_2025.{gpkg,shp}`.
+  - `ref/hors_programme/sig/communes-france-2025.csv` (hors pipeline principal ; fonction non branchée au runtime),
+  - ou, en repli, shapefile/GeoPackage équivalent sous `ref/programme/sig/` ou `ref/hors_programme/sig/`.
 - **Colonnes obligatoires (CSV)** :
   - code INSEE : `code_insee` ou `CODE_INSEE` ou `insee`,
   - coordonnées : `latitude_centre` / `longitude_centre` (ou variantes majuscules / `_centre`).
@@ -76,8 +76,8 @@ Les valeurs invalides ou sans coordonnées sont exclues du DataFrame retourné.
 ### Référentiel NATINF (`load_natinf_ref`)
 
 - **Sources possibles** :
-  - `ref/liste_natinf.csv`,
-  - ou `ref/liste-natinf-avril2023.csv`,
+  - `ref/programme/tables_reference/liste_natinf.csv`,
+  - ou `ref/programme/tables_reference/liste-natinf-avril2023.csv`,
   - ou équivalents présents dans `data/sources/`.
 - **Colonnes obligatoires** :
   - numéro NATINF : `Numéro NATINF` ou `numero_natinf` ou `NATINF` ou `natinf`

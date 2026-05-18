@@ -806,7 +806,7 @@ def _apply_legend_labels(layout, prof: "ProfileConfig") -> None:
 
 
 def _get_logo_bandeau_path() -> Optional[Path]:
-    """Retourne le chemin du bandeau logos (République française + OFB), ref/modele_ofb/word/media/image5."""
+    """Retourne le chemin du bandeau logos (République française + OFB), ref/programme/modele_ofb/word/media/image5."""
     ref_media = PROJECT_ROOT / "ref" / "modele_ofb" / "word" / "media"
     for ext in ("jpg", "jpeg", "png"):
         p = ref_media / f"image5.{ext}"
@@ -833,7 +833,7 @@ LOGO_OFB_DECALAGE_ANCRAGE_GAUCHE_MM = 4.0
 
 
 def _get_logo_ofb_horizontal_path() -> Optional[Path]:
-    """Retourne le chemin du logo RF-OFB horizontal (ref/modele_ofb/bloc-marque-RF-OFB_horizontal.jpg)."""
+    """Retourne le chemin du logo RF-OFB horizontal (ref/programme/modele_ofb/bloc-marque-RF-OFB_horizontal.jpg)."""
     p = PROJECT_ROOT / "ref" / "programme" / "modele_ofb" / LOGO_OFB_HORIZONTAL_FILENAME
     if p.exists():
         return p
@@ -849,7 +849,7 @@ def _ensure_logo_ofb_bas_droite(layout, prof: "ProfileConfig") -> None:
     logo_path = _get_logo_ofb_horizontal_path()
     if not logo_path:
         logger.warning(
-            "Logo OFB horizontal introuvable (ref/modele_ofb/%s). "
+            "Logo OFB horizontal introuvable (ref/programme/modele_ofb/%s). "
             "Placez le fichier pour l'afficher en bas à droite des cartes.",
             LOGO_OFB_HORIZONTAL_FILENAME,
         )
@@ -906,7 +906,7 @@ def _ensure_logo_bandeau(layout, prof: "ProfileConfig") -> None:
     logo_path = _get_logo_bandeau_path()
     if not logo_path:
         logger.warning(
-            "Bandeau logos OFB introuvable (ref/modele_ofb/word/media/image5.jpg ou .png). "
+            "Bandeau logos OFB introuvable (ref/programme/modele_ofb/word/media/image5.jpg ou .png). "
             "Placez le fichier pour l'afficher sur les cartes."
         )
         return

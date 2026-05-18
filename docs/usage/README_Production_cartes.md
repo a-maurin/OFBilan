@@ -5,7 +5,7 @@ Ce document décrit la génération des cartes utilisées dans les bilans.
 ## Prérequis
 
 - QGIS/OSGeo installé ;
-- projet QGIS présent : `ref/sig/sd21_tout.qgz` ;
+- projet QGIS présent : `ref/programme/sig/sd21_tout.qgz` ;
 - données opérationnelles disponibles dans `data/sources/` et `data/sources/sig/`.
 
 ## Scripts Windows

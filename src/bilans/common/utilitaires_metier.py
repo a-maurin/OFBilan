@@ -17,7 +17,7 @@ def _norm_key(s: str) -> str:
 
 @functools.lru_cache(maxsize=1)
 def _load_types_usagers_mapping() -> dict[tuple[str, str, str], str]:
-    """Charge ref/types_usagers.csv et renvoie un mapping (source_table, source_champ, valeur_source_norm) -> type_usager."""
+    """Charge ref/programme/tables_reference/types_usagers.csv (mapping type_usager)."""
     if not _TYPES_USAGERS_PATH.exists():
         return {}
     df = pd.read_csv(_TYPES_USAGERS_PATH, sep=";", dtype=str, encoding="utf-8")

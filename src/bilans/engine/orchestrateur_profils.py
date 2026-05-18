@@ -985,7 +985,7 @@ def _apply_restrict_geo_pnf(
             log.warning(
                 "Restriction PNF : aucun point ne correspond à la liste INSEE du référentiel "
                 "ni aux couches SIG (cœur / adhésion) ; vérifiez communes_pnf, les coordonnées "
-                "et ref/sig/PNF."
+                "et ref/programme/sig/PNF."
             )
         point_filtered = point_filtered.loc[mask].copy()
     # Règle métier PA : seules les localisations de contrôles "Manquement" portent

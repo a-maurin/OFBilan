@@ -114,7 +114,7 @@ def _clamp_ratio(value: float) -> float:
 def load_chart_display_config(root: Path, preset: str | None = None) -> dict[str, Any]:
     """
     Charge la config d'affichage des graphiques depuis
-    config/charts/charts_config.yaml puis, en fallback, ref/charts_config.yaml.
+    config/charts/charts_config.yaml puis, en fallback, ref/programme/charts_config.yaml.
 
     Si le fichier est absent (ou invalide), retourne les valeurs par défaut.
     """

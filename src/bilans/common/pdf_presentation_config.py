@@ -83,7 +83,7 @@ DEFAULT_PDF_PRESENTATION_CONFIG: dict[str, Any] = {
             "line_filters": "Aucun filtre sur domaine ou thème ; tous NATINF pour PEJ et PVe.",
             "line_types_usagers": (
                 "<b>Types d’usagers :</b> issus du champ OSCEAN <i>type_usager</i> des points de contrôle ; "
-                "catégorie « dominante » par contrôle via le mapping ref/types_usagers.csv."
+                "catégorie « dominante » par contrôle via ref/programme/tables_reference/types_usagers.csv."
             ),
             "zone_line_pnf_only": (
                 "<b>Analyse par zones :</b> bilan restreint au périmètre du PNF ; "

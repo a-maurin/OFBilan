@@ -17,3 +17,12 @@ Ne pas supprimer sans vérifier le projet QGIS (`sd21_tout.qgz`) et les outils d
 ## Données opérationnelles
 
 Les entrées de production restent dans `data/sources/` ; les sorties dans `data/out/`.
+
+## Vérification
+
+```powershell
+.\scripts\verify_ref_layout.ps1
+# ou : python scripts/verify_ref_layout.py
+```
+
+Contrôle la présence des fichiers sous `programme/`, l’absence des anciens dossiers à la racine de `ref/`, et les imbrications erronées (`communes_pnf/communes_pnf`, etc.).

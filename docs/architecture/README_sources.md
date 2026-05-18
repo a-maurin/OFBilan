@@ -9,7 +9,8 @@ Ce document résume les sources exploitées par le programme.
 - PA : `data/sources/suivi_procedure_administrative_*.ods`
 - PVe : `data/sources/Stats_PVe_OFB*`
 - faits PJ géolocalisés : `data/sources/sig/points_infractions_pj/localisation_infrac_FAITS_*`
-- référentiels : `ref/` et `ref/sig/`
+- référentiels actifs : `ref/programme/` (tables, SIG, charte OFB) ;
+- archives hors runtime : `ref/hors_programme/`
 
 ## Principes de traitement
 

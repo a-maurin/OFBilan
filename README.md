@@ -84,6 +84,7 @@ Les résultats sont écrits dans `data/out/` :
 ## Références
 
 - Description des sources : `docs/architecture/README_sources.md`
+- Vérification arborescence `ref/` : `scripts/verify_ref_layout.ps1` ou `python scripts/verify_ref_layout.py`
 - Schéma des données : `docs/architecture/data_schema.md`
 - Licence : Apache License 2.0 (`LICENSE`)
 
