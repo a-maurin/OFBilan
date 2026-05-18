@@ -179,7 +179,7 @@ def load_pdf_presentation_raw_config(root: Path) -> dict[str, Any]:
     """
     cfg_candidates = [
         root / "config" / "presentation" / "pdf_presentation.yaml",
-        root / "ref" / "pdf_presentation.yaml",
+        root / "ref" / "programme" / "pdf_presentation.yaml",
     ]
     cfg_path = next((p for p in cfg_candidates if p.exists()), None)
     if cfg_path is None:

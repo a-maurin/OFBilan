@@ -217,7 +217,7 @@ def load_glossary_config(root: Path) -> dict:
     """
     cfg_candidates = [
         root / "config" / "presentation" / "glossaire.yaml",
-        root / "ref" / "glossaire.yaml",
+        root / "ref" / "programme" / "glossaire.yaml",
     ]
     cfg_path = next((p for p in cfg_candidates if p.exists()), None)
     default_cfg: dict = {

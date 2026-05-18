@@ -8,6 +8,7 @@ import geopandas as gpd
 import pandas as pd
 import re
 
+from bilans.chemins_projet import ref_programme
 from bilans.common.utilitaires_metier import filtre_periode
 
 logger = logging.getLogger(__name__)
@@ -394,7 +395,7 @@ def _load_pnf_from_shp(root: Path) -> Optional[pd.DataFrame]:
     Retourne None si le fichier est absent ; lève une erreur explicite si le fichier
     existe mais qu'aucune colonne INSEE n'est reconnue.
     """
-    shp = root / "ref" / "sig" / "communes_pnf" / "communes_pnf.shp"
+    shp = ref_programme(root) / "sig" / "communes_pnf" / "communes_pnf.shp"
     if not shp.exists():
         return None
 
@@ -463,14 +464,14 @@ def load_pnf(root: Path) -> pd.DataFrame:
 
     Ordre de priorité :
     1. Shapefile ref/sig/communes_pnf/communes_pnf.shp (attributs INSEE + optionnellement nom) ;
-    2. Fichier communes_PNF.csv dans ref/tables_reference, ref/ ou data/sources/.
+    2. Fichier communes_PNF.csv dans ref/programme/tables_reference ou data/sources/.
     """
     try:
         from_shp = _load_pnf_from_shp(root)
     except KeyError:
         raise
     except Exception as e:
-        shp = root / "ref" / "sig" / "communes_pnf" / "communes_pnf.shp"
+        shp = ref_programme(root) / "sig" / "communes_pnf" / "communes_pnf.shp"
         if shp.exists():
             raise RuntimeError(f"Lecture du shapefile PNF impossible ({shp}) : {e}") from e
         from_shp = None
@@ -479,8 +480,7 @@ def load_pnf(root: Path) -> pd.DataFrame:
         return from_shp
 
     for path in (
-        root / "ref" / "tables_reference" / "communes_PNF.csv",
-        root / "ref" / "communes_PNF.csv",
+        ref_programme(root) / "tables_reference" / "communes_PNF.csv",
         root / "data" / "sources" / "communes_PNF.csv",
     ):
         if path.exists():
@@ -491,15 +491,14 @@ def load_pnf(root: Path) -> pd.DataFrame:
 
     raise FileNotFoundError(
         "Référentiel PNF introuvable : ni ref/sig/communes_pnf/communes_pnf.shp (non vide), "
-        "ni communes_PNF.csv dans ref/tables_reference, ref/ ou data/sources/."
+        "ni communes_PNF.csv dans ref/programme/tables_reference ni data/sources/."
     )
 
 
 def load_tub(root: Path) -> pd.DataFrame:
     """Charge la liste des communes TUB (référentiel)."""
     for path in (
-        root / "ref" / "tables_reference" / "tub_communes.csv",
-        root / "ref" / "tub_communes.csv",
+        ref_programme(root) / "tables_reference" / "tub_communes.csv",
         root / "data" / "sources" / "tub_communes.csv",
     ):
         if path.exists():
@@ -507,7 +506,7 @@ def load_tub(root: Path) -> pd.DataFrame:
             df["INSEE_COM"] = df["INSEE_COM"].astype(str).str.zfill(5)
             return df
     raise FileNotFoundError(
-        "Aucun fichier tub_communes.csv trouvé dans ref/tables_reference, ref/ ni data/sources/."
+        "Aucun fichier tub_communes.csv trouvé dans ref/programme/tables_reference ni data/sources/."
     )
 
 
@@ -517,9 +516,7 @@ def load_ref_themes_ctrl(root: Path) -> List[dict]:
     Retourne une liste de dictionnaires {"id": ..., "label": ..., "ordre": ...}
     triée par ordre. Si le fichier est absent ou invalide, retourne une liste vide.
     """
-    path = root / "ref" / "tables_reference" / "ref_themes_ctrl.csv"
-    if not path.exists():
-        path = root / "ref" / "ref_themes_ctrl.csv"
+    path = ref_programme(root) / "tables_reference" / "ref_themes_ctrl.csv"
     if not path.exists():
         return []
     try:
@@ -560,12 +557,12 @@ def load_tub_pnf_codes(root: Path) -> Tuple[set, set]:
 
 def get_pnf_coeur_shp_path(root: Path) -> Path:
     """Chemin du shapefile « cœur de parc » PNF (Parc national de forêts)."""
-    return root / "ref" / "sig" / "PNF" / "coeur_pnforets" / "Coeur_data_gouv_PNForets.shp"
+    return ref_programme(root) / "sig" / "PNF" / "coeur_pnforets" / "Coeur_data_gouv_PNForets.shp"
 
 
 def get_pnf_aoa_shp_path(root: Path) -> Path:
     """Chemin du shapefile de l'aire d'adhésion PNF (millésime 2021)."""
-    return root / "ref" / "sig" / "PNF" / "aoa_2021_pnforets" / "AOA_2021_PNForets.shp"
+    return ref_programme(root) / "sig" / "PNF" / "aoa_2021_pnforets" / "AOA_2021_PNForets.shp"
 
 
 def load_pnf_coeur_gdf(root: Path) -> gpd.GeoDataFrame:
@@ -772,13 +769,13 @@ def _coalesced_insee_for_pnf_overlay(df: pd.DataFrame) -> pd.Series:
 
 def load_pnf_commune_zone_by_insee(root: Path) -> dict[str, str]:
     """
-    {code INSEE 5 car.} -> « Coeur_PNF » ou « Aire_adhesion_PNF » depuis ref/communes_PNF.csv.
+    {code INSEE 5 car.} -> « Coeur_PNF » ou « Aire_adhesion_PNF » depuis ref/programme/tables_reference/communes_PNF.csv.
     Règle métier:
     - Cœur si `Coeur` == oui
     - sinon Aire d'adhésion si `perimetre_parc` == oui
     La colonne `Adhesion` n'est pas utilisée.
     """
-    path = root / "ref" / "communes_PNF.csv"
+    path = ref_programme(root) / "tables_reference" / "communes_PNF.csv"
     if not path.exists():
         return {}
     df = pd.read_csv(path, dtype=str, index_col=False).fillna("")
@@ -809,7 +806,7 @@ def overlay_pnf_zone_from_communes_pnf_csv(
 ) -> pd.DataFrame:
     """
     Après enrichissement SIG (`pnf_zone_sig`), recale la zone à partir de l'INSEE
-    lorsque ref/communes_PNF.csv définit explicitement Cœur ou adhésion.
+    lorsque ref/programme/tables_reference/communes_PNF.csv définit explicitement Cœur ou adhésion.
     Sinon conserve la valeur SIG existante.
     """
     lg = log or logger
@@ -847,7 +844,7 @@ def load_communes_noms(root: Path) -> dict:
     Retourne un dictionnaire {code_insee_5chars: nom_commune}.
     Si le fichier est absent, retourne un dict vide (les PDF afficheront le code).
     """
-    path = root / "ref" / "sig" / "communes_21" / "communes.csv"
+    path = ref_programme(root) / "sig" / "communes_21" / "communes.csv"
     if not path.exists():
         return {}
     df = pd.read_csv(path, sep=";", dtype=str)
@@ -866,7 +863,7 @@ def _load_communes_21_gdf(root: Path) -> gpd.GeoDataFrame:
     - insee_comm (code INSEE sur 5 caractères)
     - nom_commune (nom de la commune)
     """
-    shp_path = root / "ref" / "sig" / "communes_21" / "communes.shp"
+    shp_path = ref_programme(root) / "sig" / "communes_21" / "communes.shp"
     if not shp_path.exists():
         raise FileNotFoundError(
             f"Le shapefile des communes est introuvable : {shp_path}"
@@ -1128,7 +1125,7 @@ def load_communes_centroides(root: Path) -> pd.DataFrame:
     - code_insee : code INSEE commune (5 caractères, zfill(5))
     - lat / lon : coordonnées du centroïde (colonnes latitude_centre / longitude_centre)
     """
-    ref_dir = root / "ref" / "sig"
+    ref_dir = ref_programme(root) / "sig"
     csv_path = ref_dir / "communes-france-2025.csv"
 
     if csv_path.exists():
@@ -1216,10 +1213,8 @@ def load_communes_centroides(root: Path) -> pd.DataFrame:
 def load_natinf_ref(root: Path) -> pd.DataFrame:
     """Charge le référentiel NATINF pour libeller les exports."""
     for path in (
-        root / "ref" / "tables_reference" / "liste_natinf.csv",
-        root / "ref" / "tables_reference" / "liste-natinf-avril2023.csv",
-        root / "ref" / "liste_natinf.csv",
-        root / "ref" / "liste-natinf-avril2023.csv",
+        ref_programme(root) / "tables_reference" / "liste_natinf.csv",
+        ref_programme(root) / "tables_reference" / "liste-natinf-avril2023.csv",
         root / "data" / "sources" / "liste_natinf.csv",
         root / "data" / "sources" / "liste-natinf-avril2023.csv",
     ):
@@ -1299,7 +1294,7 @@ def enrich_pve_positions_from_pnf_commune_centroids(
     if df is None or df.empty or "INF-INSEE" not in df.columns:
         return df
 
-    shp = root / "ref" / "sig" / "communes_pnf" / "communes_PNF_centroides.shp"
+    shp = ref_programme(root) / "sig" / "communes_pnf" / "communes_PNF_centroides.shp"
     if not shp.exists():
         lg.debug(
             "Centroïdes communes PNF absents (%s) — coordonnées PVe non dérivées du référentiel.",

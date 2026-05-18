@@ -21,9 +21,25 @@ def get_sources_dir() -> Path:
     return PROJECT_ROOT / "data" / "sources"
 
 
+def get_ref_programme_dir() -> Path:
+    """Référentiels lus par l'application (bilans, PDF, cartographie)."""
+    return PROJECT_ROOT / "ref" / "programme"
+
+
+def get_ref_hors_programme_dir() -> Path:
+    """Référentiels archivés : hors pipeline runtime (outils, QGIS manuel, doc)."""
+    return PROJECT_ROOT / "ref" / "hors_programme"
+
+
 def get_ref_dir() -> Path:
-    """Dossier des références (modele_ofb, etc.)."""
-    return PROJECT_ROOT / "ref"
+    """Alias de get_ref_programme_dir() (compatibilité)."""
+    return get_ref_programme_dir()
+
+
+def ref_programme(root: Path | None = None) -> Path:
+    """Chemin ref/programme/ pour un jeu de tests (tmp_path) ou la racine projet."""
+    base = root if root is not None else PROJECT_ROOT
+    return base / "ref" / "programme"
 
 
 def get_config_dir() -> Path:
@@ -32,8 +48,8 @@ def get_config_dir() -> Path:
 
 
 def get_sig_dir() -> Path:
-    """Dossier des données SIG (pve_communes.shp, etc.)."""
-    return PROJECT_ROOT / "ref" / "sig"
+    """Données SIG utilisées par les bilans et la cartographie."""
+    return get_ref_programme_dir() / "sig"
 
 
 def get_sources_sig_dir() -> Path:

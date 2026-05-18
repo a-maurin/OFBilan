@@ -14,6 +14,7 @@ Toute nouvelle clé de pilotage doit être ajoutée dans `config/`.
 
 ## Hors périmètre
 
-- `ref/` : référentiels ;
+- `ref/programme/` : référentiels lus par l’application ;
+- `ref/hors_programme/` : archives (hors pipeline runtime) ;
 - `data/sources/` : données d’entrée locales ;
 - `data/out/` : sorties générées.

@@ -507,7 +507,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
 
 # Configuration globale par défaut
 CONFIG = GlobalConfig(
-    project_qgis_path='E:\\_Activité police\\_BASES DE DONNEES\\Bilans_production\\ref\\sig\\sd21_tout.qgz',
+    project_qgis_path='',
     kit_ofb_path='',
     output_dir='',
     basemap=BasemapConfig(enabled=True),

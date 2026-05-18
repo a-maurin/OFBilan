@@ -121,7 +121,7 @@ def load_chart_display_config(root: Path, preset: str | None = None) -> dict[str
     cfg = DEFAULT_CHART_DISPLAY_CONFIG.copy()
     candidates = [
         root / "config" / "charts" / "charts_config.yaml",
-        root / "ref" / "charts_config.yaml",
+        root / "ref" / "programme" / "charts_config.yaml",
     ]
     path = next((p for p in candidates if p.exists()), None)
     if path is None:

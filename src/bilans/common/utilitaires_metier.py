@@ -8,7 +8,7 @@ import geopandas as gpd
 import pandas as pd
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
-_TYPES_USAGERS_PATH = _PROJECT_ROOT / "ref" / "tables_reference" / "types_usagers.csv"
+_TYPES_USAGERS_PATH = _PROJECT_ROOT / "ref" / "programme" / "tables_reference" / "types_usagers.csv"
 
 
 def _norm_key(s: str) -> str:

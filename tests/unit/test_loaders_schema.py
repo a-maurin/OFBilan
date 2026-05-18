@@ -56,7 +56,7 @@ def test_load_communes_centroides_missing_insee_column(monkeypatch, tmp_path: Pa
     import bilans.common.chargeurs_donnees as loaders
 
     root = tmp_path
-    sig_dir = root / "ref" / "sig"
+    sig_dir = root / "ref" / "programme" / "sig"
     sig_dir.mkdir(parents=True)
     csv_path = sig_dir / "communes-france-2025.csv"
     # CSV volontairement sans colonne code_insee / CODE_INSEE / insee
@@ -71,7 +71,7 @@ def test_enrich_with_commune_from_geometry_adds_insee_and_name(monkeypatch, tmp_
     import bilans.common.chargeurs_donnees as loaders
 
     root = tmp_path
-    shp_dir = root / "ref" / "sig" / "communes_21"
+    shp_dir = root / "ref" / "programme" / "sig" / "communes_21"
     shp_dir.mkdir(parents=True)
     (shp_dir / "communes.shp").write_bytes(b"")  # présence du chemin uniquement
 
@@ -117,7 +117,7 @@ def test_ensure_insee_from_communes_shp_builds_from_xy(monkeypatch, tmp_path: Pa
     import bilans.common.chargeurs_donnees as loaders
 
     root = tmp_path
-    shp_dir = root / "ref" / "sig" / "communes_21"
+    shp_dir = root / "ref" / "programme" / "sig" / "communes_21"
     shp_dir.mkdir(parents=True)
     (shp_dir / "communes.shp").write_bytes(b"")
 
@@ -177,7 +177,7 @@ def test_enrich_pve_positions_from_pnf_commune_centroids_joins_insee(
     import bilans.common.chargeurs_donnees as loaders
 
     root = tmp_path
-    ref_dir = root / "ref" / "sig" / "communes_pnf"
+    ref_dir = root / "ref" / "programme" / "sig" / "communes_pnf"
     ref_dir.mkdir(parents=True)
     (ref_dir / "communes_PNF_centroides.shp").write_bytes(b"")
 

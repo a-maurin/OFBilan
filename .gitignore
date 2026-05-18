@@ -4,11 +4,12 @@
 
 # Dossiers de données brutes / locales (non versionnées)
 data/sources/
-ref/sig/**
-!ref/sig/README.md
-ref/modele_ofb/**
-ref/tables_reference/**
-!ref/tables_reference/README.md
+ref/programme/sig/**
+!ref/programme/README.md
+ref/programme/modele_ofb/**
+ref/programme/tables_reference/**
+!ref/programme/tables_reference/.gitkeep
+ref/hors_programme/**
 
 # Dossiers de sorties générées (PDF, CSV, images, logs…)
 data/out/
@@ -52,4 +53,3 @@ __pycache__/
 ############################
 .DS_Store
 Thumbs.db
-

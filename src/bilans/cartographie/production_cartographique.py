@@ -41,7 +41,7 @@ if not logger.handlers:
 PROJECT_ROOT = SCRIPT_DIR.parents[3]
 OUT_DIR_CARTES = PROJECT_ROOT / "data" / "out" / "generateur_de_cartes"
 
-_DEFAULT_QGIS_PROJECT = PROJECT_ROOT / "ref" / "sig" / "sd21_tout.qgz"
+_DEFAULT_QGIS_PROJECT = PROJECT_ROOT / "ref" / "programme" / "sig" / "sd21_tout.qgz"
 
 
 def _resolve_qgis_project_path(configured: str) -> str:
@@ -834,11 +834,11 @@ LOGO_OFB_DECALAGE_ANCRAGE_GAUCHE_MM = 4.0
 
 def _get_logo_ofb_horizontal_path() -> Optional[Path]:
     """Retourne le chemin du logo RF-OFB horizontal (ref/modele_ofb/bloc-marque-RF-OFB_horizontal.jpg)."""
-    p = PROJECT_ROOT / "ref" / "modele_ofb" / LOGO_OFB_HORIZONTAL_FILENAME
+    p = PROJECT_ROOT / "ref" / "programme" / "modele_ofb" / LOGO_OFB_HORIZONTAL_FILENAME
     if p.exists():
         return p
     for ext in ("jpeg", "png"):
-        alt = PROJECT_ROOT / "ref" / "modele_ofb" / f"bloc-marque-RF-OFB_horizontal.{ext}"
+        alt = PROJECT_ROOT / "ref" / "programme" / "modele_ofb" / f"bloc-marque-RF-OFB_horizontal.{ext}"
         if alt.exists():
             return alt
     return None

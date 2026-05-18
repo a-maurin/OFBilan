@@ -24,7 +24,7 @@ _ROOT = Path(__file__).resolve().parents[3]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from bilans.chemins_projet import get_out_dir, get_cartes_dir, PROJECT_ROOT
+from bilans.chemins_projet import get_out_dir, get_cartes_dir, PROJECT_ROOT, ref_programme
 from bilans.common.bilan_config import BilanConfig
 from bilans.common.chargeurs_donnees import (
     ensure_insee_from_communes_shp,
@@ -530,8 +530,8 @@ def ask_interactive_options(profile: dict, current_opts: dict) -> dict:
 
 
 def _load_types_usagers_labels(root: Path) -> list[str]:
-    """Charge la liste des catégories de type d'usager (ref/types_usagers.csv)."""
-    csv_path = root / "ref" / "types_usagers.csv"
+    """Charge la liste des catégories de type d'usager (ref/programme/tables_reference/types_usagers.csv)."""
+    csv_path = ref_programme(root) / "tables_reference" / "types_usagers.csv"
     if not csv_path.exists():
         return []
     try:
@@ -1629,8 +1629,7 @@ def _run_aggregations(
     pnf_zone_by_commune_nom: dict[str, str] = {}
     pnf_zone_by_insee: dict[str, str] = {}
     try:
-        # Référentiel prioritaire demandé : ref/communes_PNF.csv
-        csv_comm = PROJECT_ROOT / "ref" / "communes_PNF.csv"
+        csv_comm = ref_programme(PROJECT_ROOT) / "tables_reference" / "communes_PNF.csv"
         if csv_comm.exists():
             cdf = pd.read_csv(csv_comm, dtype=str, encoding="utf-8", index_col=False)
             if not cdf.empty and "NOM" in cdf.columns:
@@ -1665,7 +1664,7 @@ def _run_aggregations(
                             pnf_zone_by_insee[code_insee] = "Aire_adhesion_PNF"
         # Fallback historique : shapefile communes_pnf
         if not pnf_zone_by_commune_nom:
-            shp_comm = PROJECT_ROOT / "ref" / "sig" / "communes_pnf" / "communes_pnf.shp"
+            shp_comm = ref_programme(PROJECT_ROOT) / "sig" / "communes_pnf" / "communes_pnf.shp"
             if shp_comm.exists():
                 import geopandas as gpd
 

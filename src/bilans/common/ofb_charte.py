@@ -93,7 +93,7 @@ def print_ascii_logo_ofb() -> None:
 
 def _ref_img(name: str) -> Path:
     """Chemin vers une image dans ref/modele_ofb/word/media/."""
-    ref_dir = Path(__file__).resolve().parents[3] / "ref"
+    ref_dir = Path(__file__).resolve().parents[3] / "ref" / "programme"
     return ref_dir / "modele_ofb" / "word" / "media" / name
 
 

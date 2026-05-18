@@ -76,7 +76,7 @@ Les résultats sont écrits dans `data/out/` :
 - `src/bilans/` : code applicatif principal ;
 - `config/` : configuration de pilotage (profils, présentation PDF, graphiques) ;
 - `config/profils_bilan/_defaults.yaml` : socle YAML commun (pipeline, adapters agrégation/PDF, capacités par défaut) fusionné avec chaque profil ;
-- `ref/` : référentiels versionnés utilisés par l’application ;
+- `ref/programme/` : référentiels lus par l’application ; `ref/hors_programme/` : archives hors runtime ;
 - `data/` : données d’entrée locales et sorties générées ;
 - `docs/` : documentation d’architecture, d’usage et de migration ;
 - `tests/` : tests unitaires et tests smoke.

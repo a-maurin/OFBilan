@@ -7,8 +7,12 @@ from complete_concordance_snc import normaliser_texte
 
 BASE = r"c:\Users\aguirre.maurin\Documents\GitHub\Bilans_production"
 
-REF_PATH = os.path.join(BASE, "ref", "Plans de contrôle OSCEAN 2024.csv")
-CONC_PATH = os.path.join(BASE, "ref", "concordance_snc_2023_vers_2024.csv")
+REF_PATH = os.path.join(
+    BASE, "ref", "hors_programme", "tables_reference", "Plans de contrôle OSCEAN 2024.csv"
+)
+CONC_PATH = os.path.join(
+    BASE, "ref", "hors_programme", "tables_reference", "concordance_snc_2023_vers_2024.csv"
+)
 
 
 def charger_referentiel_2024(path: str) -> list[dict]:
