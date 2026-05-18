@@ -1149,6 +1149,7 @@ def _run_aggregations(
     options: dict,
     spatial: dict,
     ventilation_mode: str = "globale",
+    point_ctrl_perimetre: pd.DataFrame | None = None,
 ) -> dict:
     """Calcule toutes les agrégations et retourne un dict de DataFrames."""
     results: dict[str, Any] = {}
