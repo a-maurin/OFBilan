@@ -36,7 +36,7 @@ def main() -> int:
         "programme/tables_reference/tub_communes.csv",
         "programme/tables_reference/communes_PNF.csv",
         "programme/tables_reference/liste_natinf.csv",
-        "programme/sig/sd21_tout.qgz",
+        "programme/sig/bilans_carte.qgz",
         "programme/sig/pochoir_sd21.gpkg",
         "programme/sig/pve_agrainage_points_centroides.gpkg",
         "programme/sig/communes_pnf/communes_pnf.shp",

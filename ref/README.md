@@ -12,7 +12,7 @@ Voir `ref/programme/README.md` pour le détail.
 
 Fichiers **non branchés** sur le pipeline principal : jeux SIG d’appui QGIS, concordances pour scripts `tools/`, modèle Word OFB complet, documentation.
 
-Ne pas supprimer sans vérifier le projet QGIS (`sd21_tout.qgz`) et les outils de maintenance.
+Ne pas supprimer sans vérifier le projet QGIS (`bilans_carte.qgz`) et les outils de maintenance.
 
 ## Données opérationnelles
 

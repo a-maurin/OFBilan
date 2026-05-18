@@ -16,7 +16,7 @@ Contenu lu par le code (`bilans.common.chargeurs_donnees`, moteur de bilans, car
 
 | Élément | Rôle |
 |---------|------|
-| `sd21_tout.qgz` | Projet QGIS (cartographie) |
+| `bilans_carte.qgz` | Projet QGIS (cartographie) |
 | `pochoir_sd21.gpkg`, `pve_agrainage_points_centroides.gpkg` | Couches référencées par le projet / la config cartes |
 | `communes_pnf/` | Liste et centroïdes PNF |
 | `PNF/` | Périmètres cœur et aire d’adhésion |

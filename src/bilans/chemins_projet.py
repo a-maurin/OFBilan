@@ -52,6 +52,11 @@ def get_sig_dir() -> Path:
     return get_ref_programme_dir() / "sig"
 
 
+def get_qgis_project_path() -> Path:
+    """Projet QGIS principal pour la production de cartes."""
+    return get_sig_dir() / "bilans_carte.qgz"
+
+
 def get_sources_sig_dir() -> Path:
     """Dossier des données SIG construites à partir des sources (PVe, points de contrôle, etc.)."""
     return PROJECT_ROOT / "data" / "sources" / "sig"

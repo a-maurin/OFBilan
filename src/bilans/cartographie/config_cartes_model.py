@@ -113,7 +113,7 @@ class GlobalConfig:
     """Configuration globale du script de production cartographique."""
 
     # Chemin du projet QGIS utilisé pour la production cartographique.
-    # Vide par défaut : résolution vers ref/programme/sig/sd21_tout.qgz.
+    # Vide par défaut : résolution vers ref/programme/sig/bilans_carte.qgz.
     # Surchargeable par la variable d'environnement CARTO_PROJECT_QGIS_PATH.
     project_qgis_path: str = ""
     kit_ofb_path: str = ""

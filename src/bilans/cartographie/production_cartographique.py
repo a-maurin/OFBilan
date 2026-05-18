@@ -40,8 +40,12 @@ if not logger.handlers:
 
 PROJECT_ROOT = SCRIPT_DIR.parents[3]
 OUT_DIR_CARTES = PROJECT_ROOT / "data" / "out" / "generateur_de_cartes"
+sys.path.insert(0, str(SCRIPT_DIR))
+sys.path.insert(0, str(PROJECT_ROOT))
 
-_DEFAULT_QGIS_PROJECT = PROJECT_ROOT / "ref" / "programme" / "sig" / "sd21_tout.qgz"
+from bilans.chemins_projet import get_qgis_project_path
+
+_DEFAULT_QGIS_PROJECT = get_qgis_project_path()
 
 
 def _resolve_qgis_project_path(configured: str) -> str:
@@ -54,8 +58,6 @@ def _resolve_qgis_project_path(configured: str) -> str:
     if _DEFAULT_QGIS_PROJECT.exists():
         return str(_DEFAULT_QGIS_PROJECT)
     return configured or str(_DEFAULT_QGIS_PROJECT)
-sys.path.insert(0, str(SCRIPT_DIR))
-sys.path.insert(0, str(PROJECT_ROOT))
 
 try:
     from qgis.core import (

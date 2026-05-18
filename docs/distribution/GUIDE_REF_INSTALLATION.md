@@ -59,7 +59,7 @@ Seul **`ref/programme/`** est indispensable pour exécuter les bilans et génér
 
 | Fichier / dossier | Rôle | Utilisé par |
 |-------------------|------|-------------|
-| **sd21_tout.qgz** | Projet **QGIS** principal (couches, styles, mise en page des cartes). | `production_cartographique.py`, génération des PNG intégrés aux bilans. |
+| **bilans_carte.qgz** | Projet **QGIS** principal (couches, styles, mise en page des cartes). | `production_cartographique.py`, génération des PNG intégrés aux bilans. |
 | **pochoir_sd21.gpkg** | Couche « pochoir » du département (fond des cartes). | Projet QGIS / profils cartes (`layer_name: pochoir_sd21`). |
 | **pve_agrainage_points_centroides.gpkg** | Points centroïdes liés au profil agrainage / chasse. | Projet QGIS / profil carte chasse. |
 | **communes_21/communes.shp** (+ `.dbf`, `.shx`, `.prj`, `.cpg`) | Limites communales Côte-d’Or pour **jointure spatiale** (code INSEE, nom). | Enrichissement des contrôles / PVe sans INSEE complet. |
@@ -72,7 +72,7 @@ Seul **`ref/programme/`** est indispensable pour exécuter les bilans et génér
 
 **Note shapefile** : chaque `.shp` doit être accompagné de ses fichiers `.dbf`, `.shx`, `.prj` (et `.cpg` si présent) dans le **même dossier**.
 
-**Après copie** : ouvrir `sd21_tout.qgz` dans QGIS une fois et vérifier que les chemins des couches pointent vers `…/ref/programme/sig/…` (réparer si l’ancien poste utilisait un chemin absolu différent).
+**Après copie** : ouvrir `bilans_carte.qgz` dans QGIS une fois et vérifier que les chemins des couches pointent vers `…/ref/programme/sig/…` (réparer si l’ancien poste utilisait un chemin absolu différent).
 
 ---
 
@@ -100,7 +100,7 @@ Seul **`ref/programme/`** est indispensable pour exécuter les bilans et génér
 | Symptôme | Piste |
 |----------|--------|
 | `Référentiel PNF introuvable` | Vérifier `communes_pnf.shp` ou `communes_PNF.csv` sous `ref/programme/`. |
-| Cartes vides ou erreur QGIS | Réparer les sources de couches dans `sd21_tout.qgz` ; vérifier la présence des `.gpkg`. |
+| Cartes vides ou erreur QGIS | Réparer les sources de couches dans `bilans_carte.qgz` ; vérifier la présence des `.gpkg`. |
 | PDF sans logos | Vérifier les 4 fichiers sous `ref/programme/modele_ofb/`. |
 | Dossier `communes_pnf/communes_pnf/` imbriqué | Mauvaise copie : les `.shp` doivent être directement dans `communes_pnf/`, pas dans un sous-dossier du même nom. Relancer `python scripts/verify_ref_layout.py`. |
 
