@@ -42,10 +42,10 @@ from bilans.common.ofb_charte import (
     MARGIN_BOTTOM,
     MARGIN_LEFT,
     MARGIN_RIGHT,
-    MARGIN_TOP,
     PAGE_H,
     PAGE_W,
     _get_styles,
+    header_layout_metrics,
 )
 from bilans.common.pdf_presentation_config import resolve_tables_layout
 from bilans.common.pdf_utils import key_figures_table, ofb_table, ofb_table_wide
@@ -125,27 +125,36 @@ class PDFReportBuilder:
         self.footer_line2 = footer_line2
 
         self.styles = _get_styles()
-        # Compaction globale renforcée pour limiter les blancs inter-sections.
+        # Titres : espace minimal en tête de bloc (le cadre démarre déjà sous l'en-tête page).
         self.styles["Heading1"] = ParagraphStyle(
             "OFBH1_compact",
             parent=self.styles["Heading1"],
-            spaceBefore=max(0, self.styles["Heading1"].spaceBefore - 7 * mm),
-            spaceAfter=max(0, self.styles["Heading1"].spaceAfter - 2 * mm),
+            spaceBefore=0,
+            spaceAfter=1 * mm,
         )
         self.styles["Heading2"] = ParagraphStyle(
             "OFBH2_compact",
             parent=self.styles["Heading2"],
-            spaceBefore=max(0, self.styles["Heading2"].spaceBefore - 5 * mm),
-            spaceAfter=max(0, self.styles["Heading2"].spaceAfter - 2 * mm),
+            spaceBefore=0,
+            spaceAfter=1 * mm,
         )
         self.styles["Heading3"] = ParagraphStyle(
             "OFBH3_compact",
             parent=self.styles["Heading3"],
-            spaceBefore=max(0, self.styles["Heading3"].spaceBefore - 4 * mm),
-            spaceAfter=max(0, self.styles["Heading3"].spaceAfter - 2 * mm),
+            spaceBefore=0,
+            spaceAfter=1 * mm,
         )
+
+        header_lines = [
+            ln.strip() for ln in str(header_title).splitlines() if ln.strip()
+        ]
+        n_header_lines = len(header_lines) or 1
+        rule_from_top, margin_top = header_layout_metrics(n_header_lines)
+        self._header_rule_y = PAGE_H - rule_from_top
+        self._margin_top = margin_top
+
         self.avail_w = PAGE_W - MARGIN_LEFT - MARGIN_RIGHT
-        self.avail_h = PAGE_H - MARGIN_TOP - MARGIN_BOTTOM
+        self.avail_h = PAGE_H - margin_top - MARGIN_BOTTOM
         self._tables_layout = deepcopy(
             tables_layout if tables_layout is not None else resolve_tables_layout({})
         )
@@ -156,7 +165,7 @@ class PDFReportBuilder:
             MARGIN_LEFT,
             MARGIN_BOTTOM,
             PAGE_W - MARGIN_LEFT - MARGIN_RIGHT,
-            PAGE_H - MARGIN_TOP - MARGIN_BOTTOM,
+            PAGE_H - margin_top - MARGIN_BOTTOM,
             id="content",
         )
         title_frame = Frame(0, 0, PAGE_W, PAGE_H, id="title_full")
@@ -235,21 +244,19 @@ class PDFReportBuilder:
             )
         canvas.setStrokeColor(rl_colors.HexColor(COLOR_PRIMARY))
         canvas.setLineWidth(2)
-        y_header = PAGE_H - 16 * mm
-        canvas.line(MARGIN_LEFT, y_header, PAGE_W - MARGIN_RIGHT, y_header)
+        y_rule = getattr(self, "_header_rule_y", PAGE_H - 12 * mm)
+        canvas.line(MARGIN_LEFT, y_rule, PAGE_W - MARGIN_RIGHT, y_rule)
         header_lines = [ln.strip() for ln in str(self.header_title).splitlines() if ln.strip()]
         if not header_lines:
             header_lines = [""]
         font_size = 7 if len(header_lines) > 1 else 8
+        line_step = 3.2 * mm
         canvas.setFont(f"{FONT_FAMILY}-Bold", font_size)
         canvas.setFillColor(rl_colors.HexColor(COLOR_PRIMARY))
-        if len(header_lines) == 1:
-            canvas.drawString(MARGIN_LEFT, y_header + 3, header_lines[0])
-        else:
-            base_y = y_header + 14
-            step = 5
-            for idx, line in enumerate(header_lines[:3]):
-                canvas.drawString(MARGIN_LEFT, base_y - idx * step, line)
+        y_text = y_rule + 1.5 * mm
+        for line in header_lines[:3]:
+            canvas.drawString(MARGIN_LEFT, y_text, line)
+            y_text += line_step
 
         y_foot = 8 * mm
         canvas.setFont(f"{FONT_FAMILY}", 7)
@@ -370,7 +377,7 @@ class PDFReportBuilder:
         s = self.styles
         self._toc_allowed_anchors = {a for a, _ in sections}
         self.story.append(Paragraph("Sommaire", s["Title"]))
-        self.story.append(Spacer(1, 3 * mm))
+        self.story.append(Spacer(1, 1 * mm))
         # dotsMinLevel=0 : pointillés aussi pour les entrées de niveau principal (1., 2., …).
         toc = TableOfContents(dotsMinLevel=0)
         toc.levelStyles = [
@@ -427,15 +434,15 @@ class PDFReportBuilder:
             heading_style = ParagraphStyle(
                 f"{heading}_compact",
                 parent=heading_style,
-                spaceBefore=max(0, heading_style.spaceBefore - 8 * mm),
+                spaceBefore=0,
+                spaceAfter=0,
             )
         title_para = Paragraph(title, heading_style)
         if anchor in self._toc_allowed_anchors:
             title_para._bookmarkName = anchor
             title_para._toc_title = title
             title_para._toc_level = max((toc_level if toc_level is not None else level - 1), 0)
-        spacer = Spacer(1, 0.5 * mm)
-        self._pending_section = [anchor_para, title_para, spacer]
+        self._pending_section = [anchor_para, title_para]
 
     def add_keep_together_block(self, flowables: List) -> None:
         """
@@ -505,7 +512,7 @@ class PDFReportBuilder:
     # ------------------------------------------------------------------
     # Key figures
     # ------------------------------------------------------------------
-    def add_key_figures(self, figures: List[Tuple[str, str]], *, spacer_after_mm: float = 4.0) -> None:
+    def add_key_figures(self, figures: List[Tuple[str, str]], *, spacer_after_mm: float = 2.0) -> None:
         """figures = [(value_str, label_str), ...]"""
         if not figures:
             return
@@ -599,16 +606,20 @@ class PDFReportBuilder:
         *,
         header_font_size: float | None = None,
         spacer_after_mm: float = 4.0,
+        max_rows_keep_together: int | None = None,
     ) -> None:
         block: List = []
         if caption:
             block.append(Paragraph(caption, self.styles["TableCaption"]))
             block.append(Spacer(1, 1 * mm))
         split_by_row = bool(self._tables_layout.get("split_by_row"))
-        try:
-            max_rows_keep = int(self._tables_layout.get("max_rows_keep_together", 8))
-        except (TypeError, ValueError):
-            max_rows_keep = 8
+        if max_rows_keep_together is not None:
+            max_rows_keep = int(max_rows_keep_together)
+        else:
+            try:
+                max_rows_keep = int(self._tables_layout.get("max_rows_keep_together", 8))
+            except (TypeError, ValueError):
+                max_rows_keep = 8
         try:
             max_cell_chars = int(self._tables_layout.get("max_cell_chars_before_split", 100))
         except (TypeError, ValueError):
@@ -838,7 +849,7 @@ class PDFReportBuilder:
     # ------------------------------------------------------------------
     def add_paragraph(self, text: str, style: str = "BodyText") -> None:
         para = Paragraph(text, self.styles[style])
-        spacer = Spacer(1, 2 * mm)
+        spacer = Spacer(1, 1 * mm)
         if self._pending_section is not None:
             self.story.append(KeepTogether(self._pending_section + [para, spacer]))
             self._pending_section = None

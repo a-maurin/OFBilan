@@ -214,6 +214,7 @@ def resolve_pdf_presentation_config(
     *,
     scope: str,
     profile_id: str | None = None,
+    diffusion: str | None = "interne",
 ) -> dict[str, Any]:
     """
     Résout la config effective :
@@ -237,12 +238,44 @@ def resolve_pdf_presentation_config(
             if not target_scope or target_scope == str(scope).strip().lower():
                 effective = _deep_merge(effective, profile_cfg)
 
+    diffusion_norm = normalize_diffusion(diffusion)
+    if diffusion_norm == "externe":
+        profiles = raw.get("profiles", {})
+        ext_cfg = profiles.get("_diffusion_externe", {}) if isinstance(profiles, dict) else {}
+        if isinstance(ext_cfg, dict) and ext_cfg:
+            # Overlay hors scope profil : règles communes de diffusion externe.
+            overlay = {k: v for k, v in ext_cfg.items() if k != "scope"}
+            effective = _deep_merge(effective, overlay)
+
     return {
         "version": raw.get("version", 1),
         "behavior": raw.get("behavior", {}),
         "feature_registry": raw.get("feature_registry", {}),
         "effective": effective,
+        "diffusion": diffusion_norm,
     }
+
+
+def normalize_diffusion(value: str | None) -> str:
+    """Retourne ``interne`` ou ``externe`` (défaut : interne)."""
+    s = str(value or "interne").strip().lower()
+    if s in ("externe", "external", "ext"):
+        return "externe"
+    return "interne"
+
+
+def diffusion_pdf_suffix(diffusion: str | None) -> str:
+    """Suffixe de nom de fichier PDF selon le périmètre de diffusion."""
+    return "_ext" if normalize_diffusion(diffusion) == "externe" else "_int"
+
+
+def apply_diffusion_pdf_suffix(path: Path | str, diffusion: str | None) -> Path:
+    """Ajoute ``_int`` ou ``_ext`` avant l'extension ``.pdf``."""
+    p = Path(path)
+    tag = diffusion_pdf_suffix(diffusion)
+    if p.suffix.lower() == ".pdf":
+        return p.with_name(f"{p.stem}{tag}{p.suffix}")
+    return p.with_name(f"{p.name}{tag}.pdf")
 
 
 def resolve_title_page_config(

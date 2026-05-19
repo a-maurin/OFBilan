@@ -3,8 +3,11 @@ from pathlib import Path
 import pandas as pd
 
 from bilans.common.pdf_presentation_config import (
+    apply_diffusion_pdf_suffix,
     is_block_enabled,
     is_section_enabled,
+    normalize_diffusion,
+    diffusion_pdf_suffix,
     resolve_pdf_presentation_config,
     resolve_notice_methodology_config,
     resolve_sec6_methodology_config,
@@ -56,6 +59,56 @@ profiles:
     assert effective["sections"]["order"] == ["sec1", "sec3", "sec2"]
     assert effective["blocks"]["sec22res"]["show_table"] is False
     assert effective["blocks"]["sec22res"]["show_pie"] is False
+
+
+def test_normalize_diffusion() -> None:
+    assert normalize_diffusion(None) == "interne"
+    assert normalize_diffusion("externe") == "externe"
+    assert normalize_diffusion("EXTERNAL") == "externe"
+
+
+def test_diffusion_pdf_suffix() -> None:
+    assert diffusion_pdf_suffix("interne") == "_int"
+    assert diffusion_pdf_suffix("externe") == "_ext"
+    assert diffusion_pdf_suffix(None) == "_int"
+
+
+def test_apply_diffusion_pdf_suffix() -> None:
+    assert apply_diffusion_pdf_suffix("bilan_global.pdf", "interne").name == "bilan_global_int.pdf"
+    assert apply_diffusion_pdf_suffix("bilan_global.pdf", "externe").name == "bilan_global_ext.pdf"
+    assert (
+        apply_diffusion_pdf_suffix(Path("out/Bilan_agriculteur_Cote_dOr.pdf"), "external").name
+        == "Bilan_agriculteur_Cote_dOr_ext.pdf"
+    )
+
+
+def test_diffusion_externe_desactive_tableaux_detail(tmp_path: Path) -> None:
+    _write_yaml(
+        tmp_path,
+        """
+version: 1
+defaults:
+  blocks:
+    sec31:
+      show_detail_table: true
+    sec32:
+      show_detail_table: true
+profiles:
+  _diffusion_externe:
+    blocks:
+      sec31:
+        show_detail_table: false
+      sec32:
+        show_detail_table: false
+      sec33:
+        show_detail_table: false
+""".strip(),
+    )
+    interne = resolve_pdf_presentation_config(tmp_path, scope="thematique", diffusion="interne")
+    externe = resolve_pdf_presentation_config(tmp_path, scope="thematique", diffusion="externe")
+    assert is_block_enabled(interne["effective"], "sec32.show_detail_table", True) is True
+    assert is_block_enabled(externe["effective"], "sec32.show_detail_table", True) is False
+    assert externe.get("diffusion") == "externe"
 
 
 def test_nested_block_lookup_supports_dotted_path() -> None:

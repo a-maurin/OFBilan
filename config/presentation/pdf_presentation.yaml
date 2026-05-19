@@ -24,6 +24,7 @@ version: 1
 behavior:
   missing_data_policy: show_placeholder
   unknown_block_policy: ignore
+  # diffusion : pilotée par --diffusion (CLI) ; « externe » fusionne profiles._diffusion_externe
 
 defaults:
   title:
@@ -81,6 +82,10 @@ defaults:
       contrôles et peut aussi inclure des saisines extérieures (infractions constatées
       hors opération de contrôle au titre de la police administrative, instruction parquet,
       signalements, plaintes, etc.).
+    external_detail_paragraph: >
+      Version destinée à une diffusion externe : les listes nominatives de procédures
+      (numéro de dossier, localisation) ne figurent pas dans ce document. Les synthèses
+      par thème, domaine et type d'infraction restent disponibles dans ce chapitre.
     multi_usager_paragraph: >
       Lorsque des tableaux ou graphiques affichent des « effectifs » par type d'usager,
       chaque usager renseigné sur une fiche est compté (contrôles multi-usagers : plusieurs
@@ -120,6 +125,8 @@ defaults:
       overflow_note_wrap: "<i>{note}</i>"
 
   blocks:
+    sec2:
+      show_intro_text: true
     sec21:
       show_table: true
       show_chart_controles: true
@@ -157,6 +164,7 @@ defaults:
     sec33:
       show_table: true
       show_key_figures: true
+      show_theme_table: true
       show_detail_table: true
     sec4:
       show_intro_text: true
@@ -241,6 +249,16 @@ profiles:
         show_zone_table: false
       sec4:
         show_table_themes_par_type_usager: false
+
+  # Fusionné lorsque --diffusion externe (tous profils, global et thématique).
+  _diffusion_externe:
+    blocks:
+      sec31:
+        show_detail_table: false
+      sec32:
+        show_detail_table: false
+      sec33:
+        show_detail_table: false
 
 feature_registry:
   sec21: both

@@ -16,6 +16,7 @@ from bilans.common.rendus_graphiques import (
     chart_stackplot_resultats_domaine,
 )
 from bilans.common.pdf_presentation_config import (
+    apply_diffusion_pdf_suffix,
     build_title_lines_from_cfg,
     is_block_enabled,
     is_section_enabled,
@@ -82,6 +83,7 @@ def generate_profile_pdf_report(
     ventilation_mode: str = "globale",
     chart_preset: str | None = None,
     output_filename: str | None = None,
+    diffusion: str = "interne",
 ) -> None:
     """Point d’entrée moteur unique pour générer le PDF d'un profil."""
     date_deb_ts = pd.to_datetime(date_deb) if date_deb is not None else pd.Timestamp("2025-01-01")
@@ -97,6 +99,7 @@ def generate_profile_pdf_report(
         ventilation_mode=ventilation_mode,
         chart_preset=chart_preset,
         output_filename=output_filename,
+        diffusion=diffusion,
     )
 
 
@@ -170,6 +173,7 @@ def generate_pdf_report(
     ventilation_mode: str = "globale",
     chart_preset: str | None = None,
     output_filename: str | None = None,
+    diffusion: str = "interne",
 ) -> None:
     from bilans.common.rendus_graphiques import apply_mpl_style
 
@@ -183,6 +187,7 @@ def generate_pdf_report(
         ventilation_mode=ventilation_mode,
         chart_preset=chart_preset,
         output_filename=output_filename,
+        diffusion=diffusion,
     )
 
 
@@ -196,11 +201,14 @@ def _generate_pdf_content(
     ventilation_mode: str = "globale",
     chart_preset: str | None = None,
     output_filename: str | None = None,
+    diffusion: str = "interne",
 ) -> None:
     chart_ratios = compute_pdf_ratios(load_chart_display_config(_ROOT, preset=chart_preset))
     scope = str((profile or {}).get("presentation_scope", "global")).strip() or "global"
     profile_id = str((profile or {}).get("id", "")).strip() or None
-    resolved_presentation_cfg = resolve_pdf_presentation_config(_ROOT, scope=scope, profile_id=profile_id)
+    resolved_presentation_cfg = resolve_pdf_presentation_config(
+        _ROOT, scope=scope, profile_id=profile_id, diffusion=diffusion
+    )
     presentation_cfg = (
         resolved_presentation_cfg.get("effective", {}) if isinstance(resolved_presentation_cfg, dict) else {}
     )
@@ -243,7 +251,7 @@ def _generate_pdf_content(
     global_map_layout = resolve_map_layout(presentation_cfg=presentation_cfg)
 
     resolved_output_name = str(output_filename or "").strip() or "bilan_global.pdf"
-    pdf_path = out_dir / resolved_output_name
+    pdf_path = apply_diffusion_pdf_suffix(out_dir / resolved_output_name, diffusion)
     chart_bar_w = chart_ratios["chart_base"]
     legend_fontsize = float(chart_ratios.get("legend_fontsize", 8.0))
     legend_ncol_max = int(chart_ratios.get("legend_ncol_max", 4.0))
@@ -326,6 +334,7 @@ def _generate_pdf_content(
             f"au {date_fin.date():%d/%m/%Y}."
         ),
         effective_cfg=presentation_cfg,
+        diffusion=diffusion,
     )
 
     def _render_sec1() -> None:

@@ -16,6 +16,7 @@ def add_standard_notice_methodology(
     *,
     period_sentence: str,
     effective_cfg: dict | None = None,
+    diffusion: str | None = "interne",
 ) -> None:
     """
     Ajoute une notice méthodologique standardisée.
@@ -30,6 +31,7 @@ def add_standard_notice_methodology(
     unit_measure = str(notice_cfg.get("unit_measure_paragraph", "")).strip()
     pa_pj = str(notice_cfg.get("pa_pj_distinction_paragraph", "")).strip()
     multi_usager = str(notice_cfg.get("multi_usager_paragraph", "")).strip()
+    external_detail = str(notice_cfg.get("external_detail_paragraph", "")).strip()
 
     builder.add_section("notice_methodo", title)
     if data_source:
@@ -41,6 +43,8 @@ def add_standard_notice_methodology(
         builder.add_paragraph(pa_pj)
     if multi_usager:
         builder.add_paragraph(multi_usager)
+    if str(diffusion or "interne").strip().lower() in ("externe", "external", "ext") and external_detail:
+        builder.add_paragraph(external_detail)
     builder.add_page_break()
 
 

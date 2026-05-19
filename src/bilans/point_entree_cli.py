@@ -157,6 +157,16 @@ def main() -> int:
             "--no-pnf pour désactiver sans question interactive."
         ),
     )
+    parser.add_argument(
+        "--diffusion",
+        choices=("interne", "externe"),
+        default="interne",
+        help=(
+            "Périmètre de diffusion du PDF : interne (détail nominatif des procédures) "
+            "ou externe (sans listes PEJ/PA/PVe avec numéro de dossier ni localisation). "
+            "Les cartes sont conservées dans les deux cas."
+        ),
+    )
     args = parser.parse_args()
 
     if args.list_type_usagers:
@@ -219,6 +229,7 @@ def main() -> int:
         cli_options["cartes"] = args.cartes
     if args.pnf is not None:
         cli_options["pnf"] = args.pnf
+    cli_options["diffusion"] = args.diffusion
 
     return run_profiles_batch(
         profils_resolus,

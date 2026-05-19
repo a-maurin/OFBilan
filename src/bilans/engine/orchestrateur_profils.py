@@ -60,9 +60,15 @@ from bilans.common.utilitaires_metier import (
     agg_controles_par_type_usager_theme,
     agg_resultats_par_type_usager_domaine,
     agg_resultats_par_type_usager_theme,
-    agg_procedures_par_type_usager_domaine,
-    agg_procedures_par_type_usager_theme,
+    agg_procedures_dossiers_par_domaine,
+    agg_procedures_dossiers_par_theme,
+    count_procedures_liees_controle_sur_points,
+    count_pa_induites_par_controles,
+    points_as_pa_lignes,
+    mask_resultat_induit_pa,
+    filter_points_induisant_pa,
     agg_resultat_counts_par_type_usager,
+    build_tab_resultats,
     build_tab_resultats_controles,
 )
 from bilans.common.ofb_charte import Spinner
@@ -77,6 +83,7 @@ from bilans.common.pdf_shared_sections import (
     load_glossary_config,
 )
 from bilans.common.pdf_presentation_config import (
+    apply_diffusion_pdf_suffix,
     build_title_lines_from_cfg,
     normalize_dept_typography,
     resolve_pdf_presentation_config,
@@ -371,6 +378,7 @@ def _run_global_profile_via_yaml(
             ventilation_mode=ventilation_mode,
             chart_preset=chart_preset,
             output_filename=output_filename,
+            diffusion=str(resolved_opts.get("diffusion", "interne")),
         )
 
     print(f"Bilan global généré dans data/out/{out_subdir}.")
@@ -925,8 +933,8 @@ def _apply_restrict_geo_pnf(
     # l'assiette spatiale des PA.
     point_manq = point_filtered
     if "resultat" in point_filtered.columns:
-        point_manq = point_filtered[
-            point_filtered["resultat"].astype(str).str.strip().str.lower() == "manquement"
+        point_manq = point_filtered.loc[
+            mask_resultat_induit_pa(point_filtered["resultat"])
         ].copy()
 
     dc_ids: Set[str] = set()
@@ -1168,7 +1176,7 @@ def _run_aggregations(
 
     nb_ctrl = len(point_filtered)
     nb_pej = len(pej_filtered)
-    nb_pa = len(pa_filtered)
+    nb_pa = count_pa_induites_par_controles(point_filtered)
     nb_pve = len(pve_filtered)
     results["nb_ctrl"] = nb_ctrl
     results["nb_pej"] = nb_pej
@@ -1177,14 +1185,7 @@ def _run_aggregations(
 
     # Résultats des contrôles
     if not point_filtered.empty and "resultat" in point_filtered.columns:
-        tab = (
-            point_filtered["resultat"]
-            .value_counts()
-            .rename_axis("resultat")
-            .to_frame("nb")
-            .reset_index()
-        )
-        tab["taux"] = tab["nb"] / float(nb_ctrl or 1)
+        tab = build_tab_resultats(point_filtered)
         results["tab_resultats"] = tab
         # Référence de cohérence : maximum observé entre totaux de contrôles
         # calculés dans les sections structurantes des contrôles.
@@ -1245,18 +1246,18 @@ def _run_aggregations(
                 results["pej_par_theme"] = agg_pej
                 break
 
-    # PA par thème/domaine
-    if not pa_filtered.empty:
-        for col in ("THEME", "DOMAINE"):
-            if col in pa_filtered.columns:
-                agg_pa = (
-                    pa_filtered.groupby([c for c in ["DOMAINE", "THEME"] if c in pa_filtered.columns])
-                    .size()
-                    .rename("nb_pa")
-                    .reset_index()
-                )
-                results["pa_par_theme"] = agg_pa
-                break
+    # PA par thème/domaine (dérivées des contrôles à manquement)
+    pa_lignes = points_as_pa_lignes(point_filtered)
+    if not pa_lignes.empty:
+        grp_cols = [c for c in ["DOMAINE", "THEME"] if c in pa_lignes.columns]
+        if grp_cols:
+            agg_pa = (
+                pa_lignes.groupby(grp_cols)
+                .size()
+                .rename("nb_pa")
+                .reset_index()
+            )
+            results["pa_par_theme"] = agg_pa
 
     # PEJ : statistiques de durée (pour profil procedures)
     ft = profile["filter"]["type"]
@@ -1343,13 +1344,32 @@ def _run_aggregations(
             res_ut = res_ut[res_ut["type_usager"].isin(targets)]
         results["res_par_usager_theme"] = res_ut
 
-        proc_ud = agg_procedures_par_type_usager_domaine(pt_us)
-        if targets and not proc_ud.empty:
+        with_type_proc = bool(
+            not (targets and len(targets) == 1)
+            and (
+                (not pej_filtered.empty and "type_usager" in pej_filtered.columns)
+                or (not point_filtered.empty and "type_usager" in point_filtered.columns)
+            )
+        )
+        proc_ud = agg_procedures_dossiers_par_domaine(
+            pej_filtered,
+            pa_lignes,
+            with_type_usager=with_type_proc,
+            source_table="point_ctrl",
+            source_champ="type_usager",
+        )
+        if targets and with_type_proc and not proc_ud.empty:
             proc_ud = proc_ud[proc_ud["type_usager"].isin(targets)]
         results["proc_par_usager_domaine"] = proc_ud
 
-        proc_ut = agg_procedures_par_type_usager_theme(pt_us)
-        if targets and not proc_ut.empty:
+        proc_ut = agg_procedures_dossiers_par_theme(
+            pej_filtered,
+            pa_lignes,
+            with_type_usager=with_type_proc,
+            source_table="point_ctrl",
+            source_champ="type_usager",
+        )
+        if targets and with_type_proc and not proc_ut.empty:
             proc_ut = proc_ut[proc_ut["type_usager"].isin(targets)]
         results["proc_par_usager_theme"] = proc_ut
 
@@ -1697,12 +1717,12 @@ def _run_aggregations(
         ["THEME", "theme", "DOMAINE", "domaine"],
     )
     results["pa_detail"] = _build_proc_detail(
-        pa_filtered,
+        filter_points_induisant_pa(point_filtered),
         "PA",
-        ["DC_ID", "NUM_DOSSIER", "numero"],
-        ["DATE_REF", "date_ref", "date"],
-        ["nom_commun", "commune", "INSEE_NOM"],
-        ["THEME", "theme", "DOMAINE", "domaine"],
+        ["dc_id", "DC_ID", "fid"],
+        ["date_ctrl", "DATE_REF"],
+        ["nom_commun", "nom_comm", "commune", "NOM_COM"],
+        ["theme", "THEME", "domaine", "DOMAINE"],
     )
 
     # Bilan PNF : export / PDF « PEJ par zone » = Cœur vs hors-cœur (comme PVe), dérivé du détail.
@@ -1730,10 +1750,16 @@ def _run_aggregations(
             years |= set(
                 pej_filtered["DATE_REF"].dropna().dt.year.astype(int).tolist()
             )
-        if not pa_filtered.empty and "DATE_REF" in pa_filtered.columns:
+        if not pa_lignes.empty and "DATE_REF" in pa_lignes.columns:
             years |= set(
-                pa_filtered["DATE_REF"].dropna().dt.year.astype(int).tolist()
+                pa_lignes["DATE_REF"].dropna().dt.year.astype(int).tolist()
             )
+        elif not point_filtered.empty and "date_ctrl" in point_filtered.columns:
+            pa_pts = filter_points_induisant_pa(point_filtered)
+            if not pa_pts.empty:
+                years |= set(
+                    pa_pts["date_ctrl"].dropna().dt.year.astype(int).tolist()
+                )
         if not pve_filtered.empty and "INF-DATE-INTG" in pve_filtered.columns:
             years |= set(
                 pve_filtered["INF-DATE-INTG"].dropna().dt.year.astype(int).tolist()
@@ -1756,18 +1782,15 @@ def _run_aggregations(
                 year_row["nb_controles"] = 0
                 year_row["nb_controles_non_conformes"] = 0
 
-            if not pej_filtered.empty and "DATE_REF" in pej_filtered.columns:
-                year_row["nb_pej"] = int(
-                    (pej_filtered["DATE_REF"].dt.year == year).sum()
+            if not point_filtered.empty and "date_ctrl" in point_filtered.columns:
+                p_mask = point_filtered["date_ctrl"].dt.year == year
+                nb_pej, nb_pa = count_procedures_liees_controle_sur_points(
+                    point_filtered, mask=p_mask
                 )
+                year_row["nb_pej"] = nb_pej
+                year_row["nb_pa"] = nb_pa
             else:
                 year_row["nb_pej"] = 0
-
-            if not pa_filtered.empty and "DATE_REF" in pa_filtered.columns:
-                year_row["nb_pa"] = int(
-                    (pa_filtered["DATE_REF"].dt.year == year).sum()
-                )
-            else:
                 year_row["nb_pa"] = 0
 
             if not pve_filtered.empty and "INF-DATE-INTG" in pve_filtered.columns:
@@ -1807,8 +1830,9 @@ def _run_aggregations(
                 if hasattr(t, "year") and hasattr(t, "month"):
                     q = (t.month - 1) // 3 + 1
                     periods.add((int(t.year), q))
-        if not pa_filtered.empty and "DATE_REF" in pa_filtered.columns:
-            for _, r in pa_filtered["DATE_REF"].dropna().items():
+        pa_pts = filter_points_induisant_pa(point_filtered)
+        if not pa_pts.empty and "date_ctrl" in pa_pts.columns:
+            for _, r in pa_pts["date_ctrl"].dropna().items():
                 t = r
                 if hasattr(t, "year") and hasattr(t, "month"):
                     q = (t.month - 1) // 3 + 1
@@ -1845,18 +1869,16 @@ def _run_aggregations(
                 row_t["nb_controles"] = 0
                 row_t["nb_controles_non_conformes"] = 0
 
-            if not pej_filtered.empty and "DATE_REF" in pej_filtered.columns:
-                dt = pej_filtered["DATE_REF"]
+            if not point_filtered.empty and "date_ctrl" in point_filtered.columns:
+                dt = point_filtered["date_ctrl"]
                 mask = (dt.dt.year == year) & (dt.dt.month >= m1) & (dt.dt.month <= m2)
-                row_t["nb_pej"] = int(mask.sum())
+                nb_pej, nb_pa = count_procedures_liees_controle_sur_points(
+                    point_filtered, mask=mask
+                )
+                row_t["nb_pej"] = nb_pej
+                row_t["nb_pa"] = nb_pa
             else:
                 row_t["nb_pej"] = 0
-
-            if not pa_filtered.empty and "DATE_REF" in pa_filtered.columns:
-                dt = pa_filtered["DATE_REF"]
-                mask = (dt.dt.year == year) & (dt.dt.month >= m1) & (dt.dt.month <= m2)
-                row_t["nb_pa"] = int(mask.sum())
-            else:
                 row_t["nb_pa"] = 0
 
             if not pve_filtered.empty and "INF-DATE-INTG" in pve_filtered.columns:
@@ -1896,7 +1918,7 @@ def _run_aggregations(
 
         _add_iso_weeks(point_filtered, "date_ctrl")
         _add_iso_weeks(pej_filtered, "DATE_REF")
-        _add_iso_weeks(pa_filtered, "DATE_REF")
+        _add_iso_weeks(filter_points_induisant_pa(point_filtered), "date_ctrl")
         _add_iso_weeks(pve_filtered, "INF-DATE-INTG")
 
         rows_week: list[dict[str, Any]] = []
@@ -1917,17 +1939,17 @@ def _run_aggregations(
                 row_w["nb_controles"] = 0
                 row_w["nb_controles_non_conformes"] = 0
 
-            if not pej_filtered.empty and "DATE_REF" in pej_filtered.columns:
-                dt = pej_filtered["DATE_REF"]
+            if not point_filtered.empty and "date_ctrl" in point_filtered.columns:
+                dt = point_filtered["date_ctrl"]
                 iso = dt.dt.isocalendar()
-                row_w["nb_pej"] = int(((iso["year"] == year) & (iso["week"] == week)).sum())
+                mask = (iso["year"] == year) & (iso["week"] == week)
+                nb_pej, nb_pa = count_procedures_liees_controle_sur_points(
+                    point_filtered, mask=mask
+                )
+                row_w["nb_pej"] = nb_pej
+                row_w["nb_pa"] = nb_pa
             else:
                 row_w["nb_pej"] = 0
-            if not pa_filtered.empty and "DATE_REF" in pa_filtered.columns:
-                dt = pa_filtered["DATE_REF"]
-                iso = dt.dt.isocalendar()
-                row_w["nb_pa"] = int(((iso["year"] == year) & (iso["week"] == week)).sum())
-            else:
                 row_w["nb_pa"] = 0
             if not pve_filtered.empty and "INF-DATE-INTG" in pve_filtered.columns:
                 dt = pve_filtered["INF-DATE-INTG"]
@@ -1962,8 +1984,9 @@ def _run_aggregations(
                 t = r
                 if hasattr(t, "year") and hasattr(t, "month"):
                     periods_m.add((int(t.year), int(t.month)))
-        if not pa_filtered.empty and "DATE_REF" in pa_filtered.columns:
-            for _, r in pa_filtered["DATE_REF"].dropna().items():
+        pa_pts_m = filter_points_induisant_pa(point_filtered)
+        if not pa_pts_m.empty and "date_ctrl" in pa_pts_m.columns:
+            for _, r in pa_pts_m["date_ctrl"].dropna().items():
                 t = r
                 if hasattr(t, "year") and hasattr(t, "month"):
                     periods_m.add((int(t.year), int(t.month)))
@@ -1990,15 +2013,16 @@ def _run_aggregations(
                 row_m["nb_controles"] = 0
                 row_m["nb_controles_non_conformes"] = 0
 
-            if not pej_filtered.empty and "DATE_REF" in pej_filtered.columns:
-                dt = pej_filtered["DATE_REF"]
-                row_m["nb_pej"] = int(((dt.dt.year == year) & (dt.dt.month == month)).sum())
+            if not point_filtered.empty and "date_ctrl" in point_filtered.columns:
+                dt = point_filtered["date_ctrl"]
+                mask = (dt.dt.year == year) & (dt.dt.month == month)
+                nb_pej, nb_pa = count_procedures_liees_controle_sur_points(
+                    point_filtered, mask=mask
+                )
+                row_m["nb_pej"] = nb_pej
+                row_m["nb_pa"] = nb_pa
             else:
                 row_m["nb_pej"] = 0
-            if not pa_filtered.empty and "DATE_REF" in pa_filtered.columns:
-                dt = pa_filtered["DATE_REF"]
-                row_m["nb_pa"] = int(((dt.dt.year == year) & (dt.dt.month == month)).sum())
-            else:
                 row_m["nb_pa"] = 0
             if not pve_filtered.empty and "INF-DATE-INTG" in pve_filtered.columns:
                 dt = pve_filtered["INF-DATE-INTG"]
@@ -2491,10 +2515,12 @@ def _generate_pdf(
     single_label = str(single_cfg.get("label", "")).strip()
     export_prefix = profile.get("_export_prefix") or profil_id
     display_label = single_label if (is_single_usager and single_label) else label
+    diffusion = str(options.get("diffusion", "interne")).strip().lower()
     resolved_presentation_cfg = resolve_pdf_presentation_config(
         PROJECT_ROOT,
         scope="thematique",
         profile_id=profil_id,
+        diffusion=diffusion,
     )
     presentation_cfg = (
         resolved_presentation_cfg.get("effective", {})
@@ -2513,7 +2539,10 @@ def _generate_pdf(
     prepare_pdf_results_sec23_sorting(results)
 
     safe_name = dept_name.replace(" ", "_").replace("'", "")
-    pdf_path = out_dir / f"{export_prefix}_{safe_name}.pdf"
+    pdf_path = apply_diffusion_pdf_suffix(
+        out_dir / f"{export_prefix}_{safe_name}.pdf",
+        diffusion,
+    )
     tables_layout = resolve_tables_layout(presentation_cfg)
     builder = PDFReportBuilder(
         pdf_path=pdf_path,
@@ -2632,6 +2661,7 @@ def _generate_pdf(
         builder,
         period_sentence=f"Pour ce bilan, les extractions portent sur la période {period_str}.",
         effective_cfg=presentation_cfg,
+        diffusion=diffusion,
     )
 
     # ── CHIFFRES CLÉS ──
@@ -2673,6 +2703,12 @@ def _generate_pdf(
 
     # 2. Contrôles (chapitre)
     builder.add_section("sec2", section_title["sec2"])
+    if is_block_enabled(presentation_cfg, "sec2.show_intro_text", True):
+        builder.add_paragraph(
+            "Les données de cette partie concernent uniquement l'activité de contrôle "
+            "au titre de la police administrative. Pour les données exhaustives relatives "
+            "à l'activité de police judiciaire, se référer à la partie 3. Procédures."
+        )
 
     # ── ANALYSE DE L'ENSEMBLE DE LA PÉRIODE DU BILAN / RÉSULTATS ──
     agg_annuelle = results.get("agg_annuelle")
@@ -2740,7 +2776,9 @@ def _generate_pdf(
                     tbl,
                     caption=(
                         f"Indicateurs {cap_vent} "
-                        f"({PDF_LABEL_CTRL_LOCATIONS_SHORT} ; PEJ, PA, PVe : nombre de procédures)"
+                        f"({PDF_LABEL_CTRL_LOCATIONS_SHORT} ; "
+                        f"PEJ et PA : procédures ouvertes suite à un contrôle ; "
+                        f"PVe : nombre de procédures)"
                     ),
                     col_widths=[
                         avail_w * 0.12,
@@ -2821,53 +2859,75 @@ def _generate_pdf(
         elif show_placeholder:
             builder.add_paragraph("Aucun indicateur disponible sur la période pour la ventilation retenue.")
 
-    def _render_proc_usager_domaine_theme() -> None:
-        """Procédures PEJ / PA / PVe par domaine et thème (chapitre 3, usager ciblé)."""
-        proc_ud = results.get("proc_par_usager_domaine")
-        if proc_ud is not None and not proc_ud.empty:
-            max_lignes_domaine = 15
-            df_all = proc_ud.copy()
-            df_proc = df_all.head(max_lignes_domaine).copy()
-            cap_proc = pdf_metric_caption(
-                "Procédures par type d'usager et par domaine", "proc"
-            )
-            if is_single_usager and "type_usager" in df_proc.columns and df_proc["type_usager"].nunique() == 1:
-                df_proc = df_proc.drop(columns=["type_usager"])
-                cap_proc = pdf_metric_caption("Procédures par domaine", "proc")
-            if len(df_all) > len(df_proc):
-                cap_proc = f"{cap_proc} (top {len(df_proc)})"
-            cols = [c for c in ["domaine", "nb_pej", "nb_pa", "nb_pve"] if c in df_proc.columns]
-            if cols:
-                tbl = [[pdf_column_label(c) for c in cols]]
-                for _, row in df_proc.iterrows():
-                    tbl.append([
-                        str(int(row[c])) if c in ("nb_pej", "nb_pa", "nb_pve") else str(row.get(c, ""))
-                        for c in cols
-                    ])
-                builder.add_table(tbl, caption=cap_proc, keep_together=True)
+    def _proc_domaine_theme_table_specs(
+        metric_cols: tuple[str, ...],
+        *,
+        caption_domaine: str,
+        caption_theme: str,
+        max_lignes: int = 15,
+    ) -> list[dict]:
+        """Spécifications tableaux procédures par domaine / thème (pour PDF ou regroupement bandeau)."""
+        metric_cols = tuple(c for c in metric_cols if c in ("nb_pej", "nb_pa", "nb_pve"))
+        tables: list[dict] = []
 
-        proc_ut = results.get("proc_par_usager_theme")
-        if proc_ut is not None and not proc_ut.empty:
-            max_lignes_theme = 15
-            df_all = proc_ut.copy()
-            df_proc = df_all.head(max_lignes_theme).copy()
-            cap_proc = pdf_metric_caption(
-                "Procédures par type d'usager et par thème", "proc"
-            )
+        def _append_spec(df_src: pd.DataFrame | None, dim_col: str, caption: str) -> None:
+            if df_src is None or df_src.empty or dim_col not in df_src.columns:
+                return
+            present_metrics = [c for c in metric_cols if c in df_src.columns]
+            if not present_metrics:
+                return
+            if int(df_src[present_metrics].fillna(0).sum().sum()) <= 0:
+                return
+            df_all = df_src.copy()
+            df_proc = df_all.head(max_lignes).copy()
+            cap = caption
             if is_single_usager and "type_usager" in df_proc.columns and df_proc["type_usager"].nunique() == 1:
                 df_proc = df_proc.drop(columns=["type_usager"])
-                cap_proc = pdf_metric_caption("Procédures par thème", "proc")
+            elif "type_usager" in df_proc.columns:
+                cap = pdf_metric_caption(
+                    f"Procédures par type d'usager et par {dim_col}", "proc"
+                )
             if len(df_all) > len(df_proc):
-                cap_proc = f"{cap_proc} (top {len(df_proc)})"
-            cols = [c for c in ["theme", "nb_pej", "nb_pa", "nb_pve"] if c in df_proc.columns]
-            if cols:
-                tbl = [[pdf_column_label(c) for c in cols]]
-                for _, row in df_proc.iterrows():
-                    tbl.append([
-                        str(int(row[c])) if c in ("nb_pej", "nb_pa", "nb_pve") else str(row.get(c, ""))
-                        for c in cols
-                    ])
-                builder.add_table(tbl, caption=cap_proc, keep_together=True)
+                cap = f"{cap} (top {len(df_proc)})"
+            cols = [dim_col, *present_metrics]
+            tbl = [[pdf_column_label(c) for c in cols]]
+            for _, row in df_proc.iterrows():
+                tbl.append([
+                    str(int(row[c])) if c in present_metrics else str(row.get(c, ""))
+                    for c in cols
+                ])
+            col_aligns = ["LEFT"] + ["RIGHT"] * len(present_metrics)
+            tables.append({
+                "data_rows": tbl,
+                "caption": cap,
+                "col_widths": None,
+                "col_aligns": col_aligns,
+            })
+
+        _append_spec(results.get("proc_par_usager_domaine"), "domaine", caption_domaine)
+        _append_spec(results.get("proc_par_usager_theme"), "theme", caption_theme)
+        return tables
+
+    def _render_proc_par_domaine_theme(
+        metric_cols: tuple[str, ...],
+        *,
+        caption_domaine: str,
+        caption_theme: str,
+        max_lignes: int = 15,
+    ) -> None:
+        """Tableaux procédures par domaine / thème (colonnes nb_pej, nb_pa, etc.)."""
+        for spec in _proc_domaine_theme_table_specs(
+            metric_cols,
+            caption_domaine=caption_domaine,
+            caption_theme=caption_theme,
+            max_lignes=max_lignes,
+        ):
+            builder.add_table(
+                spec["data_rows"],
+                caption=spec.get("caption", ""),
+                col_aligns=spec.get("col_aligns"),
+                keep_together=True,
+            )
 
     def _render_type_usager_sec22_content() -> None:
         """Section 2.2 : contrôles et résultats pour le(s) type(s) d'usager ciblé(s)."""
@@ -3105,9 +3165,6 @@ def _generate_pdf(
     # 3. Procédures (chapitre)
     builder.add_section("sec3", section_title["sec3"], start_on_new_page=True)
 
-    if is_type_usager and nb_ctrl > 0:
-        _render_proc_usager_domaine_theme()
-
     def _render_sec31() -> None:
         builder.add_section("sec31", section_title["sec31"], compact=True, toc_level=1)
         if nb_pve > 0:
@@ -3192,7 +3249,12 @@ def _generate_pdf(
                         str(r.get("nature_infraction", "")),
                         str(int(r.get("nb", 0))),
                     ])
-                builder.add_table(tbl_nat, caption="Analyse des NATINF relevées (PVe)")
+                builder.add_table(
+                    tbl_nat,
+                    caption="Analyse des NATINF relevées (PVe)",
+                    keep_together=True,
+                    max_rows_keep_together=25,
+                )
             zone_pve = results.get("zone_pve")
             if is_block_enabled(presentation_cfg, "sec31.show_zone_table", True) and zone_pve is not None:
                 tbl = [["Zone", "Nombre"]]
@@ -3358,21 +3420,6 @@ def _generate_pdf(
                 caption=pdf_metric_caption("Détail des PEJ", "proc"),
                 col_aligns=["LEFT"] * len(hdr_pej),
             )
-        pej_nat = results.get("pej_natinf_analysis")
-        if (
-            is_block_enabled(presentation_cfg, "sec32.show_natinf_analysis", True)
-            and isinstance(pej_nat, pd.DataFrame)
-            and not pej_nat.empty
-        ):
-            tbl_nat = [["Thématique", "Libellé NATINF", "Nature d'infraction", "Nombre"]]
-            for _, r in pej_nat.head(20).iterrows():
-                tbl_nat.append([
-                    str(r.get("thematique", "")),
-                    str(r.get("libelle_natinf", "")),
-                    str(r.get("nature_infraction", "")),
-                    str(int(r.get("nb", 0))),
-                ])
-            builder.add_table(tbl_nat, caption="Analyse des NATINF relevées (PEJ)")
         zone_pej = results.get("zone_pej")
         if is_block_enabled(presentation_cfg, "sec32.show_zone_table", True) and zone_pej is not None:
             tbl_z = [["Zone", "Nombre"]]
@@ -3402,11 +3449,86 @@ def _generate_pdf(
                 caption=pdf_metric_caption("PEJ par suite donnée", "proc"),
                               col_widths=[avail_w * 0.6, avail_w * 0.4],
                               col_aligns=["LEFT", "RIGHT"])
+        if is_type_usager and nb_ctrl > 0:
+            _render_proc_par_domaine_theme(
+                ("nb_pej",),
+                caption_domaine=pdf_metric_caption("Procédures par domaine", "proc"),
+                caption_theme=pdf_metric_caption("Procédures par thème", "proc"),
+            )
+        pej_nat = results.get("pej_natinf_analysis")
+        if (
+            is_block_enabled(presentation_cfg, "sec32.show_natinf_analysis", True)
+            and isinstance(pej_nat, pd.DataFrame)
+            and not pej_nat.empty
+        ):
+            tbl_nat = [["Thématique", "Libellé NATINF", "Nature d'infraction", "Nombre"]]
+            for _, r in pej_nat.head(20).iterrows():
+                tbl_nat.append([
+                    str(r.get("thematique", "")),
+                    str(r.get("libelle_natinf", "")),
+                    str(r.get("nature_infraction", "")),
+                    str(int(r.get("nb", 0))),
+                ])
+            builder.add_table(
+                tbl_nat,
+                caption="Analyse des NATINF relevées (PEJ)",
+                keep_together=True,
+                max_rows_keep_together=25,
+            )
 
     def _render_sec33() -> None:
         builder.add_section("sec33", section_title["sec33"], toc_level=1)
-        if is_block_enabled(presentation_cfg, "sec33.show_key_figures", True):
+        if nb_pa <= 0:
+            if show_placeholder:
+                builder.add_paragraph("Aucune procédure administrative sur la période.")
+            return
+        cap_dom = pdf_metric_caption("Procédures par domaine", "proc")
+        cap_theme = pdf_metric_caption("Procédures par thème", "proc")
+        proc_tables: list[dict] = []
+        if is_type_usager and nb_ctrl > 0:
+            proc_tables = _proc_domaine_theme_table_specs(
+                ("nb_pa",),
+                caption_domaine=cap_dom,
+                caption_theme=cap_theme,
+            )
+        else:
+            pa_theme = results.get("pa_par_theme")
+            if (
+                pa_theme is not None
+                and not pa_theme.empty
+                and is_block_enabled(presentation_cfg, "sec33.show_theme_table", True)
+            ):
+                df = pa_theme.head(10).copy()
+                tbl = [list(df.columns)]
+                for _, row in df.iterrows():
+                    tbl.append([str(v) for v in row.values])
+                col_aligns = ["LEFT"] * len(df.columns)
+                if "nb_pa" in df.columns:
+                    idx = list(df.columns).index("nb_pa")
+                    col_aligns[idx] = "RIGHT"
+                proc_tables.append({
+                    "data_rows": tbl,
+                    "caption": pdf_metric_caption("PA par thème", "proc"),
+                    "col_widths": None,
+                    "col_aligns": col_aligns,
+                })
+        show_kf = is_block_enabled(presentation_cfg, "sec33.show_key_figures", True)
+        if show_kf and proc_tables:
+            builder.add_key_figures_and_tables(
+                [(str(nb_pa), "PA")],
+                proc_tables,
+                compact=True,
+            )
+        elif show_kf:
             builder.add_key_figures([(str(nb_pa), "PA")])
+        elif proc_tables:
+            for spec in proc_tables:
+                builder.add_table(
+                    spec["data_rows"],
+                    caption=spec.get("caption", ""),
+                    col_aligns=spec.get("col_aligns"),
+                    keep_together=True,
+                )
         pa_detail = results.get("pa_detail")
         if (
             is_block_enabled(presentation_cfg, "sec33.show_detail_table", True)
@@ -3432,8 +3554,6 @@ def _generate_pdf(
                 caption=pdf_metric_caption("Détail des PA", "proc"),
                 col_aligns=["LEFT"] * len(hdr_pa),
             )
-        elif show_placeholder:
-            builder.add_paragraph("Aucune procédure administrative sur la période.")
 
     sec3_registry = SectionRegistry()
     sec3_registry.register("sec31", lambda _ctx: _render_sec31())

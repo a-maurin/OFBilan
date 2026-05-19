@@ -446,6 +446,97 @@ def agg_resultat_counts_par_type_usager(
     return pd.DataFrame(rows)
 
 
+def is_filled_procedure_code(value: Any) -> bool:
+    """Vrai si la valeur est un code de procédure renseigné (hors NaN / vide / « nan »)."""
+    if value is None:
+        return False
+    if isinstance(value, float) and pd.isna(value):
+        return False
+    if pd.isna(value):
+        return False
+    s = str(value).strip()
+    if not s:
+        return False
+    if s.lower() in ("nan", "none", "<na>", "nat"):
+        return False
+    return True
+
+
+def resultat_induit_pa(value: Any) -> bool:
+    """True si le libellé de résultat implique une PA (contient « manquement »)."""
+    s = str(value or "").strip().lower()
+    if not s or s in ("nan", "none", "<na>"):
+        return False
+    return "manquement" in s
+
+
+def mask_resultat_induit_pa(resultat: pd.Series) -> pd.Series:
+    """Masque booléen : une PA est induite pour chaque résultat contenant « manquement »."""
+    return resultat.map(resultat_induit_pa)
+
+
+def filter_points_induisant_pa(point: pd.DataFrame) -> pd.DataFrame:
+    """Contrôles dont le résultat induit une procédure administrative."""
+    if point is None or point.empty or "resultat" not in point.columns:
+        return point.iloc[0:0].copy() if point is not None and not point.empty else pd.DataFrame()
+    return point.loc[mask_resultat_induit_pa(point["resultat"])].copy()
+
+
+def count_pa_induites_par_controles(
+    point: pd.DataFrame,
+    *,
+    mask: pd.Series | None = None,
+) -> int:
+    """Nombre de PA = contrôles dont le résultat contient « manquement »."""
+    if point is None or point.empty or "resultat" not in point.columns:
+        return 0
+    sub = point.loc[mask] if mask is not None else point
+    if sub.empty:
+        return 0
+    return int(mask_resultat_induit_pa(sub["resultat"]).sum())
+
+
+def points_as_pa_lignes(point: pd.DataFrame) -> pd.DataFrame:
+    """
+    Convertit les contrôles à manquement en lignes « procédure PA »
+    (domaine / thème / type d'usager) pour les agrégations chapitre Procédures.
+    """
+    sub = filter_points_induisant_pa(point)
+    cols = ["DOMAINE", "THEME", "type_usager", "DC_ID", "DATE_REF"]
+    if sub.empty:
+        return pd.DataFrame(columns=cols)
+
+    out = pd.DataFrame(index=sub.index)
+    if "domaine" in sub.columns:
+        out["DOMAINE"] = sub["domaine"].fillna("Hors domaine").astype(str)
+    elif "DOMAINE" in sub.columns:
+        out["DOMAINE"] = sub["DOMAINE"].fillna("Hors domaine").astype(str)
+    else:
+        out["DOMAINE"] = "Hors domaine"
+
+    if "theme" in sub.columns:
+        out["THEME"] = sub["theme"].fillna("Hors thème").astype(str)
+    elif "THEME" in sub.columns:
+        out["THEME"] = sub["THEME"].fillna("Hors thème").astype(str)
+    else:
+        out["THEME"] = "Hors thème"
+
+    if "type_usager" in sub.columns:
+        out["type_usager"] = sub["type_usager"]
+
+    if "dc_id" in sub.columns:
+        out["DC_ID"] = sub["dc_id"]
+    elif "DC_ID" in sub.columns:
+        out["DC_ID"] = sub["DC_ID"]
+
+    if "date_ctrl" in sub.columns:
+        out["DATE_REF"] = sub["date_ctrl"]
+    elif "DATE_REF" in sub.columns:
+        out["DATE_REF"] = sub["DATE_REF"]
+
+    return out.loc[:, [c for c in cols if c in out.columns]].reset_index(drop=True)
+
+
 def agg_procedures_par_type_usager_domaine(
     df: pd.DataFrame,
     col_domaine: str = "domaine",
@@ -458,7 +549,7 @@ def agg_procedures_par_type_usager_domaine(
     Procédures (PEJ / PA / PVe) par type d'usager × domaine.
 
     - PEJ : une procédure est comptée si col_code_pej est non vide pour le point.
-    - PA : idem pour col_code_pa.
+    - PA : contrôle dont le résultat contient « manquement » (ou col_code_pa si pas de résultat).
     - PVe : sans lien explicite PVe dans point_ctrl, nb_pve reste à 0.
     """
     if source_champ not in df.columns:
@@ -467,10 +558,14 @@ def agg_procedures_par_type_usager_domaine(
         )
 
     counts: dict[tuple[str, str], dict[str, int]] = {}
+    use_resultat_pa = "resultat" in df.columns
     for _, row in df.iterrows():
         dom = str(row.get(col_domaine, "Hors domaine") or "Hors domaine")
-        has_pej = bool(str(row.get(col_code_pej, "") or "").strip())
-        has_pa = bool(str(row.get(col_code_pa, "") or "").strip())
+        has_pej = is_filled_procedure_code(row.get(col_code_pej))
+        if use_resultat_pa:
+            has_pa = resultat_induit_pa(row.get("resultat"))
+        else:
+            has_pa = is_filled_procedure_code(row.get(col_code_pa))
         has_pve = False  # nécessite les données PVe jointes ; 0 par défaut
 
         toks = _parse_type_usager_tokens(row.get(source_champ))
@@ -530,10 +625,14 @@ def agg_procedures_par_type_usager_theme(
         )
 
     counts: dict[tuple[str, str], dict[str, int]] = {}
+    use_resultat_pa = "resultat" in df.columns
     for _, row in df.iterrows():
         theme = str(row.get(col_theme, "Hors thème") or "Hors thème")
-        has_pej = bool(str(row.get(col_code_pej, "") or "").strip())
-        has_pa = bool(str(row.get(col_code_pa, "") or "").strip())
+        has_pej = is_filled_procedure_code(row.get(col_code_pej))
+        if use_resultat_pa:
+            has_pa = resultat_induit_pa(row.get("resultat"))
+        else:
+            has_pa = is_filled_procedure_code(row.get(col_code_pa))
         has_pve = False
 
         toks = _parse_type_usager_tokens(row.get(source_champ))
@@ -573,6 +672,177 @@ def agg_procedures_par_type_usager_theme(
                 "nb_pve": int(d["nb_pve"]),
             }
         )
+    return pd.DataFrame(rows)
+
+
+def count_procedures_liees_controle_sur_points(
+    point: pd.DataFrame,
+    *,
+    mask: pd.Series | None = None,
+) -> tuple[int, int]:
+    """
+    Compte les procédures liées aux contrôles sur la période.
+
+    - PEJ : champ ``code_pej`` renseigné sur le point.
+    - PA : contrôle dont le résultat contient « manquement » (insensible à la casse).
+    """
+    if point is None or point.empty:
+        return 0, 0
+    sub = point.loc[mask] if mask is not None else point
+    if sub.empty:
+        return 0, 0
+    nb_pej = 0
+    if "code_pej" in sub.columns:
+        nb_pej = int(sub["code_pej"].map(is_filled_procedure_code).sum())
+    nb_pa = count_pa_induites_par_controles(sub)
+    return nb_pej, nb_pa
+
+
+def _col_domaine_procedure(df: pd.DataFrame) -> str | None:
+    for name in ("DOMAINE", "domaine"):
+        if name in df.columns:
+            return name
+    return None
+
+
+def _col_theme_procedure(df: pd.DataFrame) -> str | None:
+    for name in ("THEME", "theme"):
+        if name in df.columns:
+            return name
+    return None
+
+
+def _iter_type_usager_domaine_keys(
+    row: pd.Series,
+    dim_value: str,
+    *,
+    with_type_usager: bool,
+    source_table: str,
+    source_champ: str,
+) -> list[tuple[str | None, str]]:
+    if with_type_usager and source_champ in row.index:
+        toks = _parse_type_usager_tokens(row.get(source_champ))
+        if not toks:
+            cats = ["Autre"]
+        else:
+            cats = list(
+                {map_type_usager(source_table, source_champ, lab) for lab, _ in toks}
+            )
+        return [(cat, dim_value) for cat in cats]
+    return [(None, dim_value)]
+
+
+def agg_procedures_dossiers_par_domaine(
+    pej: pd.DataFrame,
+    pa: pd.DataFrame,
+    *,
+    with_type_usager: bool = False,
+    source_table: str = "pej",
+    source_champ: str = "type_usager",
+) -> pd.DataFrame:
+    """
+    Toutes les procédures (dossiers PEJ / PA), y compris saisines hors contrôle PA.
+
+    À utiliser pour le chapitre « Procédures » (tableaux par domaine).
+    """
+    counts: dict[tuple[str | None, str], dict[str, int]] = {}
+
+    def _add_rows(df: pd.DataFrame, field: str) -> None:
+        if df is None or df.empty:
+            return
+        dom_col = _col_domaine_procedure(df)
+        if dom_col is None:
+            return
+        for _, row in df.iterrows():
+            dom = str(row.get(dom_col) or "Hors domaine")
+            for key in _iter_type_usager_domaine_keys(
+                row,
+                dom,
+                with_type_usager=with_type_usager,
+                source_table=source_table,
+                source_champ=source_champ,
+            ):
+                bucket = counts.setdefault(key, {"nb_pej": 0, "nb_pa": 0, "nb_pve": 0})
+                bucket[field] += 1
+
+    _add_rows(pej, "nb_pej")
+    _add_rows(pa, "nb_pa")
+
+    if not counts:
+        cols = (
+            ["type_usager", "domaine", "nb_pej", "nb_pa", "nb_pve"]
+            if with_type_usager
+            else ["domaine", "nb_pej", "nb_pa", "nb_pve"]
+        )
+        return pd.DataFrame(columns=cols)
+
+    rows: list[dict[str, object]] = []
+    for (cat, dom), d in sorted(counts.items(), key=lambda x: (-(x[1]["nb_pej"] + x[1]["nb_pa"]), x[0][1])):
+        row: dict[str, object] = {
+            "domaine": dom,
+            "nb_pej": int(d["nb_pej"]),
+            "nb_pa": int(d["nb_pa"]),
+            "nb_pve": int(d["nb_pve"]),
+        }
+        if cat is not None:
+            row = {"type_usager": cat, **row}
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def agg_procedures_dossiers_par_theme(
+    pej: pd.DataFrame,
+    pa: pd.DataFrame,
+    *,
+    with_type_usager: bool = False,
+    source_table: str = "pej",
+    source_champ: str = "type_usager",
+) -> pd.DataFrame:
+    """Toutes les procédures (dossiers PEJ / PA) par thème."""
+    counts: dict[tuple[str | None, str], dict[str, int]] = {}
+
+    def _add_rows(df: pd.DataFrame, field: str) -> None:
+        if df is None or df.empty:
+            return
+        th_col = _col_theme_procedure(df)
+        if th_col is None:
+            return
+        for _, row in df.iterrows():
+            theme = str(row.get(th_col) or "Hors thème")
+            for key in _iter_type_usager_domaine_keys(
+                row,
+                theme,
+                with_type_usager=with_type_usager,
+                source_table=source_table,
+                source_champ=source_champ,
+            ):
+                bucket = counts.setdefault(key, {"nb_pej": 0, "nb_pa": 0, "nb_pve": 0})
+                bucket[field] += 1
+
+    _add_rows(pej, "nb_pej")
+    _add_rows(pa, "nb_pa")
+
+    if not counts:
+        cols = (
+            ["type_usager", "theme", "nb_pej", "nb_pa", "nb_pve"]
+            if with_type_usager
+            else ["theme", "nb_pej", "nb_pa", "nb_pve"]
+        )
+        return pd.DataFrame(columns=cols)
+
+    rows: list[dict[str, object]] = []
+    for (cat, theme), d in sorted(
+        counts.items(), key=lambda x: (-(x[1]["nb_pej"] + x[1]["nb_pa"]), x[0][1])
+    ):
+        row: dict[str, object] = {
+            "theme": theme,
+            "nb_pej": int(d["nb_pej"]),
+            "nb_pa": int(d["nb_pa"]),
+            "nb_pve": int(d["nb_pve"]),
+        }
+        if cat is not None:
+            row = {"type_usager": cat, **row}
+        rows.append(row)
     return pd.DataFrame(rows)
 
 
@@ -652,6 +922,31 @@ def classify_resultat_controle(value: Any) -> str:
 def classify_resultat_controle_series(resultat: pd.Series) -> pd.Series:
     """Applique :func:`classify_resultat_controle` ligne à ligne."""
     return resultat.map(classify_resultat_controle)
+
+
+def build_tab_resultats(point: pd.DataFrame) -> pd.DataFrame:
+    """
+    Tableau synthétique exporté (resultat, nb, taux) avec catégories normalisées.
+
+    Aligné sur :func:`classify_resultat_controle` (inclut « En attente »).
+    """
+    nb_total = len(point)
+    if nb_total == 0 or "resultat" not in point.columns:
+        return pd.DataFrame(columns=["resultat", "nb", "taux"])
+
+    r_norm = classify_resultat_controle_series(point["resultat"])
+    rows: list[dict[str, object]] = []
+    for label in ("Conforme", "Manquement", "Infraction", "En attente"):
+        nb = int((r_norm == label).sum())
+        if nb > 0:
+            rows.append(
+                {
+                    "resultat": label,
+                    "nb": nb,
+                    "taux": nb / float(nb_total),
+                }
+            )
+    return pd.DataFrame(rows)
 
 
 def build_tab_resultats_controles(

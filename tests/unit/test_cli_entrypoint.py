@@ -42,7 +42,14 @@ def test_bilans_cli_interactive_profile_prompt(monkeypatch) -> None:
     monkeypatch.setattr("bilans.engine.catalogue_profils.resolve_profile_ids", _fake_resolve)
     monkeypatch.setattr("bilans.engine.execution_lots_profils.run_profiles_batch", _fake_run_batch)
     assert cli.main() == 0
-    assert captured["args"] == (["chasse"], "2025-01-01", "2025-12-31", "21", False, None)
+    assert captured["args"] == (
+        ["chasse"],
+        "2025-01-01",
+        "2025-12-31",
+        "21",
+        False,
+        {"diffusion": "interne"},
+    )
 
 
 def test_bilans_cli_delegates_profile_compatibility_to_engine(monkeypatch) -> None:

@@ -67,8 +67,27 @@ PAGE_W, PAGE_H = A4
 # Marges latérales (moitié de l’ancien 17 mm) : zone utile du PDF plus large.
 MARGIN_LEFT = 8.5 * mm
 MARGIN_RIGHT = 8.5 * mm
-MARGIN_TOP = 22 * mm
 MARGIN_BOTTOM = 28 * mm
+# Marge haute par défaut (recalculée dans PDFReportBuilder selon le nombre de lignes d'en-tête).
+MARGIN_TOP = 17 * mm
+
+_HEADER_LINE_STEP = 3.2 * mm
+_HEADER_GAP_RULE = 2.5 * mm
+_HEADER_GAP_CONTENT = 4.5 * mm
+
+
+def header_layout_metrics(n_header_lines: int) -> tuple[float, float]:
+    """
+    Retourne (rule_y_from_top, margin_top) en points ReportLab.
+
+    Le trait d'en-tête est placé sous le bloc de texte ; le contenu commence
+    juste en dessous du trait (marge haute minimale).
+    """
+    n = max(1, min(int(n_header_lines), 3))
+    text_block_h = n * _HEADER_LINE_STEP
+    rule_from_top = text_block_h + _HEADER_GAP_RULE
+    margin_top = rule_from_top + _HEADER_GAP_CONTENT
+    return rule_from_top, margin_top
 
 
 ASCII_LOGO_OFB = r"""
@@ -278,8 +297,8 @@ def _get_styles():
             leading=24,
             textColor=rl_colors.HexColor(COLOR_PRIMARY),
             alignment=TA_LEFT,
-            spaceBefore=10 * mm,
-            spaceAfter=4 * mm,
+            spaceBefore=2 * mm,
+            spaceAfter=2 * mm,
             keepWithNext=1,
         ),
         "Heading2": ParagraphStyle(
@@ -290,8 +309,8 @@ def _get_styles():
             leading=18,
             textColor=rl_colors.HexColor(COLOR_PRIMARY),
             alignment=TA_LEFT,
-            spaceBefore=6 * mm,
-            spaceAfter=3 * mm,
+            spaceBefore=2 * mm,
+            spaceAfter=2 * mm,
             keepWithNext=1,
         ),
         "Heading3": ParagraphStyle(
@@ -302,8 +321,8 @@ def _get_styles():
             leading=15,
             textColor=rl_colors.HexColor(COLOR_GREY),
             alignment=TA_LEFT,
-            spaceBefore=4 * mm,
-            spaceAfter=2 * mm,
+            spaceBefore=1 * mm,
+            spaceAfter=1 * mm,
             keepWithNext=1,
         ),
         "BodyText": ParagraphStyle(

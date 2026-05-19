@@ -10,9 +10,13 @@ from bilans.common.utilitaires_metier import (
     agg_effectifs_usagers,
     agg_effectifs_usagers_par_domaine,
     agg_resultat_counts_par_type_usager,
+    build_tab_resultats,
     build_tab_resultats_controles,
     classify_resultat_controle_series,
     count_controles_non_conformes_oscean,
+    count_pa_induites_par_controles,
+    filter_points_induisant_pa,
+    points_as_pa_lignes,
 )
 
 _ROOT = Path(__file__).resolve().parents[3]
@@ -70,14 +74,7 @@ def analyse_controles_global(point: pd.DataFrame, out_dir: Path) -> Tuple[pd.Dat
 
     col_resultat = "resultat" if "resultat" in pt.columns else None
     if col_resultat:
-        tab_resultats = (
-            pt[col_resultat]
-            .value_counts()
-            .rename_axis("resultat")
-            .to_frame("nb")
-            .reset_index()
-        )
-        tab_resultats["taux"] = tab_resultats["nb"] / float(nb_total or 1)
+        tab_resultats = build_tab_resultats(pt)
         tab_resultats.to_csv(out_dir / "controles_global_resultats.csv", sep=";", index=False)
         res_ctrl = _tab_resultats_controles_detail(pt)
         res_ctrl.to_csv(out_dir / "controles_global_resultats_controles.csv", sep=";", index=False)
@@ -241,13 +238,10 @@ def analyse_pej_pa_global(
 
     pd.DataFrame([{"nb_pej_global": len(pej_dept)}]).to_csv(out_dir / "pej_global_resume.csv", sep=";", index=False)
 
-    pa_mask = pa["DC_ID"].isin(dc_ids)
-    if "ENTITE_ORIGINE_PROCEDURE" in pa.columns:
-        pa_mask = pa_mask | (pa["ENTITE_ORIGINE_PROCEDURE"].astype(str).str.strip() == f"SD{dept_code}")
-    pa_dept = pa[pa_mask].copy()
+    pa_lignes = points_as_pa_lignes(point)
 
     pa_par_domaine = (
-        pa_dept.groupby(_col_or_fallback(pa_dept, "DOMAINE", "Hors domaine"))
+        pa_lignes.groupby(_col_or_fallback(pa_lignes, "DOMAINE", "Hors domaine"))
         .size()
         .rename("nb_pa")
         .reset_index()
@@ -256,7 +250,7 @@ def analyse_pej_pa_global(
     pa_par_domaine.to_csv(out_dir / "pa_global_par_domaine.csv", sep=";", index=False)
 
     pa_par_theme = (
-        pa_dept.groupby(_col_or_fallback(pa_dept, "THEME", "Hors theme"))
+        pa_lignes.groupby(_col_or_fallback(pa_lignes, "THEME", "Hors theme"))
         .size()
         .rename("nb_pa")
         .reset_index()
@@ -264,7 +258,7 @@ def analyse_pej_pa_global(
     pa_par_theme.columns = ["theme", "nb_pa"]
     pa_par_theme.to_csv(out_dir / "pa_global_par_theme.csv", sep=";", index=False)
 
-    nb_pa = pa_dept["DC_ID"].nunique() if "DC_ID" in pa_dept.columns else len(pa_dept)
+    nb_pa = count_pa_induites_par_controles(point)
     pd.DataFrame([{"nb_pa_global": nb_pa}]).to_csv(out_dir / "pa_global_resume.csv", sep=";", index=False)
 
 
@@ -301,8 +295,9 @@ def analyse_annuelle_global(
         years |= set(point["date_ctrl"].dropna().dt.year.astype(int).tolist())
     if not pej.empty and "DATE_REF" in pej.columns:
         years |= set(pej["DATE_REF"].dropna().dt.year.astype(int).tolist())
-    if not pa.empty and "DATE_REF" in pa.columns:
-        years |= set(pa["DATE_REF"].dropna().dt.year.astype(int).tolist())
+    pa_pts = filter_points_induisant_pa(point)
+    if not pa_pts.empty and "date_ctrl" in pa_pts.columns:
+        years |= set(pa_pts["date_ctrl"].dropna().dt.year.astype(int).tolist())
     if not pve.empty and "INF-DATE-INTG" in pve.columns:
         years |= set(pve["INF-DATE-INTG"].dropna().dt.year.astype(int).tolist())
 
@@ -325,11 +320,11 @@ def analyse_annuelle_global(
             if not pej.empty and "DATE_REF" in pej.columns
             else 0
         )
-        nb_pa = (
-            int((pa["DATE_REF"].dt.year == year).sum())
-            if not pa.empty and "DATE_REF" in pa.columns
-            else 0
-        )
+        nb_pa = 0
+        if not point.empty and "date_ctrl" in point.columns and "resultat" in point.columns:
+            dt = point["date_ctrl"]
+            mask = dt.dt.year == year
+            nb_pa = count_pa_induites_par_controles(point, mask=mask)
         nb_pve = (
             int((pve["INF-DATE-INTG"].dt.year == year).sum())
             if not pve.empty and "INF-DATE-INTG" in pve.columns
@@ -374,8 +369,9 @@ def analyse_trimestrielle_global(
             if hasattr(t, "year") and hasattr(t, "month"):
                 q = (t.month - 1) // 3 + 1
                 periods.add((int(t.year), q))
-    if not pa.empty and "DATE_REF" in pa.columns:
-        for _, r in pa["DATE_REF"].dropna().items():
+    pa_pts = filter_points_induisant_pa(point)
+    if not pa_pts.empty and "date_ctrl" in pa_pts.columns:
+        for _, r in pa_pts["date_ctrl"].dropna().items():
             t = r
             if hasattr(t, "year") and hasattr(t, "month"):
                 q = (t.month - 1) // 3 + 1
@@ -408,10 +404,10 @@ def analyse_trimestrielle_global(
             mask = (dt.dt.year == year) & (dt.dt.month >= m1) & (dt.dt.month <= m2)
             nb_pej = int(mask.sum())
         nb_pa = 0
-        if not pa.empty and "DATE_REF" in pa.columns:
-            dt = pa["DATE_REF"]
+        if not point.empty and "date_ctrl" in point.columns and "resultat" in point.columns:
+            dt = point["date_ctrl"]
             mask = (dt.dt.year == year) & (dt.dt.month >= m1) & (dt.dt.month <= m2)
-            nb_pa = int(mask.sum())
+            nb_pa = count_pa_induites_par_controles(point, mask=mask)
         nb_pve = 0
         if not pve.empty and "INF-DATE-INTG" in pve.columns:
             dt = pve["INF-DATE-INTG"]
@@ -455,8 +451,9 @@ def analyse_mensuelle_global(
             t = r
             if hasattr(t, "year") and hasattr(t, "month"):
                 periods.add((int(t.year), int(t.month)))
-    if not pa.empty and "DATE_REF" in pa.columns:
-        for _, r in pa["DATE_REF"].dropna().items():
+    pa_pts = filter_points_induisant_pa(point)
+    if not pa_pts.empty and "date_ctrl" in pa_pts.columns:
+        for _, r in pa_pts["date_ctrl"].dropna().items():
             t = r
             if hasattr(t, "year") and hasattr(t, "month"):
                 periods.add((int(t.year), int(t.month)))
@@ -484,10 +481,10 @@ def analyse_mensuelle_global(
             mask = (dt.dt.year == year) & (dt.dt.month == month)
             nb_pej = int(mask.sum())
         nb_pa = 0
-        if not pa.empty and "DATE_REF" in pa.columns:
-            dt = pa["DATE_REF"]
+        if not point.empty and "date_ctrl" in point.columns and "resultat" in point.columns:
+            dt = point["date_ctrl"]
             mask = (dt.dt.year == year) & (dt.dt.month == month)
-            nb_pa = int(mask.sum())
+            nb_pa = count_pa_induites_par_controles(point, mask=mask)
         nb_pve = 0
         if not pve.empty and "INF-DATE-INTG" in pve.columns:
             dt = pve["INF-DATE-INTG"]
@@ -535,7 +532,7 @@ def analyse_hebdomadaire_global(
 
     _collect(point, "date_ctrl")
     _collect(pej, "DATE_REF")
-    _collect(pa, "DATE_REF")
+    _collect(filter_points_induisant_pa(point), "date_ctrl")
     _collect(pve, "INF-DATE-INTG")
 
     rows = []
@@ -555,10 +552,11 @@ def analyse_hebdomadaire_global(
             iso = dt.dt.isocalendar()
             nb_pej = int(((iso["year"] == year) & (iso["week"] == week)).sum())
         nb_pa = 0
-        if not pa.empty and "DATE_REF" in pa.columns:
-            dt = pa["DATE_REF"]
+        if not point.empty and "date_ctrl" in point.columns and "resultat" in point.columns:
+            dt = point["date_ctrl"]
             iso = dt.dt.isocalendar()
-            nb_pa = int(((iso["year"] == year) & (iso["week"] == week)).sum())
+            mask = (iso["year"] == year) & (iso["week"] == week)
+            nb_pa = count_pa_induites_par_controles(point, mask=mask)
         nb_pve = 0
         if not pve.empty and "INF-DATE-INTG" in pve.columns:
             dt = pve["INF-DATE-INTG"]
