@@ -3254,6 +3254,7 @@ def _generate_pdf(
                     caption="Analyse des NATINF relevées (PVe)",
                     keep_together=True,
                     max_rows_keep_together=25,
+                    max_cell_chars_before_split=2000,
                 )
             zone_pve = results.get("zone_pve")
             if is_block_enabled(presentation_cfg, "sec31.show_zone_table", True) and zone_pve is not None:
@@ -3272,76 +3273,13 @@ def _generate_pdf(
         builder.add_section("sec32", section_title["sec32"], compact=True, toc_level=1)
         pej_detail = results.get("pej_detail")
         pej_top = results.get("pej_top_infractions")
-        pej_theme = results.get("pej_par_theme")
         has_infractions = pej_top is not None and not pej_top.empty
-        has_theme = pej_theme is not None and not pej_theme.empty
 
-        if has_infractions and has_theme and is_block_enabled(presentation_cfg, "sec32.show_top_infractions", True):
-            # Bandeau + Infractions les plus relevées + PEJ par thème : espacements compacts
-            # et hauteur de tableaux limitée pour tenir sur une page.
+        if has_infractions and is_block_enabled(presentation_cfg, "sec32.show_top_infractions", True):
+            # Bandeau + infractions relevées (sans tableau « PEJ par thème » : voir procédures par domaine/thème).
             natinf_ref = load_natinf_ref(PROJECT_ROOT)
-            # Si le volume PEJ est faible, afficher toutes les infractions relevées.
             top_cap = len(pej_top) if nb_pej < 10 else 6
             top_df = pej_top.head(top_cap).copy()
-            top_df["numero_natinf"] = top_df["natinf"].astype(str).str.extract(r"(\d+)", expand=False)
-            if not natinf_ref.empty:
-                top_df = top_df.merge(natinf_ref, on="numero_natinf", how="left")
-            def _fmt_natinf_row_pej(r):
-                qualif = str(r.get("qualification_infraction") or "").strip()
-                nature_raw = str(r.get("nature_infraction") or "").strip()
-                nature = nature_raw
-                if nature_raw.lower().startswith("contravention de classe "):
-                    num = nature_raw[len("contravention de classe "):].strip()
-                    nature = f"C{num}" if num else nature_raw
-                if qualif and nature:
-                    return f"{qualif} ({nature})"
-                if qualif:
-                    return qualif
-                if nature:
-                    return nature
-                lib = str(r.get("libelle_natinf") or "").strip()
-                return lib if lib else str(r["natinf"])
-            top_df["libelle_affich"] = top_df.apply(_fmt_natinf_row_pej, axis=1)
-            tbl_infractions = [["Infraction (qualification et nature)", "Nombre"]]
-            for _, row in top_df.iterrows():
-                tbl_infractions.append([str(row["libelle_affich"]), str(int(row["nb"]))])
-            # Limiter le volume pour garantir une section V sur une seule page.
-            df_theme = pej_theme.head(8).copy()
-            if "nb_pej" in df_theme.columns:
-                df_theme = df_theme.rename(columns={"nb_pej": PDF_LABEL_PEJ_COUNT})
-            tbl_theme = [list(df_theme.columns)]
-            for _, row in df_theme.iterrows():
-                tbl_theme.append([str(v) for v in row.values])
-            col_aligns_theme = ["LEFT"] * len(df_theme.columns)
-            if PDF_LABEL_PEJ_COUNT in df_theme.columns:
-                idx = list(df_theme.columns).index(PDF_LABEL_PEJ_COUNT)
-                col_aligns_theme[idx] = "RIGHT"
-            caption_infra_pej = (
-                "Infractions relevées"
-                if nb_pej < 10
-                else "Infractions les plus relevées"
-            )
-            builder.add_key_figures_and_tables(
-                [(str(nb_pej), "PEJ")],
-                [
-                    {
-                        "data_rows": tbl_infractions,
-                        "caption": caption_infra_pej,
-                        "col_widths": [avail_w * 0.75, avail_w * 0.25],
-                        "col_aligns": ["LEFT", "RIGHT"],
-                    },
-                    {
-                        "data_rows": tbl_theme,
-                        "caption": "PEJ par thème",
-                        "col_widths": None,
-                        "col_aligns": col_aligns_theme,
-                    },
-                ],
-                compact=True,
-            )
-        elif has_infractions and is_block_enabled(presentation_cfg, "sec32.show_top_infractions", True):
-            natinf_ref = load_natinf_ref(PROJECT_ROOT)
-            top_df = pej_top.copy()
             top_df["numero_natinf"] = top_df["natinf"].astype(str).str.extract(r"(\d+)", expand=False)
             if not natinf_ref.empty:
                 top_df = top_df.merge(natinf_ref, on="numero_natinf", how="left")
@@ -3375,24 +3313,6 @@ def _generate_pdf(
                 caption=caption_infra_pej,
                 col_widths=[avail_w * 0.75, avail_w * 0.25],
                 col_aligns=["LEFT", "RIGHT"],
-            )
-        elif has_theme and is_block_enabled(presentation_cfg, "sec32.show_theme_table", True):
-            builder.add_key_figures([(str(nb_pej), "PEJ")])
-            df = pej_theme.head(10).copy()
-            if "nb_pej" in df.columns:
-                df = df.rename(columns={"nb_pej": PDF_LABEL_PEJ_COUNT})
-            tbl = [list(df.columns)]
-            for _, row in df.iterrows():
-                tbl.append([str(v) for v in row.values])
-            col_aligns = ["LEFT"] * len(df.columns)
-            if PDF_LABEL_PEJ_COUNT in df.columns:
-                idx = list(df.columns).index(PDF_LABEL_PEJ_COUNT)
-                col_aligns[idx] = "RIGHT"
-            builder.add_table(
-                tbl,
-                caption=pdf_metric_caption("PEJ par thème", "proc"),
-                col_aligns=col_aligns,
-                keep_together=True,
             )
         else:
             builder.add_key_figures([(str(nb_pej), "PEJ")])
@@ -3474,6 +3394,7 @@ def _generate_pdf(
                 caption="Analyse des NATINF relevées (PEJ)",
                 keep_together=True,
                 max_rows_keep_together=25,
+                max_cell_chars_before_split=2000,
             )
 
     def _render_sec33() -> None:

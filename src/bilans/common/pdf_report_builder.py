@@ -607,6 +607,7 @@ class PDFReportBuilder:
         header_font_size: float | None = None,
         spacer_after_mm: float = 4.0,
         max_rows_keep_together: int | None = None,
+        max_cell_chars_before_split: int | None = None,
     ) -> None:
         block: List = []
         if caption:
@@ -620,10 +621,13 @@ class PDFReportBuilder:
                 max_rows_keep = int(self._tables_layout.get("max_rows_keep_together", 8))
             except (TypeError, ValueError):
                 max_rows_keep = 8
-        try:
-            max_cell_chars = int(self._tables_layout.get("max_cell_chars_before_split", 100))
-        except (TypeError, ValueError):
-            max_cell_chars = 100
+        if max_cell_chars_before_split is not None:
+            max_cell_chars = int(max_cell_chars_before_split)
+        else:
+            try:
+                max_cell_chars = int(self._tables_layout.get("max_cell_chars_before_split", 100))
+            except (TypeError, ValueError):
+                max_cell_chars = 100
         n_rows = len(data_rows) if data_rows else 0
         long_cell = False
         if n_rows > 1 and max_cell_chars > 0:
