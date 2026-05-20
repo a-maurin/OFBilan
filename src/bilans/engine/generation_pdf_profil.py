@@ -313,6 +313,7 @@ def _generate_pdf_content(
         title=" — ".join(header_title_lines),
         author="Office français de la biodiversité",
         tables_layout=tables_layout,
+        diffusion=diffusion,
     )
     avail_w = builder.avail_w
     tmp_dir = builder.tmp_dir

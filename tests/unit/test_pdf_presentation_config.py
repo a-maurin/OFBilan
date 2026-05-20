@@ -3,11 +3,13 @@ from pathlib import Path
 import pandas as pd
 
 from bilans.common.pdf_presentation_config import (
+    INTERNAL_DIFFUSION_TITLE_NOTICE,
     apply_diffusion_pdf_suffix,
     is_block_enabled,
     is_section_enabled,
     normalize_diffusion,
     diffusion_pdf_suffix,
+    should_show_internal_diffusion_title_notice,
     resolve_pdf_presentation_config,
     resolve_notice_methodology_config,
     resolve_sec6_methodology_config,
@@ -65,6 +67,13 @@ def test_normalize_diffusion() -> None:
     assert normalize_diffusion(None) == "interne"
     assert normalize_diffusion("externe") == "externe"
     assert normalize_diffusion("EXTERNAL") == "externe"
+
+
+def test_internal_diffusion_title_notice() -> None:
+    assert "Diffusion restreinte" in INTERNAL_DIFFUSION_TITLE_NOTICE
+    assert should_show_internal_diffusion_title_notice("interne") is True
+    assert should_show_internal_diffusion_title_notice("externe") is False
+    assert should_show_internal_diffusion_title_notice(None) is True
 
 
 def test_diffusion_pdf_suffix() -> None:

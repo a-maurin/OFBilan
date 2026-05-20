@@ -47,7 +47,11 @@ from bilans.common.ofb_charte import (
     _get_styles,
     header_layout_metrics,
 )
-from bilans.common.pdf_presentation_config import resolve_tables_layout
+from bilans.common.pdf_presentation_config import (
+    INTERNAL_DIFFUSION_TITLE_NOTICE,
+    resolve_tables_layout,
+    should_show_internal_diffusion_title_notice,
+)
 from bilans.common.pdf_utils import key_figures_table, ofb_table, ofb_table_wide
 
 # Largeur relative (sur la zone utile du PDF) pour les graphiques matplotlib
@@ -116,6 +120,7 @@ class PDFReportBuilder:
         author: str = "OFB",
         *,
         tables_layout: dict[str, Any] | None = None,
+        diffusion: str = "interne",
     ):
         self.pdf_path = Path(pdf_path)
         self.pdf_path.parent.mkdir(parents=True, exist_ok=True)
@@ -158,6 +163,7 @@ class PDFReportBuilder:
         self._tables_layout = deepcopy(
             tables_layout if tables_layout is not None else resolve_tables_layout({})
         )
+        self._diffusion = str(diffusion or "interne").strip().lower()
 
         self._tmp_dir = Path(tempfile.mkdtemp(prefix="bilan_pdf_"))
 
@@ -217,6 +223,31 @@ class PDFReportBuilder:
     # ------------------------------------------------------------------
     # Page backgrounds
     # ------------------------------------------------------------------
+    def _draw_internal_diffusion_notice_on_title_page(self, canvas) -> None:
+        """Bandeau discret sur la page de garde (diffusion interne uniquement)."""
+        if not should_show_internal_diffusion_title_notice(self._diffusion):
+            return
+        text = INTERNAL_DIFFUSION_TITLE_NOTICE
+        font_name = f"{FONT_FAMILY}-Bold"
+        font_size = 8
+        pad_x = 4 * mm
+        pad_y = 2 * mm
+        box_top = PAGE_H - 42 * mm
+        canvas.saveState()
+        canvas.setFont(font_name, font_size)
+        text_w = canvas.stringWidth(text, font_name, font_size)
+        box_w = text_w + 2 * pad_x
+        box_h = font_size + 2 * pad_y
+        box_x = (PAGE_W - box_w) * 0.5
+        box_bottom = box_top - box_h
+        canvas.setFillColor(rl_colors.HexColor("#E8EEF4"))
+        canvas.setStrokeColor(rl_colors.HexColor(COLOR_PRIMARY))
+        canvas.setLineWidth(0.6)
+        canvas.rect(box_x, box_bottom, box_w, box_h, fill=1, stroke=1)
+        canvas.setFillColor(rl_colors.HexColor(COLOR_PRIMARY))
+        canvas.drawCentredString(PAGE_W * 0.5, box_bottom + pad_y, text)
+        canvas.restoreState()
+
     def _title_page_bg(self, canvas, doc):
         canvas.saveState()
         if IMG_BACKGROUND.exists():
@@ -232,6 +263,7 @@ class PDFReportBuilder:
                 preserveAspectRatio=False, mask="auto",
             )
         canvas.restoreState()
+        self._draw_internal_diffusion_notice_on_title_page(canvas)
 
     def _header_footer(self, canvas, doc):
         canvas.saveState()
@@ -591,6 +623,80 @@ class PDFReportBuilder:
         else:
             for el in block:
                 self.story.append(el)
+
+    def add_key_figures_section_keep_together(
+        self,
+        figures: List[Tuple[str, str]],
+        *,
+        intro_table: dict | None = None,
+        table_specs: list[dict] | None = None,
+        zone_table: dict | None = None,
+        compact: bool = True,
+    ) -> None:
+        """
+        Bandeau de chiffres clés + tableaux de la section dans un seul ``KeepTogether``
+        (ex. 3.1 PVe : bandeau, infractions relevées, détail, NATINF, zone).
+        """
+        if not figures:
+            return
+        gap_kf = 2 * mm if compact else 4 * mm
+        gap_cap = 1 * mm if compact else 2 * mm
+        gap_after_tbl = 2 * mm if compact else 4 * mm
+        split_by_row = bool(self._tables_layout.get("split_by_row"))
+
+        block: List = [key_figures_table(figures, self.styles), Spacer(1, gap_kf)]
+
+        if intro_table and intro_table.get("data_rows"):
+            if intro_table.get("caption"):
+                block.append(Paragraph(intro_table["caption"], self.styles["TableCaption"]))
+                block.append(Spacer(1, gap_cap))
+            block.append(
+                ofb_table(
+                    intro_table["data_rows"],
+                    col_widths=intro_table.get("col_widths"),
+                    col_aligns=intro_table.get("col_aligns"),
+                    split_by_row=split_by_row,
+                )
+            )
+            block.append(Spacer(1, gap_after_tbl))
+
+        for i, spec in enumerate(table_specs or []):
+            rows = spec.get("data_rows") or []
+            if not rows:
+                continue
+            if spec.get("caption"):
+                block.append(Paragraph(spec["caption"], self.styles["TableCaption"]))
+                block.append(Spacer(1, gap_cap))
+            block.append(
+                ofb_table(
+                    rows,
+                    col_widths=spec.get("col_widths"),
+                    col_aligns=spec.get("col_aligns"),
+                    split_by_row=split_by_row,
+                )
+            )
+            if i < len(table_specs or []) - 1 or zone_table:
+                block.append(Spacer(1, gap_after_tbl))
+
+        if zone_table and zone_table.get("data_rows"):
+            if zone_table.get("caption"):
+                block.append(Paragraph(zone_table["caption"], self.styles["TableCaption"]))
+                block.append(Spacer(1, gap_cap))
+            block.append(
+                ofb_table(
+                    zone_table["data_rows"],
+                    col_widths=zone_table.get("col_widths"),
+                    col_aligns=zone_table.get("col_aligns"),
+                    split_by_row=split_by_row,
+                )
+            )
+
+        block.append(Spacer(1, gap_after_tbl))
+        if self._pending_section is not None:
+            self.story.append(KeepTogether(self._pending_section + block))
+            self._pending_section = None
+        else:
+            self.story.append(KeepTogether(block))
 
     # ------------------------------------------------------------------
     # Tables

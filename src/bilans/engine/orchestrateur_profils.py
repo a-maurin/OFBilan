@@ -2517,6 +2517,7 @@ def _generate_pdf(
         title=f"Bilan thématique – {display_label}",
         author="Office français de la biodiversité",
         tables_layout=tables_layout,
+        diffusion=diffusion,
     )
     avail_w = builder.avail_w
     tmp_dir = builder.tmp_dir
@@ -3161,12 +3162,19 @@ def _generate_pdf(
         if nb_pve > 0:
             pve_detail = results.get("pve_detail")
             pve_top = results.get("pve_top_infractions")
-            if nb_pve >= 10 and pve_top is not None and not pve_top.empty:
+            intro_table: dict | None = None
+            if (
+                nb_pve >= 10
+                and pve_top is not None
+                and not pve_top.empty
+                and is_block_enabled(presentation_cfg, "sec31.show_top_infractions", True)
+            ):
                 natinf_ref = load_natinf_ref(PROJECT_ROOT)
                 top_df = pve_top.copy()
                 top_df["numero_natinf"] = top_df["natinf"].astype(str).str.extract(r"(\d+)", expand=False)
                 if not natinf_ref.empty:
                     top_df = top_df.merge(natinf_ref, on="numero_natinf", how="left")
+
                 def _fmt_natinf_row(r):
                     qualif = str(r.get("qualification_infraction") or "").strip()
                     nature_raw = str(r.get("nature_infraction") or "").strip()
@@ -3182,22 +3190,17 @@ def _generate_pdf(
                         return nature
                     lib = str(r.get("libelle_natinf") or "").strip()
                     return lib if lib else str(r["natinf"])
+
                 top_df["libelle_affich"] = top_df.apply(_fmt_natinf_row, axis=1)
                 tbl_infractions = [["Infraction (qualification et nature)", "Nombre"]]
                 for _, row in top_df.iterrows():
                     tbl_infractions.append([str(row["libelle_affich"]), str(int(row["nb"]))])
-                if is_block_enabled(presentation_cfg, "sec31.show_top_infractions", True):
-                    builder.add_key_figures_and_table(
-                        [(str(nb_pve), "PVe")],
-                        tbl_infractions,
-                        caption="Infractions les plus relevées",
-                        col_widths=[avail_w * 0.75, avail_w * 0.25],
-                        col_aligns=["LEFT", "RIGHT"],
-                    )
-                else:
-                    builder.add_key_figures([(str(nb_pve), "PVe")])
-            else:
-                builder.add_key_figures([(str(nb_pve), "PVe")])
+                intro_table = {
+                    "data_rows": tbl_infractions,
+                    "caption": "Infractions les plus relevées",
+                    "col_widths": [avail_w * 0.75, avail_w * 0.25],
+                    "col_aligns": ["LEFT", "RIGHT"],
+                }
             pve_table_specs: list[dict] = []
             if (
                 is_block_enabled(presentation_cfg, "sec31.show_detail_table", True)
@@ -3249,28 +3252,25 @@ def _generate_pdf(
                         "caption": "Analyse des NATINF relevées (PVe)",
                     }
                 )
-            if len(pve_table_specs) >= 2:
-                builder.add_tables_keep_together(pve_table_specs)
-            elif len(pve_table_specs) == 1:
-                spec = pve_table_specs[0]
-                builder.add_table(
-                    spec["data_rows"],
-                    caption=spec.get("caption", ""),
-                    col_widths=spec.get("col_widths"),
-                    col_aligns=spec.get("col_aligns"),
-                    keep_together=True,
-                    max_rows_keep_together=25,
-                    max_cell_chars_before_split=2000,
-                )
+            zone_table: dict | None = None
             zone_pve = results.get("zone_pve")
             if is_block_enabled(presentation_cfg, "sec31.show_zone_table", True) and zone_pve is not None:
                 tbl = [["Zone", "Nombre"]]
                 for _, row in zone_pve.iterrows():
                     tbl.append([str(row["zone"]), str(int(row["nb"]))])
-                cap_pve_zone = "PVe par zone"
-                builder.add_table(tbl, caption=cap_pve_zone,
-                                  col_widths=[avail_w * 0.62, avail_w * 0.38],
-                                  col_aligns=["LEFT", "RIGHT"])
+                zone_table = {
+                    "data_rows": tbl,
+                    "caption": "PVe par zone",
+                    "col_widths": [avail_w * 0.62, avail_w * 0.38],
+                    "col_aligns": ["LEFT", "RIGHT"],
+                }
+            builder.add_key_figures_section_keep_together(
+                [(str(nb_pve), "PVe")],
+                intro_table=intro_table,
+                table_specs=pve_table_specs,
+                zone_table=zone_table,
+                compact=True,
+            )
         elif show_placeholder:
             builder.add_key_figures([(str(nb_pve), "PVe")])
             builder.add_paragraph("Aucun procès-verbal électronique sur la période.")

@@ -256,12 +256,23 @@ def resolve_pdf_presentation_config(
     }
 
 
+INTERNAL_DIFFUSION_TITLE_NOTICE = (
+    "Diffusion restreinte – Document contenant des données sensibles – "
+    "Réservé aux services autorisés."
+)
+
+
 def normalize_diffusion(value: str | None) -> str:
     """Retourne ``interne`` ou ``externe`` (défaut : interne)."""
     s = str(value or "interne").strip().lower()
     if s in ("externe", "external", "ext"):
         return "externe"
     return "interne"
+
+
+def should_show_internal_diffusion_title_notice(diffusion: str | None) -> bool:
+    """Afficher la mention de diffusion restreinte sur la page de garde."""
+    return normalize_diffusion(diffusion) == "interne"
 
 
 def diffusion_pdf_suffix(diffusion: str | None) -> str:
