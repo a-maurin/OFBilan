@@ -9,7 +9,7 @@ Contenu lu par le code (`bilans.common.chargeurs_donnees`, moteur de bilans, car
 | `types_usagers.csv` | Mapping des types d’usagers |
 | `ref_themes_ctrl.csv` | Thèmes des contrôles (bilans + cartes) |
 | `tub_communes.csv` | Communes zone TUB |
-| `communes_PNF.csv` | Communes PNF (repli tabulaire ; priorité au shapefile) |
+| `communes_PNF.csv` | Communes PNF (repli tabulaire) |
 | `liste_natinf.csv` | Libellés NATINF |
 
 ## `sig/`

@@ -725,6 +725,50 @@ class PDFReportBuilder:
         block.append(Spacer(1, 1 * mm))
         self.story.append(KeepTogether(block))
 
+    def add_tables_keep_together(
+        self,
+        table_specs: list[dict],
+        *,
+        gap_between_mm: float = 2.0,
+        trailing_spacer_mm: float = 2.0,
+    ) -> None:
+        """
+        Enchaîne plusieurs tableaux (légendes incluses) dans un seul ``KeepTogether``
+        pour éviter un saut de page entre eux (ex. détail PVe + analyse NATINF en 3.1).
+        """
+        if not table_specs:
+            return
+        block: List = []
+        if self._pending_section is not None:
+            block.extend(self._pending_section)
+            self._pending_section = None
+        split_by_row = bool(self._tables_layout.get("split_by_row"))
+        rendered = 0
+        for spec in table_specs:
+            rows = spec.get("data_rows") or []
+            if not rows:
+                continue
+            if rendered:
+                block.append(Spacer(1, float(gap_between_mm) * mm))
+            caption = spec.get("caption") or ""
+            if caption:
+                block.append(Paragraph(caption, self.styles["TableCaption"]))
+                block.append(Spacer(1, 1 * mm))
+            block.append(
+                ofb_table(
+                    rows,
+                    col_widths=spec.get("col_widths"),
+                    col_aligns=spec.get("col_aligns"),
+                    header_font_size=spec.get("header_font_size"),
+                    split_by_row=split_by_row,
+                )
+            )
+            rendered += 1
+        if not rendered:
+            return
+        block.append(Spacer(1, float(trailing_spacer_mm) * mm))
+        self.story.append(KeepTogether(block))
+
     # ------------------------------------------------------------------
     # Images / Charts
     # ------------------------------------------------------------------

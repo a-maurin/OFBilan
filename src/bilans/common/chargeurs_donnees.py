@@ -62,6 +62,35 @@ def _find_latest_dated_file(directory: Path, prefix: str, exts: Tuple[str, ...])
     return latest_path
 
 
+def _read_spreadsheet(path: Path, *, dtype=str) -> pd.DataFrame:
+    """
+    Lit un classeur ODS / XLSX.
+
+    Priorité : ``calamine`` (rapide sur gros ODS) ; repli ``odf`` / ``openpyxl``.
+    """
+    suffix = path.suffix.lower()
+    if suffix == ".ods":
+        try:
+            return pd.read_excel(path, dtype=dtype, engine="calamine")
+        except ImportError:
+            logger.info(
+                "python-calamine absent : lecture ODS lente (%s). "
+                "Installez python-calamine pour accélérer.",
+                path.name,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Lecture ODS via calamine impossible (%s) : %s — repli odf.",
+                path.name,
+                exc,
+            )
+        logger.info("Lecture ODS en cours (peut prendre ~1 min) : %s", path.name)
+        return pd.read_excel(path, dtype=dtype, engine="odf")
+    if suffix == ".xlsx":
+        return pd.read_excel(path, dtype=dtype, engine="openpyxl")
+    raise ValueError(f"Format de classeur non pris en charge : {path}")
+
+
 def load_point_ctrl(
     root: Path,
     dept_code: Optional[str] = None,
@@ -313,7 +342,7 @@ def load_pej(
     sources = root / "data" / "sources"
     prefix = "suivi_procedure_enq_judiciaire_"
     path = _find_latest_dated_file(sources, prefix, (".ods",))
-    df = pd.read_excel(path, dtype=str, engine="odf")
+    df = _read_spreadsheet(path)
     df.columns = pd.Index([str(c).strip().upper() for c in df.columns])
     # Alias pour compatibilité si le classeur utilise "NATINF" au lieu de "NATINF_PEJ"
     if "NATINF" in df.columns and "NATINF_PEJ" not in df.columns:
@@ -375,7 +404,7 @@ def load_pa(
     path = _find_latest_dated_file(
         sources, "suivi_procedure_administrative_", (".ods",)
     )
-    df = pd.read_excel(path, dtype=str, engine="odf")
+    df = _read_spreadsheet(path)
     df.columns = pd.Index([str(c).strip().upper() for c in df.columns])
     df["DATE_CONTROLE"] = pd.to_datetime(df["DATE_CONTROLE"], errors="coerce")
     df["DATE_DOSSIER"] = pd.to_datetime(df["DATE_DOSSIER"], errors="coerce")
@@ -385,6 +414,37 @@ def load_pa(
         fin_ts = pd.to_datetime(date_fin)
         df = filtre_periode(df, "DATE_REF", deb_ts, fin_ts)
     return df
+
+
+def _load_pnf_from_127_communes_shp(root: Path) -> Optional[pd.DataFrame]:
+    """
+    Liste INSEE (+ nom) des communes PNF depuis
+    ``127_communes_AOA_et_statuts_adhesion.shp``.
+    """
+    gdf = _load_pnf_127_communes_gdf(root)
+    if gdf.empty:
+        return None
+
+    insee_col = _pick_gdf_column(
+        gdf,
+        ("INSEE_COM", "CODE_INSEE", "insee_comm", "INSEE", "code_insee", "INSEE_COM_M"),
+    )
+    if insee_col is None:
+        raise KeyError(
+            f"Aucune colonne INSEE reconnue dans {get_pnf_127_communes_aoa_shp_path(root)} "
+            f"(colonnes : {list(gdf.columns)})."
+        )
+    nom_col = _pick_gdf_column(
+        gdf,
+        ("NOM_COM", "NOM", "nom_commune", "nom_commun", "LIBELLE", "libelle"),
+    )
+
+    insee_series = gdf[insee_col].map(_normalize_insee_code)
+    out = pd.DataFrame({"CODE_INSEE": insee_series})
+    if nom_col is not None:
+        out["NOM"] = gdf[nom_col].astype(str).str.strip()
+    out = out.dropna(subset=["CODE_INSEE"]).drop_duplicates(subset=["CODE_INSEE"]).reset_index(drop=True)
+    return out if not out.empty else None
 
 
 def _load_pnf_from_shp(root: Path) -> Optional[pd.DataFrame]:
@@ -463,9 +523,23 @@ def load_pnf(root: Path) -> pd.DataFrame:
     Charge la liste des communes PNF (référentiel).
 
     Ordre de priorité :
-    1. Shapefile ref/programme/sig/communes_pnf/communes_pnf.shp (attributs INSEE + optionnellement nom) ;
-    2. Fichier communes_PNF.csv dans ref/programme/tables_reference ou data/sources/.
+    1. Shapefile ref/programme/sig/PNF/127_communes/127_communes_AOA_et_statuts_adhesion.shp ;
+    2. Shapefile ref/programme/sig/communes_pnf/communes_pnf.shp ;
+    3. Fichier communes_PNF.csv dans ref/programme/tables_reference ou data/sources/.
     """
+    try:
+        from_127 = _load_pnf_from_127_communes_shp(root)
+    except KeyError:
+        raise
+    except Exception as e:
+        path_127 = get_pnf_127_communes_aoa_shp_path(root)
+        if path_127.exists():
+            raise RuntimeError(f"Lecture du shapefile PNF 127 communes impossible ({path_127}) : {e}") from e
+        from_127 = None
+
+    if from_127 is not None and not from_127.empty:
+        return from_127
+
     try:
         from_shp = _load_pnf_from_shp(root)
     except KeyError:
@@ -490,8 +564,10 @@ def load_pnf(root: Path) -> pd.DataFrame:
             return df
 
     raise FileNotFoundError(
-        "Référentiel PNF introuvable : ni ref/programme/sig/communes_pnf/communes_pnf.shp (non vide), "
-        "ni communes_PNF.csv dans ref/programme/tables_reference ni data/sources/."
+        "Référentiel PNF introuvable : ni ref/programme/sig/PNF/127_communes/"
+        "127_communes_AOA_et_statuts_adhesion.shp, ni ref/programme/sig/communes_pnf/"
+        "communes_pnf.shp (non vide), ni communes_PNF.csv dans ref/programme/tables_reference "
+        "ni data/sources/."
     )
 
 
@@ -563,6 +639,110 @@ def get_pnf_coeur_shp_path(root: Path) -> Path:
 def get_pnf_aoa_shp_path(root: Path) -> Path:
     """Chemin du shapefile de l'aire d'adhésion PNF (millésime 2021)."""
     return ref_programme(root) / "sig" / "PNF" / "aoa_2021_pnforets" / "AOA_2021_PNForets.shp"
+
+
+def get_pnf_127_communes_aoa_shp_path(root: Path) -> Path:
+    """Communes PNF (127) : statut cœur / hors-cœur par commune (champ ``coeur``)."""
+    return (
+        ref_programme(root)
+        / "sig"
+        / "PNF"
+        / "127_communes"
+        / "127_communes_AOA_et_statuts_adhesion.shp"
+    )
+
+
+def _pnf_zone_from_coeur_value(value: object) -> str | None:
+    """
+    Statut commune dans le périmètre PNF (shapefile 127 communes ou CSV).
+
+    - ``oui`` → cœur de parc ;
+    - ``non``, vide ou null → aire d'adhésion (hors-cœur) : toute commune du
+      périmètre qui n'est pas explicitement en cœur est hors-cœur.
+    """
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return "Aire_adhesion_PNF"
+    s = str(value).strip().lower()
+    if not s or s in {"nan", "none", "<na>", "<na>"}:
+        return "Aire_adhesion_PNF"
+    if s == "oui":
+        return "Coeur_PNF"
+    if s == "non":
+        return "Aire_adhesion_PNF"
+    return "Aire_adhesion_PNF"
+
+
+def _normalize_insee_code(raw: object) -> str | None:
+    m = re.search(r"(\d{1,5})", str(raw or "").strip())
+    if not m:
+        return None
+    code = m.group(1).zfill(5)
+    if not re.fullmatch(r"\d{5}", code):
+        return None
+    return code
+
+
+def _pick_gdf_column(gdf: gpd.GeoDataFrame, candidates: tuple[str, ...]) -> str | None:
+    lower_map = {str(c).lower(): c for c in gdf.columns}
+    for cand in candidates:
+        if cand.lower() in lower_map:
+            return str(lower_map[cand.lower()])
+    return None
+
+
+def _load_pnf_127_communes_gdf(root: Path) -> gpd.GeoDataFrame:
+    path = get_pnf_127_communes_aoa_shp_path(root)
+    if not path.exists():
+        return gpd.GeoDataFrame(columns=["geometry"], geometry="geometry", crs=None)
+    try:
+        return gpd.read_file(path)
+    except Exception as exc:
+        raise RuntimeError(f"Lecture du shapefile PNF 127 communes impossible ({path}) : {exc}") from exc
+
+
+def load_pnf_commune_zone_maps(root: Path) -> tuple[dict[str, str], dict[str, str]]:
+    """
+    Cartes commune → zone PNF depuis ``127_communes_AOA_et_statuts_adhesion.shp``.
+
+    Retourne (by_insee, by_commune_nom_lower). Repli sur communes_PNF.csv si le shapefile
+    est absent.
+    """
+    gdf = _load_pnf_127_communes_gdf(root)
+    if gdf.empty:
+        by_insee = _load_pnf_commune_zone_by_insee_from_csv(root)
+        by_nom = _load_pnf_commune_zone_by_nom_from_csv(root)
+        return by_insee, by_nom
+
+    insee_col = _pick_gdf_column(
+        gdf,
+        ("INSEE_COM", "CODE_INSEE", "insee_comm", "INSEE", "code_insee", "INSEE_COM_M"),
+    )
+    coeur_col = _pick_gdf_column(gdf, ("coeur", "Coeur", "COEUR"))
+    nom_col = _pick_gdf_column(
+        gdf,
+        ("NOM_COM", "NOM", "nom_commune", "nom_commun", "LIBELLE", "libelle"),
+    )
+    if coeur_col is None:
+        raise KeyError(
+            f"Aucune colonne « coeur » reconnue dans {get_pnf_127_communes_aoa_shp_path(root)} "
+            f"(colonnes : {list(gdf.columns)})."
+        )
+
+    by_insee: dict[str, str] = {}
+    by_nom: dict[str, str] = {}
+    for _, row in gdf.iterrows():
+        zone = _pnf_zone_from_coeur_value(row.get(coeur_col))
+        if zone is None:
+            continue
+        if insee_col is not None:
+            code = _normalize_insee_code(row.get(insee_col))
+            if code:
+                by_insee[code] = zone
+        if nom_col is not None:
+            nom = str(row.get(nom_col, "")).strip().lower()
+            if nom:
+                by_nom[nom] = zone
+    return by_insee, by_nom
 
 
 def load_pnf_coeur_gdf(root: Path) -> gpd.GeoDataFrame:
@@ -767,14 +947,8 @@ def _coalesced_insee_for_pnf_overlay(df: pd.DataFrame) -> pd.Series:
     return out
 
 
-def load_pnf_commune_zone_by_insee(root: Path) -> dict[str, str]:
-    """
-    {code INSEE 5 car.} -> « Coeur_PNF » ou « Aire_adhesion_PNF » depuis ref/programme/tables_reference/communes_PNF.csv.
-    Règle métier:
-    - Cœur si `Coeur` == oui
-    - sinon Aire d'adhésion si `perimetre_parc` == oui
-    La colonne `Adhesion` n'est pas utilisée.
-    """
+def _load_pnf_commune_zone_by_insee_from_csv(root: Path) -> dict[str, str]:
+    """Repli tabulaire : communes_PNF.csv (legacy)."""
     path = ref_programme(root) / "tables_reference" / "communes_PNF.csv"
     if not path.exists():
         return {}
@@ -783,18 +957,53 @@ def load_pnf_commune_zone_by_insee(root: Path) -> dict[str, str]:
         return {}
     out: dict[str, str] = {}
     for _, r in df.iterrows():
-        raw = str(r.get("CODE_INSEE", "")).strip()
-        m = re.search(r"(\d{1,5})", raw)
-        if not m:
+        code = _normalize_insee_code(r.get("CODE_INSEE"))
+        if not code:
             continue
-        code = m.group(1).zfill(5)
-        coeur = str(r.get("Coeur", "")).strip().lower() == "oui"
+        coeur_val = r.get("Coeur", r.get("coeur", ""))
+        zone = _pnf_zone_from_coeur_value(coeur_val)
+        if zone is not None:
+            out[code] = zone
+            continue
         in_perimetre = str(r.get("perimetre_parc", "")).strip().lower() == "oui"
-        if coeur:
-            out[code] = "Coeur_PNF"
-        elif in_perimetre:
+        if in_perimetre:
             out[code] = "Aire_adhesion_PNF"
     return out
+
+
+def _load_pnf_commune_zone_by_nom_from_csv(root: Path) -> dict[str, str]:
+    """Repli tabulaire : communes_PNF.csv indexé par nom de commune (minuscules)."""
+    path = ref_programme(root) / "tables_reference" / "communes_PNF.csv"
+    if not path.exists():
+        return {}
+    df = pd.read_csv(path, dtype=str, index_col=False).fillna("")
+    if "NOM" not in df.columns:
+        return {}
+    out: dict[str, str] = {}
+    for _, r in df.iterrows():
+        nom = str(r.get("NOM", "")).strip().lower()
+        if not nom:
+            continue
+        coeur_val = r.get("Coeur", r.get("coeur", ""))
+        zone = _pnf_zone_from_coeur_value(coeur_val)
+        if zone is not None:
+            out[nom] = zone
+            continue
+        in_perimetre = str(r.get("perimetre_parc", "")).strip().lower() == "oui"
+        if in_perimetre:
+            out[nom] = "Aire_adhesion_PNF"
+    return out
+
+
+def load_pnf_commune_zone_by_insee(root: Path) -> dict[str, str]:
+    """
+    {code INSEE} → « Coeur_PNF » ou « Aire_adhesion_PNF ».
+
+    Source prioritaire : ``127_communes_AOA_et_statuts_adhesion.shp`` (champ ``coeur``).
+    Repli : ``communes_PNF.csv``.
+    """
+    by_insee, _ = load_pnf_commune_zone_maps(root)
+    return by_insee
 
 
 def overlay_pnf_zone_from_communes_pnf_csv(
@@ -805,9 +1014,9 @@ def overlay_pnf_zone_from_communes_pnf_csv(
     log: Optional[logging.Logger] = None,
 ) -> pd.DataFrame:
     """
-    Après enrichissement SIG (`pnf_zone_sig`), recale la zone à partir de l'INSEE
-    lorsque ref/programme/tables_reference/communes_PNF.csv définit explicitement Cœur ou adhésion.
-    Sinon conserve la valeur SIG existante.
+    Recale ``pnf_zone_sig`` à partir de l'INSEE commune lorsque le référentiel PNF
+    (shapefile 127 communes ou CSV) définit Cœur / Hors-cœur. Conserve la valeur SIG
+    existante si aucune correspondance INSEE.
     """
     lg = log or logger
     if df is None or df.empty:
@@ -828,7 +1037,7 @@ def overlay_pnf_zone_from_communes_pnf_csv(
     out.loc[has, out_col] = mapped[has]
     n = int(has.sum())
     lg.info(
-        "Réf. communes PNF (CSV) : %s ligne(s) — zone INSEE appliquée pour %s ligne(s) (%s).",
+        "Réf. communes PNF (127 communes / CSV) : %s ligne(s) — zone INSEE appliquée pour %s ligne(s) (%s).",
         len(df),
         n,
         out_col,
@@ -1027,6 +1236,14 @@ def _dataframe_with_xy_geometry(df: pd.DataFrame) -> Optional[gpd.GeoDataFrame]:
         if x.notna().any() and y.notna().any():
             return gpd.GeoDataFrame(df.copy(), geometry=gpd.points_from_xy(x, y), crs="EPSG:4326")
 
+    if "x_faits" in df.columns and "y_faits" in df.columns:
+        x = pd.to_numeric(df["x_faits"], errors="coerce")
+        y = pd.to_numeric(df["y_faits"], errors="coerce")
+        if x.notna().any() and y.notna().any():
+            return gpd.GeoDataFrame(
+                df.copy(), geometry=gpd.points_from_xy(x, y), crs="EPSG:4326"
+            )
+
     if "inf_gps_lat" in df.columns and "inf_gps_long" in df.columns:
         lat = pd.to_numeric(df["inf_gps_lat"], errors="coerce")
         lon = pd.to_numeric(df["inf_gps_long"], errors="coerce")
@@ -1049,6 +1266,7 @@ def ensure_insee_from_communes_shp(
     avec `ref/programme/sig/communes_21/communes.shp`.
 
     Les points de contrôle sans géométrie mais avec `x`/`y` sont convertis en points WGS84.
+    Les PEJ peuvent utiliser `x_faits` / `y_faits` (jointure FAITS) si aucun code INSEE n'est renseigné.
     Les PVe peuvent utiliser `inf_gps_lat` / `inf_gps_long` si `INF-INSEE` est absent ou incomplet.
     """
     lg = log or logger
@@ -1409,7 +1627,7 @@ def load_pve(
     if suffix == ".csv":
         df = pd.read_csv(path, sep=";", dtype=str, encoding="latin1")
     elif suffix == ".ods":
-        df = pd.read_excel(path, dtype=str, engine="odf")
+        df = _read_spreadsheet(path)
     else:
         # .xlsx : moteur openpyxl requis côté environnement Python
         df = pd.read_excel(path, dtype=str, engine="openpyxl")
@@ -1565,6 +1783,55 @@ def merge_pej_faits_locations(
     if n:
         lg.info("PEJ : %s ligne(s) avec localisation FAITS (jointure dossier).", n)
     return out
+
+
+def _propagate_nom_commune_to_nom_com(df: pd.DataFrame) -> pd.DataFrame:
+    """Recopie ``nom_commune`` vers ``NOM_COM`` lorsque ce dernier est vide."""
+    if df is None or df.empty or "nom_commune" not in df.columns:
+        return df
+    out = df.copy()
+    nc = (
+        out["nom_commune"]
+        .astype(str)
+        .str.strip()
+        .replace({"": pd.NA, "nan": pd.NA, "None": pd.NA, "<NA>": pd.NA})
+    )
+    if "NOM_COM" in out.columns:
+        nom_com = (
+            out["NOM_COM"]
+            .astype(str)
+            .str.strip()
+            .replace({"": pd.NA, "nan": pd.NA, "None": pd.NA, "<NA>": pd.NA})
+        )
+        out["NOM_COM"] = nom_com.fillna(nc)
+    else:
+        out["NOM_COM"] = nc
+    return out
+
+
+def enrich_pej_commune_from_faits_coordinates(
+    pej: pd.DataFrame,
+    root: Path,
+    *,
+    log: Optional[logging.Logger] = None,
+) -> pd.DataFrame:
+    """
+    Complète ``insee_comm`` et ``NOM_COM`` pour les PEJ disposant de coordonnées FAITS
+    (``x_faits``, ``y_faits``) via ``communes.shp``, lorsque l'ODS ou la couche FAITS
+    n'ont pas renseigné la commune.
+    """
+    if pej is None or pej.empty:
+        return pej
+    if "x_faits" not in pej.columns or "y_faits" not in pej.columns:
+        return pej.copy()
+    xy_ok = pej["x_faits"].notna() & pej["y_faits"].notna()
+    if not bool(xy_ok.any()):
+        return pej.copy()
+
+    out = ensure_insee_from_communes_shp(
+        pej, root, context="PEJ (coordonnées FAITS)", log=log
+    )
+    return _propagate_nom_commune_to_nom_com(out)
 
 
 def load_points_infrac_pj(

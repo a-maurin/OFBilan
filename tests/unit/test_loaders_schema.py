@@ -142,6 +142,86 @@ def test_ensure_insee_from_communes_shp_builds_from_xy(monkeypatch, tmp_path: Pa
     assert str(out.loc[0, "nom_commune"]) == "Dijon"
 
 
+def test_ensure_insee_from_communes_shp_builds_from_xy_faits(monkeypatch, tmp_path: Path) -> None:
+    """PEJ : x_faits / y_faits sans insee_comm -> jointure communes.shp."""
+    import bilans.common.chargeurs_donnees as loaders
+
+    root = tmp_path
+    shp_dir = root / "ref" / "programme" / "sig" / "communes_21"
+    shp_dir.mkdir(parents=True)
+    (shp_dir / "communes.shp").write_bytes(b"")
+
+    communes = gpd.GeoDataFrame(
+        {
+            "INSEE_COM": ["21231"],
+            "NOM_COM": ["Dijon"],
+            "geometry": [Polygon([(4.9, 47.2), (5.3, 47.2), (5.3, 47.5), (4.9, 47.5)])],
+        },
+        crs="EPSG:4326",
+    )
+
+    def fake_read_file(*args: Any, **kwargs: Any) -> gpd.GeoDataFrame:
+        return communes
+
+    monkeypatch.setattr("bilans.common.chargeurs_donnees.gpd.read_file", fake_read_file)
+
+    df = pd.DataFrame(
+        {
+            "DC_ID": ["OF001", "OF002"],
+            "x_faits": [5.04, pd.NA],
+            "y_faits": [47.32, pd.NA],
+        }
+    )
+    out = loaders.ensure_insee_from_communes_shp(df, root, context="test PEJ faits")
+    assert "geometry" not in out.columns
+    assert str(out.loc[0, "insee_comm"]) == "21231"
+    assert str(out.loc[0, "nom_commune"]) == "Dijon"
+    assert pd.isna(out.loc[1, "insee_comm"]) or str(out.loc[1, "insee_comm"]).strip() in (
+        "",
+        "nan",
+        "<NA>",
+    )
+
+
+def test_enrich_pej_commune_from_faits_coordinates_fills_nom_com(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """enrich_pej_commune_from_faits_coordinates propage nom_commune vers NOM_COM."""
+    import bilans.common.chargeurs_donnees as loaders
+
+    root = tmp_path
+    shp_dir = root / "ref" / "programme" / "sig" / "communes_21"
+    shp_dir.mkdir(parents=True)
+    (shp_dir / "communes.shp").write_bytes(b"")
+
+    communes = gpd.GeoDataFrame(
+        {
+            "INSEE_COM": ["21231"],
+            "NOM_COM": ["Dijon"],
+            "geometry": [Polygon([(4.9, 47.2), (5.3, 47.2), (5.3, 47.5), (4.9, 47.5)])],
+        },
+        crs="EPSG:4326",
+    )
+
+    def fake_read_file(*args: Any, **kwargs: Any) -> gpd.GeoDataFrame:
+        return communes
+
+    monkeypatch.setattr("bilans.common.chargeurs_donnees.gpd.read_file", fake_read_file)
+
+    pej = pd.DataFrame({"DC_ID": ["OF001"], "NOM_COM": [""], "x_faits": [5.04], "y_faits": [47.32]})
+    out = loaders.enrich_pej_commune_from_faits_coordinates(pej, root, log=None)
+    assert str(out.loc[0, "NOM_COM"]).strip() == "Dijon"
+    assert str(out.loc[0, "insee_comm"]) == "21231"
+
+
+def test_enrich_pej_commune_from_faits_coordinates_noop_without_coords(tmp_path: Path) -> None:
+    import bilans.common.chargeurs_donnees as loaders
+
+    pej = pd.DataFrame({"DC_ID": ["OF001"], "NOM_COM": ["Beaune"]})
+    out = loaders.enrich_pej_commune_from_faits_coordinates(pej, tmp_path, log=None)
+    assert str(out.loc[0, "NOM_COM"]) == "Beaune"
+
+
 def test_merge_pej_faits_locations_joins_dossier_to_dc_id(tmp_path: Path) -> None:
     """Jointure PEJ (ODS) ↔ FAITS : DC_ID = dossier, entité SD{dept}, x/y faits."""
     import bilans.common.chargeurs_donnees as loaders

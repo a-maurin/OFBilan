@@ -31,6 +31,7 @@ from bilans.common.chargeurs_donnees import (
     load_point_ctrl,
     load_pej,
     merge_pej_faits_locations,
+    enrich_pej_commune_from_faits_coordinates,
     load_pa,
     load_pve,
     load_pnf,
@@ -40,6 +41,7 @@ from bilans.common.chargeurs_donnees import (
     load_communes_noms,
     enrich_with_pnforet_sig_zones,
     overlay_pnf_zone_from_communes_pnf_csv,
+    load_pnf_commune_zone_maps,
     pnf_sig_union_membership_mask,
 )
 from bilans.common.percent_format import (
@@ -925,8 +927,8 @@ def _apply_restrict_geo_pnf(
         if not mask.any():
             log.warning(
                 "Restriction PNF : aucun point ne correspond à la liste INSEE du référentiel "
-                "ni aux couches SIG (cœur / adhésion) ; vérifiez communes_pnf, les coordonnées "
-                "et ref/programme/sig/PNF."
+                "ni aux couches SIG (cœur / adhésion) ; vérifiez les coordonnées "
+                "et ref/programme/sig/PNF/127_communes/127_communes_AOA_et_statuts_adhesion.shp."
             )
         point_filtered = point_filtered.loc[mask].copy()
     # Règle métier PA : seules les localisations de contrôles "Manquement" portent
@@ -1554,71 +1556,7 @@ def _run_aggregations(
                     .astype(str)
                     .to_dict()
                 )
-    pnf_zone_by_commune_nom: dict[str, str] = {}
-    pnf_zone_by_insee: dict[str, str] = {}
-    try:
-        csv_comm = ref_programme(PROJECT_ROOT) / "tables_reference" / "communes_PNF.csv"
-        if csv_comm.exists():
-            cdf = pd.read_csv(csv_comm, dtype=str, encoding="utf-8", index_col=False)
-            if not cdf.empty and "NOM" in cdf.columns:
-                nom = cdf["NOM"].astype(str).str.strip().str.lower()
-                insee_series = (
-                    cdf["CODE_INSEE"].astype(str).str.strip().str.extract(r"(\d{1,5})", expand=False).fillna("").str.zfill(5)
-                    if "CODE_INSEE" in cdf.columns
-                    else pd.Series([""] * len(cdf))
-                )
-                c_flag_col = "Coeur" if "Coeur" in cdf.columns else ("coeur" if "coeur" in cdf.columns else None)
-                a_flag_col = "perimetre_parc" if "perimetre_parc" in cdf.columns else None
-                c_flag = (
-                    cdf[c_flag_col].astype(str).str.strip().str.lower()
-                    if c_flag_col is not None
-                    else pd.Series([""] * len(cdf))
-                )
-                a_flag = (
-                    cdf[a_flag_col].astype(str).str.strip().str.lower()
-                    if a_flag_col is not None
-                    else pd.Series([""] * len(cdf))
-                )
-                for n, code_insee, c, a in zip(nom, insee_series, c_flag, a_flag):
-                    if not n:
-                        continue
-                    if c == "oui":
-                        pnf_zone_by_commune_nom[n] = "Coeur_PNF"
-                        if code_insee:
-                            pnf_zone_by_insee[code_insee] = "Coeur_PNF"
-                    elif a == "oui":
-                        pnf_zone_by_commune_nom[n] = "Aire_adhesion_PNF"
-                        if code_insee:
-                            pnf_zone_by_insee[code_insee] = "Aire_adhesion_PNF"
-        # Fallback historique : shapefile communes_pnf
-        if not pnf_zone_by_commune_nom:
-            shp_comm = ref_programme(PROJECT_ROOT) / "sig" / "communes_pnf" / "communes_pnf.shp"
-            if shp_comm.exists():
-                import geopandas as gpd
-
-                g_comm = gpd.read_file(shp_comm)
-                if not g_comm.empty and "NOM_COM" in g_comm.columns:
-                    nom = g_comm["NOM_COM"].astype(str).str.strip().str.lower()
-                    c_flag = (
-                        g_comm["communes_c"].astype(str).str.strip().str.lower()
-                        if "communes_c" in g_comm.columns
-                        else pd.Series([""] * len(g_comm))
-                    )
-                    a_flag = (
-                        g_comm["communes_a"].astype(str).str.strip().str.lower()
-                        if "communes_a" in g_comm.columns
-                        else pd.Series([""] * len(g_comm))
-                    )
-                    for n, c, a in zip(nom, c_flag, a_flag):
-                        if not n:
-                            continue
-                        if c == "oui":
-                            pnf_zone_by_commune_nom[n] = "Coeur_PNF"
-                        elif a == "oui":
-                            pnf_zone_by_commune_nom[n] = "Aire_adhesion_PNF"
-    except Exception as exc:
-        _log.debug("Chargement zones PNF (CSV/shapefile communes): %s", exc)
-        pnf_zone_by_commune_nom = {}
+    pnf_zone_by_insee, pnf_zone_by_commune_nom = load_pnf_commune_zone_maps(PROJECT_ROOT)
 
     def _build_proc_detail(
         df: pd.DataFrame,
@@ -1652,6 +1590,10 @@ def _run_aggregations(
         if "NOM_COM_FAITS" in d.columns:
             out["commune"] = out["commune"].fillna(
                 d["NOM_COM_FAITS"].astype(str).str.strip().replace({"": pd.NA, "nan": pd.NA, "None": pd.NA})
+            )
+        if "nom_commune" in d.columns:
+            out["commune"] = out["commune"].fillna(
+                d["nom_commune"].astype(str).str.strip().replace({"": pd.NA, "nan": pd.NA, "None": pd.NA})
             )
         if "DC_ID" in d.columns and nom_commune_by_dc:
             out["commune"] = out["commune"].fillna(
@@ -1687,16 +1629,41 @@ def _run_aggregations(
             # PEJ / PA : la commune affichée peut venir de NOM_COM_FAITS ou des points (DC_ID) alors que
             # NOM_COM reste vide — aligner le libellé Cœur/Hors-cœur sur `out["commune"]`, pas sur la seule
             # colonne candidate d'origine.
-            if proc_type in ("PEJ", "PA") and pnf_zone_by_commune_nom:
-                zc = (
-                    out["commune"]
-                    .astype(str)
-                    .str.strip()
-                    .str.lower()
-                    .replace({"": pd.NA, "nan": pd.NA, "none": pd.NA, "<na>": pd.NA})
-                )
-                from_nom = zc.map(pnf_zone_by_commune_nom).apply(_coeur_hors_coeur_from_zone)
-                out["coeur_hors_coeur"] = from_nom.where(from_nom.ne("n.d."), out["coeur_hors_coeur"])
+            if proc_type in ("PEJ", "PA"):
+                if pnf_zone_by_commune_nom:
+                    zc = (
+                        out["commune"]
+                        .astype(str)
+                        .str.strip()
+                        .str.lower()
+                        .replace({"": pd.NA, "nan": pd.NA, "none": pd.NA, "<na>": pd.NA})
+                    )
+                    from_nom = zc.map(pnf_zone_by_commune_nom).apply(_coeur_hors_coeur_from_zone)
+                    out["coeur_hors_coeur"] = from_nom.where(
+                        from_nom.ne("n.d."), out["coeur_hors_coeur"]
+                    )
+                if pnf_zone_by_insee:
+                    insee_s = pd.Series(pd.NA, index=d.index, dtype="string")
+                    for col in ("insee_comm", "INSEE_COM"):
+                        if col not in d.columns:
+                            continue
+                        cand = (
+                            d[col]
+                            .astype(str)
+                            .str.strip()
+                            .str.extract(r"(\d{1,5})", expand=False)
+                            .fillna("")
+                            .str.zfill(5)
+                        )
+                        cand = cand.mask(~cand.str.fullmatch(r"\d{5}", na=False), pd.NA)
+                        insee_s = insee_s.fillna(cand)
+                    if insee_s.notna().any():
+                        from_insee = (
+                            insee_s.map(pnf_zone_by_insee).apply(_coeur_hors_coeur_from_zone)
+                        )
+                        out["coeur_hors_coeur"] = from_insee.where(
+                            from_insee.ne("n.d."), out["coeur_hors_coeur"]
+                        )
         out["type_procedure"] = proc_type
         return out.fillna("")
 
@@ -3019,31 +2986,44 @@ def _generate_pdf(
             else:
                 cw_res = [avail_w * 0.50, avail_w * 0.22, avail_w * 0.28]
                 ca_res = ["LEFT", "RIGHT", "RIGHT"]
-            builder.add_table(
-                tbl,
-                caption=cap_res,
-                col_widths=cw_res,
-                col_aligns=ca_res,
-            )
+            cap_res_tbl = cap_res
             pie_data = {
                 str(r["resultat"]): int(r["nb"])
                 for _, r in tr_u.iterrows()
                 if str(r["resultat"]) in ("Conforme", "Non-conforme", "En attente")
             }
+            pie_path: Path | None = None
             if pie_data:
-                pie_path = chart_pie(
-                    pie_data,
-                    "Répartition des résultats",
-                    tmp_dir,
-                    "pie_resultats_usager.png",
-                    **_chart_pie_compact_legend_kw(
-                        len(pie_data),
-                        legend_fontsize=legend_fontsize,
-                        legend_ncol_max=legend_ncol_max,
-                    ),
-                    figure_scale=figure_scale,
+                pie_path = Path(
+                    chart_pie(
+                        pie_data,
+                        "Répartition des résultats",
+                        tmp_dir,
+                        "pie_resultats_usager.png",
+                        **_chart_pie_compact_legend_kw(
+                            len(pie_data),
+                            legend_fontsize=legend_fontsize,
+                            legend_ncol_max=legend_ncol_max,
+                        ),
+                        figure_scale=figure_scale,
+                    )
                 )
-                builder.add_image(Path(pie_path), width_ratio=pie_ratio_base)
+            if pie_path is not None and pie_path.exists():
+                builder.add_table_and_image_keep_together(
+                    tbl,
+                    table_caption=cap_res_tbl,
+                    col_widths=cw_res,
+                    col_aligns=ca_res,
+                    image_path=pie_path,
+                    image_width_ratio=pie_ratio_base,
+                )
+            else:
+                builder.add_table(
+                    tbl,
+                    caption=cap_res_tbl,
+                    col_widths=cw_res,
+                    col_aligns=ca_res,
+                )
 
         res_ud = results.get("res_par_usager_domaine")
         if res_ud is not None and not res_ud.empty:
@@ -3122,33 +3102,44 @@ def _generate_pdf(
             else:
                 cw = [avail_w * 0.50, avail_w * 0.22, avail_w * 0.28]
                 ca = ["LEFT", "RIGHT", "RIGHT"]
-            builder.add_table(
-                tbl,
-                caption=pdf_metric_caption("Résultats des contrôles", "ctrl"),
-                col_widths=cw,
-                col_aligns=ca,
-            )
+            cap_res_ctrl = pdf_metric_caption("Résultats des contrôles", "ctrl")
             pie_data = {
                 str(r["resultat"]): int(r["nb"])
                 for _, r in tr.iterrows()
                 if str(r["resultat"]) in ("Conforme", "Non-conforme", "En attente")
             }
+            pie_path: Path | None = None
             if pie_data and is_block_enabled(presentation_cfg, "sec22.show_pie", True):
-                pie_path = chart_pie(
-                    pie_data,
-                    "Répartition des résultats",
-                    tmp_dir,
-                    "pie_resultats.png",
-                    **_chart_pie_compact_legend_kw(
-                        len(pie_data),
-                        legend_fontsize=legend_fontsize,
-                        legend_ncol_max=legend_ncol_max,
-                    ),
-                    figure_scale=figure_scale,
+                pie_path = Path(
+                    chart_pie(
+                        pie_data,
+                        "Répartition des résultats",
+                        tmp_dir,
+                        "pie_resultats.png",
+                        **_chart_pie_compact_legend_kw(
+                            len(pie_data),
+                            legend_fontsize=legend_fontsize,
+                            legend_ncol_max=legend_ncol_max,
+                        ),
+                        figure_scale=figure_scale,
+                    )
                 )
-                # Légère augmentation pour un meilleur confort de lecture,
-                # tout en restant assez compact pour tenir sur la même page.
-                builder.add_image(Path(pie_path), width_ratio=pie_ratio_base)
+            if pie_path is not None and pie_path.exists():
+                builder.add_table_and_image_keep_together(
+                    tbl,
+                    table_caption=cap_res_ctrl,
+                    col_widths=cw,
+                    col_aligns=ca,
+                    image_path=pie_path,
+                    image_width_ratio=pie_ratio_base,
+                )
+            else:
+                builder.add_table(
+                    tbl,
+                    caption=cap_res_ctrl,
+                    col_widths=cw,
+                    col_aligns=ca,
+                )
         elif show_placeholder:
             builder.add_paragraph("Aucune donnée de résultat disponible sur la période.")
         # On ne force pas systématiquement un saut de page ici.
@@ -3207,6 +3198,7 @@ def _generate_pdf(
                     builder.add_key_figures([(str(nb_pve), "PVe")])
             else:
                 builder.add_key_figures([(str(nb_pve), "PVe")])
+            pve_table_specs: list[dict] = []
             if (
                 is_block_enabled(presentation_cfg, "sec31.show_detail_table", True)
                 and isinstance(pve_detail, pd.DataFrame)
@@ -3230,10 +3222,12 @@ def _generate_pdf(
                     if show_coeur_hors_pdf:
                         row_det.append(str(r.get("coeur_hors_coeur", "")))
                     tbl_det.append(row_det)
-                builder.add_table(
-                    tbl_det,
-                    caption=pdf_metric_caption("Détail des PVe", "proc"),
-                    col_aligns=["LEFT"] * len(hdr_det),
+                pve_table_specs.append(
+                    {
+                        "data_rows": tbl_det,
+                        "caption": pdf_metric_caption("Détail des PVe", "proc"),
+                        "col_aligns": ["LEFT"] * len(hdr_det),
+                    }
                 )
             pve_nat = results.get("pve_natinf_analysis")
             if (
@@ -3249,9 +3243,21 @@ def _generate_pdf(
                         str(r.get("nature_infraction", "")),
                         str(int(r.get("nb", 0))),
                     ])
+                pve_table_specs.append(
+                    {
+                        "data_rows": tbl_nat,
+                        "caption": "Analyse des NATINF relevées (PVe)",
+                    }
+                )
+            if len(pve_table_specs) >= 2:
+                builder.add_tables_keep_together(pve_table_specs)
+            elif len(pve_table_specs) == 1:
+                spec = pve_table_specs[0]
                 builder.add_table(
-                    tbl_nat,
-                    caption="Analyse des NATINF relevées (PVe)",
+                    spec["data_rows"],
+                    caption=spec.get("caption", ""),
+                    col_widths=spec.get("col_widths"),
+                    col_aligns=spec.get("col_aligns"),
                     keep_together=True,
                     max_rows_keep_together=25,
                     max_cell_chars_before_split=2000,
@@ -4001,6 +4007,11 @@ def _run_engine_thematic_pipeline(
                     root,
                     spatial_log,
                 )
+
+    if not pej_filtered.empty and sources.get("pej", True):
+        pej_filtered = enrich_pej_commune_from_faits_coordinates(
+            pej_filtered, root, log=spatial_log
+        )
 
     # ── INSEE commune (jointure communes.shp si besoin) ──
     if resolved_opts.get("pnf") or resolved_opts.get("tub"):
