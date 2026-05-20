@@ -48,7 +48,7 @@ from bilans.common.ofb_charte import (
     header_layout_metrics,
 )
 from bilans.common.pdf_presentation_config import (
-    INTERNAL_DIFFUSION_TITLE_NOTICE,
+    resolve_internal_diffusion_notice_config,
     resolve_tables_layout,
     should_show_internal_diffusion_title_notice,
 )
@@ -121,6 +121,7 @@ class PDFReportBuilder:
         *,
         tables_layout: dict[str, Any] | None = None,
         diffusion: str = "interne",
+        title_page_config: dict[str, Any] | None = None,
     ):
         self.pdf_path = Path(pdf_path)
         self.pdf_path.parent.mkdir(parents=True, exist_ok=True)
@@ -164,6 +165,9 @@ class PDFReportBuilder:
             tables_layout if tables_layout is not None else resolve_tables_layout({})
         )
         self._diffusion = str(diffusion or "interne").strip().lower()
+        self._internal_diffusion_notice = resolve_internal_diffusion_notice_config(
+            title_page_config
+        )
 
         self._tmp_dir = Path(tempfile.mkdtemp(prefix="bilan_pdf_"))
 
@@ -223,16 +227,32 @@ class PDFReportBuilder:
     # ------------------------------------------------------------------
     # Page backgrounds
     # ------------------------------------------------------------------
+    def _logo_banner_top_ratio(self) -> float:
+        try:
+            return float(self._internal_diffusion_notice.get("logo_banner_top_ratio", 0.86))
+        except (TypeError, ValueError):
+            return 0.86
+
     def _draw_internal_diffusion_notice_on_title_page(self, canvas) -> None:
         """Bandeau discret sur la page de garde (diffusion interne uniquement)."""
         if not should_show_internal_diffusion_title_notice(self._diffusion):
             return
-        text = INTERNAL_DIFFUSION_TITLE_NOTICE
+        cfg = self._internal_diffusion_notice
+        text = str(cfg.get("text", "")).strip()
+        if not text:
+            return
         font_name = f"{FONT_FAMILY}-Bold"
-        font_size = 8
-        pad_x = 4 * mm
-        pad_y = 2 * mm
-        box_top = PAGE_H - 42 * mm
+        try:
+            font_size = float(cfg.get("font_size", 8))
+        except (TypeError, ValueError):
+            font_size = 8.0
+        try:
+            pad_x = float(cfg.get("pad_x_mm", 4)) * mm
+            pad_y = float(cfg.get("pad_y_mm", 2)) * mm
+            gap_below_banner = float(cfg.get("gap_below_logo_banner_mm", 10)) * mm
+        except (TypeError, ValueError):
+            pad_x, pad_y, gap_below_banner = 4 * mm, 2 * mm, 10 * mm
+        box_top = PAGE_H * self._logo_banner_top_ratio() - gap_below_banner
         canvas.saveState()
         canvas.setFont(font_name, font_size)
         text_w = canvas.stringWidth(text, font_name, font_size)
@@ -249,17 +269,19 @@ class PDFReportBuilder:
         canvas.restoreState()
 
     def _title_page_bg(self, canvas, doc):
+        banner_top = self._logo_banner_top_ratio()
+        banner_h = max(0.0, min(1.0, 1.0 - banner_top))
         canvas.saveState()
         if IMG_BACKGROUND.exists():
             canvas.drawImage(
                 str(IMG_BACKGROUND), 0, 0,
-                width=PAGE_W, height=PAGE_H * 0.86,
+                width=PAGE_W, height=PAGE_H * banner_top,
                 preserveAspectRatio=False, mask="auto",
             )
         if IMG_LOGO_BANNER.exists():
             canvas.drawImage(
-                str(IMG_LOGO_BANNER), 0, PAGE_H * 0.86,
-                width=PAGE_W, height=PAGE_H * 0.14,
+                str(IMG_LOGO_BANNER), 0, PAGE_H * banner_top,
+                width=PAGE_W, height=PAGE_H * banner_h,
                 preserveAspectRatio=False, mask="auto",
             )
         canvas.restoreState()
@@ -453,8 +475,9 @@ class PDFReportBuilder:
         compact: bool = False,
         toc_level: int | None = None,
         start_on_new_page: bool = False,
+        append_to_pending: bool = False,
     ) -> None:
-        if self._pending_section is not None:
+        if self._pending_section is not None and not append_to_pending:
             self.story.extend(self._pending_section)
             self._pending_section = None
         if start_on_new_page and self.story:
@@ -474,7 +497,11 @@ class PDFReportBuilder:
             title_para._bookmarkName = anchor
             title_para._toc_title = title
             title_para._toc_level = max((toc_level if toc_level is not None else level - 1), 0)
-        self._pending_section = [anchor_para, title_para]
+        section_flowables = [anchor_para, title_para]
+        if append_to_pending and self._pending_section is not None:
+            self._pending_section.extend(section_flowables)
+        else:
+            self._pending_section = section_flowables
 
     def add_keep_together_block(self, flowables: List) -> None:
         """
@@ -634,73 +661,118 @@ class PDFReportBuilder:
         compact: bool = True,
     ) -> None:
         """
-        Bandeau de chiffres clés + tableaux de la section dans un seul ``KeepTogether``
-        (ex. 3.1 PVe : bandeau, infractions relevées, détail, NATINF, zone).
+        Bandeau de chiffres clés + tableaux (ex. 3.1 PVe).
+
+        Titres de section + bandeau (+ intro éventuelle) dans un ``KeepTogether`` ;
+        chaque tableau avec légende dans son propre ``KeepTogether`` (légende + début
+        du tableau sur la même page, coupure inter-lignes si le tableau est long).
         """
         if not figures:
             return
         gap_kf = 2 * mm if compact else 4 * mm
-        gap_cap = 1 * mm if compact else 2 * mm
-        gap_after_tbl = 2 * mm if compact else 4 * mm
-        split_by_row = bool(self._tables_layout.get("split_by_row"))
+        gap_cap_mm = 1.0 if compact else 2.0
+        gap_after_tbl_mm = 2.0 if compact else 4.0
 
-        block: List = [key_figures_table(figures, self.styles), Spacer(1, gap_kf)]
+        header: List = []
+        if self._pending_section is not None:
+            header.extend(self._pending_section)
+            self._pending_section = None
+        header.extend([key_figures_table(figures, self.styles), Spacer(1, gap_kf)])
 
         if intro_table and intro_table.get("data_rows"):
-            if intro_table.get("caption"):
-                block.append(Paragraph(intro_table["caption"], self.styles["TableCaption"]))
-                block.append(Spacer(1, gap_cap))
-            block.append(
+            intro_rows = intro_table["data_rows"]
+            intro_caption = intro_table.get("caption") or ""
+            if intro_caption:
+                header.append(Paragraph(intro_caption, self.styles["TableCaption"]))
+                header.append(Spacer(1, gap_cap_mm * mm))
+            header.append(
                 ofb_table(
-                    intro_table["data_rows"],
+                    intro_rows,
                     col_widths=intro_table.get("col_widths"),
                     col_aligns=intro_table.get("col_aligns"),
-                    split_by_row=split_by_row,
+                    split_by_row=self._table_uses_split_by_row(intro_rows),
                 )
             )
-            block.append(Spacer(1, gap_after_tbl))
+            header.append(Spacer(1, gap_after_tbl_mm * mm))
 
-        for i, spec in enumerate(table_specs or []):
-            rows = spec.get("data_rows") or []
-            if not rows:
-                continue
-            if spec.get("caption"):
-                block.append(Paragraph(spec["caption"], self.styles["TableCaption"]))
-                block.append(Spacer(1, gap_cap))
-            block.append(
-                ofb_table(
-                    rows,
-                    col_widths=spec.get("col_widths"),
-                    col_aligns=spec.get("col_aligns"),
-                    split_by_row=split_by_row,
-                )
+        if header:
+            self.story.append(KeepTogether(header))
+
+        specs = [s for s in (table_specs or []) if s.get("data_rows")]
+        for i, spec in enumerate(specs):
+            gap_after = gap_after_tbl_mm if (i < len(specs) - 1 or zone_table) else gap_after_tbl_mm
+            self._append_captioned_table_keep_together(
+                spec["data_rows"],
+                caption=spec.get("caption") or "",
+                col_widths=spec.get("col_widths"),
+                col_aligns=spec.get("col_aligns"),
+                gap_cap_mm=gap_cap_mm,
+                gap_after_mm=gap_after,
             )
-            if i < len(table_specs or []) - 1 or zone_table:
-                block.append(Spacer(1, gap_after_tbl))
 
         if zone_table and zone_table.get("data_rows"):
-            if zone_table.get("caption"):
-                block.append(Paragraph(zone_table["caption"], self.styles["TableCaption"]))
-                block.append(Spacer(1, gap_cap))
-            block.append(
-                ofb_table(
-                    zone_table["data_rows"],
-                    col_widths=zone_table.get("col_widths"),
-                    col_aligns=zone_table.get("col_aligns"),
-                    split_by_row=split_by_row,
-                )
+            self._append_captioned_table_keep_together(
+                zone_table["data_rows"],
+                caption=zone_table.get("caption") or "",
+                col_widths=zone_table.get("col_widths"),
+                col_aligns=zone_table.get("col_aligns"),
+                gap_cap_mm=gap_cap_mm,
+                gap_after_mm=gap_after_tbl_mm,
             )
-
-        block.append(Spacer(1, gap_after_tbl))
-        if self._pending_section is not None:
-            self.story.append(KeepTogether(self._pending_section + block))
-            self._pending_section = None
-        else:
-            self.story.append(KeepTogether(block))
 
     # ------------------------------------------------------------------
     # Tables
     # ------------------------------------------------------------------
+    def _table_uses_split_by_row(self, data_rows: list) -> bool:
+        if bool(self._tables_layout.get("split_by_row")):
+            return True
+        n_rows = len(data_rows) if data_rows else 0
+        try:
+            max_rows_keep = int(self._tables_layout.get("max_rows_keep_together", 8))
+        except (TypeError, ValueError):
+            max_rows_keep = 8
+        if n_rows > max_rows_keep:
+            return True
+        try:
+            max_cell_chars = int(self._tables_layout.get("max_cell_chars_before_split", 100))
+        except (TypeError, ValueError):
+            max_cell_chars = 100
+        if n_rows > 1 and max_cell_chars > 0:
+            for row in data_rows[1:]:
+                for cell in row:
+                    if isinstance(cell, str) and len(cell.strip()) > max_cell_chars:
+                        return True
+        return False
+
+    def _append_captioned_table_keep_together(
+        self,
+        data_rows: list,
+        *,
+        caption: str = "",
+        col_widths: Optional[list] = None,
+        col_aligns: Optional[list] = None,
+        header_font_size: float | None = None,
+        gap_cap_mm: float = 1.0,
+        gap_after_mm: float = 2.0,
+    ) -> None:
+        """Légende + tableau : même page au début ; tableau long coupé entre les lignes."""
+        if not data_rows:
+            return
+        block: List = []
+        if caption:
+            block.append(Paragraph(caption, self.styles["TableCaption"]))
+            block.append(Spacer(1, float(gap_cap_mm) * mm))
+        block.append(
+            ofb_table(
+                data_rows,
+                col_widths=col_widths,
+                col_aligns=col_aligns,
+                header_font_size=header_font_size,
+                split_by_row=self._table_uses_split_by_row(data_rows),
+            )
+        )
+        block.append(Spacer(1, float(gap_after_mm) * mm))
+        self.story.append(KeepTogether(block))
     def add_table(
         self,
         data_rows: list,
@@ -746,7 +818,6 @@ class PDFReportBuilder:
                     break
         if n_rows > max_rows_keep or long_cell:
             split_by_row = True
-            keep_together = False
         vh = self._tables_layout.get("vertical_header")
         pad_x = 0.0
         if isinstance(vh, dict):
@@ -773,7 +844,8 @@ class PDFReportBuilder:
             )
         block.append(tbl)
         block.append(Spacer(1, float(spacer_after_mm) * mm))
-        if keep_together:
+        use_keep = bool(caption) or keep_together
+        if use_keep:
             if self._pending_section is not None:
                 self.story.append(KeepTogether(self._pending_section + block))
                 self._pending_section = None

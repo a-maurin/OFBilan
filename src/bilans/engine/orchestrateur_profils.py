@@ -92,6 +92,7 @@ from bilans.common.pdf_presentation_config import (
     resolve_section_titles,
     resolve_sections_for_toc,
     resolve_tables_layout,
+    resolve_title_page_config,
     is_block_enabled,
     is_section_enabled,
     should_show_placeholder,
@@ -2511,6 +2512,9 @@ def _generate_pdf(
         diffusion,
     )
     tables_layout = resolve_tables_layout(presentation_cfg)
+    title_page_cfg = resolve_title_page_config(
+        PROJECT_ROOT, scope="thematique", profile_id=profil_id
+    )
     builder = PDFReportBuilder(
         pdf_path=pdf_path,
         header_title=f"Bilan thématique – {display_label}",
@@ -2518,6 +2522,7 @@ def _generate_pdf(
         author="Office français de la biodiversité",
         tables_layout=tables_layout,
         diffusion=diffusion,
+        title_page_config=title_page_cfg,
     )
     avail_w = builder.avail_w
     tmp_dir = builder.tmp_dir
@@ -3154,11 +3159,25 @@ def _generate_pdf(
         sec2_order = ["sec21", "sec22"]
     sec2_registry.render_many(sec2_order, {})
 
-    # 3. Procédures (chapitre)
-    builder.add_section("sec3", section_title["sec3"], start_on_new_page=True)
+    sec3_order = [sid for sid, _ in sections_toc if sid in {"sec31", "sec32", "sec33"}]
+    if not sec3_order:
+        sec3_order = ["sec31", "sec32", "sec33"]
+
+    def _begin_sec3_subsection(subsection_id: str) -> bool:
+        """Ouvre le chapitre 3 sur la première sous-section (titre + contenu groupés)."""
+        if not sec3_order or sec3_order[0] != subsection_id:
+            return False
+        builder.add_section("sec3", section_title["sec3"], start_on_new_page=True)
+        return True
 
     def _render_sec31() -> None:
-        builder.add_section("sec31", section_title["sec31"], compact=True, toc_level=1)
+        builder.add_section(
+            "sec31",
+            section_title["sec31"],
+            compact=True,
+            toc_level=1,
+            append_to_pending=_begin_sec3_subsection("sec31"),
+        )
         if nb_pve > 0:
             pve_detail = results.get("pve_detail")
             pve_top = results.get("pve_top_infractions")
@@ -3276,7 +3295,13 @@ def _generate_pdf(
             builder.add_paragraph("Aucun procès-verbal électronique sur la période.")
 
     def _render_sec32() -> None:
-        builder.add_section("sec32", section_title["sec32"], compact=True, toc_level=1)
+        builder.add_section(
+            "sec32",
+            section_title["sec32"],
+            compact=True,
+            toc_level=1,
+            append_to_pending=_begin_sec3_subsection("sec32"),
+        )
         pej_detail = results.get("pej_detail")
         pej_top = results.get("pej_top_infractions")
         has_infractions = pej_top is not None and not pej_top.empty
@@ -3404,7 +3429,12 @@ def _generate_pdf(
             )
 
     def _render_sec33() -> None:
-        builder.add_section("sec33", section_title["sec33"], toc_level=1)
+        builder.add_section(
+            "sec33",
+            section_title["sec33"],
+            toc_level=1,
+            append_to_pending=_begin_sec3_subsection("sec33"),
+        )
         if nb_pa <= 0:
             if show_placeholder:
                 builder.add_paragraph("Aucune procédure administrative sur la période.")
@@ -3487,9 +3517,6 @@ def _generate_pdf(
     sec3_registry.register("sec32", lambda _ctx: _render_sec32())
     sec3_registry.register("sec33", lambda _ctx: _render_sec33())
 
-    sec3_order = [sid for sid, _ in sections_toc if sid in {"sec31", "sec32", "sec33"}]
-    if not sec3_order:
-        sec3_order = ["sec31", "sec32", "sec33"]
     sec3_registry.render_many(sec3_order, {})
 
     # Le détail Cœur/Hors-cœur des contrôles est désormais intégré au tableau

@@ -35,6 +35,14 @@ DEFAULT_PDF_PRESENTATION_CONFIG: dict[str, Any] = {
             "top_spacer_ratio": 0.30,
             "meta_block_space_before": 12,
             "meta_block_space_between": 8,
+            "internal_diffusion_notice": {
+                "logo_banner_top_ratio": 0.86,
+                "gap_below_logo_banner_mm": 10,
+                "font_size": 8,
+                "pad_x_mm": 4,
+                "pad_y_mm": 2,
+                "text": "",
+            },
         },
         "sections": {
             "order": ["sec1", "sec2", "sec3", "sec4", "sec5", "sec6"],
@@ -307,6 +315,28 @@ def resolve_title_page_config(
     if not isinstance(title_page, dict):
         return deepcopy(default_title_page)
     return _deep_merge(default_title_page, title_page)
+
+
+def resolve_internal_diffusion_notice_config(
+    title_page_cfg: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """
+    Mise en page de la mention « diffusion restreinte » sur la page de garde.
+
+    ``text`` vide dans le YAML : texte par défaut ``INTERNAL_DIFFUSION_TITLE_NOTICE``.
+    """
+    default_notice = DEFAULT_PDF_PRESENTATION_CONFIG["defaults"]["title_page"][
+        "internal_diffusion_notice"
+    ]
+    title_page = title_page_cfg if isinstance(title_page_cfg, dict) else {}
+    notice = title_page.get("internal_diffusion_notice", {})
+    if not isinstance(notice, dict):
+        notice = {}
+    merged = _deep_merge(deepcopy(default_notice), notice)
+    text = str(merged.get("text", "")).strip()
+    if not text:
+        merged["text"] = INTERNAL_DIFFUSION_TITLE_NOTICE
+    return merged
 
 
 def resolve_notice_methodology_config(effective_cfg: dict[str, Any]) -> dict[str, Any]:

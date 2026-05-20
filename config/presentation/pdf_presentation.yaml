@@ -55,6 +55,14 @@ defaults:
     # - fixed: texte fixe via subtitle_fixed
     subtitle_mode: none
     subtitle_fixed: ""
+    # Mention « diffusion restreinte » (page de garde, --diffusion interne uniquement).
+    internal_diffusion_notice:
+      logo_banner_top_ratio: 0.86
+      gap_below_logo_banner_mm: 10
+      font_size: 8
+      pad_x_mm: 4
+      pad_y_mm: 2
+      # text: ""  # vide = libellé par défaut dans pdf_presentation_config.py
 
   sections:
     order: ["sec1", "sec2", "sec3", "sec4", "sec5", "sec6"]

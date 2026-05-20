@@ -25,6 +25,7 @@ from bilans.common.pdf_presentation_config import (
     resolve_section_titles,
     resolve_sections_for_toc,
     resolve_tables_layout,
+    resolve_title_page_config,
     should_show_placeholder,
 )
 from bilans.common.pdf_report_builder import PDFReportBuilder
@@ -307,6 +308,7 @@ def _generate_pdf_content(
     report_header = " — ".join(line.strip() for line in header_title_lines if line.strip())
 
     tables_layout = resolve_tables_layout(presentation_cfg)
+    title_page_cfg = resolve_title_page_config(_ROOT, scope=scope, profile_id=profile_id)
     builder = PDFReportBuilder(
         pdf_path=pdf_path,
         header_title=report_header,
@@ -314,6 +316,7 @@ def _generate_pdf_content(
         author="Office français de la biodiversité",
         tables_layout=tables_layout,
         diffusion=diffusion,
+        title_page_config=title_page_cfg,
     )
     avail_w = builder.avail_w
     tmp_dir = builder.tmp_dir

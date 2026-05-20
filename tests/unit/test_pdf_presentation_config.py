@@ -10,12 +10,14 @@ from bilans.common.pdf_presentation_config import (
     normalize_diffusion,
     diffusion_pdf_suffix,
     should_show_internal_diffusion_title_notice,
+    resolve_internal_diffusion_notice_config,
     resolve_pdf_presentation_config,
     resolve_notice_methodology_config,
     resolve_sec6_methodology_config,
     resolve_section_titles,
     resolve_sections_for_toc,
     resolve_tables_layout,
+    resolve_title_page_config,
     should_show_placeholder,
 )
 from bilans.common.pdf_usagers_domaine_table import build_usagers_x_domaine_pdf_rows
@@ -74,6 +76,32 @@ def test_internal_diffusion_title_notice() -> None:
     assert should_show_internal_diffusion_title_notice("interne") is True
     assert should_show_internal_diffusion_title_notice("externe") is False
     assert should_show_internal_diffusion_title_notice(None) is True
+
+
+def test_resolve_internal_diffusion_notice_config_defaults() -> None:
+    cfg = resolve_internal_diffusion_notice_config({})
+    assert cfg["gap_below_logo_banner_mm"] == 10
+    assert cfg["logo_banner_top_ratio"] == 0.86
+    assert "Diffusion restreinte" in cfg["text"]
+
+
+def test_resolve_internal_diffusion_notice_config_yaml_merge(tmp_path: Path) -> None:
+    _write_yaml(
+        tmp_path,
+        """
+version: 1
+defaults:
+  title_page:
+    internal_diffusion_notice:
+      gap_below_logo_banner_mm: 14
+      text: "Mention personnalisée"
+""".strip(),
+    )
+    title_page = resolve_title_page_config(tmp_path, scope="thematique")
+    notice = resolve_internal_diffusion_notice_config(title_page)
+    assert notice["gap_below_logo_banner_mm"] == 14
+    assert notice["text"] == "Mention personnalisée"
+    assert notice["font_size"] == 8
 
 
 def test_diffusion_pdf_suffix() -> None:
