@@ -1,0 +1,61 @@
+schema_version: 2
+id: synthese_activite_PA_PJ
+label: Synthèse des activités PA / PJ
+title_label: Synthèse des activités PA / PJ
+pipeline: global
+presentation_scope: global
+out_subdir: bilan_synthese_activite_PA_PJ
+output_filename: synthese_activite_PA_PJ.pdf
+# Présentation PDF : config/presentation/pdf_presentation.yaml → profiles.synthese_activite_PA_PJ
+
+filter:
+  type: all
+
+analyse_PVe: true
+
+sources:
+  point_ctrl: true
+  pej: true
+  pa: true
+  pve: true
+
+periode_analyse:
+  ventilation:
+    type: globale
+    seuil_jours: 366
+
+analyses:
+  type_usager: true
+  distinction_coeur_hors_coeur: false
+
+aggregation:
+  adapter: run_synthese_aggregations
+
+pdf:
+  adapter: generate_synthese_pdf_report
+
+capabilities:
+  combine: false
+  mix_batch: false
+  map_profiles:
+    - synthese_activite_PA_PJ
+
+cartographie:
+  fichiers:
+    - carte_synthese_activite_PA_PJ.png
+    - carte_synthese_activite_PA_PJ_2.png
+  disposition: verticale
+
+options:
+  diffusion:
+    label: Périmètre de diffusion du PDF
+    default: externe
+    ask: false
+  brochure:
+    label: Format brochure (2 pages A4 portrait)
+    default: false
+    ask: false
+  cartes:
+    label: Intégration des cartes
+    default: true
+    ask: false

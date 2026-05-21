@@ -17,6 +17,7 @@ from bilans.common.ofb_charte import (
     CHART_PIE_COLORS,
     CHART_BAR_GROUPED_COLORS,
     COLOR_CHART_4,
+    COLOR_GREY,
 )
 from bilans.common.percent_format import int_percents_largest_remainder
 
@@ -44,6 +45,16 @@ CHART_PIE_DISK_SCALE = 0.5
 # Hauteur des barres / barres groupées-empilées : +50 % vs ancienne base pour lisibilité PDF.
 CHART_FIG_HEIGHT_BAR = 3.5 * 1.5
 CHART_FIG_HEIGHT_WITH_LEGEND = 4.15 * 1.5
+
+_KEYWORDS_INFRACTION = (
+    "infraction",
+    "infractions",
+    "non conforme",
+    "non conformes",
+    "non-conforme",
+    "non-conformes",
+)
+_KEYWORDS_ATTENTE = ("en attente", "attente")
 
 
 def apply_mpl_style() -> None:
@@ -140,6 +151,7 @@ def chart_pie(
     legend_fontsize: float | None = None,
     legend_ncol: int | None = None,
     figure_scale: float = 1.0,
+    legend_percent_only: bool = False,
 ) -> str:
     apply_mpl_style()
     labels = list(data.keys())
@@ -149,7 +161,7 @@ def chart_pie(
     # correspondant aux infractions / non-conformes, les autres utilisent la
     # palette standard CHART_PIE_COLORS.
     colors_pie = []
-    keywords_inf = ("infraction", "infractions", "non conforme", "non conformes", "non-conforme", "non-conformes")
+    keywords_inf = _KEYWORDS_INFRACTION
     for i, lb in enumerate(labels):
         base = CHART_PIE_COLORS[i % len(CHART_PIE_COLORS)]
         lbl = str(lb).lower()
@@ -160,12 +172,19 @@ def chart_pie(
     total = sum(values)
     if total:
         pcts = int_percents_largest_remainder([int(v) for v in values])
-        legend_labels = [
-            f"{lb} : {v} ({pcts[i]} %)"
-            for i, (lb, v) in enumerate(zip(labels, values))
-        ]
+        if legend_percent_only:
+            legend_labels = [f"{lb} : {pcts[i]} %" for i, lb in enumerate(labels)]
+        else:
+            legend_labels = [
+                f"{lb} : {v} ({pcts[i]} %)"
+                for i, (lb, v) in enumerate(zip(labels, values))
+            ]
     else:
-        legend_labels = [f"{lb} : {v} (0 %)" for lb, v in zip(labels, values)]
+        legend_labels = (
+            [f"{lb} : 0 %" for lb in labels]
+            if legend_percent_only
+            else [f"{lb} : {v} (0 %)" for lb, v in zip(labels, values)]
+        )
     if legend_ncol is not None:
         ncol = max(1, int(legend_ncol))
     else:
@@ -274,12 +293,14 @@ def chart_bar_grouped(
     n = len(series)
     # Harmonisation demandée : largeur de colonnes réduite de moitié.
     w = 0.09 if len(group_labels) == 1 else 0.15
-    keywords_inf = ("infraction", "infractions", "non conforme", "non conformes", "non-conforme", "non-conformes")
+    keywords_inf = _KEYWORDS_INFRACTION
     for i, (label, vals) in enumerate(series.items()):
         offset = (i - n / 2 + 0.5) * w
         lbl = str(label).lower()
         if any(k in lbl for k in keywords_inf):
             color = COLOR_CHART_4
+        elif any(k in lbl for k in _KEYWORDS_ATTENTE):
+            color = COLOR_GREY
         else:
             color = CHART_BAR_GROUPED_COLORS[i % len(CHART_BAR_GROUPED_COLORS)]
         bars = ax.bar(
@@ -320,7 +341,7 @@ def chart_bar_stacked(
     fig, ax = plt.subplots(figsize=(fig_w, CHART_FIG_HEIGHT_WITH_LEGEND * figure_scale))
     x = np.arange(len(group_labels))
     bottom = np.zeros(len(group_labels))
-    keywords_inf = ("infraction", "infractions", "non conforme", "non conformes", "non-conforme", "non-conformes")
+    keywords_inf = _KEYWORDS_INFRACTION
     # Harmonisation demandée : largeur de colonnes réduite de moitié.
     bar_w = 0.17 if len(group_labels) == 1 else 0.275
     for i, (label, vals) in enumerate(series.items()):
@@ -433,14 +454,7 @@ def chart_bar_horizontal_stacked(
     n = max(1, len(row_labels))
     y = np.arange(n)
     height = 0.62
-    keywords_inf = (
-        "infraction",
-        "infractions",
-        "non conforme",
-        "non conformes",
-        "non-conforme",
-        "non-conformes",
-    )
+    keywords_inf = _KEYWORDS_INFRACTION
     # Libellés Y repliés : sinon tight_layout compresse fortement la zone utile de l'axe X.
     label_wrap = 40
     display_labels = [
@@ -475,6 +489,8 @@ def chart_bar_horizontal_stacked(
         lbl = str(label).lower()
         if any(k in lbl for k in keywords_inf):
             color = COLOR_CHART_4
+        elif any(k in lbl for k in _KEYWORDS_ATTENTE):
+            color = COLOR_GREY
         else:
             color = CHART_BAR_GROUPED_COLORS[i % len(CHART_BAR_GROUPED_COLORS)]
         bars = ax.barh(y, vals_arr, height, left=left, label=label, color=color)
@@ -529,11 +545,13 @@ def chart_line_evolution(
     fig_w = max(CHART_FIG_WIDTH, min(10.0, n_x * 0.75)) * figure_scale
     fig, ax = plt.subplots(figsize=(fig_w, CHART_FIG_HEIGHT_WITH_LEGEND * figure_scale))
     x = np.arange(len(x_labels))
-    keywords_inf = ("infraction", "infractions", "non conforme", "non conformes", "non-conforme", "non-conformes")
+    keywords_inf = _KEYWORDS_INFRACTION
     for i, (label, vals) in enumerate(series.items()):
         lbl = str(label).lower()
         if any(k in lbl for k in keywords_inf):
             color = COLOR_CHART_4
+        elif any(k in lbl for k in _KEYWORDS_ATTENTE):
+            color = COLOR_GREY
         else:
             color = CHART_BAR_GROUPED_COLORS[i % len(CHART_BAR_GROUPED_COLORS)]
         ax.plot(x, vals, marker="o", label=label, color=color, linewidth=2, markersize=6)

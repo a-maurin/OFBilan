@@ -77,6 +77,29 @@ profiles:
         symbology_ref: points_piegeage
         layer_name: point_ctrl_20260205_wgs84
 
+  global:
+    id: global
+    title: "Bilan global — Contrôles et procédures — Côte-d'Or"
+    layout_name: "Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or"
+    output_filename: carte_global.png
+    date_deb: "2025-01-01"
+    date_fin: "2026-02-05"
+    title_main: "Contrôles et procédures — Côte-d'Or"
+    subtitle: ""
+    layout_title_item_id: titre_principal
+    layout_subtitle_item_id: sous_titre
+    layers:
+      pochoir_sd21:
+        symbology_ref: pochoir
+        layer_name: pochoir_sd21
+      point_ctrl_20260205_wgs84:
+        symbology_ref: points_global
+        layer_name: point_ctrl_20260205_wgs84
+      localisation_infrac_FAITS_20260205:
+        legend_label: Procédures judiciaires (FAITS)
+        filter_type: pj
+        layer_name: localisation_infrac_FAITS_20260205
+
   global_usagers:
     id: global_usagers
     title: "Bilan global SD21 — Contrôles par types d’usagers — Côte-d'Or"

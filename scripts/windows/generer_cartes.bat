@@ -20,16 +20,17 @@ set /p DEPT=Code departement [21] ^>
 if "!DEPT!"=="" set "DEPT=21"
 
 echo.
-echo 1 = agrainage  2 = chasse  3 = piegeage  4 = types usagers  5 = procedures PVe  6 = toutes
-set /p CHOIX=Quelle(s) carte(s) (1 a 6) [6] ^> 
+echo 1 = agrainage  2 = chasse  3 = piegeage  4 = global  5 = types usagers  6 = procedures PVe  7 = toutes
+set /p CHOIX=Quelle(s) carte(s) (1 a 7) [7] ^> 
 
-if "!CHOIX!"=="" set "CHOIX=6"
+if "!CHOIX!"=="" set "CHOIX=7"
 if "!CHOIX!"=="1" set "MAP=agrainage"
 if "!CHOIX!"=="2" set "MAP=chasse"
 if "!CHOIX!"=="3" set "MAP=piegeage"
-if "!CHOIX!"=="4" set "MAP=global_usagers"
-if "!CHOIX!"=="5" set "MAP=procedures_pve"
-if "!CHOIX!"=="6" set "MAP=tous"
+if "!CHOIX!"=="4" set "MAP=global"
+if "!CHOIX!"=="5" set "MAP=global_usagers"
+if "!CHOIX!"=="6" set "MAP=procedures_pve"
+if "!CHOIX!"=="7" set "MAP=tous"
 if "!MAP!"=="" set "MAP=tous"
 
 echo.

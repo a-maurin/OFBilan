@@ -251,7 +251,7 @@ def _generate_pdf_content(
     nb_pve = int(pve_resume["nb_pve_global"].iloc[0]) if pve_resume is not None and not pve_resume.empty else 0
 
     dept_name_typo = normalize_dept_typography(get_dept_name(dept_code))
-    map_id = str(profile.get("_map_id") or "global_usagers").strip() or "global_usagers"
+    map_id = str(profile.get("_map_id") or "global").strip() or "global"
     global_map_paths = (
         resolve_profile_map_paths(map_id, presentation_cfg=presentation_cfg)
         if cartes
@@ -1168,7 +1168,8 @@ def _generate_pdf_content(
                 builder.add_paragraph("<i>Cartographie désactivée pour ce bilan.</i>")
         elif is_section_enabled(presentation_cfg, "sec5map", True) and global_map_paths and show_map_block:
             builder.add_paragraph(
-                "Répartition spatiale des usagers contrôlés par types (générateur cartographique).",
+                "Répartition spatiale des contrôles et procédures sur le département "
+                "(générateur cartographique).",
             )
             builder.add_maps(global_map_paths, layout=global_map_layout)
         elif is_section_enabled(presentation_cfg, "sec5map", True) and show_map_fallback and show_placeholder:

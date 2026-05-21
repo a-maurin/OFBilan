@@ -52,6 +52,19 @@ points_piegeage:
   symbol_shape: circle
   visible: true
 
+points_global:
+  legend_label: Contrôles (localisations, département)
+  filter_type: point_ctrl_global
+  geometry_mode: polygon_fill
+  renderer_type: graduated
+  field: ""
+  classification_mode: quantile
+  num_classes: 5
+  palette: "#003A76"
+  symbol_size_mm: 3.8
+  symbol_shape: circle
+  visible: true
+
 points_global_usagers:
   legend_label: Contrôles (types d’usagers)
   filter_type: point_ctrl_global

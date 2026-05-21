@@ -52,7 +52,7 @@ from bilans.common.pdf_presentation_config import (
     resolve_tables_layout,
     should_show_internal_diffusion_title_notice,
 )
-from bilans.common.pdf_utils import key_figures_table, ofb_table, ofb_table_wide
+from bilans.common.pdf_utils import key_figures_table, key_figures_table_rows, ofb_table, ofb_table_wide
 
 # Largeur relative (sur la zone utile du PDF) pour les graphiques matplotlib
 # des bilans thématiques — barres, courbes, etc.
@@ -223,6 +223,10 @@ class PDFReportBuilder:
     @property
     def tmp_dir(self) -> Path:
         return self._tmp_dir
+
+    def begin_content_pages(self) -> None:
+        """Contenu sur le gabarit Normal, sans page de garde ni sommaire."""
+        self.story.append(NextPageTemplate("Normal"))
 
     # ------------------------------------------------------------------
     # Page backgrounds
@@ -571,11 +575,17 @@ class PDFReportBuilder:
     # ------------------------------------------------------------------
     # Key figures
     # ------------------------------------------------------------------
-    def add_key_figures(self, figures: List[Tuple[str, str]], *, spacer_after_mm: float = 2.0) -> None:
+    def add_key_figures(
+        self,
+        figures: List[Tuple[str, str]],
+        *,
+        spacer_after_mm: float = 2.0,
+        density: str = "auto",
+    ) -> None:
         """figures = [(value_str, label_str), ...]"""
         if not figures:
             return
-        kf_table = key_figures_table(figures, self.styles)
+        kf_table = key_figures_table(figures, self.styles, density=density)
         spacer = Spacer(1, float(spacer_after_mm) * mm)
         if self._pending_section is not None:
             self.story.append(KeepTogether(self._pending_section + [kf_table, spacer]))
@@ -583,6 +593,88 @@ class PDFReportBuilder:
         else:
             self.story.append(kf_table)
             self.story.append(spacer)
+
+    def add_key_figures_rows(
+        self,
+        figure_rows: List[List[Tuple[str, str]]],
+        *,
+        spacer_after_mm: float = 2.0,
+    ) -> None:
+        """Chiffres clés sur plusieurs lignes ; s'ajoute au titre de section en attente si présent."""
+        if not figure_rows:
+            return
+        kf_table = key_figures_table_rows(figure_rows, self.styles)
+        spacer = Spacer(1, float(spacer_after_mm) * mm)
+        if self._pending_section is not None:
+            self._pending_section.extend([kf_table, spacer])
+        else:
+            self.story.append(kf_table)
+            self.story.append(spacer)
+
+    def append_pending_paragraph(self, text: str, style: str = "BodyText") -> None:
+        """Paragraphe ajouté au bloc en attente (sans flush immédiat)."""
+        para = Paragraph(text, self.styles[style])
+        spacer = Spacer(1, 1 * mm)
+        if self._pending_section is not None:
+            self._pending_section.extend([para, spacer])
+        else:
+            self.story.append(para)
+            self.story.append(spacer)
+
+    def append_pending_image(
+        self,
+        path: Path,
+        width_ratio: float = 0.55,
+        *,
+        spacer_after_mm: float = 1.0,
+    ) -> None:
+        """Image ajoutée au bloc en attente (sans flush immédiat)."""
+        if not Path(path).exists():
+            return
+        w = self.avail_w * width_ratio
+        try:
+            with PILImage.open(str(path)) as im:
+                width_px, height_px = im.size
+            ratio = height_px / float(width_px) if width_px > 0 else 0.65
+        except Exception:
+            ratio = 0.65
+        img = RLImage(str(path), width=w, height=w * ratio)
+        img.hAlign = "CENTER"
+        block = [img, Spacer(1, float(spacer_after_mm) * mm)]
+        if self._pending_section is not None:
+            self._pending_section.extend(block)
+        else:
+            for el in block:
+                self.story.append(el)
+
+    def append_pending_table(
+        self,
+        data_rows: list,
+        caption: str = "",
+        *,
+        col_widths: Optional[list] = None,
+        col_aligns: Optional[list] = None,
+        spacer_after_mm: float = 1.5,
+    ) -> None:
+        """Tableau ajouté au bloc en attente (sans flush immédiat)."""
+        block: List = []
+        if caption:
+            block.append(Paragraph(caption, self.styles["TableCaption"]))
+            block.append(Spacer(1, 1 * mm))
+        block.append(
+            ofb_table(
+                data_rows,
+                col_widths=col_widths,
+                col_aligns=col_aligns,
+                split_by_row=True,
+            )
+        )
+        block.append(Spacer(1, float(spacer_after_mm) * mm))
+        if self._pending_section is not None:
+            self._pending_section.extend(block)
+        else:
+            for el in block:
+                self.story.append(el)
 
     def add_key_figures_and_table(
         self,

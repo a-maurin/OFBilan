@@ -8,7 +8,8 @@ Les bilans PDF intègrent des cartes pré-générées stockées dans `data/out/g
 - Exemples usuels :
   - `carte_agrainage.png`
   - `carte_chasse.png`
-  - `carte_global_usagers.png`
+  - `carte_global.png` (bilan `--profil global`)
+  - `carte_global_usagers.png` (carte par types d’usagers, autre usage)
   - `carte_procedures_pve.png`
 
 Pour le profil `types_usager_cible`, le `map_id` est construit à partir de la
@@ -22,7 +23,7 @@ sélection d’usagers (ex. `carte_Agriculteur_Collectivite.png`).
     - `data/out/generateur_de_cartes/<profile_id>.png`,
     - puis tout fichier `*<profile_id>*.png`.
   - `find_maps_for_bilan("bilan_global")` agrège les cartes standards du bilan
-    global : `agrainage`, `chasse`, `global_usagers`, `procedures_pve`.
+    global : `global`, `agrainage`, `chasse`, `procedures_pve`.
 
 - Dans `python -m bilans` (CLI officielle) :
   - `ensure_maps("bilan_global", ...)` est appelé avant le bilan global,

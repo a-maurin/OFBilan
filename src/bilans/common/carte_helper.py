@@ -174,7 +174,7 @@ def expected_map_filenames(
 def find_maps_for_bilan(bilan_type: str) -> List[Path]:
     """Return all pre-generated map PNGs relevant to a bilan type."""
     profile_map = {
-        "bilan_global": ["agrainage", "chasse", "global_usagers", "procedures_pve"],
+        "bilan_global": ["global", "agrainage", "chasse", "procedures_pve"],
         "bilan_agrainage": ["agrainage"],
         "bilan_chasse": ["chasse"],
         "bilan_procedures": ["procedures_pve"],
@@ -232,7 +232,7 @@ def ensure_maps(
         return existing
 
     profile_map = {
-        "bilan_global": ["agrainage", "chasse", "global_usagers", "procedures_pve"],
+        "bilan_global": ["global", "agrainage", "chasse", "procedures_pve"],
         "bilan_agrainage": ["agrainage"],
         "bilan_chasse": ["chasse"],
         "bilan_procedures": ["procedures_pve"],

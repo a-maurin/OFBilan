@@ -9,10 +9,14 @@ capabilities:
   combine: false
   mix_batch: false
   map_profiles:
-  - global_usagers
+  - global
   - agrainage
   - chasse
   - procedures_pve
+
+cartographie:
+  fichiers:
+    - carte_global.png
 aggregation:
   adapter: run_profile_aggregations
 pdf:

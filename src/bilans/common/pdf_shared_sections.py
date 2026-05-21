@@ -19,10 +19,12 @@ def add_standard_notice_methodology(
     diffusion: str | None = "interne",
 ) -> None:
     """
-    Ajoute une notice méthodologique standardisée.
+    Ajoute une notice méthodologique standardisée (début du PDF, avant le sommaire).
+
+    N'affecte pas la mention « diffusion restreinte » sur la page de garde, gérée
+    séparément par ``PDFReportBuilder`` lorsque ``--diffusion interne``.
 
     `period_sentence` doit être déjà formatée, par ex:
-    - "Pour ce bilan, les extractions portent sur la période du 01/01/2025 au 05/02/2026."
     - "Pour ce bilan, les extractions portent sur la période du 01/01/2025 au 05/02/2026."
     """
     notice_cfg = resolve_notice_methodology_config(effective_cfg or {})
@@ -31,7 +33,6 @@ def add_standard_notice_methodology(
     unit_measure = str(notice_cfg.get("unit_measure_paragraph", "")).strip()
     pa_pj = str(notice_cfg.get("pa_pj_distinction_paragraph", "")).strip()
     multi_usager = str(notice_cfg.get("multi_usager_paragraph", "")).strip()
-    external_detail = str(notice_cfg.get("external_detail_paragraph", "")).strip()
 
     builder.add_section("notice_methodo", title)
     if data_source:
@@ -43,8 +44,7 @@ def add_standard_notice_methodology(
         builder.add_paragraph(pa_pj)
     if multi_usager:
         builder.add_paragraph(multi_usager)
-    if str(diffusion or "interne").strip().lower() in ("externe", "external", "ext") and external_detail:
-        builder.add_paragraph(external_detail)
+    # Pas de paragraphe « diffusion externe » ici (uniquement allègement de cette notice).
     builder.add_page_break()
 
 

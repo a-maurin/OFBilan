@@ -34,6 +34,27 @@ def _load_types_usagers_mapping() -> dict[tuple[str, str, str], str]:
     return mapping
 
 
+@functools.lru_cache(maxsize=1)
+def _canonical_type_usager_aliases() -> dict[str, str]:
+    """
+    Libellés déjà au format catégorie cible (référentiel), pour PEJ/PA (champ USAGER).
+    """
+    aliases: dict[str, str] = {}
+    for (_, _, _), tu in _load_types_usagers_mapping().items():
+        aliases[_norm_key(tu)] = tu
+    for (_, _, vs), tu in _load_types_usagers_mapping().items():
+        aliases.setdefault(_norm_key(vs), tu)
+    return aliases
+
+
+def format_type_usager_display(label: str) -> str:
+    """Libellé affiché dans les PDF (ex. « Autre » → « Autre usager »)."""
+    s = str(label or "").strip()
+    if s == "Autre":
+        return "Autre usager"
+    return s
+
+
 def _parse_type_usager_tokens(valeur_source: str) -> list[tuple[str, int]]:
     """
     Parse une valeur OSCEAN de type_usager.
@@ -67,7 +88,20 @@ def map_type_usager(source_table: str, source_champ: str, valeur_source: str) ->
     """Mappe une valeur source vers un type d’usager (6 catégories cibles). Fallback : 'Autre'."""
     mapping = _load_types_usagers_mapping()
     key = (_norm_key(source_table), _norm_key(source_champ), _norm_key(valeur_source))
-    return mapping.get(key, "Autre")
+    if key in mapping:
+        return mapping[key]
+    hit = _canonical_type_usager_aliases().get(_norm_key(valeur_source))
+    if hit:
+        return hit
+    return "Autre"
+
+
+def resolve_type_usager_champ(df: pd.DataFrame) -> str | None:
+    """Colonne type d'usager dans un jeu PEJ/PA/contrôles (casse et alias OSCEAN)."""
+    for name in ("type_usager", "USAGER", "TYPE_USAGER", "TYPE USAGER"):
+        if name in df.columns:
+            return name
+    return None
 
 
 def serie_type_usager(df: pd.DataFrame, source_table: str, source_champ: str) -> pd.Series:
@@ -200,6 +234,48 @@ def agg_effectifs_usagers_par_domaine(
     cross = long.groupby(["type_usager", "domaine"])["nb"].sum().unstack(fill_value=0)
     cross.index.name = "type_usager"
     return cross.reset_index()
+
+
+def agg_effectifs_usagers_par_theme(
+    df: pd.DataFrame,
+    col_theme: str = "theme",
+    source_table: str = "point_ctrl",
+    source_champ: str = "type_usager",
+) -> pd.DataFrame:
+    """
+    Effectifs par type d'usager × thème (format long : type_usager, theme, nb).
+
+    Chaque libellé d'usager sur une fiche est compté avec son effectif chiffré
+    (contrôles multi-usagers : plusieurs effectifs pour une même localisation).
+    """
+    if source_champ not in df.columns:
+        return pd.DataFrame(columns=["type_usager", "theme", "nb"])
+    theme_col = col_theme if col_theme in df.columns else None
+    if theme_col is None and "type_actio" in df.columns:
+        theme_col = "type_actio"
+    if theme_col is None:
+        return pd.DataFrame(columns=["type_usager", "theme", "nb"])
+
+    rows: list[tuple[str, str, int]] = []
+    for _, row in df.iterrows():
+        theme = str(row.get(theme_col, "Hors thème") or "Hors thème")
+        toks = _parse_type_usager_tokens(row.get(source_champ))
+        if not toks:
+            rows.append(("Autre", theme, 1))
+            continue
+        for lab, n in toks:
+            cat = map_type_usager(source_table, source_champ, lab)
+            rows.append((cat, theme, int(n)))
+
+    if not rows:
+        return pd.DataFrame(columns=["type_usager", "theme", "nb"])
+
+    long = pd.DataFrame(rows, columns=["type_usager", "theme", "nb"])
+    return (
+        long.groupby(["type_usager", "theme"], as_index=False)["nb"]
+        .sum()
+        .sort_values(["type_usager", "nb"], ascending=[True, False], kind="stable")
+    )
 
 
 def agg_controles_par_type_usager_domaine(
@@ -434,6 +510,67 @@ def agg_resultat_counts_par_type_usager(
         for cat in cats:
             d = counts.setdefault(cat, {k: 0 for k in buckets})
             d[b] += 1
+
+    rows: list[dict[str, object]] = []
+    for cat in sorted(counts.keys(), key=lambda x: (-sum(counts[x].values()), x)):
+        d = counts[cat]
+        tot = sum(d.values())
+        row = {"type_usager": cat, "Total": tot}
+        for k in buckets:
+            row[k] = int(d[k])
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def agg_resultat_effectifs_par_type_usager(
+    df: pd.DataFrame,
+    col_resultat: str = "resultat",
+    source_table: str = "point_ctrl",
+    source_champ: str = "type_usager",
+) -> pd.DataFrame:
+    """
+    Résultats des contrôles par type d'usager, pondérés par effectif.
+
+    Même ventilation que ``agg_resultat_counts_par_type_usager``, mais chaque
+    catégorie d'usager reçoit l'effectif chiffré de la fiche (et non +1 par
+    localisation).
+    """
+    if source_champ not in df.columns or col_resultat not in df.columns:
+        return pd.DataFrame(
+            columns=[
+                "type_usager",
+                "Conforme",
+                "Infraction",
+                "Manquement",
+                "Autre_resultat",
+                "Total",
+            ]
+        )
+
+    buckets = ("Conforme", "Infraction", "Manquement", "Autre_resultat")
+    counts: dict[str, dict[str, int]] = {}
+
+    for _, row in df.iterrows():
+        res = str(row.get(col_resultat, "") or "").strip()
+        if res == "Infraction":
+            b = "Infraction"
+        elif res == "Manquement":
+            b = "Manquement"
+        elif res == "Conforme":
+            b = "Conforme"
+        else:
+            b = "Autre_resultat"
+
+        toks = _parse_type_usager_tokens(row.get(source_champ))
+        if not toks:
+            cat = "Autre"
+            d = counts.setdefault(cat, {k: 0 for k in buckets})
+            d[b] += 1
+            continue
+        for lab, n in toks:
+            cat = map_type_usager(source_table, source_champ, lab)
+            d = counts.setdefault(cat, {k: 0 for k in buckets})
+            d[b] += int(n)
 
     rows: list[dict[str, object]] = []
     for cat in sorted(counts.keys(), key=lambda x: (-sum(counts[x].values()), x)):

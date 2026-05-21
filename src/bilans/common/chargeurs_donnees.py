@@ -335,6 +335,10 @@ def load_pej(
     Le **décompte et le filtre de période** s'appuient uniquement sur le classeur
     ODS, sur ``RECAP_DATE_INIT_PJ`` (et non plus sur la coalescence DATE_REF).
 
+    Si *dept_code* est fourni, les lignes sont restreintes à
+    ``ENTITE_ORIGINE_PROCEDURE == SD{dept_code}``, puis dédoublonnées par ``DC_ID``
+    (ligne la plus récente selon ``DATE_REF``).
+
     Les localisations ne sont pas dans l'ODS : les joindre via
     ``merge_pej_faits_locations`` sur la couche ``localisation_infrac_FAITS_*``.
     Voir ref/README_sources.md § 2.2.
@@ -378,6 +382,20 @@ def load_pej(
         deb_ts = pd.to_datetime(date_deb)
         fin_ts = pd.to_datetime(date_fin)
         df = filtre_periode(df, "RECAP_DATE_INIT_PJ", deb_ts, fin_ts)
+
+    if dept_code is not None and str(dept_code).strip():
+        entity_sd = f"SD{str(dept_code).strip()}"
+        if "ENTITE_ORIGINE_PROCEDURE" in df.columns:
+            df = df[df["ENTITE_ORIGINE_PROCEDURE"].astype(str).str.strip() == entity_sd].copy()
+
+    if not df.empty and "DC_ID" in df.columns:
+        if "DATE_REF" in df.columns:
+            df = df.sort_values("DATE_REF", ascending=False).drop_duplicates(
+                subset="DC_ID", keep="first"
+            )
+        else:
+            df = df.drop_duplicates(subset="DC_ID", keep="first")
+
     return df
 
 

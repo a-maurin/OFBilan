@@ -308,8 +308,14 @@ def _run_global_profile_via_yaml(
     pdf_mod = __import__("bilans.engine.generation_pdf_profil", fromlist=["_dummy"])
     agg_adapter_name = str((profile.get("aggregation", {}) or {}).get("adapter", "run_profile_aggregations")).strip()
     pdf_adapter_name = str((profile.get("pdf", {}) or {}).get("adapter", "generate_profile_pdf_report")).strip()
-    run_aggregations = getattr(aggregations_mod, agg_adapter_name)
-    generate_pdf_impl = getattr(pdf_mod, pdf_adapter_name)
+    run_aggregations = getattr(aggregations_mod, agg_adapter_name, None)
+    if run_aggregations is None:
+        synthese_agg = __import__("bilans.engine.synthese_aggregations", fromlist=[agg_adapter_name])
+        run_aggregations = getattr(synthese_agg, agg_adapter_name)
+    generate_pdf_impl = getattr(pdf_mod, pdf_adapter_name, None)
+    if generate_pdf_impl is None:
+        synthese_pdf = __import__("bilans.engine.generation_pdf_synthese", fromlist=[pdf_adapter_name])
+        generate_pdf_impl = getattr(synthese_pdf, pdf_adapter_name)
 
     resolved_opts = resolve_options(profile, options)
     chart_preset = resolved_opts.get("chart_preset")
@@ -344,7 +350,12 @@ def _run_global_profile_via_yaml(
     with Spinner():
         point = load_point_ctrl(root, dept_code=dept_code_norm, date_deb=date_deb_ts, date_fin=date_fin_ts)
         pa = load_pa(root, date_deb=date_deb_ts, date_fin=date_fin_ts)
-        pej = load_pej(root, date_deb=date_deb_ts, date_fin=date_fin_ts)
+        pej = load_pej(
+            root,
+            dept_code=dept_code_norm,
+            date_deb=date_deb_ts,
+            date_fin=date_fin_ts,
+        )
         pve = load_pve(root, dept_code=dept_code_norm, date_deb=date_deb_ts, date_fin=date_fin_ts)
 
     spatial_log = logging.getLogger("bilans.spatial")
@@ -381,18 +392,22 @@ def _run_global_profile_via_yaml(
     print("Étape 4/4 : génération du PDF...")
     with Spinner():
         output_filename = str(profile.get("output_filename", "")).strip() or None
-        generate_pdf_impl(
-            out_dir,
-            profile=profile,
-            date_deb=date_deb_ts,
-            date_fin=date_fin_ts,
-            dept_code=dept_code_norm,
-            ventilation_mode=ventilation_mode,
-            chart_preset=chart_preset,
-            output_filename=output_filename,
-            diffusion=str(resolved_opts.get("diffusion", "interne")),
-            cartes=bool(resolved_opts.get("cartes", False)),
-        )
+        pdf_kwargs: dict = {
+            "profile": profile,
+            "date_deb": date_deb_ts,
+            "date_fin": date_fin_ts,
+            "dept_code": dept_code_norm,
+            "ventilation_mode": ventilation_mode,
+            "chart_preset": chart_preset,
+            "output_filename": output_filename,
+            "diffusion": str(resolved_opts.get("diffusion", "interne")),
+            "cartes": bool(resolved_opts.get("cartes", False)),
+        }
+        import inspect
+
+        if "brochure" in inspect.signature(generate_pdf_impl).parameters:
+            pdf_kwargs["brochure"] = bool(resolved_opts.get("brochure", False))
+        generate_pdf_impl(out_dir, **pdf_kwargs)
 
     print(f"Bilan global généré dans data/out/{out_subdir}.")
     return 0
@@ -426,7 +441,7 @@ def resolve_profile_map_id(profile: dict, profil_id: str) -> str:
     if existing:
         return str(existing).strip()
     if str(profile.get("pipeline", "")).strip().lower() == "global":
-        return "global_usagers"
+        return str(profil_id).strip() or "global"
     targets = (profile.get("filter", {}) or {}).get("type_usager_target") or []
     if profil_id == "types_usager_cible" and targets:
         codes = [_short_type_usager_code(t) for t in targets]
@@ -4033,7 +4048,12 @@ def _run_engine_thematic_pipeline(
             else pd.DataFrame()
         )
         pej = (
-            load_pej(root, date_deb=date_deb, date_fin=date_fin)
+            load_pej(
+                root,
+                dept_code=dept_code,
+                date_deb=date_deb,
+                date_fin=date_fin,
+            )
             if sources.get("pej", True)
             else pd.DataFrame()
         )

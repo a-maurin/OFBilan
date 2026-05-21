@@ -331,17 +331,62 @@ def ofb_table(
     return tbl
 
 
-def key_figures_table(figures: list[tuple[str, str]], styles):
+def key_figures_table(
+    figures: list[tuple[str, str]],
+    styles,
+    *,
+    density: str = "auto",
+):
     """Bloc de chiffres clés : liste de (valeur, libellé) affichés en ligne."""
     if not figures:
         return Spacer(1, 0)
+    n = len(figures)
+    if density == "auto":
+        if n >= 7:
+            density = "dense"
+        elif n >= 5:
+            density = "compact"
+        else:
+            density = "normal"
+    if density == "dense":
+        val_style = ParagraphStyle(
+            "KFValDense",
+            parent=styles["KeyFigure"],
+            fontSize=14,
+            leading=17,
+        )
+        lbl_style = ParagraphStyle(
+            "KFLblDense",
+            parent=styles["KeyFigureLabel"],
+            fontSize=6.5,
+            leading=8,
+        )
+        val_pad, lbl_pad = 5, 5
+    elif density == "compact":
+        val_style = ParagraphStyle(
+            "KFValCompact",
+            parent=styles["KeyFigure"],
+            fontSize=17,
+            leading=20,
+        )
+        lbl_style = ParagraphStyle(
+            "KFLblCompact",
+            parent=styles["KeyFigureLabel"],
+            fontSize=7.5,
+            leading=9,
+        )
+        val_pad, lbl_pad = 6, 6
+    else:
+        val_style = styles["KeyFigure"]
+        lbl_style = styles["KeyFigureLabel"]
+        val_pad, lbl_pad = 8, 8
     header = []
     labels = []
     for val, lbl in figures:
-        header.append(Paragraph(f"<b>{val}</b>", styles["KeyFigure"]))
-        labels.append(Paragraph(lbl, styles["KeyFigureLabel"]))
-    col_w = (PAGE_W - MARGIN_LEFT - MARGIN_RIGHT) / len(figures)
-    tbl = Table([header, labels], colWidths=[col_w] * len(figures))
+        header.append(Paragraph(f"<b>{val}</b>", val_style))
+        labels.append(Paragraph(lbl, lbl_style))
+    col_w = (PAGE_W - MARGIN_LEFT - MARGIN_RIGHT) / n
+    tbl = Table([header, labels], colWidths=[col_w] * n)
     tbl.setStyle(
         TableStyle(
             [
@@ -349,9 +394,48 @@ def key_figures_table(figures: list[tuple[str, str]], styles):
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                 ("BOX", (0, 0), (-1, -1), 1, rl_colors.HexColor(COLOR_PRIMARY)),
                 ("LINEBELOW", (0, 0), (-1, 0), 0.5, COLOR_TABLE_BORDER),
-                ("TOPPADDING", (0, 0), (-1, 0), 8),
-                ("BOTTOMPADDING", (0, -1), (-1, -1), 8),
+                ("TOPPADDING", (0, 0), (-1, 0), val_pad),
+                ("BOTTOMPADDING", (0, -1), (-1, -1), lbl_pad),
             ]
         )
     )
+    return tbl
+
+
+def key_figures_table_rows(
+    figures_rows: list[list[tuple[str, str]]],
+    styles,
+):
+    """Bloc de chiffres clés sur plusieurs lignes (valeurs puis libellés par ligne)."""
+    if not figures_rows or not any(figures_rows):
+        return Spacer(1, 0)
+    n_cols = max(len(row) for row in figures_rows)
+    val_style = styles["KeyFigure"]
+    lbl_style = styles["KeyFigureLabel"]
+    table_rows: list[list] = []
+    for row_figs in figures_rows:
+        val_cells: list = []
+        lbl_cells: list = []
+        for i in range(n_cols):
+            if i < len(row_figs):
+                val, lbl = row_figs[i]
+                val_cells.append(Paragraph(f"<b>{val}</b>", val_style))
+                lbl_cells.append(Paragraph(lbl, lbl_style))
+            else:
+                val_cells.append(Paragraph("", val_style))
+                lbl_cells.append(Paragraph("", lbl_style))
+        table_rows.append(val_cells)
+        table_rows.append(lbl_cells)
+    col_w = (PAGE_W - MARGIN_LEFT - MARGIN_RIGHT) / n_cols
+    tbl = Table(table_rows, colWidths=[col_w] * n_cols)
+    style_cmds: list = [
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("BOX", (0, 0), (-1, -1), 1, rl_colors.HexColor(COLOR_PRIMARY)),
+        ("TOPPADDING", (0, 0), (-1, 0), 8),
+        ("BOTTOMPADDING", (0, -1), (-1, -1), 8),
+    ]
+    if len(table_rows) >= 4:
+        style_cmds.append(("LINEBELOW", (0, 1), (-1, 1), 0.5, COLOR_TABLE_BORDER))
+    tbl.setStyle(TableStyle(style_cmds))
     return tbl

@@ -244,6 +244,15 @@ profiles:
         show_table_themes_par_type_usager: false
         show_resultats_par_type_usager_chart: false
 
+  # Synthèse PA/PJ : titre page de garde dédié (PDF généré par generation_pdf_synthese).
+  synthese_activite_PA_PJ:
+    scope: global
+    title:
+      line1: "Synthèse des activités de police\nadministrative et judiciaire"
+      line2_mode: none
+    title_page:
+      subtitle_mode: none
+
   # Contrôles sécheresse : pas de tableaux « par zone » PVe/PEJ (découpages type PNF/TUB).
   controles_secheresse:
     scope: thematique

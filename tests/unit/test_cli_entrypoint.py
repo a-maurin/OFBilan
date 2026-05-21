@@ -48,7 +48,7 @@ def test_bilans_cli_interactive_profile_prompt(monkeypatch) -> None:
         "2025-12-31",
         "21",
         False,
-        {"diffusion": "interne"},
+        None,
     )
 
 
@@ -128,6 +128,50 @@ def test_bilans_cli_type_usager_and_cartes_options(monkeypatch) -> None:
     assert opts["type_usager_target"] == ["Agriculteur et autres acteurs agricoles"]
     assert opts["cartes"] is False
     assert opts["pnf"] is False
+
+
+def test_bilans_cli_brochure_option(monkeypatch) -> None:
+    import bilans.point_entree_cli as cli
+
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "bilans",
+            "--profil",
+            "synthese_activite_PA_PJ",
+            "--date-deb",
+            "2025-01-01",
+            "--date-fin",
+            "2025-12-31",
+            "--brochure",
+        ],
+    )
+    monkeypatch.setattr(cli, "_check_deps", lambda: None)
+    monkeypatch.setattr(
+        "bilans.engine.catalogue_profils.resolve_profile_ids",
+        lambda ids: ids,
+    )
+
+    def _fake_run_batch(
+        _profils: list[str],
+        _date_deb: str,
+        _date_fin: str,
+        _dept_code: str,
+        *,
+        combine: bool = False,
+        cli_options: dict | None = None,
+    ) -> int:
+        captured["cli_options"] = cli_options
+        return 0
+
+    monkeypatch.setattr(
+        "bilans.engine.execution_lots_profils.run_profiles_batch",
+        _fake_run_batch,
+    )
+    assert cli.main() == 0
+    assert captured["cli_options"]["brochure"] is True
 
 
 def test_list_type_usagers(monkeypatch, capsys) -> None:

@@ -160,11 +160,20 @@ def main() -> int:
     parser.add_argument(
         "--diffusion",
         choices=("interne", "externe"),
-        default="interne",
+        default=None,
         help=(
             "Périmètre de diffusion du PDF : interne (détail nominatif des procédures) "
             "ou externe (sans listes PEJ/PA/PVe avec numéro de dossier ni localisation). "
+            "Par défaut : valeur du profil YAML (sinon interne). "
             "Les cartes sont conservées dans les deux cas."
+        ),
+    )
+    parser.add_argument(
+        "--brochure",
+        action="store_true",
+        help=(
+            "Profil synthese_activite_PA_PJ : génère un PDF brochure de 2 pages A4 portrait "
+            "(fichier *_brochure_ext.pdf ou *_brochure_int.pdf) à la place du rapport détaillé."
         ),
     )
     args = parser.parse_args()
@@ -229,7 +238,10 @@ def main() -> int:
         cli_options["cartes"] = args.cartes
     if args.pnf is not None:
         cli_options["pnf"] = args.pnf
-    cli_options["diffusion"] = args.diffusion
+    if args.diffusion is not None:
+        cli_options["diffusion"] = args.diffusion
+    if args.brochure:
+        cli_options["brochure"] = True
 
     return run_profiles_batch(
         profils_resolus,
