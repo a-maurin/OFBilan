@@ -1,16 +1,33 @@
-# Profil « bilan global » — exécuté par le moteur unifié (pipeline global).
-# Ne pas utiliser ce fichier comme un profil thématique classique.
 id: global
 label: Bilan global
 title_label: Bilan global
 pipeline: global
+presentation_scope: global
 out_subdir: bilan_global
 output_filename: bilan_global.pdf
 capabilities:
   combine: false
   mix_batch: false
-  map_profiles: ["global_usagers", "agrainage", "chasse", "procedures_pve"]
+  map_profiles:
+  - global_usagers
+  - agrainage
+  - chasse
+  - procedures_pve
 aggregation:
   adapter: run_profile_aggregations
 pdf:
   adapter: generate_profile_pdf_report
+periode_analyse:
+  ventilation:
+    type: auto
+    seuil_jours: 0
+analyse_PVe: true
+analyses:
+  type_usager: true
+  distinction_coeur_hors_coeur: false
+
+options:
+  cartes:
+    label: "Intégration des cartes"
+    default: true
+    ask: false

@@ -313,7 +313,16 @@ def _run_global_profile_via_yaml(
 
     resolved_opts = resolve_options(profile, options)
     chart_preset = resolved_opts.get("chart_preset")
+    if options.get("chart_preset") and not chart_preset:
+        chart_preset = options.get("chart_preset")
+    resolved_opts = ask_interactive_options(profile, resolved_opts)
     root = PROJECT_ROOT
+    prompt_cartography_integration(
+        root=root,
+        profile=profile,
+        profil_id=str(profile.get("id", "global")),
+        resolved_opts=resolved_opts,
+    )
     out_subdir = str(profile.get("out_subdir", f"bilan_{profile.get('id', 'global')}")).strip()
     if not out_subdir:
         out_subdir = "bilan_global"
@@ -382,6 +391,7 @@ def _run_global_profile_via_yaml(
             chart_preset=chart_preset,
             output_filename=output_filename,
             diffusion=str(resolved_opts.get("diffusion", "interne")),
+            cartes=bool(resolved_opts.get("cartes", False)),
         )
 
     print(f"Bilan global généré dans data/out/{out_subdir}.")
@@ -408,6 +418,78 @@ def _copy_to_clipboard(text: str) -> None:
     except Exception as exc:
         # En cas d'échec (clip absent, droits, etc.), on ne bloque pas le bilan.
         _log.debug("Copie presse-papiers (clip) indisponible: %s", exc)
+
+
+def resolve_profile_map_id(profile: dict, profil_id: str) -> str:
+    """Identifiant cartographique pour retrouver les PNG (profil global, thématique, usager ciblé)."""
+    existing = profile.get("_map_id")
+    if existing:
+        return str(existing).strip()
+    if str(profile.get("pipeline", "")).strip().lower() == "global":
+        return "global_usagers"
+    targets = (profile.get("filter", {}) or {}).get("type_usager_target") or []
+    if profil_id == "types_usager_cible" and targets:
+        codes = [_short_type_usager_code(t) for t in targets]
+        return "_".join([c for c in codes if c]) or profil_id
+    return profil_id
+
+
+def prompt_cartography_integration(
+    *,
+    root: Path,
+    profile: dict,
+    profil_id: str,
+    resolved_opts: dict,
+    map_id: str | None = None,
+) -> None:
+    """
+    Pause interactive : dossier et noms de fichiers attendus pour les cartes du PDF.
+
+    Même comportement pour tous les profils (global et thématiques) si ``--cartes``
+    et terminal interactif.
+    """
+    if not resolved_opts.get("cartes", False) or not sys.stdin.isatty():
+        return
+    map_id = (map_id or resolve_profile_map_id(profile, profil_id)).strip() or profil_id
+    profile["_map_id"] = map_id
+    scope = str(profile.get("presentation_scope", "thematique")).strip() or "thematique"
+    cartes_dir = get_cartes_dir()
+    pres_cfg = resolve_pdf_presentation_config(
+        root, scope=scope, profile_id=profil_id
+    ).get("effective", {})
+    expected_names = expected_map_filenames(
+        map_id,
+        profile=profile,
+        presentation_cfg=pres_cfg if isinstance(pres_cfg, dict) else None,
+    )
+    if not expected_names:
+        expected_names = [f"carte_{map_id}.png", f"carte_{map_id}_2.png"]
+
+    section_hint = (
+        "section 5 (localisation cartographique)"
+        if scope == "global"
+        else "section 5 du bilan (même page si deux fichiers)"
+    )
+    print("\n--- Cartographie ---")
+    print(f"Pour intégrer les cartes dans le bilan PDF ({section_hint}) :")
+    print(f"  - dossier : {cartes_dir}")
+    for name in expected_names:
+        print(f"  - fichier : {name}")
+    layout_hint = resolve_map_layout(
+        profile=profile,
+        presentation_cfg=pres_cfg if isinstance(pres_cfg, dict) else None,
+    )
+    if len(expected_names) >= 2:
+        dispo = "côte à côte" if layout_hint == "horizontal" else "l'une au-dessus de l'autre"
+        print(f"  - si les deux PNG sont présents, elles seront affichées {dispo}.")
+
+    _copy_to_clipboard(expected_names[0])
+    print("(Le premier nom de fichier attendu a été copié dans le presse-papiers si possible.)")
+
+    try:
+        input("Appuyez sur Entrée une fois la carte prête (renommée et placée au bon endroit)... ")
+    except (EOFError, KeyboardInterrupt):
+        pass
 
 
 def resolve_options(profile: dict, cli_opts: dict | None = None) -> dict:
@@ -3906,51 +3988,17 @@ def _run_engine_thematic_pipeline(
     # Pour le profil "types_usager_cible", le nom de carte doit dépendre des
     # types d'usagers réellement sélectionnés, via des codes courts lisibles.
     targets = (profile.get("filter", {}) or {}).get("type_usager_target") or []
-    if profil_id == "types_usager_cible" and targets:
-        codes = [_short_type_usager_code(t) for t in targets]
-        map_id = "_".join([c for c in codes if c]) or profil_id
-    else:
-        map_id = profil_id
+    map_id = resolve_profile_map_id(profile, profil_id)
     profile["_map_id"] = map_id
 
-    # Si l'utilisateur a activé l'intégration des cartes, indiquer le nommage attendu
-    # de la carte et mettre le programme en pause pour lui laisser le temps de préparer
-    # le fichier (nom + emplacement).
-    #
-    # IMPORTANT : pour "types_usager_cible", cette étape doit se faire après la
-    # sélection des types d'usagers afin de respecter le nommage carte_{types}.
-    if resolved_opts.get("cartes", False) and sys.stdin.isatty():
-        cartes_dir = get_cartes_dir()
-        pres_cfg = resolve_pdf_presentation_config(
-            root, scope="thematique", profile_id=profil_id
-        ).get("effective", {})
-        expected_names = expected_map_filenames(
-            str(map_id), profile=profile, presentation_cfg=pres_cfg if isinstance(pres_cfg, dict) else None
-        )
-        if not expected_names:
-            expected_names = [f"carte_{map_id}.png", f"carte_{map_id}_2.png"]
-
-        print("\n--- Cartographie ---")
-        print("Pour intégrer les cartes dans le bilan PDF (section 5, même page si deux fichiers) :")
-        print(f"  - dossier : {cartes_dir}")
-        for name in expected_names:
-            print(f"  - fichier : {name}")
-        layout_hint = resolve_map_layout(
-            profile=profile,
-            presentation_cfg=pres_cfg if isinstance(pres_cfg, dict) else None,
-        )
-        if len(expected_names) >= 2:
-            dispo = "côte à côte" if layout_hint == "horizontal" else "l'une au-dessus de l'autre"
-            print(f"  - si les deux PNG sont présents, elles seront affichées {dispo}.")
-
-        _copy_to_clipboard(expected_names[0])
-        print("(Le premier nom de fichier attendu a été copié dans le presse-papiers si possible.)")
-
-        try:
-            input("Appuyez sur Entrée une fois la carte prête (renommée et placée au bon endroit)... ")
-        except (EOFError, KeyboardInterrupt):
-            # En contexte non interactif ou interruption, on continue sans bloquer.
-            pass
+    # Après sélection des types d'usagers (types_usager_cible) : pause cartographie commune.
+    prompt_cartography_integration(
+        root=root,
+        profile=profile,
+        profil_id=profil_id,
+        resolved_opts=resolved_opts,
+        map_id=map_id,
+    )
 
     # Déterminer si l'on est dans un contexte \"mono-usager\" (un seul type ciblé).
     is_type_usager = profile.get("analyses", {}).get("type_usager", False)

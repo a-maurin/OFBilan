@@ -85,6 +85,7 @@ def generate_profile_pdf_report(
     chart_preset: str | None = None,
     output_filename: str | None = None,
     diffusion: str = "interne",
+    cartes: bool = True,
 ) -> None:
     """Point d’entrée moteur unique pour générer le PDF d'un profil."""
     date_deb_ts = pd.to_datetime(date_deb) if date_deb is not None else pd.Timestamp("2025-01-01")
@@ -101,6 +102,7 @@ def generate_profile_pdf_report(
         chart_preset=chart_preset,
         output_filename=output_filename,
         diffusion=diffusion,
+        cartes=cartes,
     )
 
 
@@ -175,6 +177,7 @@ def generate_pdf_report(
     chart_preset: str | None = None,
     output_filename: str | None = None,
     diffusion: str = "interne",
+    cartes: bool = True,
 ) -> None:
     from bilans.common.rendus_graphiques import apply_mpl_style
 
@@ -189,6 +192,7 @@ def generate_pdf_report(
         chart_preset=chart_preset,
         output_filename=output_filename,
         diffusion=diffusion,
+        cartes=cartes,
     )
 
 
@@ -203,6 +207,7 @@ def _generate_pdf_content(
     chart_preset: str | None = None,
     output_filename: str | None = None,
     diffusion: str = "interne",
+    cartes: bool = True,
 ) -> None:
     chart_ratios = compute_pdf_ratios(load_chart_display_config(_ROOT, preset=chart_preset))
     scope = str((profile or {}).get("presentation_scope", "global")).strip() or "global"
@@ -246,10 +251,13 @@ def _generate_pdf_content(
     nb_pve = int(pve_resume["nb_pve_global"].iloc[0]) if pve_resume is not None and not pve_resume.empty else 0
 
     dept_name_typo = normalize_dept_typography(get_dept_name(dept_code))
-    global_map_paths = resolve_profile_map_paths(
-        "global_usagers", presentation_cfg=presentation_cfg
+    map_id = str(profile.get("_map_id") or "global_usagers").strip() or "global_usagers"
+    global_map_paths = (
+        resolve_profile_map_paths(map_id, presentation_cfg=presentation_cfg)
+        if cartes
+        else []
     )
-    global_map_layout = resolve_map_layout(presentation_cfg=presentation_cfg)
+    global_map_layout = resolve_map_layout(presentation_cfg=presentation_cfg) if cartes else "vertical"
 
     resolved_output_name = str(output_filename or "").strip() or "bilan_global.pdf"
     pdf_path = apply_diffusion_pdf_suffix(out_dir / resolved_output_name, diffusion)
@@ -1155,14 +1163,17 @@ def _generate_pdf_content(
             )
         show_map_block = is_block_enabled(presentation_cfg, "sec5.show_map", True)
         show_map_fallback = is_block_enabled(presentation_cfg, "sec5.show_map_fallback_message", True)
-        if is_section_enabled(presentation_cfg, "sec5map", True) and global_map_paths and show_map_block:
+        if not cartes:
+            if is_section_enabled(presentation_cfg, "sec5map", True) and show_placeholder:
+                builder.add_paragraph("<i>Cartographie désactivée pour ce bilan.</i>")
+        elif is_section_enabled(presentation_cfg, "sec5map", True) and global_map_paths and show_map_block:
             builder.add_paragraph(
                 "Répartition spatiale des usagers contrôlés par types (générateur cartographique).",
             )
             builder.add_maps(global_map_paths, layout=global_map_layout)
         elif is_section_enabled(presentation_cfg, "sec5map", True) and show_map_fallback and show_placeholder:
-            expected = expected_map_filenames("global_usagers", presentation_cfg=presentation_cfg)
-            files_hint = ", ".join(f"<b>{n}</b>" for n in expected) or "<b>carte_global_usagers.png</b>"
+            expected = expected_map_filenames(map_id, presentation_cfg=presentation_cfg)
+            files_hint = ", ".join(f"<b>{n}</b>" for n in expected) or f"<b>carte_{map_id}.png</b>"
             builder.add_paragraph(
                 f"<i>Carte(s) non disponible(s). Déposez {files_hint} dans le dossier des cartes pour "
                 "les intégrer au bilan.</i>"
