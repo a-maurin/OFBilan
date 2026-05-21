@@ -1,0 +1,259 @@
+# Schéma de l'interface « Configurer les profils » (tools/config_profils.py).
+# Chaque champ : path (dot), label, help, widget, visible_when, profile_exclude, pdf_scope.
+
+version: 1
+
+sections:
+  - id: identite
+    title: "Identité du profil"
+    help: "Libellés affichés dans la CLI, les PDF et le dossier de sortie des exports."
+    fields:
+      - path: id
+        label: "Identifiant technique"
+        help: "Nom du fichier YAML (sans .yaml). Non modifiable ici."
+        widget: readonly
+      - path: label
+        label: "Titre du bilan"
+        help: "Libellé principal du profil (menus, page de garde si non surchargé)."
+        widget: text
+      - path: title_label
+        label: "Titre PDF (surcharge)"
+        help: "Optionnel. Remplace le label sur la page de garde du PDF thématique."
+        widget: text
+        optional: true
+      - path: out_subdir
+        label: "Dossier de sortie"
+        help: "Sous-dossier dans data/out/ (ex. bilan_chasse)."
+        widget: text
+      - path: output_filename
+        label: "Nom du fichier PDF"
+        help: "Uniquement pour le bilan global (ex. bilan_global.pdf)."
+        widget: text
+        optional: true
+        profile_exclude: ["_defaults"]
+        visible_when:
+          profile_id: global
+
+  - id: filtre
+    title: "Filtrage des contrôles"
+    help: "Définit quels points de contrôle OSCEAN sont retenus pour le bilan."
+    profile_exclude: ["_defaults", "global"]
+    fields:
+      - path: filter.type
+        label: "Mode de filtre"
+        help: "Règle principale de sélection des contrôles."
+        widget: choice
+        choices:
+          all: "Tous les contrôles du département"
+          keywords: "Mots-clés dans des colonnes OSCEAN"
+          chasse: "Règle dédiée chasse"
+          agrainage: "Règle dédiée agrainage"
+          procedures: "Profil procédures (PVe / PEJ / PA)"
+          type_usager: "Filtrage par type d'usager ciblé"
+      - path: filter.keywords
+        label: "Mots-clés"
+        help: "Une valeur par ligne. Recherche dans les colonnes ci-dessous (mode keywords)."
+        widget: list_lines
+        visible_when:
+          filter.type: keywords
+      - path: filter.columns
+        label: "Colonnes OSCEAN pour les mots-clés"
+        help: "Une colonne par ligne (ex. theme, type_actio, nom_dossie)."
+        widget: list_lines
+        visible_when:
+          filter.type: keywords
+      - path: filter.type_usager_target
+        label: "Types d'usagers ciblés"
+        help: "Laisser vide = choix interactif à la génération. Une catégorie par ligne."
+        widget: list_lines
+        visible_when:
+          filter.type: type_usager
+      - path: restrict_geo
+        label: "Restriction géographique"
+        help: "Limite l'analyse à un périmètre SIG (ex. parc PNF)."
+        widget: choice
+        choices:
+          "": "Aucune (département entier)"
+          pnf: "Périmètre PNF uniquement"
+        optional: true
+
+  - id: sources
+    title: "Sources de données"
+    help: "Jeux de données OSCEAN chargés pour ce profil."
+    dynamic: sources
+    profile_exclude: ["_defaults"]
+
+  - id: options
+    title: "Options à la génération"
+    help: "Comportement par défaut et questions posées à l'utilisateur (CLI / lancement)."
+    dynamic: options
+    profile_exclude: ["_defaults", "global"]
+
+  - id: periode
+    title: "Période et ventilation"
+    help: "Découpage temporel des indicateurs dans le PDF."
+    profile_exclude: ["_defaults"]
+    fields:
+      - path: periode_analyse.ventilation.type
+        label: "Mode de ventilation"
+        help: "auto = règle selon la durée de la période ; autres = mode forcé."
+        widget: choice
+        choices:
+          auto: "Automatique (selon durée)"
+          mensuelle: "Mensuelle"
+          trimestrielle: "Trimestrielle"
+          annuelle: "Annuelle"
+          globale: "Globale (sans découpage)"
+        optional: true
+      - path: periode_analyse.ventilation.seuil_jours
+        label: "Seuil (jours) en mode auto"
+        help: "Au-delà de ce nombre de jours, bascule vers ventilation annuelle."
+        widget: int
+        optional: true
+
+  - id: analyses
+    title: "Analyses spécifiques"
+    help: "Sections et traitements additionnels du moteur."
+    profile_exclude: ["_defaults"]
+    fields:
+      - path: analyse_PVe
+        label: "Analyse détaillée des PVe"
+        help: "Active les traitements NATINF / infractions liés aux PVe."
+        widget: bool
+        optional: true
+      - path: analyses.type_usager
+        label: "Profil « analyse par type d'usager »"
+        help: "Sections PDF dédiées aux usagers (profils types_usager, etc.)."
+        widget: bool
+        optional: true
+      - path: analyses.distinction_coeur_hors_coeur
+        label: "Distinction cœur / hors-cœur (PNF)"
+        help: "Colonnes et indicateurs liés au zonage parc."
+        widget: bool
+        optional: true
+
+  - id: natinf
+    title: "Codes NATINF"
+    help: "Listes de codes pour filtrer PEJ et PVe (une valeur par ligne)."
+    profile_exclude: ["_defaults", "global"]
+    fields:
+      - path: natinf_pej
+        label: "NATINF — procédures PEJ"
+        widget: list_lines
+        optional: true
+      - path: natinf_pve
+        label: "NATINF — PVe"
+        widget: list_lines
+        optional: true
+
+  - id: cartographie
+    title: "Cartographie"
+    help: "Fichiers PNG attendus dans data/out/generateur_de_cartes/."
+    profile_exclude: ["_defaults", "global"]
+    fields:
+      - path: cartographie.disposition
+        label: "Disposition des cartes dans le PDF"
+        widget: choice
+        choices:
+          verticale: "Empilées (vertical)"
+          horizontale: "Côte à côte (horizontal)"
+        optional: true
+      - path: cartographie.fichiers
+        label: "Fichiers carte (motifs)"
+        help: "Ex. carte_{map_id}.png — une ligne par fichier."
+        widget: list_lines
+        optional: true
+        visible_when:
+          path_exists: cartographie
+
+  - id: pdf
+    title: "Présentation PDF"
+    help: "Surcharges dans config/presentation/pdf_presentation.yaml → profiles.<id>.blocks"
+    dynamic: pdf_blocks
+    profile_exclude: ["_defaults"]
+
+  - id: avance
+    title: "Avancé"
+    help: >
+      Édition directe du fichier YAML du profil (sans passer par les formulaires).
+      Vérifiez la syntaxe avant d'enregistrer. Quitter cette rubrique applique le texte
+      au modèle en mémoire.
+    ui_mode: yaml_editor
+
+# Catalogue des blocs PDF éditables (fusionné avec les valeurs par défaut à l'affichage).
+pdf_block_fields:
+  # --- Bilan thématique ---
+  - path: blocks.sec21.show_table
+    label: "2.1 — Tableau indicateurs ventilés"
+    pdf_scope: thematique
+  - path: blocks.sec21.show_chart_controles
+    label: "2.1 — Graphique contrôles"
+    pdf_scope: thematique
+  - path: blocks.sec21.show_chart_procedures
+    label: "2.1 — Graphique procédures / PVe"
+    pdf_scope: thematique
+  - path: blocks.sec21.show_chart_taux_line
+    label: "2.1 — Courbe taux de non-conformité"
+    pdf_scope: thematique
+  - path: blocks.sec22.show_intro_text
+    label: "2.2 — Texte d'introduction"
+    pdf_scope: thematique
+  - path: blocks.sec22.show_table
+    label: "2.2 — Tableau résultats des contrôles"
+    pdf_scope: thematique
+  - path: blocks.sec22.show_pie
+    label: "2.2 — Camembert « Répartition des résultats »"
+    help: "Conforme / Non-conforme / En attente."
+    pdf_scope: thematique
+  - path: blocks.sec4.show_intro_text
+    label: "4 — Texte d'introduction (usagers)"
+    pdf_scope: thematique
+  - path: blocks.sec4.show_table_usagers
+    label: "4 — Tableau effectifs par type d'usager"
+    pdf_scope: thematique
+  - path: blocks.sec4.show_pie_usagers
+    label: "4 — Camembert répartition par type d'usager"
+    pdf_scope: thematique
+  - path: blocks.sec4.show_table_themes_par_type_usager
+    label: "4 — Tableaux « Thèmes de contrôle » par type"
+    pdf_scope: thematique
+  - path: blocks.sec4.show_resultats_par_type_usager_chart
+    label: "4 — Graphique résultats par type d'usager"
+    pdf_scope: thematique
+  - path: blocks.sec4.show_resultats_par_type_usager_table
+    label: "4 — Tableau résultats par type d'usager"
+    pdf_scope: thematique
+  - path: blocks.sec31.show_zone_table
+    label: "3.1 PVe — Tableaux par zone"
+    pdf_scope: thematique
+  - path: blocks.sec32.show_zone_table
+    label: "3.2 PEJ — Tableaux par zone"
+    pdf_scope: thematique
+  - path: blocks.sec5.show_map
+    label: "5 — Carte dans le PDF"
+    pdf_scope: thematique
+  # --- Bilan global ---
+  - path: blocks.sec22dom.show_pie
+    label: "2.2 — Camembert par domaines"
+    pdf_scope: global
+  - path: blocks.sec22theme.show_pie
+    label: "2.3 — Camembert par thèmes"
+    pdf_scope: global
+  - path: blocks.sec22res.show_table
+    label: "2.4 — Tableau résultats"
+    pdf_scope: global
+  - path: blocks.sec22res.show_pie
+    label: "2.4 — Camembert résultats"
+    pdf_scope: global
+  - path: blocks.sec22res.show_chart_resultats_domaine
+    label: "2.4 — Graphique empilé par domaine"
+    pdf_scope: global
+  - path: blocks.sec4.show_resultats_par_type_usager_chart
+    label: "4 — Graphique résultats par type d'usager"
+    pdf_scope: global
+  - path: blocks.sec4.show_resultats_par_type_usager_table
+    label: "4 — Tableau résultats par type d'usager"
+    pdf_scope: global
+  - path: blocks.sec5map.show_map
+    label: "5 — Carte usagers"
+    pdf_scope: global

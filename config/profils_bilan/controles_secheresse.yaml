@@ -28,7 +28,8 @@ analyses:
 # Partie 4 du PDF : pas des tableaux « Thèmes de contrôle — <type d'usager> » (un par catégorie).
 # Réglage effectif : config/presentation/pdf_presentation.yaml → profiles.controles_secheresse
 # → blocks.sec4.show_table_themes_par_type_usager (false pour ce profil).
-# Section 2.2 : pas de camembert « Répartition des résultats » → blocks.sec22.show_pie: false.
+# Présentation PDF : rubrique « Présentation PDF » dans config_profils (schema_ui.yaml)
+# ou profiles.controles_secheresse.blocks.sec22.show_pie: false dans pdf_presentation.yaml.
 
 periode_analyse:
   ventilation:
