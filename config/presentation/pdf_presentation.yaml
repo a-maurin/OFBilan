@@ -102,18 +102,8 @@ defaults:
       correspondent à des nombres de procédures (dossiers), et non à des localisations de
       contrôle ; ils sont signalés comme tels dans les légendes des tableaux concernés.
 
-  sec6_methodology:
-    line_period: "<b>Période d'analyse :</b> {period_str}."
-    line_scope: "<b>Périmètre :</b> département {dept_name} ({dept_code})."
-    line_profile: "<b>Profil :</b> {profile_label}."
-    line_sources: "<b>Sources :</b> {sources_text}."
-    line_ventilation: "<b>Ventilation temporelle :</b> {ventilation_mode} (seuil {ventilation_threshold_days} jours en mode auto)."
-    line_filters: "Aucun filtre sur domaine ou thème ; tous NATINF pour PEJ et PVe."
-    line_types_usagers: "<b>Types d’usagers :</b> issus du champ OSCEAN <i>type_usager</i> des points de contrôle ; catégorie « dominante » par contrôle via le mapping ref/programme/tables_reference/types_usagers.csv."
-    zone_line_pnf_only: "<b>Analyse par zones :</b> bilan restreint au périmètre du PNF ; la lecture spatiale distingue le coeur de parc de l'aire d'adhésion hors coeur de parc."
-    zone_line_pnf_and_tub: "<b>Analyse par zones :</b> la zone « Département » inclut l'ensemble des contrôles, puis les zones PNF et TUB sont détaillées séparément."
-    zone_line_pnf_only_department: "<b>Analyse par zones :</b> la zone « Département » inclut l'ensemble des contrôles, puis la zone PNF est détaillée séparément."
-    zone_line_tub_only: "<b>Analyse par zones :</b> la zone « Département » inclut l'ensemble des contrôles, puis la zone TUB est détaillée séparément."
+  # Méthodologie d'annexe (section 6) : paragraphes courts via items[] (defaults Python).
+  # Surcharge possible par profil (ex. profiles.synthese_activite_PA_PJ.sec6_methodology.items).
 
   # Tableaux PDF (ReportLab) : coupure inter-pages, en-têtes verticaux, tableau Usagers×Domaine.
   tables:
@@ -252,6 +242,26 @@ profiles:
       line2_mode: none
     title_page:
       subtitle_mode: none
+    sec6_methodology:
+      items:
+        - when: always
+          text: "Ce document regroupe, sur une même période, l'activité de police administrative (contrôles) et l'activité de procédures (PEJ, PA, PVe)."
+        - when: always
+          text: "<b>Période :</b> {period_str}."
+        - when: always
+          text: "<b>Périmètre :</b> {dept_name} ({dept_code})."
+        - when: always
+          text: "<b>Données utilisées :</b> {sources_phrase}."
+        - when: has_controls
+          text: "Les contrôles sont comptés en localisations sur la période."
+        - when: has_procedures
+          text: "Les procédures sont comptées en nombre de dossiers sur la période."
+        - when: has_ventilation
+          text: "<b>Lecture dans le temps :</b> {ventilation_label}."
+        - when: show_usagers
+          text: "Les graphiques par type d'usager peuvent compter plusieurs usagers pour une même localisation de contrôle."
+        - when: diffusion_externe
+          text: "Version de synthèse sans listes nominatives de procédures."
 
   # Contrôles sécheresse : pas de tableaux « par zone » PVe/PEJ (découpages type PNF/TUB).
   controles_secheresse:

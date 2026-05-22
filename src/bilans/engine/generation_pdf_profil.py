@@ -29,6 +29,7 @@ from bilans.common.pdf_presentation_config import (
     should_show_placeholder,
 )
 from bilans.common.pdf_report_builder import PDFReportBuilder
+from bilans.common.pdf_utils import truncate_text_to_width
 from bilans.common.pdf_utils import ofb_table
 from bilans.common.pdf_table_sort import (
     PDF_LABEL_CTRL_LOCATIONS,
@@ -43,6 +44,7 @@ from bilans.common.pdf_shared_sections import (
     add_standard_cover_and_toc,
     add_standard_notice_methodology,
     build_filtered_glossary_rows,
+    build_sec6_methodology_context,
     build_sec6_methodology_html,
     load_glossary_config,
 )
@@ -822,6 +824,7 @@ def _generate_pdf_content(
             and not pve_natinf.empty
             and is_block_enabled(presentation_cfg, "sec31.show_table", True)
         ):
+            natinf_label_w = avail_w * 0.60
             tbl = [["Nature d'infraction (NATINF)", "Nombre PVe"]]
             for _, row in pve_natinf.head(15).iterrows():
                 libelle = row.get("libelle_natinf") or row.get("LIBELLE_NATINF") or ""
@@ -830,11 +833,16 @@ def _generate_pdf_content(
                     nature = f"{code} – {libelle}" if code else libelle
                 else:
                     nature = code or "-"
-                tbl.append([nature, str(int(row["nb"]))])
+                tbl.append(
+                    [
+                        truncate_text_to_width(str(nature), natinf_label_w),
+                        str(int(row["nb"])),
+                    ]
+                )
             builder.add_table(
                 tbl,
                 caption="Analyse des NATINF relevées (PVe)",
-                col_widths=[avail_w * 0.60, avail_w * 0.40],
+                col_widths=[natinf_label_w, avail_w * 0.40],
                 col_aligns=["LEFT", "RIGHT"],
             )
         elif show_placeholder:
@@ -1184,17 +1192,23 @@ def _generate_pdf_content(
         if not is_section_enabled(presentation_cfg, "sec6", True):
             return
         builder.add_section("sec6", section_title["sec6"], start_on_new_page=True)
+        vent_mode = resolve_ventilation_mode_global(date_deb, date_fin)
         methodo = build_sec6_methodology_html(
             effective_cfg=presentation_cfg,
-            period_str=f"du {date_deb.date():%d/%m/%Y} au {date_fin.date():%d/%m/%Y}",
-            dept_name=f"de la {dept_name_typo}",
-            dept_code=str(dept_code),
-            profile_label="Global",
-            sources_text="OSCEAN (points de contrôle, PEJ, PA) et PVe OFB",
-            ventilation_mode=resolve_ventilation_mode_global(date_deb, date_fin),
-            ventilation_threshold_days=VENTILATION_SEUIL_JOURS_GLOBAL,
-            include_filters_line=True,
-            include_types_usagers_line=True,
+            context=build_sec6_methodology_context(
+                period_str=f"du {date_deb.date():%d/%m/%Y} au {date_fin.date():%d/%m/%Y}",
+                dept_name=f"de la {dept_name_typo}",
+                dept_code=str(dept_code),
+                profile_label="Bilan global",
+                profile_id=profile_id,
+                diffusion=diffusion,
+                nb_ctrl=nb_ctrl,
+                nb_pej=nb_pej,
+                nb_pa=nb_pa,
+                nb_pve=nb_pve,
+                ventilation_mode=vent_mode,
+                show_usagers=is_section_enabled(presentation_cfg, "sec4", True),
+            ),
         )
         if is_block_enabled(presentation_cfg, "sec6.show_methodology", True):
             builder.add_methodology(methodo)

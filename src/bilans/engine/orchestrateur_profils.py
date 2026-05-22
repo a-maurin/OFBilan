@@ -81,6 +81,7 @@ from bilans.common.pdf_shared_sections import (
     add_standard_cover_and_toc,
     add_standard_notice_methodology,
     build_filtered_glossary_rows,
+    build_sec6_methodology_context,
     build_sec6_methodology_html,
     load_glossary_config,
 )
@@ -3860,31 +3861,34 @@ def _generate_pdf(
 
     # ── ANNEXES ──
     builder.add_section("sec6", section_title["sec6"], start_on_new_page=True)
-    src_parts: list[str] = []
-    if sources.get("point_ctrl", True):
-        src_parts.append("OSCEAN (points de contrôle)")
-    if sources.get("pej", True):
-        src_parts.append("OSCEAN (PEJ)")
-    if sources.get("pa", True):
-        src_parts.append("OSCEAN (PA)")
-    if sources.get("pve", True):
-        src_parts.append("PVe OFB")
-    src_text = ", ".join(src_parts) if src_parts else "sources spécifiques au profil"
-
     has_zone_table = zone_ctrl is not None and not zone_ctrl.empty
     has_pnf = bool(options.get("pnf", False)) and results.get("agg_pnf") is not None
     has_tub = bool(options.get("tub", False)) and has_zone_table
     is_pnf_profile = str(profil_id).strip().lower() in {"pnf", "pnf_foret"}
+    show_usagers_sec = is_type_usager or is_section_enabled(presentation_cfg, "sec4", False)
     methodo = build_sec6_methodology_html(
         effective_cfg=presentation_cfg,
-        period_str=period_str,
-        dept_name=dept_name,
-        dept_code=str(cfg.dept_code),
-        profile_label=label,
-        sources_text=src_text,
-        has_pnf=has_pnf,
-        has_tub=has_tub,
-        is_pnf_profile=is_pnf_profile,
+        context=build_sec6_methodology_context(
+            period_str=period_str,
+            dept_name=dept_name,
+            dept_code=str(cfg.dept_code),
+            profile_label=display_label,
+            profile_id=profil_id,
+            diffusion=diffusion,
+            nb_ctrl=nb_ctrl,
+            nb_pej=nb_pej,
+            nb_pa=nb_pa,
+            nb_pve=nb_pve,
+            source_point_ctrl=bool(sources.get("point_ctrl", True)),
+            source_pej=bool(sources.get("pej", True)),
+            source_pa=bool(sources.get("pa", True)),
+            source_pve=bool(sources.get("pve", True)),
+            ventilation_mode=str(results.get("ventilation_temporelle_type") or ""),
+            has_pnf=has_pnf,
+            has_tub=has_tub,
+            is_pnf_profile=is_pnf_profile,
+            show_usagers=show_usagers_sec,
+        ),
     )
 
     if is_block_enabled(presentation_cfg, "sec6.show_methodology", True):

@@ -11,6 +11,7 @@ from bilans.common.ofb_charte import (
     COLOR_TABLE_ALT_ROW,
     COLOR_TABLE_BORDER,
     COLOR_TABLE_HEADER_BG,
+    FONT_FAMILY,
     MARGIN_LEFT,
     MARGIN_RIGHT,
     PAGE_W,
@@ -22,6 +23,43 @@ from bilans.common.ofb_charte import (
 
 # Largeur utile par défaut pour le calcul des colonnes des tableaux larges
 _AVail_W = PAGE_W - MARGIN_LEFT - MARGIN_RIGHT
+
+
+def truncate_text_to_width(
+    value: str,
+    max_width_pt: float,
+    *,
+    font_name: str | None = None,
+    font_size: float = 9.0,
+    padding_pt: float = 8.0,
+    suffix: str = "…",
+) -> str:
+    """Tronque un libellé pour tenir sur une seule ligne dans une cellule de tableau PDF."""
+    txt = " ".join(str(value or "").split())
+    if not txt:
+        return ""
+    fn = font_name or FONT_FAMILY
+    usable = max(float(max_width_pt) - float(padding_pt), 1.0)
+    try:
+        if pdfmetrics.stringWidth(txt, fn, font_size) <= usable:
+            return txt
+    except Exception:
+        return txt if len(txt) <= 48 else txt[:47].rstrip() + suffix
+
+    end = len(txt)
+    while end > 0:
+        probe = txt[:end].rstrip()
+        if not probe:
+            break
+        candidate = probe + suffix
+        try:
+            fits = pdfmetrics.stringWidth(candidate, fn, font_size) <= usable
+        except Exception:
+            fits = len(candidate) <= 48
+        if fits:
+            return candidate
+        end -= 1
+    return suffix
 
 
 class VerticalText(Flowable):

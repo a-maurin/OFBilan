@@ -160,31 +160,63 @@ def _pa_par_theme_depuis_controles(point: pd.DataFrame) -> pd.DataFrame:
 def procedures_par_theme(
     pej: pd.DataFrame,
     pa: pd.DataFrame,
-    pve: pd.DataFrame,
     point: pd.DataFrame,
     dept_code: str,
 ) -> pd.DataFrame:
-    """§ 2.3 : PA, PEJ, PVe par thème (procédures, hors logique de cumul § 2.1)."""
+    """§ 2.3 : PEJ et PA par thème OSCEAN (les PVe sont traités au § 4)."""
     del pa  # PA : dérivées des fiches contrôle uniquement (voir _pa_par_theme_depuis_controles)
     pej_d = _pej_departement(pej, dept_code)
     pej_t = _counts_par_theme(pej_d, "nb_pej")
     pa_t = _pa_par_theme_depuis_controles(point)
-    pve_t = (
-        _counts_par_theme(pve, "nb_pve")
-        if pve is not None and not pve.empty
-        else pd.DataFrame(columns=["theme", "nb_pve"])
-    )
-    out = _merge_theme_counts(
-        [(pej_t, "nb_pej"), (pa_t, "nb_pa"), (pve_t, "nb_pve")]
-    )
-    for col in ("nb_pej", "nb_pa", "nb_pve"):
+    out = _merge_theme_counts([(pej_t, "nb_pej"), (pa_t, "nb_pa")])
+    for col in ("nb_pej", "nb_pa"):
         if col not in out.columns:
             out[col] = 0
         else:
             out[col] = out[col].fillna(0).astype(int)
     if not out.empty:
-        out = out.sort_values(["nb_pej", "nb_pa", "nb_pve"], ascending=False, kind="stable")
+        out = out.sort_values(["nb_pej", "nb_pa"], ascending=False, kind="stable")
     return out.reset_index(drop=True)
+
+
+def analyse_pve_synthese(pve: pd.DataFrame, out_dir: Path) -> None:
+    """
+    Agrégations PVe pour le § 4 (source OFB, sans type d'usager ni thème OSCEAN).
+    """
+    classe_cols = ["classe", "libelle_classe", "nb"]
+
+    if pve is None or pve.empty:
+        pd.DataFrame(columns=classe_cols).to_csv(out_dir / f"{_PREFIX}_pve_par_classe.csv", sep=";", index=False)
+        return
+
+    if "INF-CLASSE" in pve.columns:
+        par_classe = (
+            pve["INF-CLASSE"]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+            .replace("", "Non renseigné")
+            .value_counts()
+            .rename_axis("classe")
+            .to_frame("nb")
+            .reset_index()
+        )
+        par_classe["libelle_classe"] = par_classe["classe"].map(_libelle_classe_pve)
+    else:
+        par_classe = pd.DataFrame(columns=classe_cols)
+    par_classe.to_csv(out_dir / f"{_PREFIX}_pve_par_classe.csv", sep=";", index=False)
+
+
+def _libelle_classe_pve(classe: str) -> str:
+    mapping = {
+        "1": "Contravention de 1re classe",
+        "2": "Contravention de 2e classe",
+        "3": "Contravention de 3e classe",
+        "4": "Contravention de 4e classe",
+        "5": "Contravention de 5e classe",
+    }
+    key = str(classe).strip()
+    return mapping.get(key, f"Classe {key}" if key and key != "Non renseigné" else "Non renseigné")
 
 
 def _pej_par_type_usager_theme(pej: pd.DataFrame, value_col: str) -> pd.DataFrame:
@@ -291,15 +323,15 @@ def activite_usager_par_theme(
 
 def _merge_proc_usager_theme(parts: list[pd.DataFrame]) -> pd.DataFrame:
     """Fusionne des tableaux procédures (PEJ/PA) par type_usager × thème."""
-    cols = ["type_usager", "theme", "nb_pej", "nb_pa", "nb_pve"]
+    cols = ["type_usager", "theme", "nb_pej", "nb_pa"]
     totals: dict[tuple[str, str], dict[str, int]] = {}
     for df in parts:
         if df is None or df.empty or "type_usager" not in df.columns:
             continue
         for _, row in df.iterrows():
             key = (str(row["type_usager"]), str(row.get("theme", "Hors thème")))
-            bucket = totals.setdefault(key, {"nb_pej": 0, "nb_pa": 0, "nb_pve": 0})
-            for metric in ("nb_pej", "nb_pa", "nb_pve"):
+            bucket = totals.setdefault(key, {"nb_pej": 0, "nb_pa": 0})
+            for metric in ("nb_pej", "nb_pa"):
                 bucket[metric] += int(row.get(metric, 0) or 0)
     if not totals:
         return pd.DataFrame(columns=cols)
@@ -309,7 +341,6 @@ def _merge_proc_usager_theme(parts: list[pd.DataFrame]) -> pd.DataFrame:
             "theme": theme,
             "nb_pej": int(d["nb_pej"]),
             "nb_pa": int(d["nb_pa"]),
-            "nb_pve": int(d["nb_pve"]),
         }
         for (cat, theme), d in totals.items()
     ]
@@ -383,11 +414,12 @@ def run_synthese_aggregations(
     analyse_controles_global(point, out_dir)
     analyse_pej_pa_global(root, point, pa, pej, out_dir, dept_code=dept_code)
     analyse_pve_global(pve, out_dir)
+    analyse_pve_synthese(pve, out_dir)
 
     res_usager = agg_resultat_effectifs_par_type_usager(point)
 
     act_theme = activite_police_par_theme(point, pej, dept_code)
-    proc_theme = procedures_par_theme(pej, pa, pve, point, dept_code)
+    proc_theme = procedures_par_theme(pej, pa, point, dept_code)
     act_ut = activite_usager_par_theme(point, pej, dept_code)
     act_u = activite_par_type_usager(point, pej, dept_code)
     proc_ut = procedures_usager_par_theme(pej, pa, point, dept_code)
@@ -417,6 +449,7 @@ __all__ = [
     "activite_par_type_usager",
     "activite_police_par_theme",
     "activite_usager_par_theme",
+    "analyse_pve_synthese",
     "pej_hors_fiche_controle",
     "pej_sur_fiche_controle",
     "procedures_par_theme",

@@ -14,16 +14,19 @@ from bilans.common.carte_helper import (
 from bilans.common.pdf_presentation_config import (
     apply_diffusion_pdf_suffix,
     build_title_lines_from_cfg,
+    is_section_enabled,
     normalize_dept_typography,
     resolve_pdf_presentation_config,
     resolve_title_page_config,
     should_show_placeholder,
 )
 from bilans.common.pdf_report_builder import PDFReportBuilder
+from bilans.common.pdf_utils import truncate_text_to_width
 from bilans.common.pdf_shared_sections import (
     add_standard_cover_and_toc,
     add_standard_notice_methodology,
     build_filtered_glossary_rows,
+    build_sec6_methodology_context,
     build_sec6_methodology_html,
     load_glossary_config,
 )
@@ -163,6 +166,31 @@ def _build_usager_theme_table_rows(sub: pd.DataFrame) -> list[list[str]]:
 
 def _display_type_usager(label: str) -> str:
     return format_type_usager_display(str(label or ""))
+
+
+def _format_pve_natinf_label(row: pd.Series) -> str:
+    libelle = row.get("libelle_natinf") or row.get("LIBELLE_NATINF") or ""
+    code = str(row.get("numero_natinf") or row.get("natinf") or "").strip()
+    if libelle:
+        return f"{code} – {libelle}" if code else str(libelle)
+    return code or "-"
+
+
+def _build_pve_natinf_table_rows(
+    pve_natinf: pd.DataFrame,
+    *,
+    head: int = 12,
+    label_col_width_pt: float | None = None,
+) -> list[list[str]]:
+    tbl = [["Nature d'infraction (NATINF)", "Nombre de PVe"]]
+    for _, row in pve_natinf.head(head).iterrows():
+        nature = _format_pve_natinf_label(row)
+        if label_col_width_pt is not None and label_col_width_pt > 0:
+            nature = truncate_text_to_width(nature, label_col_width_pt)
+        else:
+            nature = _truncate_with_dash(str(nature), 52)
+        tbl.append([nature, str(int(row["nb"]))])
+    return tbl
 
 
 def _pie_data_controles_par_type_usager(df: pd.DataFrame | None) -> dict[str, int]:
@@ -322,8 +350,9 @@ def _generate_synthese_pdf(
         ("sec3_1", "3.1. Thème de contrôle par type d'usager"),
         ("sec3_2", "3.2. Résultat des contrôles par type d'usager"),
         ("sec3_3", "3.3. Activité procédurale par type d'usager"),
-        ("sec4", "4. Cartographie"),
-        ("sec5", "5. Annexes"),
+        ("sec4", "4. Procès-verbaux électroniques (PVe)"),
+        ("sec5", "5. Cartographie"),
+        ("sec6", "6. Annexes"),
     ]
     sections_toc = section_defs
 
@@ -444,21 +473,20 @@ def _generate_synthese_pdf(
         "contrôle."
     )
     if proc_theme is not None and not proc_theme.empty:
-        tbl = [["Thème", "PEJ", "PA", "PVe"]]
+        tbl = [["Thème", "PEJ", "PA"]]
         for _, row in proc_theme.head(25).iterrows():
             tbl.append(
                 [
                     str(row["theme"])[:45],
                     str(int(row.get("nb_pej", 0))),
                     str(int(row.get("nb_pa", 0))),
-                    str(int(row.get("nb_pve", 0))),
                 ]
             )
         builder.add_table(
             tbl,
             caption=pdf_metric_caption("Procédures par thème", "proc"),
-            col_widths=[avail_w * 0.46, avail_w * 0.18, avail_w * 0.18, avail_w * 0.18],
-            col_aligns=["LEFT", "RIGHT", "RIGHT", "RIGHT"],
+            col_widths=[avail_w * 0.52, avail_w * 0.24, avail_w * 0.24],
+            col_aligns=["LEFT", "RIGHT", "RIGHT"],
         )
     elif show_placeholder:
         builder.add_paragraph("Aucune procédure sur la période.")
@@ -640,14 +668,13 @@ def _generate_synthese_pdf(
             if not first:
                 builder.add_spacer(1.5)
             first = False
-            tbl = [["Thème", "PEJ", "PA", "PVe"]]
+            tbl = [["Thème", "PEJ", "PA"]]
             for _, row in sub.head(15).iterrows():
                 tbl.append(
                     [
                         str(row["theme"])[:40],
                         str(int(row.get("nb_pej", 0))),
                         str(int(row.get("nb_pa", 0))),
-                        str(int(row.get("nb_pve", 0))),
                     ]
                 )
             builder.add_table(
@@ -655,15 +682,58 @@ def _generate_synthese_pdf(
                 caption=pdf_metric_caption(
                     f"Procédures par thème — {_display_type_usager(tu)}", "proc"
                 ),
-                col_widths=[avail_w * 0.46, avail_w * 0.18, avail_w * 0.18, avail_w * 0.18],
-                col_aligns=["LEFT", "RIGHT", "RIGHT", "RIGHT"],
+                col_widths=[avail_w * 0.52, avail_w * 0.24, avail_w * 0.24],
+                col_aligns=["LEFT", "RIGHT", "RIGHT"],
                 keep_together=True,
             )
     elif show_placeholder:
         builder.add_paragraph("Aucune procédure ventilée par type d'usager.")
 
-    # ── 4. Cartographie ──
-    builder.add_section("sec4", "4. Cartographie", start_on_new_page=True)
+    # ── 4. PVe (source OFB, hors périmètre type d'usager OSCEAN) ──
+    builder.add_section("sec4", "4. Procès-verbaux électroniques (PVe)", start_on_new_page=True)
+    builder.add_paragraph(
+        "Les procès-verbaux électroniques (PVe) proviennent du fichier national OFB "
+        "(<i>Stats_PVe_OFB</i>). Ils recensent des infractions constatées et intégrées sur la "
+        f"période du {date_deb.date():%d/%m/%Y} au {date_fin.date():%d/%m/%Y} "
+        "(date d'intégration <i>INF-DATE-INTG</i>). Ils ne sont pas rattachés aux fiches de "
+        "contrôle OSCEAN ni ventilés par type d'usager : cette section les présente "
+        "selon leur propre nomenclature (NATINF et classe d'infraction)."
+    )
+    pve_natinf = _sort_desc(_load_csv_opt(out_dir, "pve_global_par_natinf.csv"), ["nb"])
+    pve_classe = _sort_desc(_load_csv_opt(out_dir, "synthese_pve_par_classe.csv"), ["nb"])
+
+    if nb_pve > 0:
+        if pve_natinf is not None and not pve_natinf.empty:
+            natinf_label_w = avail_w * 0.72
+            builder.add_table(
+                _build_pve_natinf_table_rows(
+                    pve_natinf,
+                    label_col_width_pt=natinf_label_w,
+                ),
+                caption=pdf_metric_caption("Principales natures d'infraction (NATINF)", "proc"),
+                col_widths=[natinf_label_w, avail_w * 0.28],
+                col_aligns=["LEFT", "RIGHT"],
+                keep_together=True,
+            )
+        if pve_classe is not None and not pve_classe.empty:
+            tbl_cl = [["Classe d'infraction", "Nombre de PVe"]]
+            total_cl = float(pve_classe["nb"].sum()) or 1.0
+            for _, row in pve_classe.iterrows():
+                lib = str(row.get("libelle_classe") or row.get("classe") or "-")
+                nbv = int(row["nb"])
+                tbl_cl.append([lib, f"{nbv} ({_pct_table_cell(nbv, total_cl)})"])
+            builder.add_table(
+                tbl_cl,
+                caption=pdf_metric_caption("PVe par classe d'infraction", "proc"),
+                col_widths=[avail_w * 0.60, avail_w * 0.40],
+                col_aligns=["LEFT", "RIGHT"],
+                keep_together=True,
+            )
+    elif show_placeholder:
+        builder.add_paragraph("Aucun procès-verbal électronique sur la période.")
+
+    # ── 5. Cartographie ──
+    builder.add_section("sec5", "5. Cartographie", start_on_new_page=True)
     if cartes:
         map_id = str(profile.get("_map_id") or profil_id)
         map_paths = resolve_profile_map_paths(map_id, profile=profile, presentation_cfg=presentation_cfg)
@@ -679,19 +749,24 @@ def _generate_synthese_pdf(
     elif show_placeholder:
         builder.add_paragraph("<i>Cartographie désactivée pour ce bilan.</i>")
 
-    # ── 5. Annexes ──
-    builder.add_section("sec5", "5. Annexes", start_on_new_page=True)
+    # ── 6. Annexes ──
+    builder.add_section("sec6", "6. Annexes", start_on_new_page=True)
     methodo = build_sec6_methodology_html(
         effective_cfg=presentation_cfg,
-        period_str=f"du {date_deb.date():%d/%m/%Y} au {date_fin.date():%d/%m/%Y}",
-        dept_name=f"de la {dept_name_typo}",
-        dept_code=str(dept_code),
-        profile_label=profile_label,
-        sources_text="OSCEAN (points de contrôle, PEJ, PA) et PVe OFB",
-        ventilation_mode="globale",
-        ventilation_threshold_days=366,
-        include_filters_line=True,
-        include_types_usagers_line=True,
+        context=build_sec6_methodology_context(
+            period_str=f"du {date_deb.date():%d/%m/%Y} au {date_fin.date():%d/%m/%Y}",
+            dept_name=f"de la {dept_name_typo}",
+            dept_code=str(dept_code),
+            profile_label=profile_label or "Synthèse PA / PJ",
+            profile_id=profil_id,
+            diffusion=diffusion,
+            nb_ctrl=nb_ctrl,
+            nb_pej=nb_pej,
+            nb_pa=nb_pa,
+            nb_pve=nb_pve,
+            ventilation_mode="globale",
+            show_usagers=is_section_enabled(presentation_cfg, "sec3", True),
+        ),
     )
     builder.add_methodology(methodo)
     gloss_cfg = load_glossary_config(_ROOT)

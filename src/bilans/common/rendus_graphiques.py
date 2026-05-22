@@ -66,7 +66,13 @@ def apply_mpl_style() -> None:
     plt.rcParams["legend.frameon"] = False
 
 
-def _legend_below_axis(ax, *, ncol: int | None = None, fontsize: float = 8.0) -> None:
+def _legend_below_axis(
+    ax,
+    *,
+    ncol: int | None = None,
+    fontsize: float = 8.0,
+    anchor_y: float = -0.14,
+) -> None:
     """Légende centrée sous le graphique (repère axes, y négatif)."""
     handles, labels = ax.get_legend_handles_labels()
     if not handles:
@@ -78,7 +84,7 @@ def _legend_below_axis(ax, *, ncol: int | None = None, fontsize: float = 8.0) ->
         handles,
         labels,
         loc="upper center",
-        bbox_to_anchor=(0.5, -0.14),
+        bbox_to_anchor=(0.5, anchor_y),
         ncol=ncol,
         fontsize=fontsize,
         frameon=False,
@@ -113,11 +119,20 @@ def _tight_with_legend_space(
     fig.tight_layout(rect=(left, bottom, right, top))
 
 
-def save_chart(fig, tmp_dir: Path, name: str, *, dpi: int = 150, tight: bool = True) -> str:
+def save_chart(
+    fig,
+    tmp_dir: Path,
+    name: str,
+    *,
+    dpi: int = 150,
+    tight: bool = True,
+    pad_inches: float = 0.1,
+) -> str:
     path = str(tmp_dir / name)
     save_kw = {"dpi": dpi, "facecolor": "white"}
     if tight:
         save_kw["bbox_inches"] = "tight"
+        save_kw["pad_inches"] = pad_inches
     fig.savefig(path, **save_kw)
     plt.close(fig)
     return path
@@ -527,6 +542,16 @@ def chart_bar_horizontal_stacked(
     figure_scale: float = 1.0,
     show_title: bool = True,
     legend_below: bool = False,
+    brochure_compact: bool = False,
+    brochure_narrow: bool = False,
+    figure_width_in: float | None = None,
+    figure_height_in: float | None = None,
+    plot_area_scale: float = 1.0,
+    legend_right: bool = False,
+    x_tick_fontsize: float | None = None,
+    y_tick_fontsize: float | None = None,
+    bar_value_fontsize: float | None = None,
+    chart_dpi: int = 150,
     apply_mpl: bool = True,
     grouped_colors: list[str] | None = None,
     title_color: str | None = None,
@@ -539,8 +564,7 @@ def chart_bar_horizontal_stacked(
     y = np.arange(n)
     height = 0.62
     keywords_inf = _KEYWORDS_INFRACTION
-    # Libellés Y repliés : sinon tight_layout compresse fortement la zone utile de l'axe X.
-    label_wrap = 40
+    label_wrap = 18 if brochure_narrow else 40
     display_labels = [
         textwrap.fill(str(lb).strip(), width=label_wrap, break_long_words=False, break_on_hyphens=False)
         for lb in row_labels
@@ -551,14 +575,30 @@ def chart_bar_horizontal_stacked(
             longest_line = max(longest_line, len(line.strip()))
 
     scale_eff = max(0.45, float(figure_scale))
-    # Largeur : plancher élevé + croissance modérée avec la longueur des libellés (PDF inch).
-    fig_w = max(
-        CHART_FIG_WIDTH * scale_eff * 1.12,
-        9.2 + min(5.4, max(0, longest_line - 22) * 0.085),
-    )
-    fig_w = min(fig_w, 15.0)
-    # Hauteur figure : assez d'espace pour les libellés Y (types d'usager souvent longs).
-    fig_h = max(CHART_FIG_HEIGHT_WITH_LEGEND, min(14.0, 0.55 * n + 2.8)) * scale_eff
+    y_tick_fs = 9
+    bar_value_fs = 8
+    if brochure_narrow:
+        fig_w = float(figure_width_in) if figure_width_in else 5.0
+        fig_h = float(figure_height_in) if figure_height_in else max(2.6, 0.52 * n + 1.0)
+        y_tick_fs = float(y_tick_fontsize) if y_tick_fontsize is not None else 8.0
+        bar_value_fs = float(bar_value_fontsize) if bar_value_fontsize is not None else 7.5
+    elif brochure_compact:
+        scale_eff = max(0.26, min(0.48, float(figure_scale)))
+        fig_w = max(
+            CHART_FIG_WIDTH * scale_eff,
+            7.8 + min(3.8, max(0, longest_line - 22) * 0.065),
+        )
+        fig_w = min(fig_w, 11.5)
+        fig_h = max(3.0, 0.48 * n + 1.9) * scale_eff
+        y_tick_fs = float(y_tick_fontsize) if y_tick_fontsize is not None else 8.5
+        bar_value_fs = float(bar_value_fontsize) if bar_value_fontsize is not None else 7.5
+    else:
+        fig_w = max(
+            CHART_FIG_WIDTH * scale_eff * 1.12,
+            9.2 + min(5.4, max(0, longest_line - 22) * 0.085),
+        )
+        fig_w = min(fig_w, 15.0)
+        fig_h = max(CHART_FIG_HEIGHT_WITH_LEGEND, min(14.0, 0.55 * n + 2.8)) * scale_eff
     fig, ax = plt.subplots(figsize=(fig_w, fig_h))
 
     series_items = list(series.items())
@@ -586,34 +626,63 @@ def chart_bar_horizontal_stacked(
                     f"{int(val)}",
                     ha="center",
                     va="center",
-                    fontsize=8,
+                    fontsize=bar_value_fs,
                     fontweight="bold",
                     color="white",
                 )
         left += vals_arr
 
     ax.set_yticks(y)
-    ax.set_yticklabels(display_labels, fontsize=9)
+    ax.set_yticklabels(display_labels, fontsize=y_tick_fs)
     ax.invert_yaxis()
-    ax.set_xlabel(xlabel, fontsize=9)
+    show_xlabel = bool(str(xlabel).strip())
+    if not (len(series_items) > 1 and legend_below) and show_xlabel:
+        ax.set_xlabel(xlabel, fontsize=9)
     xmax = float(np.max(left)) if n else 0.0
     xmax = max(xmax, 1.0)
     ax.set_xlim(0, xmax * 1.08)
     ax.xaxis.set_major_locator(MaxNLocator(nbins=8, integer=True, min_n_ticks=4))
+    x_tick_fs = float(x_tick_fontsize) if x_tick_fontsize is not None else (6.5 if brochure_compact else 8.0)
+    ax.tick_params(axis="x", labelsize=x_tick_fs)
     if show_title and str(title).strip():
         ax.set_title(title, fontsize=11, fontweight="bold", color=title_color or COLOR_PRIMARY, pad=10)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     if len(series_items) > 1:
-        if legend_below:
-            _legend_below_axis(ax, ncol=min(legend_ncol_max, len(series_items)), fontsize=legend_fontsize)
-            _tight_with_legend_space(fig, bottom=0.22, top=0.92, left=0.22, right=0.98)
+        use_legend_right = legend_right or (brochure_narrow and not legend_below)
+        if use_legend_right:
+            _legend_right_of_axis(ax, fontsize=legend_fontsize)
+            if brochure_narrow:
+                base_left, base_right = 0.30, 0.78
+                span = (base_right - base_left) * max(1.0, float(plot_area_scale))
+                span = min(0.70, span)
+                left = max(0.14, base_right - span)
+                fig.subplots_adjust(bottom=0.10, top=0.96, left=left, right=0.86)
+            else:
+                _tight_with_legend_space(fig, bottom=0.10, top=0.96, left=0.07, right=0.70)
+        elif legend_below:
+            x_fs = 8 if brochure_compact else 9
+            x_pad = 12 if brochure_compact else 14
+            leg_y = -0.24 if brochure_compact else -0.28
+            leg_bottom = 0.28 if brochure_compact else 0.34
+            leg_left = 0.20 if brochure_compact else 0.22
+            if show_xlabel:
+                ax.set_xlabel(xlabel, fontsize=x_fs, labelpad=x_pad)
+            _legend_below_axis(
+                ax,
+                ncol=min(legend_ncol_max, len(series_items)),
+                fontsize=legend_fontsize,
+                anchor_y=leg_y,
+            )
+            _tight_with_legend_space(fig, bottom=leg_bottom, top=0.94, left=leg_left, right=0.98)
         else:
             _legend_right_of_axis(ax, fontsize=legend_fontsize)
             _tight_with_legend_space(fig, bottom=0.12, top=0.90, left=0.07, right=0.74)
     else:
-        _tight_with_legend_space(fig, bottom=0.10, top=0.92, left=0.24, right=0.98)
-    return save_chart(fig, tmp_dir, name)
+        left_margin = 0.38 if brochure_narrow else 0.24
+        _tight_with_legend_space(fig, bottom=0.10, top=0.96, left=left_margin, right=0.98)
+    pad = 0.03 if brochure_narrow else 0.1
+    return save_chart(fig, tmp_dir, name, dpi=chart_dpi, pad_inches=pad)
 
 
 def chart_bar_horizontal_simple(

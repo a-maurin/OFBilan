@@ -83,35 +83,100 @@ DEFAULT_PDF_PRESENTATION_CONFIG: dict[str, Any] = {
             ),
         },
         "sec6_methodology": {
-            "line_period": "<b>Période d'analyse :</b> {period_str}.",
-            "line_scope": "<b>Périmètre :</b> département {dept_name} ({dept_code}).",
-            "line_profile": "<b>Profil :</b> {profile_label}.",
-            "line_sources": "<b>Sources :</b> {sources_text}.",
-            "line_ventilation": (
-                "<b>Ventilation temporelle :</b> {ventilation_mode} "
-                "(seuil {ventilation_threshold_days} jours en mode auto)."
-            ),
-            "line_filters": "Aucun filtre sur domaine ou thème ; tous NATINF pour PEJ et PVe.",
-            "line_types_usagers": (
-                "<b>Types d’usagers :</b> issus du champ OSCEAN <i>type_usager</i> des points de contrôle ; "
-                "catégorie « dominante » par contrôle via ref/programme/tables_reference/types_usagers.csv."
-            ),
-            "zone_line_pnf_only": (
-                "<b>Analyse par zones :</b> bilan restreint au périmètre du PNF ; "
-                "la lecture spatiale distingue le coeur de parc de l'aire d'adhésion hors coeur de parc."
-            ),
-            "zone_line_pnf_and_tub": (
-                "<b>Analyse par zones :</b> la zone « Département » inclut l'ensemble des contrôles, "
-                "puis les zones PNF et TUB sont détaillées séparément."
-            ),
-            "zone_line_pnf_only_department": (
-                "<b>Analyse par zones :</b> la zone « Département » inclut l'ensemble des contrôles, "
-                "puis la zone PNF est détaillée séparément."
-            ),
-            "zone_line_tub_only": (
-                "<b>Analyse par zones :</b> la zone « Département » inclut l'ensemble des contrôles, "
-                "puis la zone TUB est détaillée séparément."
-            ),
+            "items": [
+                {
+                    "when": "always",
+                    "text": "<b>Période :</b> {period_str}.",
+                },
+                {
+                    "when": "always",
+                    "text": "<b>Périmètre :</b> {dept_name} ({dept_code}).",
+                },
+                {
+                    "when": "has_profile",
+                    "text": "<b>Objet du bilan :</b> {profile_label}.",
+                },
+                {
+                    "when": "always",
+                    "text": "<b>Données utilisées :</b> {sources_phrase}.",
+                },
+                {
+                    "when": "has_controls",
+                    "text": (
+                        "Les chiffres de <b>contrôle</b> correspondent à des localisations "
+                        "enregistrées sur la période (un lieu contrôlé compte pour une localisation)."
+                    ),
+                },
+                {
+                    "when": "has_pej",
+                    "text": (
+                        "Les <b>PEJ</b> (procédures d'enquête judiciaire) sont comptées en nombre "
+                        "de dossiers sur la période."
+                    ),
+                },
+                {
+                    "when": "has_pa",
+                    "text": (
+                        "Les <b>procédures administratives (PA)</b> sont comptées en nombre de "
+                        "dossiers sur la période."
+                    ),
+                },
+                {
+                    "when": "has_pve",
+                    "text": (
+                        "Les <b>procès-verbaux électroniques (PVe)</b> sont comptés en nombre de "
+                        "dossiers sur la période."
+                    ),
+                },
+                {
+                    "when": "has_ventilation",
+                    "text": "<b>Lecture dans le temps :</b> {ventilation_label}.",
+                },
+                {
+                    "when": "show_usagers",
+                    "text": (
+                        "Les effectifs par type d'usager décomptent chaque usager renseigné ; "
+                        "ils peuvent dépasser le nombre de localisations lorsque plusieurs usagers "
+                        "sont associés au même contrôle."
+                    ),
+                },
+                {
+                    "when": "zone_pnf_only",
+                    "text": (
+                        "Les comparaisons spatiales distinguent le <b>cœur</b> du parc et "
+                        "l'<b>aire d'adhésion</b> du parc national de forêts."
+                    ),
+                },
+                {
+                    "when": "zone_pnf_and_tub",
+                    "text": (
+                        "Des tableaux comparent le département, le périmètre PNF et les zones "
+                        "de lutte contre la tuberculose bovine (TUB)."
+                    ),
+                },
+                {
+                    "when": "zone_pnf_dept",
+                    "text": (
+                        "Des tableaux comparent l'ensemble du département et le périmètre du "
+                        "parc national de forêts (PNF)."
+                    ),
+                },
+                {
+                    "when": "zone_tub_only",
+                    "text": (
+                        "Des tableaux comparent l'ensemble du département et les zones TUB "
+                        "(tuberculose bovine)."
+                    ),
+                },
+                {
+                    "when": "diffusion_externe",
+                    "text": (
+                        "Ce document est une <b>version de synthèse</b> : les listes nominatives "
+                        "de procédures (numéros de dossier, localisations détaillées) ne sont pas "
+                        "reproduites."
+                    ),
+                },
+            ],
         },
         # Mise en page des tableaux PDF (ReportLab) — préférer le pilotage YAML.
         "tables": {

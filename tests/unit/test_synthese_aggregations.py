@@ -8,6 +8,7 @@ from bilans.engine.synthese_aggregations import (
     activite_par_type_usager,
     activite_police_par_theme,
     activite_usager_par_theme,
+    analyse_pve_synthese,
     pej_hors_fiche_controle,
     procedures_par_theme,
 )
@@ -146,10 +147,10 @@ def test_procedures_par_theme_pa_uniquement_depuis_controles() -> None:
     proc = procedures_par_theme(
         pd.DataFrame(columns=["DC_ID", "ENTITE_ORIGINE_PROCEDURE", "THEME"]),
         pa_ods,
-        pd.DataFrame(),
         point,
         "21",
     )
+    assert "nb_pve" not in proc.columns
     assert int(proc.loc[proc["theme"] == "Thème A", "nb_pa"].sum()) == 2
 
 
@@ -172,6 +173,21 @@ def test_map_type_usager_libelle_referentiel_pej() -> None:
     assert map_type_usager("pej", "USAGER", lib) == lib
     assert map_type_usager("pej", "type_usager", lib) == lib
     assert format_type_usager_display("Autre") == "Autre usager"
+
+
+def test_analyse_pve_synthese_exports(tmp_path) -> None:
+    pve = pd.DataFrame(
+        {
+            "INF-DATE-INTG": pd.to_datetime(["2025-03-15", "2025-03-20", "2025-04-01"]),
+            "INF-CLASSE": ["4", "4", "3"],
+            "INF-INSEE": ["21001", "21001", "21002"],
+            "INF-NATINF": ["100", "100", "200"],
+        }
+    )
+    analyse_pve_synthese(pve, tmp_path)
+    classe = pd.read_csv(tmp_path / "synthese_pve_par_classe.csv", sep=";")
+    assert int(classe["nb"].sum()) == 3
+    assert int(classe.loc[classe["classe"].astype(str) == "4", "nb"].sum()) == 2
 
 
 def test_activite_usager_par_theme_pej_suite_controle() -> None:

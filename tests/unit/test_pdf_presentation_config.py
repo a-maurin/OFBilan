@@ -266,9 +266,11 @@ def test_types_usager_cible_sec4_pression_controle() -> None:
 def test_sec6_methodology_config_resolution() -> None:
     effective = {
         "sec6_methodology": {
-            "line_profile": "<b>Profil :</b> {profile_label} (personnalisé).",
+            "items": [
+                {"when": "always", "text": "<b>Test :</b> {profile_label}."},
+            ],
         }
     }
     resolved = resolve_sec6_methodology_config(effective)
-    assert resolved["line_profile"] == "<b>Profil :</b> {profile_label} (personnalisé)."
-    assert "line_sources" in resolved
+    assert resolved["items"][0]["text"] == "<b>Test :</b> {profile_label}."
+    assert len(resolved["items"]) >= 1
