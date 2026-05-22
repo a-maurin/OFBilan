@@ -1,0 +1,2 @@
+[console_scripts]
+bilans = bilans.point_entree_cli:main

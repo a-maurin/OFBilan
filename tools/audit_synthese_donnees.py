@@ -53,7 +53,7 @@ def main() -> int:
     act_theme = activite_police_par_theme(point, pej, DEPT)
     act_u = activite_par_type_usager(point, pej, DEPT)
     act_ut = activite_usager_par_theme(point, pej, DEPT)
-    proc_theme = procedures_par_theme(pej, pa, pve, point, DEPT)
+    proc_theme = procedures_par_theme(pej, pa, point, DEPT)
     proc_ut = procedures_usager_par_theme(pej, pa, point, DEPT)
 
     hors = pej_hors_fiche_controle(pej, point, DEPT)
@@ -102,6 +102,11 @@ def main() -> int:
         "§2.3 PEJ = nb PEJ dept",
         s23_pej == len(pej_d),
         f"{s23_pej} vs {len(pej_d)}",
+    )
+    _chk(
+        "§2.3 sans colonne PVe",
+        "nb_pve" not in proc_theme.columns,
+        "PVe traites au § 4",
     )
 
     # --- § 3 camembert (loc.) vs § 3.1 (effectifs) ---
