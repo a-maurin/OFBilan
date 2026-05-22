@@ -66,15 +66,11 @@ def test_run_global_smoke(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(
         engine,
         "load_point_ctrl",
-        lambda root, dept_code, date_deb, date_fin: minimal_point,
+        lambda root, *args, **kwargs: minimal_point,
     )
-    monkeypatch.setattr(engine, "load_pa", lambda root, date_deb, date_fin: minimal_pa)
-    monkeypatch.setattr(engine, "load_pej", lambda root, date_deb, date_fin: minimal_pej)
-    monkeypatch.setattr(
-        engine,
-        "load_pve",
-        lambda root, dept_code, date_deb, date_fin: minimal_pve,
-    )
+    monkeypatch.setattr(engine, "load_pa", lambda root, *args, **kwargs: minimal_pa)
+    monkeypatch.setattr(engine, "load_pej", lambda root, *args, **kwargs: minimal_pej)
+    monkeypatch.setattr(engine, "load_pve", lambda root, *args, **kwargs: minimal_pve)
     monkeypatch.setattr(engine, "ensure_insee_from_communes_shp", lambda df, *args, **kwargs: df)
 
     # Neutralise la génération PDF (PDFReportBuilder / graphiques matplotlib).
