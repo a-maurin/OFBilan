@@ -152,8 +152,11 @@ def chart_pie(
     legend_ncol: int | None = None,
     figure_scale: float = 1.0,
     legend_percent_only: bool = False,
+    apply_mpl: bool = True,
+    palette: list[str] | None = None,
 ) -> str:
-    apply_mpl_style()
+    if apply_mpl:
+        apply_mpl_style()
     labels = list(data.keys())
     values = list(data.values())
     fig_w = CHART_FIG_WIDTH * figure_scale if figsize is None else (figsize[0] * figure_scale)
@@ -162,8 +165,9 @@ def chart_pie(
     # palette standard CHART_PIE_COLORS.
     colors_pie = []
     keywords_inf = _KEYWORDS_INFRACTION
+    pie_palette = palette if palette else CHART_PIE_COLORS
     for i, lb in enumerate(labels):
-        base = CHART_PIE_COLORS[i % len(CHART_PIE_COLORS)]
+        base = pie_palette[i % len(pie_palette)]
         lbl = str(lb).lower()
         if any(k in lbl for k in keywords_inf):
             colors_pie.append(COLOR_CHART_4)
@@ -218,13 +222,14 @@ def chart_pie(
     )
     wedges, _ = ax.pie(values, startangle=90, colors=colors_pie)
     ax.set_aspect("equal")
-    ax.set_title(
-        title,
-        fontsize=CHART_TITLE_FONT_SIZE_REF,
-        fontweight="bold",
-        color=COLOR_PRIMARY,
-        pad=10,
-    )
+    if str(title).strip():
+        ax.set_title(
+            title,
+            fontsize=CHART_TITLE_FONT_SIZE_REF,
+            fontweight="bold",
+            color=COLOR_PRIMARY,
+            pad=10,
+        )
 
     ax_leg = fig.add_axes([0.06, bottom_pad_in / fig_h, 0.88, legend_h_in / fig_h])
     ax_leg.axis("off")
@@ -242,6 +247,79 @@ def chart_pie(
     )
     # DPI un peu plus élevé : le PDF insère le camembert plus étroit que les barres.
     # "tight bbox" inclut toute la légende dans le PNG final (pas de troncature).
+    return save_chart(fig, tmp_dir, name, dpi=165, tight=True)
+
+
+def chart_pie_legend_right(
+    data: dict,
+    title: str,
+    tmp_dir: Path,
+    name: str,
+    *,
+    figure_scale: float = 1.0,
+    legend_percent_only: bool = False,
+    legend_fontsize: float = 7.5,
+    apply_mpl: bool = True,
+    palette: list[str] | None = None,
+) -> str:
+    """Camembert compact avec légende à droite (brochure, colonne étroite)."""
+    if apply_mpl:
+        apply_mpl_style()
+    labels = list(data.keys())
+    values = list(data.values())
+    colors_pie = []
+    pie_palette = palette if palette else CHART_PIE_COLORS
+    for i, lb in enumerate(labels):
+        base = pie_palette[i % len(pie_palette)]
+        lbl = str(lb).lower()
+        if any(k in lbl for k in _KEYWORDS_INFRACTION):
+            colors_pie.append(COLOR_CHART_4)
+        else:
+            colors_pie.append(base)
+    total = sum(values)
+    if total:
+        pcts = int_percents_largest_remainder([int(v) for v in values])
+        if legend_percent_only:
+            legend_labels = [f"{lb}\n{pcts[i]} %" for i, lb in enumerate(labels)]
+        else:
+            legend_labels = [
+                f"{lb}\n{v} ({pcts[i]} %)" for i, (lb, v) in enumerate(zip(labels, values))
+            ]
+    else:
+        legend_labels = (
+            [f"{lb}\n0 %" for lb in labels]
+            if legend_percent_only
+            else [f"{lb}\n0 (0 %)" for lb in labels]
+        )
+    fig_w = 5.2 * figure_scale
+    fig_h = max(2.8, 0.35 * len(labels) + 1.8) * figure_scale
+    fig, (ax_pie, ax_leg) = plt.subplots(
+        1,
+        2,
+        figsize=(fig_w, fig_h),
+        gridspec_kw={"width_ratios": [1.15, 1.0], "wspace": 0.08},
+    )
+    wedges, _ = ax_pie.pie(values, startangle=90, colors=colors_pie)
+    ax_pie.set_aspect("equal")
+    if str(title).strip():
+        ax_pie.set_title(
+            title,
+            fontsize=CHART_TITLE_FONT_SIZE_REF - 1,
+            fontweight="bold",
+            color=COLOR_PRIMARY,
+            pad=4,
+        )
+    ax_leg.axis("off")
+    ax_leg.legend(
+        wedges,
+        legend_labels,
+        loc="center left",
+        fontsize=legend_fontsize,
+        frameon=False,
+        handlelength=0.9,
+        handletextpad=0.35,
+    )
+    fig.subplots_adjust(left=0.02, right=0.98, top=0.92, bottom=0.06)
     return save_chart(fig, tmp_dir, name, dpi=165, tight=True)
 
 
@@ -448,9 +526,15 @@ def chart_bar_horizontal_stacked(
     legend_ncol_max: int = 4,
     figure_scale: float = 1.0,
     show_title: bool = True,
+    legend_below: bool = False,
+    apply_mpl: bool = True,
+    grouped_colors: list[str] | None = None,
+    title_color: str | None = None,
 ) -> str:
     """Barres horizontales empilées : une ligne par catégorie, segments empilés selon les séries."""
-    apply_mpl_style()
+    if apply_mpl:
+        apply_mpl_style()
+    bar_palette = grouped_colors if grouped_colors else CHART_BAR_GROUPED_COLORS
     n = max(1, len(row_labels))
     y = np.arange(n)
     height = 0.62
@@ -492,7 +576,7 @@ def chart_bar_horizontal_stacked(
         elif any(k in lbl for k in _KEYWORDS_ATTENTE):
             color = COLOR_GREY
         else:
-            color = CHART_BAR_GROUPED_COLORS[i % len(CHART_BAR_GROUPED_COLORS)]
+            color = bar_palette[i % len(bar_palette)]
         bars = ax.barh(y, vals_arr, height, left=left, label=label, color=color)
         for bar, val, rt in zip(bars, vals_arr, row_totals):
             if val > 0 and bar.get_width() >= max(3.5, 0.042 * float(rt)):
@@ -516,14 +600,58 @@ def chart_bar_horizontal_stacked(
     xmax = max(xmax, 1.0)
     ax.set_xlim(0, xmax * 1.08)
     ax.xaxis.set_major_locator(MaxNLocator(nbins=8, integer=True, min_n_ticks=4))
-    if show_title:
-        ax.set_title(title, fontsize=11, fontweight="bold", color=COLOR_PRIMARY, pad=10)
-    # Légende à droite : évite le chevauchement avec les graduations de l'abscisse.
-    _legend_right_of_axis(ax, fontsize=legend_fontsize)
+    if show_title and str(title).strip():
+        ax.set_title(title, fontsize=11, fontweight="bold", color=title_color or COLOR_PRIMARY, pad=10)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
-    _tight_with_legend_space(fig, bottom=0.12, top=0.90, left=0.07, right=0.74)
+    if len(series_items) > 1:
+        if legend_below:
+            _legend_below_axis(ax, ncol=min(legend_ncol_max, len(series_items)), fontsize=legend_fontsize)
+            _tight_with_legend_space(fig, bottom=0.22, top=0.92, left=0.22, right=0.98)
+        else:
+            _legend_right_of_axis(ax, fontsize=legend_fontsize)
+            _tight_with_legend_space(fig, bottom=0.12, top=0.90, left=0.07, right=0.74)
+    else:
+        _tight_with_legend_space(fig, bottom=0.10, top=0.92, left=0.24, right=0.98)
     return save_chart(fig, tmp_dir, name)
+
+
+def chart_bar_horizontal_simple(
+    labels: list,
+    values: list,
+    tmp_dir: Path,
+    name: str,
+    *,
+    figure_scale: float = 0.38,
+    dpi: int = 150,
+    apply_mpl: bool = True,
+    bar_color: str | None = None,
+) -> str:
+    """Barres horizontales simples (brochure PDF, sans titre ni légende matplotlib)."""
+    if apply_mpl:
+        apply_mpl_style()
+    n = max(1, len(labels))
+    display_labels = [
+        textwrap.fill(str(lb).strip(), width=34, break_long_words=False, break_on_hyphens=False)
+        for lb in labels
+    ]
+    scale_eff = max(0.35, float(figure_scale))
+    fig_h = max(2.4, 0.42 * n + 0.8) * scale_eff * 2.2
+    fig_w = 6.8 * scale_eff
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h))
+    y = np.arange(n)
+    bars = ax.barh(y, values, height=0.58, color=bar_color or COLOR_PRIMARY)
+    ax.bar_label(bars, fmt="%g", fontsize=8, fontweight="bold", padding=2)
+    ax.set_yticks(y)
+    ax.set_yticklabels(display_labels, fontsize=8)
+    ax.invert_yaxis()
+    xmax = max(float(max(values)) if values else 1.0, 1.0)
+    ax.set_xlim(0, xmax * 1.12)
+    ax.xaxis.set_major_locator(MaxNLocator(nbins=6, integer=True, min_n_ticks=3))
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    fig.subplots_adjust(left=0.34, right=0.99, top=0.96, bottom=0.06)
+    return save_chart(fig, tmp_dir, name, dpi=dpi)
 
 
 def chart_line_evolution(

@@ -16,8 +16,20 @@ def _pdf_page_count(path: Path) -> int:
     return len(re.findall(rb"/Type\s*/Page\b", data))
 
 
+def _pdf_media_box_pts(path: Path) -> tuple[float, float]:
+    data = path.read_bytes()
+    matches = re.findall(
+        rb"/MediaBox\s*\[\s*0(?:\.0+)?\s+0(?:\.0+)?\s+([\d.]+)\s+([\d.]+)\s*\]",
+        data,
+    )
+    assert matches, "MediaBox introuvable"
+    w, h = (float(matches[-1][0]), float(matches[-1][1]))
+    return w, h
+
+
 @pytest.mark.skipif(not OUT_DIR.is_dir(), reason="Données de sortie synthèse absentes")
-def test_brochure_pdf_has_two_pages() -> None:
+@pytest.mark.parametrize("cartes", [False, True])
+def test_brochure_pdf_has_two_pages(cartes: bool) -> None:
     from bilans.engine.generation_pdf_synthese_brochure import generate_synthese_brochure_pdf_report
 
     generate_synthese_brochure_pdf_report(
@@ -26,8 +38,10 @@ def test_brochure_pdf_has_two_pages() -> None:
         date_fin="2026-02-05",
         dept_code="21",
         diffusion="externe",
-        cartes=False,
+        cartes=cartes,
     )
     pdf_path = OUT_DIR / "synthese_activite_PA_PJ_brochure_ext.pdf"
     assert pdf_path.is_file()
-    assert _pdf_page_count(pdf_path) == 2
+    assert _pdf_page_count(pdf_path) == 2, f"attendu 2 pages (cartes={cartes})"
+    page_w, page_h = _pdf_media_box_pts(pdf_path)
+    assert page_w > page_h, "La brochure doit être en A4 paysage (largeur > hauteur)"

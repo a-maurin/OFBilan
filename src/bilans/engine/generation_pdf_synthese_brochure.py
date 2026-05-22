@@ -1,35 +1,49 @@
-"""Rendu PDF brochure (2 pages A4 portrait) du profil synthese_activite_PA_PJ."""
+"""Rendu PDF brochure (2 pages A4 paysage).
+
+Couleurs : charte OFB standard (``ofb_charte``).
+Formes : encadrés arrondis via ``brochure_charte`` (module brochure uniquement).
+"""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 import pandas as pd
+from reportlab.lib import colors as rl_colors
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
-from reportlab.platypus import Image as RLImage, Paragraph, Spacer, Table
+from reportlab.platypus import Image as RLImage, Paragraph, Spacer, Table, TableStyle
 
-from bilans.common.carte_helper import resolve_map_layout, resolve_profile_map_paths
+from bilans.common.carte_helper import resolve_profile_map_paths
+from bilans.common.ofb_charte import COLOR_PRIMARY
 from bilans.common.pdf_presentation_config import (
     apply_diffusion_pdf_suffix,
-    build_title_lines_from_cfg,
     normalize_dept_typography,
     resolve_pdf_presentation_config,
 )
-from bilans.common.pdf_report_builder import (
-    PDFReportBuilder,
-    compute_side_by_side_maps_width,
-    compute_stacked_maps_width,
-)
+from bilans.common.pdf_report_builder import PDFReportBuilder, compute_side_by_side_maps_width
 from bilans.common.pdf_table_sort import pdf_metric_caption, sort_dataframe_desc as _sort_desc
-from bilans.common.pdf_utils import ofb_table
-from bilans.common.rendus_graphiques import apply_mpl_style, chart_bar_horizontal_stacked, chart_pie
+from bilans.common.percent_format import tab_counts_to_pct_strings
+from bilans.common.rendus_graphiques import (
+    chart_bar_horizontal_stacked,
+    chart_pie_legend_right,
+)
+from bilans.engine.brochure_charte import (
+    BrochureBandeau,
+    apply_brochure_mpl_style,
+    append_page1_logos_bas_droite,
+    brochure_table,
+    encadre_inner_width,
+    encadre_section,
+    kpi_encadre,
+    note_encadre,
+)
 from bilans.common.utilitaires_metier import get_dept_name
 from bilans.engine.generation_pdf_synthese import (
     PROFILE_ID,
     _ROOT,
-    _build_rows_resultats_controles_pdf,
     _build_synthese_key_figure_rows,
-    _chart_pie_compact_legend_kw,
     _display_type_usager,
     _filter_dataframe_min_pct,
     _load_csv_opt,
@@ -37,13 +51,17 @@ from bilans.engine.generation_pdf_synthese import (
     _pie_data_controles_par_type_usager,
 )
 
-_BROCHURE_MAX_THEMES = 7
+_BROCHURE_MAX_THEMES = 5
 _BROCHURE_MAX_PROC_THEMES = 5
 _BROCHURE_MAX_USAGER_TYPES = 5
 _BROCHURE_USAGER_MIN_SHARE = 0.02
 
+BROCHURE_PAGE_SIZE = landscape(A4)
+_GRID_GAP_MM = 6.0
+_COL_LEFT_RATIO = 0.58
 
-def _truncate_theme(label: str, max_len: int = 32) -> str:
+
+def _truncate_theme(label: str, max_len: int = 34) -> str:
     txt = str(label or "").strip()
     if len(txt) <= max_len:
         return txt
@@ -51,7 +69,6 @@ def _truncate_theme(label: str, max_len: int = 32) -> str:
 
 
 def _rollup_usager_types(df: pd.DataFrame | None) -> pd.DataFrame | None:
-    """Regroupe les types d'usagers peu représentés sous « Autres »."""
     if df is None or df.empty or "nb_total" not in df.columns:
         return df
     work = df.copy()
@@ -112,7 +129,197 @@ def _rollup_resultats_usager(df: pd.DataFrame | None) -> pd.DataFrame | None:
     return pd.DataFrame(kept)
 
 
-def _brochure_methodology_line(
+def _flatten_key_figures(figure_rows: list[list[tuple[str, str]]]) -> list[tuple[str, str]]:
+    flat: list[tuple[str, str]] = []
+    for row in figure_rows:
+        flat.extend(row)
+    return flat
+
+
+def _build_rows_resultats_brochure(tr: pd.DataFrame | None) -> list[list[str]]:
+    header = [["Résultat", "Nb", "Taux"]]
+    if tr is None or tr.empty:
+        return header + [["—", "0", "n.d."]]
+    strip_res = tr["resultat"].astype(str).str.strip()
+    labels = ("Conforme", "Non-conforme", "En attente")
+    counts: list[int] = []
+    rows_out: list[list[str]] = []
+    for label in labels:
+        sub = tr.loc[strip_res == label]
+        if sub.empty:
+            continue
+        counts.append(int(sub.iloc[0]["nb"]))
+        rows_out.append([label, str(int(sub.iloc[0]["nb"])), ""])
+    if counts:
+        rates = tab_counts_to_pct_strings(counts)
+        for i, row in enumerate(rows_out):
+            if i < len(rates):
+                row[2] = rates[i]
+    return header + (rows_out or [["—", "0", "n.d."]])
+
+
+def _grid_columns(builder: PDFReportBuilder, left_ratio: float = _COL_LEFT_RATIO) -> tuple[float, float, float]:
+    """Largeurs gauche | intercolonne | droite = zone utile (alignement strict)."""
+    gap = _GRID_GAP_MM * mm
+    inner = builder.avail_w - gap
+    left_w = inner * left_ratio
+    right_w = inner - left_w
+    return left_w, gap, right_w
+
+
+def _layout_page1_maps_mm(builder: PDFReportBuilder, *, has_maps: bool) -> float:
+    """Hauteur réservée aux cartes page 1 (le reste est en tableaux compacts)."""
+    if not has_maps:
+        return 0.0
+    avail_mm = builder.avail_h / mm
+    fixed_mm = 10.0 + 17.0 + 0.5 + 40.0 + 0.5 + 7.0 + 11.0
+    return min(34.0, max(24.0, avail_mm - fixed_mm - 4.0))
+
+
+def _layout_page2_charts_mm(builder: PDFReportBuilder) -> float:
+    avail_mm = builder.avail_h / mm
+    fixed_mm = 34.0 + 0.5 + 20.0 + 8.0 + 11.0
+    return min(46.0, max(34.0, avail_mm - fixed_mm))
+
+
+def _build_themes_table_brochure(
+    labels: list[str],
+    values: list[int],
+    inner_w: float,
+) -> Table:
+    rows = [["Thème", "Nb", "%"]]
+    pcts = tab_counts_to_pct_strings([int(v) for v in values])
+    for lb, v, pct in zip(labels, values, pcts):
+        rows.append([_truncate_theme(lb, 30), str(int(v)), pct])
+    return brochure_table(
+        rows,
+        col_widths=[inner_w * 0.54, inner_w * 0.18, inner_w * 0.28],
+        col_aligns=["LEFT", "RIGHT", "RIGHT"],
+        header_font_size=7.0,
+        split_by_row=False,
+    )
+
+
+def _append_dual_panels(
+    builder: PDFReportBuilder,
+    *,
+    left_panel,
+    right_panel,
+    left_ratio: float = _COL_LEFT_RATIO,
+) -> None:
+    left_w, gap_w, right_w = _grid_columns(builder, left_ratio)
+    row = Table([[left_panel, "", right_panel]], colWidths=[left_w, gap_w, right_w], hAlign="LEFT")
+    row.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ]
+        )
+    )
+    builder.story.append(row)
+
+
+def _append_spacer(builder: PDFReportBuilder, mm_h: float = 1.5) -> None:
+    builder.story.append(Spacer(1, mm_h * mm))
+
+
+def _append_bandeau(builder: PDFReportBuilder, dept: str, period: str) -> None:
+    """Bandeau bleu OFB à coins arrondis."""
+    title_style = ParagraphStyle(
+        "BrochureBandeauTitle",
+        parent=builder.styles["BodyText"],
+        fontName=f"{builder.styles['BodyText'].fontName}-Bold",
+        fontSize=10,
+        leading=12,
+        textColor=rl_colors.white,
+    )
+    builder.story.append(
+        BrochureBandeau(
+            builder.avail_w,
+            [
+                Paragraph(
+                    f"<b>Synthèse PA/PJ</b> — {dept} — <font color='#C5D9ED'>{period}</font>",
+                    title_style,
+                ),
+            ],
+        )
+    )
+
+
+def _append_kpi_strip(builder: PDFReportBuilder, figures: list[tuple[str, str]]) -> None:
+    builder.story.append(kpi_encadre(builder.avail_w, figures, builder.styles))
+
+
+def _image_fit(
+    builder: PDFReportBuilder,
+    path: Path,
+    *,
+    max_width: float,
+    max_height: float,
+) -> RLImage | str:
+    if not path.exists():
+        return ""
+    ratio = builder._image_aspect_ratio(path)
+    w = max_width
+    h = w * ratio
+    if h > max_height:
+        h = max_height
+        w = h / ratio if ratio > 0 else max_width
+    img = RLImage(str(path), width=w, height=h)
+    img.hAlign = "CENTER"
+    return img
+
+
+def _append_maps_row(
+    builder: PDFReportBuilder,
+    paths: list[Path],
+    *,
+    max_height_mm: float,
+) -> None:
+    w = builder.avail_w
+    existing = [p for p in paths if p.exists()]
+    if not existing:
+        return
+    max_h = max_height_mm * mm
+    gap = _GRID_GAP_MM * mm
+    if len(existing) == 1:
+        img = _image_fit(builder, existing[0], max_width=w - 8 * mm, max_height=max_h)
+        body = [img] if img else []
+    else:
+        ratios = [builder._image_aspect_ratio(p) for p in existing[:2]]
+        col_w = compute_side_by_side_maps_width(
+            w - 8 * mm, max_h, ratios, horizontal_gap_pt=gap, reserve_pt=0
+        )
+        col_w = min(col_w, (w - gap - 8 * mm) / 2.0)
+        imgs = [
+            _image_fit(builder, p, max_width=col_w, max_height=max_h) for p in existing[:2]
+        ]
+        maps_tbl = Table([imgs], colWidths=[col_w, col_w], hAlign="CENTER")
+        maps_tbl.setStyle(
+            TableStyle(
+                [
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ]
+            )
+        )
+        body = [maps_tbl]
+    builder.story.append(
+        encadre_section(builder.avail_w, "Cartographie de l'activité", body, builder.styles, variant="surface")
+    )
+
+
+def _append_footer_note(builder: PDFReportBuilder, html: str) -> None:
+    builder.story.append(note_encadre(builder.avail_w, html, builder.styles))
+
+
+def _brochure_methodology_html(
     *,
     date_deb: pd.Timestamp,
     date_fin: pd.Timestamp,
@@ -121,60 +328,13 @@ def _brochure_methodology_line(
 ) -> str:
     diff = "externe" if str(diffusion).strip().lower() in ("externe", "external", "ext") else "interne"
     return (
-        "<i>Méthodologie : sources OSCEAN (points de contrôle, PEJ, PA) et PVe OFB — "
+        "<i><b>Méthodologie.</b> Sources OSCEAN (points de contrôle, PEJ, PA) et PVe OFB — "
         f"période du {date_deb.date():%d/%m/%Y} au {date_fin.date():%d/%m/%Y} — "
         f"ventilation {ventilation_mode} — diffusion {diff} — "
-        "effectifs d'usagers contrôlés (chaque usager renseigné sur une fiche) ; "
-        "contrôles = localisations OSCEAN ; PEJ = suite contrôle et saisines hors fiche contrôle.</i>"
+        "effectifs d'usagers contrôlés (chaque usager sur une fiche) ; "
+        "contrôles = localisations OSCEAN ; "
+        "PEJ = suite à contrôle et saisines hors fiche contrôle.</i>"
     )
-
-
-def _add_chart_table_row(
-    builder: PDFReportBuilder,
-    *,
-    chart_path: Path,
-    table_rows: list[list[str]],
-    col_widths: list[float],
-    col_aligns: list[str],
-    chart_width_ratio: float = 0.56,
-    table_caption: str = "",
-    header_font_size: float = 7.5,
-) -> None:
-    if not chart_path.exists() and not table_rows:
-        return
-    left_w = builder.avail_w * chart_width_ratio
-    right_w = builder.avail_w - left_w - 3 * mm
-    cells: list = []
-    if chart_path.exists():
-        ratio = builder._image_aspect_ratio(chart_path)
-        max_h = builder.avail_h * 0.34
-        img_w = left_w
-        img_h = img_w * ratio
-        if img_h > max_h:
-            img_h = max_h
-            img_w = img_h / ratio if ratio > 0 else left_w
-        cells.append(RLImage(str(chart_path), width=img_w, height=img_h))
-    else:
-        cells.append("")
-    tbl_block: list = []
-    if table_caption:
-        tbl_block.append(Paragraph(table_caption, builder.styles["TableCaption"]))
-        tbl_block.append(Spacer(1, 0.5 * mm))
-    if table_rows:
-        tbl_block.append(
-            ofb_table(
-                table_rows,
-                col_widths=col_widths,
-                col_aligns=col_aligns,
-                header_font_size=header_font_size,
-                split_by_row=False,
-            )
-        )
-    cells.append(tbl_block or "")
-    row = Table([[cells[0], cells[1]]], colWidths=[left_w, right_w])
-    row.hAlign = "LEFT"
-    builder.story.append(row)
-    builder.story.append(Spacer(1, 1.5 * mm))
 
 
 def generate_synthese_brochure_pdf_report(
@@ -192,7 +352,7 @@ def generate_synthese_brochure_pdf_report(
     brochure: bool = True,
 ) -> None:
     del chart_preset, brochure
-    apply_mpl_style()
+    apply_brochure_mpl_style()
     profile = profile or {"id": PROFILE_ID}
     date_deb_ts = pd.to_datetime(date_deb) if date_deb is not None else pd.Timestamp("2025-01-01")
     date_fin_ts = pd.to_datetime(date_fin) if date_fin is not None else pd.Timestamp("2026-02-05")
@@ -229,13 +389,9 @@ def _generate_synthese_brochure_pdf(
     )
     presentation_cfg = resolved.get("effective", {}) if isinstance(resolved, dict) else {}
 
-    dept_name = get_dept_name(dept_code)
-    dept_name_typo = normalize_dept_typography(dept_name)
-    cover_title_lines, header_title_lines = build_title_lines_from_cfg(
-        presentation_cfg, profile_label="", dept_name_typo=dept_name_typo
-    )
-    report_header = " — ".join(line.strip() for line in header_title_lines if line.strip())
-    period_str = f"Période : du {date_deb.date():%d/%m/%Y} au {date_fin.date():%d/%m/%Y}"
+    dept_name_typo = normalize_dept_typography(get_dept_name(dept_code))
+    report_header = f"Synthèse PA/PJ — {dept_name_typo}"
+    period_str = f"du {date_deb.date():%d/%m/%Y} au {date_fin.date():%d/%m/%Y}"
 
     act_theme = _sort_desc(_load_csv_opt(out_dir, "synthese_activite_par_theme.csv"), ["nb_total"])
     proc_theme = _sort_desc(_load_csv_opt(out_dir, "synthese_procedures_par_theme.csv"), ["nb_pej"])
@@ -265,12 +421,22 @@ def _generate_synthese_brochure_pdf(
     )
     nb_nc = _nb_non_conformes_brut(tab_resultats) if nb_ctrl > 0 else 0
 
+    map_paths: list[Path] = []
+    if cartes:
+        map_id = str(profile.get("_map_id") or profil_id)
+        map_paths = [
+            Path(p) for p in resolve_profile_map_paths(
+                map_id, profile=profile, presentation_cfg=presentation_cfg
+            )
+            if p and Path(p).exists()
+        ][:2]
+    has_maps = bool(map_paths)
+
     base_name = output_filename or f"{profil_id}.pdf"
     stem = Path(base_name).stem
     if not stem.endswith("_brochure"):
         stem = f"{stem}_brochure"
-    pdf_name = f"{stem}.pdf"
-    pdf_path = apply_diffusion_pdf_suffix(out_dir / pdf_name, diffusion)
+    pdf_path = apply_diffusion_pdf_suffix(out_dir / f"{stem}.pdf", diffusion)
 
     builder = PDFReportBuilder(
         pdf_path=pdf_path,
@@ -278,17 +444,18 @@ def _generate_synthese_brochure_pdf(
         title=report_header,
         author="Office français de la biodiversité",
         diffusion=diffusion,
+        content_only=True,
+        pagesize=BROCHURE_PAGE_SIZE,
+        margin_bottom=15 * mm,
     )
-    avail_w = builder.avail_w
+    left_w, _, right_w = _grid_columns(builder)
+    maps_mm = _layout_page1_maps_mm(builder, has_maps=has_maps)
+    charts_mm = _layout_page2_charts_mm(builder)
     tmp_dir = builder.tmp_dir
 
-    builder.begin_content_pages()
-    title_line = " — ".join(ln.replace("\n", " ").strip() for ln in cover_title_lines if ln.strip())
-    builder.add_paragraph(
-        f"<b>{title_line}</b><br/>{dept_name_typo} — {period_str}",
-        style="Heading1",
-    )
-    builder.add_spacer(1.0)
+    # ── Page 1 ──
+    _append_bandeau(builder, dept_name_typo, period_str)
+    _append_spacer(builder, 0.6)
 
     kf_rows = _build_synthese_key_figure_rows(
         nb_effectifs=nb_effectifs,
@@ -298,129 +465,132 @@ def _generate_synthese_brochure_pdf(
         nb_pa=nb_pa,
         nb_pve=nb_pve,
     )
-    builder.add_key_figures_rows(kf_rows, spacer_after_mm=1.0)
+    _append_kpi_strip(builder, _flatten_key_figures(kf_rows))
+    _append_spacer(builder, 0.6)
 
+    inner_left = encadre_inner_width(left_w)
+    inner_right = encadre_inner_width(right_w)
+    left_body: list = []
     act_theme_display = _filter_dataframe_min_pct(act_theme, value_col="nb_total", min_pct=0.01)
-    theme_labels: list[str] = []
-    theme_values: list[int] = []
     if act_theme_display is not None and not act_theme_display.empty:
         sub = act_theme_display.head(_BROCHURE_MAX_THEMES)
-        theme_labels = [_truncate_theme(r["theme"]) for _, r in sub.iterrows()]
-        theme_values = [int(r["nb_total"]) for _, r in sub.iterrows()]
-    chart_theme_path = Path()
-    if theme_labels and theme_values:
-        chart_theme_path = Path(
-            chart_bar_horizontal_stacked(
-                theme_labels,
-                {"Activité": theme_values},
-                "Principaux thèmes d'activité (contrôles + PEJ hors fiche)",
-                "Nombre",
-                tmp_dir,
-                "brochure_themes.png",
-                figure_scale=0.40,
-                legend_fontsize=7.0,
-                legend_ncol_max=1,
-            )
-        )
+        labels = [_truncate_theme(r["theme"]) for _, r in sub.iterrows()]
+        values = [int(r["nb_total"]) for _, r in sub.iterrows()]
+        left_body = [_build_themes_table_brochure(labels, values, inner_left)]
 
-    res_tbl = (
-        _build_rows_resultats_controles_pdf(tab_res_ctrl)
-        if tab_res_ctrl is not None and not tab_res_ctrl.empty
-        else [["Résultat", "Nombre", "Taux"], ["—", "0", "n.d."]]
-    )
-    _add_chart_table_row(
-        builder,
-        chart_path=chart_theme_path,
-        table_rows=res_tbl,
-        col_widths=[avail_w * 0.40, avail_w * 0.30, avail_w * 0.30],
+    res_tbl = _build_rows_resultats_brochure(tab_res_ctrl)
+    res_table = brochure_table(
+        res_tbl,
+        col_widths=[inner_right * 0.48, inner_right * 0.22, inner_right * 0.30],
         col_aligns=["LEFT", "RIGHT", "RIGHT"],
-        table_caption="Résultats des contrôles",
-        chart_width_ratio=0.58,
+        header_font_size=7.0,
+        split_by_row=False,
     )
+    left_panel = encadre_section(
+        left_w, "Principaux thèmes d'activité", left_body, builder.styles
+    )
+    right_panel = encadre_section(
+        right_w, "Résultats des contrôles", [res_table], builder.styles, variant="surface"
+    )
+    _append_dual_panels(builder, left_panel=left_panel, right_panel=right_panel)
+    _append_spacer(builder, 0.6)
 
-    if cartes:
-        map_id = str(profile.get("_map_id") or profil_id)
-        map_paths = resolve_profile_map_paths(
-            map_id, profile=profile, presentation_cfg=presentation_cfg
+    if has_maps:
+        _append_maps_row(builder, map_paths, max_height_mm=maps_mm)
+    else:
+        _append_footer_note(
+            builder,
+            "<i>Cartographie : cartes non disponibles "
+            "(fichiers attendus dans data/out/generateur_de_cartes/).</i>",
         )
-        map_layout = resolve_map_layout(profile=profile, presentation_cfg=presentation_cfg)
-        existing = [Path(p) for p in map_paths if p and Path(p).exists()][:2]
-        if existing:
-            layout_norm = str(map_layout).strip().lower()
-            vertical = layout_norm in ("vertical", "verticale", "empilees", "stacked")
-            if len(existing) == 1:
-                ratio = builder._image_aspect_ratio(existing[0])
-                map_w = min(avail_w * 0.92, builder.avail_h * 0.30 / max(ratio, 0.2))
-                builder.story.append(builder._scaled_image_flowable(existing[0], map_w))
-            elif vertical:
-                ratios = [builder._image_aspect_ratio(p) for p in existing]
-                map_w = compute_stacked_maps_width(
-                    avail_w, builder.avail_h * 0.32, ratios, width_fraction=0.95
-                )
-                for i, path in enumerate(existing):
-                    builder.story.append(builder._scaled_image_flowable(path, map_w))
-                    if i < len(existing) - 1:
-                        builder.story.append(Spacer(1, 1 * mm))
-            else:
-                ratios = [builder._image_aspect_ratio(p) for p in existing]
-                col_w = compute_side_by_side_maps_width(
-                    avail_w, builder.avail_h * 0.32, ratios
-                )
-                cells = [builder._scaled_image_flowable(p, col_w) for p in existing]
-                builder.story.append(Table([cells], colWidths=[col_w, col_w]))
-            builder.story.append(Spacer(1, 1 * mm))
+    _append_spacer(builder, 0.4)
+    append_page1_logos_bas_droite(builder, builder.tmp_dir)
 
     builder.add_page_break()
 
+    # ── Page 2 ──
+    chart_h2 = charts_mm * mm
+    left_w2, _, right_w2 = _grid_columns(builder, 0.55)
+
+    left_body2: list = []
     res_usager_plot = _rollup_resultats_usager(res_usager)
-    chart_res_path = Path()
     if res_usager_plot is not None and not res_usager_plot.empty:
-        labels = [_display_type_usager(x) for x in res_usager_plot["type_usager"].tolist()]
+        labels = [_truncate_theme(_display_type_usager(x), 28) for x in res_usager_plot["type_usager"]]
         series: dict[str, list[int]] = {
             "Conforme": [int(x) for x in res_usager_plot["Conforme"].tolist()],
             "Infraction": [int(x) for x in res_usager_plot["Infraction"].tolist()],
             "Manquement": [int(x) for x in res_usager_plot["Manquement"].tolist()],
         }
-        if (
-            "Autre_resultat" in res_usager_plot.columns
-            and int(res_usager_plot["Autre_resultat"].sum()) > 0
-        ):
+        if "Autre_resultat" in res_usager_plot.columns and int(res_usager_plot["Autre_resultat"].sum()) > 0:
             series["En attente"] = [int(x) for x in res_usager_plot["Autre_resultat"].tolist()]
-        chart_res_path = Path(
+        chart_path = Path(
             chart_bar_horizontal_stacked(
                 labels,
                 series,
-                pdf_metric_caption("Résultats des contrôles par type d'usager", "effectifs"),
+                "",
                 "Effectifs",
                 tmp_dir,
                 "brochure_resultats_usager.png",
-                figure_scale=0.42,
+                figure_scale=0.38,
+                show_title=False,
+                legend_below=True,
                 legend_fontsize=7.0,
             )
         )
+        img = _image_fit(
+            builder,
+            chart_path,
+            max_width=encadre_inner_width(left_w2),
+            max_height=chart_h2 * 0.92,
+        )
+        if img:
+            left_body2 = [img]
 
-    act_type_roll = _rollup_usager_types(act_par_type)
-    pie_data = _pie_data_controles_par_type_usager(act_type_roll)
-    chart_pie_path = Path()
+    right_body2: list = []
+    pie_data = _pie_data_controles_par_type_usager(_rollup_usager_types(act_par_type))
     if pie_data:
-        chart_pie_path = Path(
-            chart_pie(
+        chart_path = Path(
+            chart_pie_legend_right(
                 pie_data,
-                "Effectifs contrôlés et PEJ hors contrôle par type d'usager",
+                "",
                 tmp_dir,
                 "brochure_pie_usagers.png",
                 legend_percent_only=True,
-                figure_scale=0.72,
-                **_chart_pie_compact_legend_kw(len(pie_data)),
+                figure_scale=0.82,
+                legend_fontsize=7.0,
             )
         )
+        img = _image_fit(
+            builder,
+            chart_path,
+            max_width=encadre_inner_width(right_w2),
+            max_height=chart_h2 * 0.95,
+        )
+        if img:
+            right_body2 = [img]
+
+    _append_dual_panels(
+        builder,
+        left_panel=encadre_section(
+            left_w2, "Résultats par type d'usager", left_body2, builder.styles
+        ),
+        right_panel=encadre_section(
+            right_w2,
+            "Répartition par type d'usager",
+            right_body2,
+            builder.styles,
+            variant="surface",
+        ),
+        left_ratio=0.55,
+    )
+    _append_spacer(builder, 0.6)
 
     proc_rows = [["Thème", "PEJ", "PA", "PVe"]]
     if proc_theme is not None and not proc_theme.empty:
         for _, row in proc_theme.head(_BROCHURE_MAX_PROC_THEMES).iterrows():
             proc_rows.append(
                 [
-                    _truncate_theme(row["theme"], 28),
+                    _truncate_theme(row["theme"], 32),
                     str(int(row.get("nb_pej", 0))),
                     str(int(row.get("nb_pa", 0))),
                     str(int(row.get("nb_pve", 0))),
@@ -429,37 +599,29 @@ def _generate_synthese_brochure_pdf(
     else:
         proc_rows.append(["—", "0", "0", "0"])
 
-    if chart_res_path.exists() or chart_pie_path.exists():
-        left_w = avail_w * 0.52
-        right_w = avail_w - left_w - 3 * mm
-        left_cell: object = ""
-        right_cell: object = ""
-        if chart_res_path.exists():
-            ratio = builder._image_aspect_ratio(chart_res_path)
-            img_w = left_w
-            img_h = min(img_w * ratio, builder.avail_h * 0.36)
-            if img_h < img_w * ratio:
-                img_w = img_h / ratio if ratio > 0 else img_w
-            left_cell = RLImage(str(chart_res_path), width=img_w, height=img_h)
-        if chart_pie_path.exists():
-            ratio = builder._image_aspect_ratio(chart_pie_path)
-            img_w = right_w
-            img_h = min(img_w * ratio, builder.avail_h * 0.36)
-            if img_h < img_w * ratio:
-                img_w = img_h / ratio if ratio > 0 else img_w
-            right_cell = RLImage(str(chart_pie_path), width=img_w, height=img_h)
-        builder.story.append(Table([[left_cell, right_cell]], colWidths=[left_w, right_w]))
-        builder.story.append(Spacer(1, 1.5 * mm))
-
-    builder.add_table(
+    inner_full = encadre_inner_width(builder.avail_w)
+    proc_tbl = brochure_table(
         proc_rows,
-        caption=pdf_metric_caption("Procédures par thème (principaux postes)", "proc"),
-        col_widths=[avail_w * 0.46, avail_w * 0.18, avail_w * 0.18, avail_w * 0.18],
+        col_widths=[
+            inner_full * 0.46,
+            inner_full * 0.18,
+            inner_full * 0.18,
+            inner_full * 0.18,
+        ],
         col_aligns=["LEFT", "RIGHT", "RIGHT", "RIGHT"],
-        keep_together=True,
-        spacer_after_mm=1.5,
-        max_rows_keep_together=12,
+        header_font_size=7.5,
+        split_by_row=False,
     )
+    builder.story.append(
+        encadre_section(
+            builder.avail_w,
+            pdf_metric_caption("Procédures par thème (principaux postes)", "proc"),
+            [proc_tbl],
+            builder.styles,
+            variant="surface",
+        )
+    )
+    _append_spacer(builder, 0.5)
 
     if nb_pej or nb_pa or nb_pve:
         parts = []
@@ -468,19 +630,32 @@ def _generate_synthese_brochure_pdf(
         parts.append(f"<b>{nb_pa}</b> PA")
         if nb_pve:
             parts.append(f"<b>{nb_pve}</b> PVe")
-        builder.add_paragraph(
-            "Totaux procéduraux sur la période : " + " · ".join(parts) + ".",
-            style="BodyText",
+        totaux_style = ParagraphStyle(
+            "BrochureTotaux",
+            parent=builder.styles["BodyText"],
+            fontSize=9.5,
+            leading=12,
+            textColor=rl_colors.HexColor(COLOR_PRIMARY),
         )
+        builder.story.append(
+            encadre_section(
+                builder.avail_w,
+                None,
+                [Paragraph("Totaux procéduraux : " + " · ".join(parts), totaux_style)],
+                builder.styles,
+                variant="surface",
+            )
+        )
+        _append_spacer(builder, 0.4)
 
-    builder.add_paragraph(
-        _brochure_methodology_line(
+    _append_footer_note(
+        builder,
+        _brochure_methodology_html(
             date_deb=date_deb,
             date_fin=date_fin,
             ventilation_mode=ventilation_mode,
             diffusion=diffusion,
         ),
-        style="BodySmall",
     )
 
     builder.build()

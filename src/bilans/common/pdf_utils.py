@@ -225,6 +225,8 @@ def ofb_table(
     *,
     header_font_size: float | None = None,
     split_by_row: bool = False,
+    show_grid: bool = True,
+    zebra_rows: bool = True,
 ):
     """Crée un Table reportlab stylisé charte OFB (en-tête bleu, lignes alternées).
 
@@ -314,12 +316,14 @@ def ofb_table(
         ("TOPPADDING", (0, 1), (-1, -1), 3),
         ("LEFTPADDING", (0, 0), (-1, -1), 4),
         ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-        ("GRID", (0, 0), (-1, -1), 0.5, COLOR_TABLE_BORDER),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
     ]
-    for i in range(1, len(wrapped)):
-        if i % 2 == 0:
-            style_cmds.append(("BACKGROUND", (0, i), (-1, i), COLOR_TABLE_ALT_ROW))
+    if show_grid:
+        style_cmds.append(("GRID", (0, 0), (-1, -1), 0.5, COLOR_TABLE_BORDER))
+    if zebra_rows:
+        for i in range(1, len(wrapped)):
+            if i % 2 == 0:
+                style_cmds.append(("BACKGROUND", (0, i), (-1, i), COLOR_TABLE_ALT_ROW))
 
     tbl = Table(
         wrapped,
@@ -336,6 +340,7 @@ def key_figures_table(
     styles,
     *,
     density: str = "auto",
+    table_width: float | None = None,
 ):
     """Bloc de chiffres clés : liste de (valeur, libellé) affichés en ligne."""
     if not figures:
@@ -385,7 +390,8 @@ def key_figures_table(
     for val, lbl in figures:
         header.append(Paragraph(f"<b>{val}</b>", val_style))
         labels.append(Paragraph(lbl, lbl_style))
-    col_w = (PAGE_W - MARGIN_LEFT - MARGIN_RIGHT) / n
+    total_w = float(table_width) if table_width is not None else (PAGE_W - MARGIN_LEFT - MARGIN_RIGHT)
+    col_w = total_w / n
     tbl = Table([header, labels], colWidths=[col_w] * n)
     tbl.setStyle(
         TableStyle(
@@ -405,6 +411,8 @@ def key_figures_table(
 def key_figures_table_rows(
     figures_rows: list[list[tuple[str, str]]],
     styles,
+    *,
+    table_width: float | None = None,
 ):
     """Bloc de chiffres clés sur plusieurs lignes (valeurs puis libellés par ligne)."""
     if not figures_rows or not any(figures_rows):
@@ -426,7 +434,8 @@ def key_figures_table_rows(
                 lbl_cells.append(Paragraph("", lbl_style))
         table_rows.append(val_cells)
         table_rows.append(lbl_cells)
-    col_w = (PAGE_W - MARGIN_LEFT - MARGIN_RIGHT) / n_cols
+    total_w = float(table_width) if table_width is not None else (PAGE_W - MARGIN_LEFT - MARGIN_RIGHT)
+    col_w = total_w / n_cols
     tbl = Table(table_rows, colWidths=[col_w] * n_cols)
     style_cmds: list = [
         ("ALIGN", (0, 0), (-1, -1), "CENTER"),

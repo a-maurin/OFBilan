@@ -52,7 +52,7 @@ options:
     default: externe
     ask: false
   brochure:
-    label: Format brochure (2 pages A4 portrait)
+    label: Format brochure (2 pages A4 paysage)
     default: false
     ask: false
   cartes:

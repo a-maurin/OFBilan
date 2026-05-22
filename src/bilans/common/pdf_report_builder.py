@@ -122,9 +122,14 @@ class PDFReportBuilder:
         tables_layout: dict[str, Any] | None = None,
         diffusion: str = "interne",
         title_page_config: dict[str, Any] | None = None,
+        content_only: bool = False,
+        pagesize: tuple[float, float] | None = None,
+        margin_bottom: float | None = None,
     ):
         self.pdf_path = Path(pdf_path)
         self.pdf_path.parent.mkdir(parents=True, exist_ok=True)
+        self._pagesize = pagesize if pagesize is not None else A4
+        self._page_w, self._page_h = self._pagesize
 
         self.header_title = header_title
         self.footer_line1 = footer_line1
@@ -156,11 +161,12 @@ class PDFReportBuilder:
         ]
         n_header_lines = len(header_lines) or 1
         rule_from_top, margin_top = header_layout_metrics(n_header_lines)
-        self._header_rule_y = PAGE_H - rule_from_top
+        self._header_rule_y = self._page_h - rule_from_top
         self._margin_top = margin_top
 
-        self.avail_w = PAGE_W - MARGIN_LEFT - MARGIN_RIGHT
-        self.avail_h = PAGE_H - margin_top - MARGIN_BOTTOM
+        self._margin_bottom = float(margin_bottom) if margin_bottom is not None else MARGIN_BOTTOM
+        self.avail_w = self._page_w - MARGIN_LEFT - MARGIN_RIGHT
+        self.avail_h = self._page_h - margin_top - self._margin_bottom
         self._tables_layout = deepcopy(
             tables_layout if tables_layout is not None else resolve_tables_layout({})
         )
@@ -173,12 +179,12 @@ class PDFReportBuilder:
 
         content_frame = Frame(
             MARGIN_LEFT,
-            MARGIN_BOTTOM,
-            PAGE_W - MARGIN_LEFT - MARGIN_RIGHT,
-            PAGE_H - margin_top - MARGIN_BOTTOM,
+            self._margin_bottom,
+            self._page_w - MARGIN_LEFT - MARGIN_RIGHT,
+            self._page_h - margin_top - self._margin_bottom,
             id="content",
         )
-        title_frame = Frame(0, 0, PAGE_W, PAGE_H, id="title_full")
+        title_frame = Frame(0, 0, self._page_w, self._page_h, id="title_full")
 
         class _OFBBaseDocTemplate(BaseDocTemplate):
             def afterFlowable(doc_self, flowable):
@@ -195,23 +201,28 @@ class PDFReportBuilder:
                         ),
                     )
 
-        self.doc = _OFBBaseDocTemplate(
-            str(self.pdf_path),
-            pagesize=A4,
-            title=title or header_title,
-            author=author,
-            pageTemplates=[
+        normal_template = PageTemplate(
+            id="Normal",
+            frames=[content_frame],
+            onPage=self._header_footer,
+        )
+        if content_only:
+            page_templates = [normal_template]
+        else:
+            page_templates = [
                 PageTemplate(
                     id="TitlePage",
                     frames=[title_frame],
                     onPage=self._title_page_bg,
                 ),
-                PageTemplate(
-                    id="Normal",
-                    frames=[content_frame],
-                    onPage=self._header_footer,
-                ),
-            ],
+                normal_template,
+            ]
+        self.doc = _OFBBaseDocTemplate(
+            str(self.pdf_path),
+            pagesize=self._pagesize,
+            title=title or header_title,
+            author=author,
+            pageTemplates=page_templates,
         )
 
         self.story: list = []
@@ -256,20 +267,20 @@ class PDFReportBuilder:
             gap_below_banner = float(cfg.get("gap_below_logo_banner_mm", 10)) * mm
         except (TypeError, ValueError):
             pad_x, pad_y, gap_below_banner = 4 * mm, 2 * mm, 10 * mm
-        box_top = PAGE_H * self._logo_banner_top_ratio() - gap_below_banner
+        box_top = self._page_h * self._logo_banner_top_ratio() - gap_below_banner
         canvas.saveState()
         canvas.setFont(font_name, font_size)
         text_w = canvas.stringWidth(text, font_name, font_size)
         box_w = text_w + 2 * pad_x
         box_h = font_size + 2 * pad_y
-        box_x = (PAGE_W - box_w) * 0.5
+        box_x = (self._page_w - box_w) * 0.5
         box_bottom = box_top - box_h
         canvas.setFillColor(rl_colors.HexColor("#E8EEF4"))
         canvas.setStrokeColor(rl_colors.HexColor(COLOR_PRIMARY))
         canvas.setLineWidth(0.6)
         canvas.rect(box_x, box_bottom, box_w, box_h, fill=1, stroke=1)
         canvas.setFillColor(rl_colors.HexColor(COLOR_PRIMARY))
-        canvas.drawCentredString(PAGE_W * 0.5, box_bottom + pad_y, text)
+        canvas.drawCentredString(self._page_w * 0.5, box_bottom + pad_y, text)
         canvas.restoreState()
 
     def _title_page_bg(self, canvas, doc):
@@ -279,13 +290,13 @@ class PDFReportBuilder:
         if IMG_BACKGROUND.exists():
             canvas.drawImage(
                 str(IMG_BACKGROUND), 0, 0,
-                width=PAGE_W, height=PAGE_H * banner_top,
+                width=self._page_w, height=self._page_h * banner_top,
                 preserveAspectRatio=False, mask="auto",
             )
         if IMG_LOGO_BANNER.exists():
             canvas.drawImage(
-                str(IMG_LOGO_BANNER), 0, PAGE_H * banner_top,
-                width=PAGE_W, height=PAGE_H * banner_h,
+                str(IMG_LOGO_BANNER), 0, self._page_h * banner_top,
+                width=self._page_w, height=self._page_h * banner_h,
                 preserveAspectRatio=False, mask="auto",
             )
         canvas.restoreState()
@@ -296,14 +307,14 @@ class PDFReportBuilder:
         if IMG_FOOTER_DECO.exists():
             canvas.drawImage(
                 str(IMG_FOOTER_DECO),
-                PAGE_W - 60 * mm, 0,
+                self._page_w - 60 * mm, 0,
                 width=60 * mm, height=7 * mm,
                 preserveAspectRatio=False, mask="auto",
             )
         canvas.setStrokeColor(rl_colors.HexColor(COLOR_PRIMARY))
         canvas.setLineWidth(2)
-        y_rule = getattr(self, "_header_rule_y", PAGE_H - 12 * mm)
-        canvas.line(MARGIN_LEFT, y_rule, PAGE_W - MARGIN_RIGHT, y_rule)
+        y_rule = getattr(self, "_header_rule_y", self._page_h - 12 * mm)
+        canvas.line(MARGIN_LEFT, y_rule, self._page_w - MARGIN_RIGHT, y_rule)
         header_lines = [ln.strip() for ln in str(self.header_title).splitlines() if ln.strip()]
         if not header_lines:
             header_lines = [""]
@@ -321,7 +332,7 @@ class PDFReportBuilder:
         canvas.setFillColor(rl_colors.HexColor(COLOR_SECONDARY))
         canvas.drawString(MARGIN_LEFT, y_foot + 12, self.footer_line1)
         canvas.drawString(MARGIN_LEFT, y_foot + 3, self.footer_line2)
-        canvas.drawRightString(PAGE_W - MARGIN_RIGHT, y_foot + 3, f"{doc.page}")
+        canvas.drawRightString(self._page_w - MARGIN_RIGHT, y_foot + 3, f"{doc.page}")
         canvas.restoreState()
 
     # ------------------------------------------------------------------
@@ -375,7 +386,7 @@ class PDFReportBuilder:
             rightIndent=right_indent_mm * mm,
         )
 
-        self.story.append(Spacer(1, PAGE_H * max(0.0, top_spacer_ratio)))
+        self.story.append(Spacer(1, self._page_h * max(0.0, top_spacer_ratio)))
         paragraphs: list[list[str]] = []
         current_lines: list[str] = []
         for raw_line in title_lines:
@@ -417,7 +428,7 @@ class PDFReportBuilder:
                     meta_style,
                 )
             )
-        self.story.append(Spacer(1, PAGE_H * 0.15))
+        self.story.append(Spacer(1, self._page_h * 0.15))
         self.story.append(
             Paragraph(
                 f'<font color="white" size="8">{self.footer_line1}<br/>{self.footer_line2}</font>',
@@ -585,7 +596,9 @@ class PDFReportBuilder:
         """figures = [(value_str, label_str), ...]"""
         if not figures:
             return
-        kf_table = key_figures_table(figures, self.styles, density=density)
+        kf_table = key_figures_table(
+            figures, self.styles, density=density, table_width=self.avail_w
+        )
         spacer = Spacer(1, float(spacer_after_mm) * mm)
         if self._pending_section is not None:
             self.story.append(KeepTogether(self._pending_section + [kf_table, spacer]))
@@ -603,7 +616,7 @@ class PDFReportBuilder:
         """Chiffres clés sur plusieurs lignes ; s'ajoute au titre de section en attente si présent."""
         if not figure_rows:
             return
-        kf_table = key_figures_table_rows(figure_rows, self.styles)
+        kf_table = key_figures_table_rows(figure_rows, self.styles, table_width=self.avail_w)
         spacer = Spacer(1, float(spacer_after_mm) * mm)
         if self._pending_section is not None:
             self._pending_section.extend([kf_table, spacer])
