@@ -57,7 +57,8 @@ _BROCHURE_MAX_USAGER_TYPES = 5
 _BROCHURE_USAGER_MIN_SHARE = 0.02
 
 BROCHURE_PAGE_SIZE = landscape(A4)
-_GRID_GAP_MM = 6.0
+_GRID_GAP_MM = 10.0
+_BROCHURE_SECTION_GAP_MM = 3.2
 _COL_LEFT_RATIO = 0.58
 
 
@@ -136,10 +137,14 @@ def _flatten_key_figures(figure_rows: list[list[tuple[str, str]]]) -> list[tuple
     return flat
 
 
+_BROCHURE_THEME_COL_FRACS = [0.54, 0.18, 0.28]
+_BROCHURE_RESULT_COL_FRACS = [0.48, 0.22, 0.30]
+_BROCHURE_PROC_COL_FRACS = [0.46, 0.18, 0.18, 0.18]
+
+
 def _build_rows_resultats_brochure(tr: pd.DataFrame | None) -> list[list[str]]:
-    header = [["Résultat", "Nb", "Taux"]]
     if tr is None or tr.empty:
-        return header + [["—", "0", "n.d."]]
+        return [["—", "0", "n.d."]]
     strip_res = tr["resultat"].astype(str).str.strip()
     labels = ("Conforme", "Non-conforme", "En attente")
     counts: list[int] = []
@@ -155,7 +160,7 @@ def _build_rows_resultats_brochure(tr: pd.DataFrame | None) -> list[list[str]]:
         for i, row in enumerate(rows_out):
             if i < len(rates):
                 row[2] = rates[i]
-    return header + (rows_out or [["—", "0", "n.d."]])
+    return rows_out or [["—", "0", "n.d."]]
 
 
 def _grid_columns(builder: PDFReportBuilder, left_ratio: float = _COL_LEFT_RATIO) -> tuple[float, float, float]:
@@ -167,19 +172,58 @@ def _grid_columns(builder: PDFReportBuilder, left_ratio: float = _COL_LEFT_RATIO
     return left_w, gap, right_w
 
 
+def _page1_vertical_gaps_mm(*, has_maps: bool) -> float:
+    """Espace blanc entre bandeau, KPI, tableaux, cartes et logos."""
+    n = 3 + (1 if has_maps else 0) + 1
+    return n * _BROCHURE_SECTION_GAP_MM
+
+
+def _page2_vertical_gaps_mm() -> float:
+    return 3 * _BROCHURE_SECTION_GAP_MM
+
+
 def _layout_page1_maps_mm(builder: PDFReportBuilder, *, has_maps: bool) -> float:
-    """Hauteur réservée aux cartes page 1 (le reste est en tableaux compacts)."""
+    """Hauteur réservée aux cartes page 1 (compense les espacements inter-blocs)."""
     if not has_maps:
         return 0.0
     avail_mm = builder.avail_h / mm
-    fixed_mm = 10.0 + 17.0 + 0.5 + 40.0 + 0.5 + 7.0 + 11.0
-    return min(34.0, max(24.0, avail_mm - fixed_mm - 4.0))
+    fixed_mm = (
+        9.0
+        + 15.0
+        + _page1_vertical_gaps_mm(has_maps=has_maps)
+        + 37.0
+        + 9.0
+    )
+    return min(31.0, max(21.0, avail_mm - fixed_mm - 3.0))
 
 
 def _layout_page2_charts_mm(builder: PDFReportBuilder) -> float:
     avail_mm = builder.avail_h / mm
-    fixed_mm = 34.0 + 0.5 + 20.0 + 8.0 + 11.0
-    return min(46.0, max(34.0, avail_mm - fixed_mm))
+    fixed_mm = 32.0 + _page2_vertical_gaps_mm() + 19.0 + 10.0
+    return min(41.0, max(30.0, avail_mm - fixed_mm))
+
+
+def _build_procedures_table_brochure(proc_theme: pd.DataFrame | None, inner_w: float) -> Table:
+    rows: list[list[str]] = []
+    if proc_theme is not None and not proc_theme.empty:
+        for _, row in proc_theme.head(_BROCHURE_MAX_PROC_THEMES).iterrows():
+            rows.append(
+                [
+                    _truncate_theme(row["theme"], 32),
+                    str(int(row.get("nb_pej", 0))),
+                    str(int(row.get("nb_pa", 0))),
+                    str(int(row.get("nb_pve", 0))),
+                ]
+            )
+    else:
+        rows.append(["—", "0", "0", "0"])
+    return brochure_table(
+        rows,
+        col_widths=[inner_w * f for f in _BROCHURE_PROC_COL_FRACS],
+        col_aligns=["LEFT", "RIGHT", "RIGHT", "RIGHT"],
+        split_by_row=False,
+        header_row=False,
+    )
 
 
 def _build_themes_table_brochure(
@@ -187,16 +231,16 @@ def _build_themes_table_brochure(
     values: list[int],
     inner_w: float,
 ) -> Table:
-    rows = [["Thème", "Nb", "%"]]
+    rows: list[list[str]] = []
     pcts = tab_counts_to_pct_strings([int(v) for v in values])
     for lb, v, pct in zip(labels, values, pcts):
         rows.append([_truncate_theme(lb, 30), str(int(v)), pct])
     return brochure_table(
         rows,
-        col_widths=[inner_w * 0.54, inner_w * 0.18, inner_w * 0.28],
+        col_widths=[inner_w * f for f in _BROCHURE_THEME_COL_FRACS],
         col_aligns=["LEFT", "RIGHT", "RIGHT"],
-        header_font_size=7.0,
         split_by_row=False,
+        header_row=False,
     )
 
 
@@ -455,7 +499,7 @@ def _generate_synthese_brochure_pdf(
 
     # ── Page 1 ──
     _append_bandeau(builder, dept_name_typo, period_str)
-    _append_spacer(builder, 0.6)
+    _append_spacer(builder, _BROCHURE_SECTION_GAP_MM)
 
     kf_rows = _build_synthese_key_figure_rows(
         nb_effectifs=nb_effectifs,
@@ -466,7 +510,7 @@ def _generate_synthese_brochure_pdf(
         nb_pve=nb_pve,
     )
     _append_kpi_strip(builder, _flatten_key_figures(kf_rows))
-    _append_spacer(builder, 0.6)
+    _append_spacer(builder, _BROCHURE_SECTION_GAP_MM)
 
     inner_left = encadre_inner_width(left_w)
     inner_right = encadre_inner_width(right_w)
@@ -481,19 +525,30 @@ def _generate_synthese_brochure_pdf(
     res_tbl = _build_rows_resultats_brochure(tab_res_ctrl)
     res_table = brochure_table(
         res_tbl,
-        col_widths=[inner_right * 0.48, inner_right * 0.22, inner_right * 0.30],
+        col_widths=[inner_right * f for f in _BROCHURE_RESULT_COL_FRACS],
         col_aligns=["LEFT", "RIGHT", "RIGHT"],
-        header_font_size=7.0,
         split_by_row=False,
+        header_row=False,
     )
     left_panel = encadre_section(
-        left_w, "Principaux thèmes d'activité", left_body, builder.styles
+        left_w,
+        "Principaux thèmes d'activité",
+        left_body,
+        builder.styles,
+        col_headers=["Nb", "Taux"],
+        col_width_fracs=_BROCHURE_THEME_COL_FRACS,
     )
     right_panel = encadre_section(
-        right_w, "Résultats des contrôles", [res_table], builder.styles, variant="surface"
+        right_w,
+        "Résultats des contrôles",
+        [res_table],
+        builder.styles,
+        variant="surface",
+        col_headers=["Nb", "Taux"],
+        col_width_fracs=_BROCHURE_RESULT_COL_FRACS,
     )
     _append_dual_panels(builder, left_panel=left_panel, right_panel=right_panel)
-    _append_spacer(builder, 0.6)
+    _append_spacer(builder, _BROCHURE_SECTION_GAP_MM)
 
     if has_maps:
         _append_maps_row(builder, map_paths, max_height_mm=maps_mm)
@@ -503,7 +558,7 @@ def _generate_synthese_brochure_pdf(
             "<i>Cartographie : cartes non disponibles "
             "(fichiers attendus dans data/out/generateur_de_cartes/).</i>",
         )
-    _append_spacer(builder, 0.4)
+    _append_spacer(builder, _BROCHURE_SECTION_GAP_MM)
     append_page1_logos_bas_droite(builder, builder.tmp_dir)
 
     builder.add_page_break()
@@ -531,7 +586,7 @@ def _generate_synthese_brochure_pdf(
                 "Effectifs",
                 tmp_dir,
                 "brochure_resultats_usager.png",
-                figure_scale=0.38,
+                figure_scale=0.35,
                 show_title=False,
                 legend_below=True,
                 legend_fontsize=7.0,
@@ -556,7 +611,7 @@ def _generate_synthese_brochure_pdf(
                 tmp_dir,
                 "brochure_pie_usagers.png",
                 legend_percent_only=True,
-                figure_scale=0.82,
+                figure_scale=0.76,
                 legend_fontsize=7.0,
             )
         )
@@ -583,35 +638,10 @@ def _generate_synthese_brochure_pdf(
         ),
         left_ratio=0.55,
     )
-    _append_spacer(builder, 0.6)
-
-    proc_rows = [["Thème", "PEJ", "PA", "PVe"]]
-    if proc_theme is not None and not proc_theme.empty:
-        for _, row in proc_theme.head(_BROCHURE_MAX_PROC_THEMES).iterrows():
-            proc_rows.append(
-                [
-                    _truncate_theme(row["theme"], 32),
-                    str(int(row.get("nb_pej", 0))),
-                    str(int(row.get("nb_pa", 0))),
-                    str(int(row.get("nb_pve", 0))),
-                ]
-            )
-    else:
-        proc_rows.append(["—", "0", "0", "0"])
+    _append_spacer(builder, _BROCHURE_SECTION_GAP_MM)
 
     inner_full = encadre_inner_width(builder.avail_w)
-    proc_tbl = brochure_table(
-        proc_rows,
-        col_widths=[
-            inner_full * 0.46,
-            inner_full * 0.18,
-            inner_full * 0.18,
-            inner_full * 0.18,
-        ],
-        col_aligns=["LEFT", "RIGHT", "RIGHT", "RIGHT"],
-        header_font_size=7.5,
-        split_by_row=False,
-    )
+    proc_tbl = _build_procedures_table_brochure(proc_theme, inner_full)
     builder.story.append(
         encadre_section(
             builder.avail_w,
@@ -619,9 +649,11 @@ def _generate_synthese_brochure_pdf(
             [proc_tbl],
             builder.styles,
             variant="surface",
+            col_headers=["PEJ", "PA", "PVe"],
+            col_width_fracs=_BROCHURE_PROC_COL_FRACS,
         )
     )
-    _append_spacer(builder, 0.5)
+    _append_spacer(builder, _BROCHURE_SECTION_GAP_MM)
 
     if nb_pej or nb_pa or nb_pve:
         parts = []
@@ -646,7 +678,7 @@ def _generate_synthese_brochure_pdf(
                 variant="surface",
             )
         )
-        _append_spacer(builder, 0.4)
+        _append_spacer(builder, _BROCHURE_SECTION_GAP_MM)
 
     _append_footer_note(
         builder,

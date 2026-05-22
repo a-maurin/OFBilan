@@ -7,7 +7,7 @@ from pathlib import Path
 
 from PIL import Image as PILImage
 from reportlab.lib import colors as rl_colors
-from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import Flowable, Paragraph, Spacer, Table, TableStyle
@@ -29,7 +29,8 @@ _PAGE1_LOGO_GAP = 3.0 * mm
 
 RADIUS_STD_PT = 10.0
 RADIUS_CALLOUT_TL_PT = 22.0
-_PAD_STD_PT = 3.5 * mm
+_PAD_STD_PT = 3.0 * mm
+_TABLE_CELL_PAD_PT = 4.0
 
 _CLR_PRIMARY = COLOR_TABLE_HEADER_BG
 _CLR_BODY_BG = rl_colors.white
@@ -44,6 +45,14 @@ def encadre_inner_width(outer_w: float, *, pad_pt: float = _PAD_STD_PT) -> float
     return max(30.0, float(outer_w) - 2 * pad_pt - 2.0)
 
 
+def _flowable_col_widths(flow: Flowable) -> list[float] | None:
+    if isinstance(flow, Table):
+        cw = getattr(flow, "_colWidths", None) or getattr(flow, "colWidths", None)
+        if cw:
+            return [float(x) for x in cw]
+    return None
+
+
 def brochure_table(
     data_rows,
     *,
@@ -51,8 +60,9 @@ def brochure_table(
     col_aligns=None,
     header_font_size: float | None = None,
     split_by_row: bool = False,
+    header_row: bool = True,
 ):
-    """Tableau brochure : pas de grille ni zébrage (cadre arrondi suffit)."""
+    """Tableau brochure : pas de grille ni zébrage (l'encadré arrondi porte la forme)."""
     from bilans.common.pdf_utils import ofb_table
 
     return ofb_table(
@@ -63,6 +73,7 @@ def brochure_table(
         split_by_row=split_by_row,
         show_grid=False,
         zebra_rows=False,
+        header_row=header_row,
     )
 
 
@@ -151,6 +162,8 @@ class BrochureEncadre(Flowable):
         *,
         styles,
         pad_pt: float = _PAD_STD_PT,
+        col_headers: list[str] | None = None,
+        col_width_fracs: list[float] | None = None,
     ):
         super().__init__()
         self.box_width = float(width)
@@ -159,30 +172,104 @@ class BrochureEncadre(Flowable):
         self.style = style
         self.styles = styles
         self.pad = float(pad_pt)
+        self.col_headers = [str(h).strip() for h in (col_headers or []) if str(h).strip()]
+        self.col_width_fracs = list(col_width_fracs) if col_width_fracs else None
         self._hdr_h = 0.0
         self._body_h = 0.0
-        self._title_para: Paragraph | None = None
+        self._header_table: Table | None = None
         self._wrapped: list[tuple[Flowable, float, float]] = []
         self.height = 0.0
+
+    def _header_title_style(self) -> ParagraphStyle:
+        return ParagraphStyle(
+            "BrochureEncTitle",
+            parent=self.styles["BodyText"],
+            fontName=f"{self.styles['BodyText'].fontName}-Bold",
+            fontSize=9.5,
+            leading=11.5,
+            textColor=_CLR_WHITE,
+            alignment=TA_LEFT,
+        )
+
+    def _header_col_style(self) -> ParagraphStyle:
+        base = self._header_title_style()
+        return ParagraphStyle(
+            "BrochureEncColHdr",
+            parent=base.parent,
+            fontName=base.fontName,
+            fontSize=base.fontSize,
+            leading=base.leading,
+            textColor=base.textColor,
+            alignment=TA_RIGHT,
+        )
+
+    def _resolve_col_widths(self, inner_w: float) -> list[float]:
+        for item in self.body:
+            cw = _flowable_col_widths(item)
+            if cw:
+                return cw
+        fracs = self.col_width_fracs
+        if not fracs:
+            return [inner_w]
+        total = sum(float(f) for f in fracs) or 1.0
+        return [inner_w * float(f) / total for f in fracs]
+
+    def _build_header_table(self, col_ws: list[float], availHeight: float) -> Table | None:
+        if not self.title:
+            return None
+        title_ps = self._header_title_style()
+        col_ps = self._header_col_style()
+        cells: list = [Paragraph(f"<b>{self.title}</b>", title_ps)]
+        for label in self.col_headers:
+            cells.append(Paragraph(f"<b>{label}</b>", col_ps))
+        while len(cells) < len(col_ws):
+            cells.append("")
+        cells = cells[: len(col_ws)]
+        tbl = Table([cells], colWidths=col_ws)
+        n_hdr = len(self.col_headers)
+        last_col = len(col_ws) - 1
+        first_num = len(col_ws) - n_hdr
+        style_cmds = [
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), _TABLE_CELL_PAD_PT),
+            ("RIGHTPADDING", (0, 0), (-1, -1), _TABLE_CELL_PAD_PT),
+            ("TOPPADDING", (0, 0), (-1, -1), 2),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+            ("ALIGN", (0, 0), (0, 0), "LEFT"),
+        ]
+        if n_hdr and first_num <= last_col:
+            style_cmds.append(("ALIGN", (first_num, 0), (last_col, 0), "RIGHT"))
+        tbl.setStyle(TableStyle(style_cmds))
+        return tbl
 
     def wrap(self, availWidth: float, availHeight: float) -> tuple[float, float]:
         w = min(self.box_width, availWidth)
         self.box_width = w
         inner_w = encadre_inner_width(w, pad_pt=self.pad)
         if self.title:
-            ps = ParagraphStyle(
-                "BrochureEncTitle",
-                parent=self.styles["BodyText"],
-                fontName=f"{self.styles['BodyText'].fontName}-Bold",
-                fontSize=9.5,
-                leading=11.5,
-                textColor=_CLR_WHITE,
-                alignment=TA_LEFT,
-            )
-            self._title_para = Paragraph(f"<b>{self.title}</b>", ps)
-            _, th = self._title_para.wrap(inner_w, availHeight)
+            if self.col_headers:
+                col_ws = self._resolve_col_widths(inner_w)
+                self._header_table = self._build_header_table(col_ws, availHeight)
+                _, th = self._header_table.wrap(inner_w, availHeight)
+            else:
+                ps = self._header_title_style()
+                para = Paragraph(f"<b>{self.title}</b>", ps)
+                self._header_table = Table([[para]], colWidths=[inner_w])
+                self._header_table.setStyle(
+                    TableStyle(
+                        [
+                            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                            ("LEFTPADDING", (0, 0), (-1, -1), _TABLE_CELL_PAD_PT),
+                            ("RIGHTPADDING", (0, 0), (-1, -1), _TABLE_CELL_PAD_PT),
+                            ("TOPPADDING", (0, 0), (-1, -1), 2),
+                            ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+                        ]
+                    )
+                )
+                _, th = self._header_table.wrap(inner_w, availHeight)
             self._hdr_h = th + 10.0
         else:
+            self._header_table = None
             self._hdr_h = 0.0
         self._wrapped = []
         body_h = 0.0
@@ -194,7 +281,7 @@ class BrochureEncadre(Flowable):
             body_h += ih
         if not self._wrapped:
             body_h = 2 * mm
-        self._body_h = body_h + (4.0 if self._wrapped else 0.0)
+        self._body_h = body_h + (2.0 if self._wrapped else 0.0)
         self.height = self._hdr_h + self._body_h + 2 * self.pad
         return (w, self.height)
 
@@ -205,7 +292,7 @@ class BrochureEncadre(Flowable):
         _draw_round_rect(
             c, 0, 0, w, h, radii_body, fill=self.style.body_bg, stroke=self.style.border, stroke_w=0.6
         )
-        if self.title and self._title_para:
+        if self.title and self._header_table:
             hh = self._hdr_h
             radii_hdr = _radii_tuple(self.style, header=True)
             _draw_round_rect(c, 0, h - hh, w, hh, radii_hdr, fill=self.style.header_bg, stroke=None)
@@ -214,7 +301,9 @@ class BrochureEncadre(Flowable):
                 c.setFillColor(self.style.header_bg)
                 c.rect(0, h - hh, w, hh - radii_hdr[0], fill=1, stroke=0)
                 c.restoreState()
-            self._title_para.drawOn(c, self.pad, h - hh + 5.0)
+            inner_w = encadre_inner_width(w, pad_pt=self.pad)
+            _, th = self._header_table.wrap(inner_w, hh)
+            self._header_table.drawOn(c, self.pad, h - hh + 5.0 + (hh - 10.0 - th) * 0.5)
         y = h - self._hdr_h - self.pad
         for flow, _fw, fh in self._wrapped:
             y -= fh
@@ -370,9 +459,19 @@ def encadre_section(
     styles,
     *,
     variant: str = "default",
+    col_headers: list[str] | None = None,
+    col_width_fracs: list[float] | None = None,
 ) -> BrochureEncadre:
     style = ENCADRE_SURFACE if variant == "surface" else ENCADRE_SECTION
-    return BrochureEncadre(width, title, body, style, styles=styles)
+    return BrochureEncadre(
+        width,
+        title,
+        body,
+        style,
+        styles=styles,
+        col_headers=col_headers,
+        col_width_fracs=col_width_fracs,
+    )
 
 
 def kpi_encadre(

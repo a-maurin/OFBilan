@@ -296,6 +296,25 @@ def _resolve_ventilation_mode_from_profile(
     return ventilation_mode, vent_type, seuil_jours, duree_jours
 
 
+def _message_fin_generation_pdf(
+    profile: dict,
+    out_subdir: str,
+    *,
+    resolved_opts: dict,
+) -> str:
+    """Message console indiquant le dossier et le nom du PDF produit."""
+    diffusion = str(resolved_opts.get("diffusion", "interne"))
+    base = str(profile.get("output_filename", "")).strip() or f"{profile.get('id', 'global')}.pdf"
+    stem = Path(base).stem
+    if resolved_opts.get("brochure"):
+        if not stem.endswith("_brochure"):
+            stem = f"{stem}_brochure"
+        pdf_name = apply_diffusion_pdf_suffix(f"{stem}.pdf", diffusion).name
+        return f"Brochure générée : data/out/{out_subdir}/{pdf_name}"
+    pdf_name = apply_diffusion_pdf_suffix(base, diffusion).name
+    return f"Bilan généré : data/out/{out_subdir}/{pdf_name}"
+
+
 def _run_global_profile_via_yaml(
     profile: dict,
     date_deb: str,
@@ -346,7 +365,7 @@ def _run_global_profile_via_yaml(
         date_fin_ts=date_fin_ts,
     )
 
-    print("Étape 1/4 : chargement des données...")
+    print("Étape 1/3 : chargement des données...")
     with Spinner():
         point = load_point_ctrl(root, dept_code=dept_code_norm, date_deb=date_deb_ts, date_fin=date_fin_ts)
         pa = load_pa(root, date_deb=date_deb_ts, date_fin=date_fin_ts)
@@ -373,7 +392,7 @@ def _run_global_profile_via_yaml(
         f"(type={vent_type}, seuil={seuil_jours} j, durée={duree_jours} j)"
     )
 
-    print("Étape 2/4 : agrégations...")
+    print("Étape 2/3 : agrégations...")
     with Spinner():
         run_aggregations(
             profile=profile,
@@ -389,7 +408,7 @@ def _run_global_profile_via_yaml(
             date_fin=date_fin_ts,
         )
 
-    print("Étape 4/4 : génération du PDF...")
+    print("Étape 3/3 : génération du PDF (graphiques et mise en page)...")
     with Spinner():
         output_filename = str(profile.get("output_filename", "")).strip() or None
         pdf_kwargs: dict = {
@@ -409,7 +428,7 @@ def _run_global_profile_via_yaml(
             pdf_kwargs["brochure"] = bool(resolved_opts.get("brochure", False))
         generate_pdf_impl(out_dir, **pdf_kwargs)
 
-    print(f"Bilan global généré dans data/out/{out_subdir}.")
+    print(_message_fin_generation_pdf(profile, out_subdir, resolved_opts=resolved_opts))
     return 0
 
 
@@ -480,11 +499,12 @@ def prompt_cartography_integration(
     if not expected_names:
         expected_names = [f"carte_{map_id}.png", f"carte_{map_id}_2.png"]
 
-    section_hint = (
-        "section 5 (localisation cartographique)"
-        if scope == "global"
-        else "section 5 du bilan (même page si deux fichiers)"
-    )
+    if resolved_opts.get("brochure"):
+        section_hint = "page 1 de la brochure (encadré « Cartographie de l'activité »)"
+    elif scope == "global":
+        section_hint = "section 5 (localisation cartographique)"
+    else:
+        section_hint = "section 5 du bilan (même page si deux fichiers)"
     print("\n--- Cartographie ---")
     print(f"Pour intégrer les cartes dans le bilan PDF ({section_hint}) :")
     print(f"  - dossier : {cartes_dir}")
@@ -495,7 +515,10 @@ def prompt_cartography_integration(
         presentation_cfg=pres_cfg if isinstance(pres_cfg, dict) else None,
     )
     if len(expected_names) >= 2:
-        dispo = "côte à côte" if layout_hint == "horizontal" else "l'une au-dessus de l'autre"
+        if resolved_opts.get("brochure"):
+            dispo = "côte à côte"
+        else:
+            dispo = "côte à côte" if layout_hint == "horizontal" else "l'une au-dessus de l'autre"
         print(f"  - si les deux PNG sont présents, elles seront affichées {dispo}.")
 
     _copy_to_clipboard(expected_names[0])

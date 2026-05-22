@@ -227,6 +227,7 @@ def ofb_table(
     split_by_row: bool = False,
     show_grid: bool = True,
     zebra_rows: bool = True,
+    header_row: bool = True,
 ):
     """Crée un Table reportlab stylisé charte OFB (en-tête bleu, lignes alternées).
 
@@ -256,8 +257,8 @@ def ofb_table(
     inferred_aligns = None
     if not col_aligns and data_rows:
         right_cols = set()
-        # On analyse uniquement les lignes de données (hors en-tête)
-        for row in data_rows[1:]:
+        data_start = 1 if header_row else 0
+        for row in data_rows[data_start:]:
             for ci, cell in enumerate(row):
                 if isinstance(cell, str) and _looks_numeric(cell):
                     right_cols.add(ci)
@@ -296,7 +297,8 @@ def ofb_table(
                 elif inferred_aligns and ci < len(inferred_aligns):
                     is_right = inferred_aligns[ci] == "RIGHT"
 
-                if ri == 0:
+                is_header = header_row and ri == 0
+                if is_header:
                     style = hdr_right if is_right else hdr_left
                 else:
                     style = _CELL_RIGHT if is_right else _CELL_NORMAL
@@ -306,29 +308,39 @@ def ofb_table(
         wrapped.append(new_row)
 
     style_cmds = [
-        ("BACKGROUND", (0, 0), (-1, 0), COLOR_TABLE_HEADER_BG),
-        # Lignes d'en-tête : padding légèrement réduit pour éviter des hauteurs
-        # excessives lorsque les libellés sont courts.
-        ("BOTTOMPADDING", (0, 0), (-1, 0), 5),
-        ("TOPPADDING", (0, 0), (-1, 0), 5),
-        # Lignes de données : padding plus serré pour compacter les tableaux.
-        ("BOTTOMPADDING", (0, 1), (-1, -1), 3),
-        ("TOPPADDING", (0, 1), (-1, -1), 3),
         ("LEFTPADDING", (0, 0), (-1, -1), 4),
         ("RIGHTPADDING", (0, 0), (-1, -1), 4),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
     ]
+    if header_row:
+        style_cmds.extend(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), COLOR_TABLE_HEADER_BG),
+                ("BOTTOMPADDING", (0, 0), (-1, 0), 5),
+                ("TOPPADDING", (0, 0), (-1, 0), 5),
+                ("BOTTOMPADDING", (0, 1), (-1, -1), 3),
+                ("TOPPADDING", (0, 1), (-1, -1), 3),
+            ]
+        )
+    else:
+        style_cmds.extend(
+            [
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+            ]
+        )
     if show_grid:
         style_cmds.append(("GRID", (0, 0), (-1, -1), 0.5, COLOR_TABLE_BORDER))
     if zebra_rows:
-        for i in range(1, len(wrapped)):
-            if i % 2 == 0:
+        start = 1 if header_row else 0
+        for i in range(start, len(wrapped)):
+            if (i - start) % 2 == 1:
                 style_cmds.append(("BACKGROUND", (0, i), (-1, i), COLOR_TABLE_ALT_ROW))
 
     tbl = Table(
         wrapped,
         colWidths=col_widths,
-        repeatRows=1,
+        repeatRows=1 if header_row else 0,
         splitByRow=1 if split_by_row else 0,
     )
     tbl.setStyle(TableStyle(style_cmds))
