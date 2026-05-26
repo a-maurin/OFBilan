@@ -148,4 +148,30 @@ def test_detailed_pdf_section_3_1_keeps_entreprise_title_with_table() -> None:
     window = section_lines[idx : idx + 10]
 
     assert "Thème" in window
-    assert not any(line.startswith("Synthèse des activités de police") for line in window[:4])
+    assert not any(
+        line.startswith("Synthèse des activités de police de l'environnement")
+        for line in window[:4]
+    )
+
+
+@pytest.mark.skipif(not OUT_DIR.is_dir(), reason="Données de sortie synthèse absentes")
+def test_detailed_pdf_highlights_control_definition_and_section_2_reminder() -> None:
+    from bilans.engine.generation_pdf_synthese import generate_synthese_pdf_report
+
+    generate_synthese_pdf_report(
+        OUT_DIR,
+        date_deb="2025-01-01",
+        date_fin="2025-12-31",
+        dept_code="21",
+        output_filename="synthese_activite_PA_PJ.pdf",
+        diffusion="externe",
+        cartes=False,
+    )
+
+    detailed_pdf = OUT_DIR / "synthese_activite_PA_PJ_ext.pdf"
+    detailed_text = _pdf_text(detailed_pdf)
+
+    assert "Contrôle : définition et suites possibles" in detailed_text
+    assert "Dans ce document, le terme contrôle renvoie exclusivement" in detailed_text
+    assert "aboutir à trois types de résultats" in detailed_text
+    assert "Comme indiqué dans la notice méthodologique" in detailed_text

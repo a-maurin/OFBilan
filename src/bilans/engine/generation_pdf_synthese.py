@@ -393,6 +393,12 @@ def _generate_synthese_pdf(
         "2. Activité de police administrative et judiciaire",
         append_to_pending=True,
     )
+    builder.append_pending_callout_box(
+        "Comme indiqué dans la notice méthodologique, le terme contrôle désigne ici "
+        "exclusivement une mesure de police administrative.",
+        title="Rappel",
+        spacer_after_mm=1.5,
+    )
     builder.append_pending_paragraph(
         "Sauf mention contraire, les tableaux de cette partie cumulent les localisations de "
         "contrôle (points de contrôle OSCEAN) et les procédures d'enquêtes judiciaires (PEJ) "

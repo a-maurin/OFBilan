@@ -53,7 +53,10 @@ def add_standard_notice_methodology(
     if unit_measure:
         builder.add_paragraph(unit_measure)
     if pa_pj:
-        builder.add_paragraph(pa_pj)
+        builder.add_callout_box(
+            pa_pj,
+            title="Contrôle : définition et suites possibles",
+        )
     if multi_usager:
         builder.add_paragraph(multi_usager)
     builder.add_page_break()

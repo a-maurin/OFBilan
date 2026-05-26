@@ -238,10 +238,18 @@ profiles:
   synthese_activite_PA_PJ:
     scope: global
     title:
-      line1: "Synthèse des activités de police\nadministrative et judiciaire"
+      line1: "Synthèse des activités de police\nde l'environnement"
       line2_mode: none
     title_page:
       subtitle_mode: none
+    notice_methodology:
+      pa_pj_distinction_paragraph: >
+        Dans ce document, le terme contrôle renvoie exclusivement à une mesure
+        de police administrative. Un contrôle peut aboutir à trois types de
+        résultats : conforme, manquement ou infraction. Selon le résultat
+        constaté, il peut ne donner lieu à aucune suite, conduire à l'ouverture
+        d'une procédure administrative, ou relever d'une procédure judiciaire
+        avec, le cas échéant, rédaction d'un procès-verbal électronique.
     sec6_methodology:
       items:
         - when: always

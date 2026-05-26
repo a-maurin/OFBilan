@@ -28,6 +28,7 @@ from reportlab.platypus import (
     Paragraph,
     Spacer,
     Table,
+    TableStyle,
 )
 from reportlab.platypus.tableofcontents import TableOfContents
 from PIL import Image as PILImage
@@ -633,6 +634,88 @@ class PDFReportBuilder:
         else:
             self.story.append(para)
             self.story.append(spacer)
+
+    def _build_callout_box_block(
+        self,
+        text: str,
+        *,
+        title: str = "",
+        style: str = "BodyText",
+        spacer_after_mm: float = 2.0,
+    ) -> List:
+        callout_text = str(text or "").strip()
+        if not callout_text:
+            return []
+
+        title_text = str(title or "").strip()
+        title_html = ""
+        if title_text:
+            title_html = f'<font color="{COLOR_PRIMARY}"><b>{title_text}</b></font><br/>'
+
+        callout_style = ParagraphStyle(
+            "OFBCalloutBody",
+            parent=self.styles[style],
+            spaceBefore=0,
+            spaceAfter=0,
+        )
+        callout_para = Paragraph(f"{title_html}{callout_text}", callout_style)
+        callout_table = Table([[callout_para]], colWidths=[self.avail_w])
+        callout_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, -1), rl_colors.HexColor("#EAF2F8")),
+                    ("BOX", (0, 0), (-1, -1), 0.8, rl_colors.HexColor(COLOR_PRIMARY)),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                    ("TOPPADDING", (0, 0), (-1, -1), 7),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+                ]
+            )
+        )
+        return [callout_table, Spacer(1, float(spacer_after_mm) * mm)]
+
+    def add_callout_box(
+        self,
+        text: str,
+        *,
+        title: str = "",
+        style: str = "BodyText",
+        spacer_after_mm: float = 2.0,
+    ) -> None:
+        block = self._build_callout_box_block(
+            text,
+            title=title,
+            style=style,
+            spacer_after_mm=spacer_after_mm,
+        )
+        if not block:
+            return
+        if self._pending_section is not None:
+            self.story.append(KeepTogether(self._pending_section + block))
+            self._pending_section = None
+        else:
+            self.story.extend(block)
+
+    def append_pending_callout_box(
+        self,
+        text: str,
+        *,
+        title: str = "",
+        style: str = "BodyText",
+        spacer_after_mm: float = 2.0,
+    ) -> None:
+        block = self._build_callout_box_block(
+            text,
+            title=title,
+            style=style,
+            spacer_after_mm=spacer_after_mm,
+        )
+        if not block:
+            return
+        if self._pending_section is not None:
+            self._pending_section.extend(block)
+        else:
+            self.story.extend(block)
 
     def append_pending_image(
         self,

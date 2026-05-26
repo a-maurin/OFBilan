@@ -5,6 +5,7 @@ import pandas as pd
 from bilans.common.pdf_presentation_config import (
     INTERNAL_DIFFUSION_TITLE_NOTICE,
     apply_diffusion_pdf_suffix,
+    build_title_lines_from_cfg,
     is_block_enabled,
     is_section_enabled,
     normalize_diffusion,
@@ -200,6 +201,26 @@ def test_notice_methodology_config_resolution() -> None:
     assert resolved["title"] == "Notice personnalisée"
     assert resolved["multi_usager_paragraph"] == "Texte personnalisé."
     assert "data_source_paragraph" in resolved
+
+
+def test_build_title_lines_from_cfg_supports_line_break_in_same_cover_paragraph() -> None:
+    cover_lines, header_lines = build_title_lines_from_cfg(
+        {
+            "title": {
+                "line1": "Synthèse des activités de police\nde l'environnement",
+                "line2_mode": "none",
+            }
+        },
+        profile_label="",
+        dept_name_typo="Côte-d'Or",
+    )
+
+    assert cover_lines[:3] == [
+        "Synthèse des activités de police",
+        "de l'environnement",
+        "",
+    ]
+    assert header_lines[0] == "Synthèse des activités de police de l'environnement"
 
 
 def test_resolve_tables_layout_merges_yaml_over_defaults() -> None:
