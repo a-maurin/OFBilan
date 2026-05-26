@@ -1020,7 +1020,6 @@ def _generate_synthese_brochure_pdf(
                 x_tick_fontsize=7.0,
                 y_tick_fontsize=8.0,
                 bar_value_fontsize=7.5,
-                chart_dpi=200,
             )
         )
         img = _image_fit(

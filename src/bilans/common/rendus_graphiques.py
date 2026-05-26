@@ -34,6 +34,8 @@ def _pick_mpl_font() -> str:
 
 # Dimensions harmonisées (pouces) pour export PNG puis intégration PDF homogène.
 CHART_FIG_WIDTH = 7.2
+# Résolution raster par défaut pour tous les éléments exportés puis intégrés aux PDF.
+DEFAULT_RASTER_EXPORT_DPI = 300
 # Camemberts : base harmonisée pour tous les camemberts PDF.
 CHART_FIG_HEIGHT_PIE_COMPACT = 5.0
 # Références typographiques : "Résultats des contrôles par type d'usager".
@@ -124,7 +126,7 @@ def save_chart(
     tmp_dir: Path,
     name: str,
     *,
-    dpi: int = 150,
+    dpi: int = DEFAULT_RASTER_EXPORT_DPI,
     tight: bool = True,
     pad_inches: float = 0.1,
 ) -> str:
@@ -260,9 +262,8 @@ def chart_pie(
         columnspacing=0.85,
         borderpad=0.2,
     )
-    # DPI un peu plus élevé : le PDF insère le camembert plus étroit que les barres.
     # "tight bbox" inclut toute la légende dans le PNG final (pas de troncature).
-    return save_chart(fig, tmp_dir, name, dpi=165, tight=True)
+    return save_chart(fig, tmp_dir, name, dpi=DEFAULT_RASTER_EXPORT_DPI, tight=True)
 
 
 def chart_pie_legend_right(
@@ -335,7 +336,7 @@ def chart_pie_legend_right(
         handletextpad=0.35,
     )
     fig.subplots_adjust(left=0.02, right=0.98, top=0.92, bottom=0.06)
-    return save_chart(fig, tmp_dir, name, dpi=165, tight=True)
+    return save_chart(fig, tmp_dir, name, dpi=DEFAULT_RASTER_EXPORT_DPI, tight=True)
 
 
 def chart_bar(
@@ -526,7 +527,7 @@ def chart_stackplot_resultats_domaine(
     _legend_right_of_axis(ax, fontsize=legend_fontsize)
     # bottom : libellés X inclinés ; right : bande réservée à la légende (sans chevauchement).
     _tight_with_legend_space(fig, bottom=0.30, top=0.90, left=0.07, right=0.72)
-    return save_chart(fig, tmp_dir, name, dpi=150, tight=True)
+    return save_chart(fig, tmp_dir, name, dpi=DEFAULT_RASTER_EXPORT_DPI, tight=True)
 
 
 def chart_bar_horizontal_stacked(
@@ -551,7 +552,7 @@ def chart_bar_horizontal_stacked(
     x_tick_fontsize: float | None = None,
     y_tick_fontsize: float | None = None,
     bar_value_fontsize: float | None = None,
-    chart_dpi: int = 150,
+    chart_dpi: int = DEFAULT_RASTER_EXPORT_DPI,
     apply_mpl: bool = True,
     grouped_colors: list[str] | None = None,
     title_color: str | None = None,
@@ -692,7 +693,7 @@ def chart_bar_horizontal_simple(
     name: str,
     *,
     figure_scale: float = 0.38,
-    dpi: int = 150,
+    dpi: int = DEFAULT_RASTER_EXPORT_DPI,
     apply_mpl: bool = True,
     bar_color: str | None = None,
 ) -> str:
