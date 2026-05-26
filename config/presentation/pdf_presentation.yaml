@@ -240,7 +240,7 @@ profiles:
   synthese_activite_PA_PJ:
     scope: global
     title:
-      line1: "Synthèse des activités de police\nde l'environnement"
+      line1: "Synthèse des activités de police\nde l'environnement de l'OFB"
       line2_mode: none
     title_page:
       subtitle_mode: none
