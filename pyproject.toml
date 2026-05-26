@@ -23,7 +23,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "pypdf"]
 
 [project.scripts]
 bilans = "bilans.point_entree_cli:main"
