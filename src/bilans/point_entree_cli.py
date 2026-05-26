@@ -172,8 +172,9 @@ def main() -> int:
         "--brochure",
         action="store_true",
         help=(
-            "Profil synthese_activite_PA_PJ : génère un PDF brochure de 2 pages A4 paysage "
-            "(fichier *_brochure_ext.pdf ou *_brochure_int.pdf) à la place du rapport détaillé."
+            "Option conservée pour compatibilité. Le profil synthese_activite_PA_PJ génère "
+            "désormais systématiquement le PDF détaillé et la brochure "
+            "(*_brochure_ext.pdf ou *_brochure_int.pdf) à chaque exécution."
         ),
     )
     args = parser.parse_args()

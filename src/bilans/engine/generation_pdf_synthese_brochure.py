@@ -25,7 +25,7 @@ from bilans.common.pdf_presentation_config import (
 from bilans.common.pdf_report_builder import PDFReportBuilder
 from bilans.common.pdf_utils import truncate_text_to_width
 from bilans.common.pdf_table_sort import pdf_metric_caption, sort_dataframe_desc as _sort_desc
-from bilans.common.percent_format import tab_counts_to_pct_strings
+from bilans.common.percent_format import format_pct_int_from_rate, tab_counts_to_pct_strings
 from bilans.common.rendus_graphiques import (
     chart_bar_horizontal_stacked,
     chart_pie_legend_right,
@@ -49,10 +49,10 @@ from bilans.engine.generation_pdf_synthese import (
     _ROOT,
     _build_synthese_key_figure_rows,
     _display_type_usager,
-    _filter_dataframe_min_pct,
     _load_csv_opt,
     _nb_non_conformes_brut,
     _pie_data_controles_par_type_usager,
+    _rollup_small_categories,
 )
 
 _BROCHURE_MAX_THEMES = 5
@@ -387,10 +387,11 @@ def _build_themes_table_brochure(
     labels: list[str],
     values: list[int],
     inner_w: float,
+    *,
+    total_value: int,
 ) -> Table:
     rows: list[list[str]] = []
-    pcts = tab_counts_to_pct_strings([int(v) for v in values])
-    for lb, v, pct in zip(labels, values, pcts):
+    for lb, v, pct in zip(labels, values, _theme_pct_strings_brochure(values, total_value=total_value)):
         rows.append([_truncate_theme(lb, 30), str(int(v)), pct])
     return brochure_table(
         rows,
@@ -399,6 +400,13 @@ def _build_themes_table_brochure(
         split_by_row=False,
         header_row=False,
     )
+
+
+def _theme_pct_strings_brochure(values: list[int], *, total_value: int) -> list[str]:
+    return [
+        format_pct_int_from_rate((int(value) / int(total_value)) if total_value > 0 else None)
+        for value in values
+    ]
 
 
 def _append_dual_panels(
@@ -838,12 +846,36 @@ def _generate_synthese_brochure_pdf(
     inner_themes = encadre_inner_width(themes_w, pad_pt=_PAD_STD_PT)
     inner_results = encadre_inner_width(results_w, pad_pt=_PAD_STD_PT)
     themes_body: list = []
-    act_theme_display = _filter_dataframe_min_pct(act_theme, value_col="nb_total", min_pct=0.01)
+    act_theme_display = _rollup_small_categories(
+        act_theme,
+        label_col="theme",
+        other_label="Autres thèmes de contrôle",
+        value_col="nb_total",
+        min_pct=0.01,
+        sum_cols=["nb_ctrl", "nb_pej_hors_controle", "nb_total"],
+    )
+    act_theme_total = int(act_theme["nb_total"].sum()) if act_theme is not None and not act_theme.empty else 0
     if act_theme_display is not None and not act_theme_display.empty:
-        sub = act_theme_display.head(_BROCHURE_MAX_THEMES)
+        sub = act_theme_display
+        if len(sub) > _BROCHURE_MAX_THEMES:
+            has_other_row = str(sub.iloc[-1].get("theme", "")).strip() == "Autres thèmes de contrôle"
+            if has_other_row and _BROCHURE_MAX_THEMES > 1:
+                sub = pd.concat(
+                    [sub.head(_BROCHURE_MAX_THEMES - 1), sub.tail(1)],
+                    ignore_index=True,
+                )
+            else:
+                sub = sub.head(_BROCHURE_MAX_THEMES)
         labels = [_truncate_theme(r["theme"]) for _, r in sub.iterrows()]
         values = [int(r["nb_total"]) for _, r in sub.iterrows()]
-        themes_body = [_build_themes_table_brochure(labels, values, inner_themes)]
+        themes_body = [
+            _build_themes_table_brochure(
+                labels,
+                values,
+                inner_themes,
+                total_value=act_theme_total,
+            )
+        ]
 
     res_tbl = _build_rows_resultats_brochure(tab_res_ctrl)
     res_table = brochure_table(

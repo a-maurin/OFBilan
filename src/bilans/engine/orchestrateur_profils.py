@@ -26,6 +26,7 @@ if str(_ROOT) not in sys.path:
 
 from bilans.chemins_projet import get_out_dir, get_cartes_dir, PROJECT_ROOT, ref_programme
 from bilans.common.bilan_config import BilanConfig
+from bilans.common.dataframe_rollup import rollup_small_categories
 from bilans.common.chargeurs_donnees import (
     ensure_insee_from_communes_shp,
     load_point_ctrl,
@@ -307,6 +308,14 @@ def _message_fin_generation_pdf(
     diffusion = str(resolved_opts.get("diffusion", "interne"))
     base = str(profile.get("output_filename", "")).strip() or f"{profile.get('id', 'global')}.pdf"
     stem = Path(base).stem
+    if str(profile.get("id", "")).strip() == "synthese_activite_PA_PJ":
+        detailed_name = apply_diffusion_pdf_suffix(base, diffusion).name
+        brochure_stem = stem if stem.endswith("_brochure") else f"{stem}_brochure"
+        brochure_name = apply_diffusion_pdf_suffix(f"{brochure_stem}.pdf", diffusion).name
+        return (
+            f"Bilans générés : data/out/{out_subdir}/{detailed_name} "
+            f"et data/out/{out_subdir}/{brochure_name}"
+        )
     if resolved_opts.get("brochure"):
         if not stem.endswith("_brochure"):
             stem = f"{stem}_brochure"
@@ -500,7 +509,12 @@ def prompt_cartography_integration(
     if not expected_names:
         expected_names = [f"carte_{map_id}.png", f"carte_{map_id}_2.png"]
 
-    if resolved_opts.get("brochure"):
+    if str(profile.get("id", "")).strip() == "synthese_activite_PA_PJ":
+        section_hint = (
+            "section 5 du bilan détaillé et page 1 de la brochure "
+            "(encadré « Cartographie de l'activité »)"
+        )
+    elif resolved_opts.get("brochure"):
         section_hint = "page 1 de la brochure (encadré « Cartographie de l'activité »)"
     elif scope == "global":
         section_hint = "section 5 (localisation cartographique)"
@@ -516,7 +530,9 @@ def prompt_cartography_integration(
         presentation_cfg=pres_cfg if isinstance(pres_cfg, dict) else None,
     )
     if len(expected_names) >= 2:
-        if resolved_opts.get("brochure"):
+        if str(profile.get("id", "")).strip() == "synthese_activite_PA_PJ":
+            dispo = "côte à côte dans la brochure"
+        elif resolved_opts.get("brochure"):
             dispo = "côte à côte"
         else:
             dispo = "côte à côte" if layout_hint == "horizontal" else "l'une au-dessus de l'autre"
@@ -2437,6 +2453,16 @@ def _pdf_section_activite_par_types_usagers(
             if sub.empty:
                 continue
             sub = sub.sort_values("nb_controles", ascending=False, kind="stable")
+            sub = rollup_small_categories(
+                sub,
+                label_col="theme",
+                other_label="Autres thèmes de contrôle",
+                value_col="nb_controles",
+                min_pct=0.01,
+                sum_cols=["nb_controles"],
+            )
+            if sub is None or sub.empty:
+                continue
             st = float(sum_par_type.loc[tu]) if tu in sum_par_type.index else 1.0
             st = st or 1.0
             tbl_th = [

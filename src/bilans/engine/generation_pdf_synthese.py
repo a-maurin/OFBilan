@@ -11,6 +11,7 @@ from bilans.common.carte_helper import (
     resolve_map_layout,
     resolve_profile_map_paths,
 )
+from bilans.common.dataframe_rollup import rollup_small_categories as _rollup_small_categories
 from bilans.common.pdf_presentation_config import (
     apply_diffusion_pdf_suffix,
     build_title_lines_from_cfg,
@@ -69,6 +70,9 @@ def _build_rows_resultats_controles_pdf(tr: pd.DataFrame) -> list[list[str]]:
     nb_nc = int(tr.loc[strip_res.eq("Non-conforme"), "nb"].sum())
     for _, row in tr.iterrows():
         rlib = str(row["resultat"])
+        rlib_display = rlib
+        if rlib.strip() in ("Dont infraction", "Dont manquement"):
+            rlib_display = f"&nbsp;&nbsp;&nbsp;{rlib.strip()}"
         nbv = int(row["nb"])
         if rlib.strip() in ("Dont infraction", "Dont manquement"):
             t = format_pct_int_from_rate((nbv / nb_nc) if nb_nc > 0 else None)
@@ -77,7 +81,7 @@ def _build_rows_resultats_controles_pdf(tr: pd.DataFrame) -> list[list[str]]:
             j += 1
         else:
             t = "n.d."
-        tbl.append([rlib, str(nbv), t])
+        tbl.append([rlib_display, str(nbv), t])
     return tbl
 
 
@@ -253,35 +257,33 @@ def generate_synthese_pdf_report(
     cartes: bool = True,
     brochure: bool = False,
 ) -> None:
-    del chart_preset
+    del chart_preset, brochure
     apply_mpl_style()
     profile = profile or {"id": PROFILE_ID}
     date_deb_ts = pd.to_datetime(date_deb) if date_deb is not None else pd.Timestamp("2025-01-01")
     date_fin_ts = pd.to_datetime(date_fin) if date_fin is not None else pd.Timestamp("2026-02-05")
     dept_code_str = str(dept_code) if dept_code is not None else "21"
-    if brochure:
-        from bilans.engine.generation_pdf_synthese_brochure import (
-            generate_synthese_brochure_pdf_report,
-        )
-
-        generate_synthese_brochure_pdf_report(
-            out_dir,
-            profile=profile,
-            date_deb=date_deb_ts,
-            date_fin=date_fin_ts,
-            dept_code=dept_code_str,
-            ventilation_mode=ventilation_mode,
-            output_filename=output_filename,
-            diffusion=diffusion,
-            cartes=cartes,
-        )
-        return
     _generate_synthese_pdf(
         out_dir,
         profile=profile,
         date_deb=date_deb_ts,
         date_fin=date_fin_ts,
         dept_code=dept_code_str,
+        output_filename=output_filename,
+        diffusion=diffusion,
+        cartes=cartes,
+    )
+    from bilans.engine.generation_pdf_synthese_brochure import (
+        generate_synthese_brochure_pdf_report,
+    )
+
+    generate_synthese_brochure_pdf_report(
+        out_dir,
+        profile=profile,
+        date_deb=date_deb_ts,
+        date_fin=date_fin_ts,
+        dept_code=dept_code_str,
+        ventilation_mode=ventilation_mode,
         output_filename=output_filename,
         diffusion=diffusion,
         cartes=cartes,
@@ -342,8 +344,8 @@ def _generate_synthese_pdf(
 
     section_defs = [
         ("sec1", "1. Chiffres clés"),
-        ("sec2", "2. Activité de police"),
-        ("sec2_1", "2.1. Activité de police par thème"),
+        ("sec2", "2. Activité de police administrative et judiciaire"),
+        ("sec2_1", "2.1. Activité de police par thème du plan de contrôle"),
         ("sec2_2", "2.2. Résultat des contrôles au titre de la police administrative"),
         ("sec2_3", "2.3. Activité procédurale"),
         ("sec3", "3. Activité de police par type d'usager"),
@@ -408,7 +410,11 @@ def _generate_synthese_pdf(
     )
     builder.add_key_figures_rows(kf_rows)
 
-    builder.add_section("sec2", "2. Activité de police", append_to_pending=True)
+    builder.add_section(
+        "sec2",
+        "2. Activité de police administrative et judiciaire",
+        append_to_pending=True,
+    )
     builder.append_pending_paragraph(
         "Sauf mention contraire, les tableaux de cette partie cumulent les localisations de "
         "contrôle (points de contrôle OSCEAN) et les procédures d'enquêtes judiciaires (PEJ) "
@@ -417,16 +423,27 @@ def _generate_synthese_pdf(
     )
 
     builder.add_section(
-        "sec2_1", "2.1. Activité de police par thème", level=2, toc_level=1, append_to_pending=True
+        "sec2_1",
+        "2.1. Activité de police par thème du plan de contrôle",
+        level=2,
+        toc_level=1,
+        append_to_pending=True,
     )
-    act_theme_display = _filter_dataframe_min_pct(act_theme, value_col="nb_total", min_pct=0.01)
+    act_theme_display = _rollup_small_categories(
+        act_theme,
+        label_col="theme",
+        other_label="Autres thèmes de contrôle",
+        value_col="nb_total",
+        min_pct=0.01,
+        sum_cols=["nb_ctrl", "nb_pej_hors_controle", "nb_total"],
+    )
     act_theme_total = (
         int(act_theme["nb_total"].astype(float).sum())
         if act_theme is not None and not act_theme.empty
         else 0
     )
     if act_theme_display is not None and not act_theme_display.empty:
-        tbl = [["Thème", "Contrôles", "PEJ hors contrôle PA", "Total"]]
+        tbl = [["Thème", "Contrôles PA", "PEJ hors contrôle PA", "Total"]]
         for _, row in act_theme_display.iterrows():
             nb_row = int(row["nb_total"])
             pct = format_pct_int_from_rate(nb_row / act_theme_total) if act_theme_total > 0 else "n.d."

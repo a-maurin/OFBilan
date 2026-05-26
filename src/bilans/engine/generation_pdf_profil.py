@@ -8,6 +8,7 @@ import pandas as pd
 from PIL import Image as PILImage
 
 from bilans.common.chart_display_config import compute_pdf_ratios, load_chart_display_config
+from bilans.common.dataframe_rollup import rollup_small_categories
 from bilans.common.rendus_graphiques import (
     chart_bar_horizontal_stacked,
     chart_bar_stacked,
@@ -629,16 +630,23 @@ def _generate_pdf_content(
             section_title["sec22theme"],
             toc_level=1,
         )
-        if agg_theme is not None and not agg_theme.empty:
+        agg_theme_display = rollup_small_categories(
+            agg_theme,
+            label_col="theme",
+            other_label="Autres thèmes de contrôle",
+            value_col="nb",
+            min_pct=0.01,
+            sum_cols=["nb", "taux"],
+            max_rows=20,
+        )
+        if agg_theme_display is not None and not agg_theme_display.empty:
             tbl = [["Thème", "Nombre", "Taux"]]
-            for _, row in agg_theme.head(20).iterrows():
+            for _, row in agg_theme_display.iterrows():
                 taux_str = format_pct_int_from_rate(row.get("taux"))
                 tbl.append([str(row["theme"])[:45], str(int(row["nb"])), taux_str])
             builder.add_table(
                 tbl,
-                caption=pdf_metric_caption(
-                    "Nombre de contrôles par thèmes (extrait)", "ctrl"
-                ),
+                caption=pdf_metric_caption("Nombre de contrôles par thèmes", "ctrl"),
                 col_widths=[avail_w * 0.55, avail_w * 0.22, avail_w * 0.23],
                 col_aligns=["LEFT", "RIGHT", "RIGHT"],
             )
