@@ -13,6 +13,7 @@ from bilans.common.utilitaires_metier import (
     build_tab_resultats,
     build_tab_resultats_controles,
     classify_resultat_controle_series,
+    count_multi_usager_controles,
     count_controles_non_conformes_oscean,
     count_pa_induites_par_controles,
     filter_points_induisant_pa,
@@ -142,7 +143,7 @@ def analyse_controles_global(point: pd.DataFrame, out_dir: Path) -> Tuple[pd.Dat
             cross = agg_effectifs_usagers_par_domaine(pt, col_domaine="domaine")
         cross.to_csv(out_dir / "controles_global_usager_par_domaine.csv", sep=";", index=False)
 
-        nb_multi = int(pt["type_usager"].fillna("").astype(str).str.contains(",", regex=False).sum())
+        nb_multi = count_multi_usager_controles(pt)
         pd.DataFrame([{"nb_controles_multi_usagers": nb_multi}]).to_csv(
             out_dir / "controles_global_usagers_resume.csv", sep=";", index=False
         )

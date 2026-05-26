@@ -1,5 +1,6 @@
 """Utilitaires partagés pour les bilans (filtrage, résumés, détection colonnes)."""
 import functools
+import logging
 import re
 from pathlib import Path
 from typing import Any, List
@@ -9,6 +10,7 @@ import pandas as pd
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _TYPES_USAGERS_PATH = _PROJECT_ROOT / "ref" / "programme" / "tables_reference" / "types_usagers.csv"
+logger = logging.getLogger(__name__)
 
 
 def _norm_key(s: str) -> str:
@@ -84,6 +86,152 @@ def _parse_type_usager_tokens(valeur_source: str) -> list[tuple[str, int]]:
     return out
 
 
+def _is_missing_effectif_value(value: Any) -> bool:
+    """Vrai si la valeur est absente pour une consolidation d'effectifs."""
+    if value is None:
+        return True
+    try:
+        if pd.isna(value):
+            return True
+    except TypeError:
+        pass
+    if isinstance(value, str):
+        return value.strip() in ("", "(vide)")
+    return False
+
+
+def _stable_non_empty_group_values(values: pd.Series) -> list[Any]:
+    """Liste stable de valeurs distinctes non vides observées dans un groupe."""
+    out: list[Any] = []
+    seen: set[tuple[str, str]] = set()
+    for value in values:
+        if _is_missing_effectif_value(value):
+            continue
+        normalized = value.strip() if isinstance(value, str) else value
+        key = (type(normalized).__name__, str(normalized))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(normalized)
+    return out
+
+
+def _date_score_for_effectif_row(value: Any) -> tuple[int, int]:
+    """Score de récence d'une date pour arbitrer un conflit intra-fc_id."""
+    if _is_missing_effectif_value(value):
+        return (0, 0)
+    try:
+        dt = pd.to_datetime(value, errors="coerce")
+    except (TypeError, ValueError):
+        return (0, 0)
+    if pd.isna(dt):
+        return (0, 0)
+    return (1, int(dt.value))
+
+
+def _score_effectif_group_row(row: pd.Series, order_col: str) -> tuple[int, int, int]:
+    """Score de sélection d'une ligne représentative du groupe."""
+    has_date, date_value = _date_score_for_effectif_row(row.get("date_ctrl"))
+    row_order = int(row.get(order_col, 0) or 0)
+    return (has_date, date_value, -row_order)
+
+
+def _score_effectif_group_value(
+    row: pd.Series,
+    col: str,
+    source_table: str,
+    order_col: str,
+) -> tuple[int, int, int, int]:
+    """Score de sélection d'une valeur métier au sein d'un groupe ``fc_id``."""
+    value = row.get(col)
+    normalized = value.strip() if isinstance(value, str) else value
+    informative = 0
+    if col == "type_usager" and not _is_missing_effectif_value(normalized):
+        informative = int(map_type_usager(source_table, col, str(normalized)) != "Autre")
+    has_date, date_value = _date_score_for_effectif_row(row.get("date_ctrl"))
+    row_order = int(row.get(order_col, 0) or 0)
+    return (informative, has_date, date_value, -row_order)
+
+
+def _pick_effectif_group_value(
+    group: pd.DataFrame,
+    col: str,
+    source_table: str,
+    order_col: str,
+) -> Any:
+    """Choisit la meilleure valeur non vide pour une colonne d'un groupe ``fc_id``."""
+    candidates = group.loc[~group[col].map(_is_missing_effectif_value)].copy()
+    if candidates.empty:
+        return None
+    best_index = max(
+        candidates.index,
+        key=lambda idx: _score_effectif_group_value(
+            candidates.loc[idx],
+            col,
+            source_table,
+            order_col,
+        ),
+    )
+    best_value = candidates.loc[best_index, col]
+    return best_value.strip() if isinstance(best_value, str) else best_value
+
+
+def _consolide_lignes_effectifs_par_fc_id(
+    df: pd.DataFrame,
+    colonnes_metier: list[str],
+    source_table: str = "point_ctrl",
+) -> pd.DataFrame:
+    """
+    Consolide les lignes OSCEAN au niveau ``fc_id`` pour les seules métriques d'effectifs.
+
+    Quand plusieurs localisations portent la même fiche, les champs d'effectifs
+    (``type_usager`` et dimensions associées) ne doivent être lus qu'une seule
+    fois. En cas de valeurs contradictoires dans un groupe ``fc_id``, la
+    première valeur non vide est conservée et un avertissement est journalisé.
+    """
+    if df.empty or _norm_key(source_table) != "point_ctrl" or "fc_id" not in df.columns:
+        return df
+
+    work = df.copy()
+    order_col = "__effectif_row_order__"
+    work[order_col] = range(len(work))
+    fc_values = work["fc_id"].astype("string").str.strip()
+    has_fc_id = fc_values.notna() & (fc_values != "")
+    if not has_fc_id.any():
+        return work.drop(columns=[order_col])
+
+    grouped = work.loc[has_fc_id].copy()
+    standalone = work.loc[~has_fc_id].copy()
+    merged_rows: list[pd.Series] = []
+    target_columns = [col for col in dict.fromkeys(colonnes_metier) if col in grouped.columns]
+
+    for fc_id, group in grouped.groupby("fc_id", sort=False, dropna=False):
+        base_index = max(group.index, key=lambda idx: _score_effectif_group_row(group.loc[idx], order_col))
+        merged = group.loc[base_index].copy()
+        merged[order_col] = int(group[order_col].min())
+        for col in target_columns:
+            values = _stable_non_empty_group_values(group[col])
+            if not values:
+                continue
+            if len(values) > 1:
+                logger.warning(
+                    "Conflit intra-fc_id sur %s pour fc_id=%s ; valeur la plus informative/récente conservée.",
+                    col,
+                    fc_id,
+                )
+            merged[col] = _pick_effectif_group_value(group, col, source_table, order_col)
+        merged_rows.append(merged)
+
+    consolidated = pd.DataFrame(merged_rows, columns=work.columns)
+    if not standalone.empty:
+        consolidated = pd.concat([consolidated, standalone], ignore_index=True, sort=False)
+    return (
+        consolidated.sort_values(order_col, kind="stable")
+        .drop(columns=[order_col])
+        .reset_index(drop=True)
+    )
+
+
 def map_type_usager(source_table: str, source_champ: str, valeur_source: str) -> str:
     """Mappe une valeur source vers un type d’usager (6 catégories cibles). Fallback : 'Autre'."""
     mapping = _load_types_usagers_mapping()
@@ -142,16 +290,18 @@ def agg_nb_controles_par_type_usager(
     source_champ: str = "type_usager",
 ) -> pd.DataFrame:
     """
-    Nombre de localisations de contrôle par catégorie type d'usager.
+    Nombre de contrôles par catégorie type d'usager.
 
-    Une ligne de *df* compte pour une localisation ; la catégorie retenue est la
-    catégorie dominante (``serie_type_usager``), et non la somme des effectifs
-    multi-usagers du champ source.
+    La catégorie retenue est la catégorie dominante (``serie_type_usager``), et
+    non la somme des effectifs multi-usagers du champ source. Si ``fc_id`` est
+    disponible sur ``point_ctrl``, chaque fiche de contrôle contribue une seule
+    fois.
     """
     if source_champ not in df.columns or df.empty:
         return pd.DataFrame(columns=["type_usager", "nb"])
 
-    cats = serie_type_usager(df, source_table, source_champ)
+    work_df = _consolide_lignes_effectifs_par_fc_id(df, [source_champ], source_table=source_table)
+    cats = serie_type_usager(work_df, source_table, source_champ)
     return (
         cats.value_counts()
         .rename_axis("type_usager")
@@ -171,7 +321,9 @@ def agg_effectifs_usagers(
 
     Pour chaque ligne de *df*, le champ *source_champ* est parsé
     (ex. « Particulier 6, Collectivité 1 »).  Chaque libellé est mappé
-    vers une catégorie du référentiel et l'effectif associé est sommé.
+    vers une catégorie du référentiel et l'effectif associé est sommé. Si
+    ``fc_id`` est disponible sur ``point_ctrl``, la somme est consolidée une
+    seule fois par fiche de contrôle.
 
     Retourne un DataFrame avec colonnes ``type_usager`` et ``nb``.
     Le total de ``nb`` peut dépasser ``len(df)`` (un point peut contribuer
@@ -180,8 +332,10 @@ def agg_effectifs_usagers(
     if source_champ not in df.columns:
         return pd.DataFrame(columns=["type_usager", "nb"])
 
+    work_df = _consolide_lignes_effectifs_par_fc_id(df, [source_champ], source_table=source_table)
+
     agg: dict[str, int] = {}
-    for val in df[source_champ]:
+    for val in work_df[source_champ]:
         toks = _parse_type_usager_tokens(val)
         if not toks:
             agg["Autre"] = agg.get("Autre", 0) + 1
@@ -208,7 +362,9 @@ def agg_effectifs_usagers_par_domaine(
     Tableau croisé (type_usager, domaine) basé sur les effectifs.
 
     Pour chaque ligne de *df*, décompose *source_champ* en (catégorie, effectif)
-    et ajoute l'effectif dans la cellule (catégorie, domaine du point).
+    et ajoute l'effectif dans la cellule (catégorie, domaine du point). Si
+    ``fc_id`` est disponible sur ``point_ctrl``, chaque fiche ne contribue
+    qu'une seule fois.
 
     Retourne un DataFrame en format « long » (type_usager, domaine, nb)
     ou en format « large » (type_usager en index, domaines en colonnes).
@@ -216,8 +372,14 @@ def agg_effectifs_usagers_par_domaine(
     if source_champ not in df.columns:
         return pd.DataFrame(columns=["type_usager"])
 
+    work_df = _consolide_lignes_effectifs_par_fc_id(
+        df,
+        [source_champ, col_domaine],
+        source_table=source_table,
+    )
+
     rows: list[tuple[str, str, int]] = []
-    for _, row in df.iterrows():
+    for _, row in work_df.iterrows():
         dom = str(row.get(col_domaine, "Hors domaine") or "Hors domaine")
         toks = _parse_type_usager_tokens(row.get(source_champ))
         if not toks:
@@ -256,8 +418,14 @@ def agg_effectifs_usagers_par_theme(
     if theme_col is None:
         return pd.DataFrame(columns=["type_usager", "theme", "nb"])
 
+    work_df = _consolide_lignes_effectifs_par_fc_id(
+        df,
+        [source_champ, theme_col],
+        source_table=source_table,
+    )
+
     rows: list[tuple[str, str, int]] = []
-    for _, row in df.iterrows():
+    for _, row in work_df.iterrows():
         theme = str(row.get(theme_col, "Hors thème") or "Hors thème")
         toks = _parse_type_usager_tokens(row.get(source_champ))
         if not toks:
@@ -289,13 +457,20 @@ def agg_controles_par_type_usager_domaine(
 
     Pour chaque point de contrôle, on identifie les catégories de type_usager
     présentes (via le référentiel) et on incrémente une fois par catégorie
-    (peu importe l'effectif associé).
+    (peu importe l'effectif associé). Si ``fc_id`` est disponible sur
+    ``point_ctrl``, chaque fiche contribue une seule fois.
     """
     if source_champ not in df.columns:
         return pd.DataFrame(columns=["type_usager", "domaine", "nb_controles"])
 
+    work_df = _consolide_lignes_effectifs_par_fc_id(
+        df,
+        [source_champ, col_domaine],
+        source_table=source_table,
+    )
+
     counts: dict[tuple[str, str], int] = {}
-    for _, row in df.iterrows():
+    for _, row in work_df.iterrows():
         dom = str(row.get(col_domaine, "Hors domaine") or "Hors domaine")
         toks = _parse_type_usager_tokens(row.get(source_champ))
         if not toks:
@@ -329,8 +504,14 @@ def agg_controles_par_type_usager_theme(
     if source_champ not in df.columns:
         return pd.DataFrame(columns=["type_usager", "theme", "nb_controles"])
 
+    work_df = _consolide_lignes_effectifs_par_fc_id(
+        df,
+        [source_champ, col_theme],
+        source_table=source_table,
+    )
+
     counts: dict[tuple[str, str], int] = {}
-    for _, row in df.iterrows():
+    for _, row in work_df.iterrows():
         theme = str(row.get(col_theme, "Hors thème") or "Hors thème")
         toks = _parse_type_usager_tokens(row.get(source_champ))
         if not toks:
@@ -371,8 +552,14 @@ def _agg_resultats_par_type_usager_dimension(
     if source_champ not in df.columns or col_resultat not in df.columns:
         return pd.DataFrame(columns=base_cols)
 
+    work_df = _consolide_lignes_effectifs_par_fc_id(
+        df,
+        [source_champ, col_resultat, col_dim],
+        source_table=source_table,
+    )
+
     counts: dict[tuple[str, str], dict[str, int]] = {}
-    for _, row in df.iterrows():
+    for _, row in work_df.iterrows():
         dim_val = str(row.get(col_dim, col_dim_default) or col_dim_default)
         res_cls = classify_resultat_controle(row.get(col_resultat, ""))
 
@@ -470,8 +657,9 @@ def agg_resultat_counts_par_type_usager(
     (Conforme / Infraction / Manquement ; le reste → colonne ``Autre_resultat``,
     distinct du libellé de type d'usager « Autre » lorsque le champ est vide).
 
-    Une ligne de point peut contribuer à plusieurs types d'usager si le champ
-    source est multi-catégories (même logique que les autres ``agg_*_par_type_usager``).
+    Une fiche peut contribuer à plusieurs types d'usager si le champ source est
+    multi-catégories. Si ``fc_id`` est disponible sur ``point_ctrl``, chaque
+    fiche est comptée une seule fois.
     """
     if source_champ not in df.columns or col_resultat not in df.columns:
         return pd.DataFrame(
@@ -488,7 +676,13 @@ def agg_resultat_counts_par_type_usager(
     buckets = ("Conforme", "Infraction", "Manquement", "Autre_resultat")
     counts: dict[str, dict[str, int]] = {}
 
-    for _, row in df.iterrows():
+    work_df = _consolide_lignes_effectifs_par_fc_id(
+        df,
+        [source_champ, col_resultat],
+        source_table=source_table,
+    )
+
+    for _, row in work_df.iterrows():
         res = str(row.get(col_resultat, "") or "").strip()
         if res == "Infraction":
             b = "Infraction"
@@ -522,6 +716,20 @@ def agg_resultat_counts_par_type_usager(
     return pd.DataFrame(rows)
 
 
+def count_multi_usager_controles(
+    df: pd.DataFrame,
+    source_table: str = "point_ctrl",
+    source_champ: str = "type_usager",
+) -> int:
+    """Nombre de contrôles multi-usagers, consolidés par ``fc_id`` si disponible."""
+    if source_champ not in df.columns or df.empty:
+        return 0
+    work_df = _consolide_lignes_effectifs_par_fc_id(df, [source_champ], source_table=source_table)
+    return int(
+        sum(1 for val in work_df[source_champ] if len(_parse_type_usager_tokens(val)) > 1)
+    )
+
+
 def agg_resultat_effectifs_par_type_usager(
     df: pd.DataFrame,
     col_resultat: str = "resultat",
@@ -550,7 +758,13 @@ def agg_resultat_effectifs_par_type_usager(
     buckets = ("Conforme", "Infraction", "Manquement", "Autre_resultat")
     counts: dict[str, dict[str, int]] = {}
 
-    for _, row in df.iterrows():
+    work_df = _consolide_lignes_effectifs_par_fc_id(
+        df,
+        [source_champ, col_resultat],
+        source_table=source_table,
+    )
+
+    for _, row in work_df.iterrows():
         res = str(row.get(col_resultat, "") or "").strip()
         if res == "Infraction":
             b = "Infraction"

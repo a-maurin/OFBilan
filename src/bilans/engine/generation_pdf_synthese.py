@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import textwrap
+from html import escape
 from pathlib import Path
 
 import pandas as pd
@@ -41,6 +43,12 @@ from bilans.common.utilitaires_metier import (
     _load_csv_opt,
     format_type_usager_display,
     get_dept_name,
+)
+
+_KEY_FIGURES_GRAIN_NOTE = (
+    "Les localisations comptent les points de contrôle, tandis que les effectifs "
+    "d'usagers sont comptés par fiche de contrôle ; ils peuvent donc être "
+    "inférieurs ou supérieurs."
 )
 
 
@@ -134,9 +142,10 @@ def _build_usager_theme_table_rows(sub: pd.DataFrame) -> list[list[str]]:
         ]
     ]
     for _, row in sub.iterrows():
+        theme_label = " ".join(str(row.get("theme", "")).split())
         tbl.append(
             [
-                str(row["theme"])[:40],
+                theme_label,
                 str(int(row.get("nb_effectifs", 0))),
                 str(int(row.get("nb_pej_suite_controle", 0))),
                 str(int(row.get("nb_pej_hors_controle", 0))),
@@ -150,12 +159,51 @@ def _display_type_usager(label: str) -> str:
     return format_type_usager_display(str(label or ""))
 
 
+def _wrap_table_label(value: str, width: int = 34) -> str:
+    txt = " ".join(str(value or "").split())
+    if not txt:
+        return ""
+    lines = textwrap.wrap(
+        txt,
+        width=max(int(width), 8),
+        break_long_words=False,
+        break_on_hyphens=False,
+    )
+    if not lines:
+        return escape(txt)
+    return "<br/>".join(escape(line) for line in lines)
+
+
 def _format_pve_natinf_label(row: pd.Series) -> str:
     libelle = row.get("libelle_natinf") or row.get("LIBELLE_NATINF") or ""
     code = str(row.get("numero_natinf") or row.get("natinf") or "").strip()
     if libelle:
         return f"{code} – {libelle}" if code else str(libelle)
     return code or "-"
+
+
+def _resultats_controles_pie_data(tab_resultats: pd.DataFrame | None) -> dict[str, int]:
+    """Camembert des résultats de contrôle sur les 4 catégories métier."""
+    if (
+        tab_resultats is None
+        or tab_resultats.empty
+        or "resultat" not in tab_resultats.columns
+        or "nb" not in tab_resultats.columns
+    ):
+        return {}
+
+    labels = tab_resultats["resultat"].astype(str).str.strip()
+    out: dict[str, int] = {}
+    for label, accepted in (
+        ("Conforme", ("Conforme",)),
+        ("Infraction", ("Infraction", "Dont infraction")),
+        ("Manquement", ("Manquement", "Dont manquement")),
+        ("En attente", ("En attente",)),
+    ):
+        nb = int(tab_resultats.loc[labels.isin(accepted), "nb"].astype(int).sum())
+        if nb > 0:
+            out[label] = nb
+    return out
 
 
 def _build_pve_natinf_table_rows(
@@ -393,6 +441,7 @@ def _generate_synthese_pdf(
         "2. Activité de police administrative et judiciaire",
         append_to_pending=True,
     )
+    builder.append_pending_paragraph(_KEY_FIGURES_GRAIN_NOTE)
     builder.append_pending_callout_box(
         "Comme indiqué dans la notice méthodologique, le terme contrôle désigne ici "
         "exclusivement une mesure de police administrative.",
@@ -433,7 +482,7 @@ def _generate_synthese_pdf(
             pct = format_pct_int_from_rate(nb_row / act_theme_total) if act_theme_total > 0 else "n.d."
             tbl.append(
                 [
-                    str(row["theme"])[:45],
+                    _wrap_table_label(row["theme"]),
                     str(int(row.get("nb_ctrl", 0))),
                     str(int(row.get("nb_pej_hors_controle", 0))),
                     f"{nb_row} ({pct})",
@@ -458,17 +507,29 @@ def _generate_synthese_pdf(
     )
     if tab_res_ctrl is not None and not tab_res_ctrl.empty:
         tbl_pdf = _build_rows_resultats_controles_pdf(tab_res_ctrl)
-        builder.add_table(
+        pie_data = _resultats_controles_pie_data(tab_resultats)
+        pie_path = None
+        if pie_data:
+            pie_path = chart_pie(
+                pie_data,
+                "",
+                tmp_dir,
+                "pie_synthese_resultats_controles.png",
+                figure_scale=_PIE_SEC3_FIGURE_SCALE,
+            )
+        builder.add_table_and_image_keep_together(
             tbl_pdf,
-            caption="Résultats des contrôles",
+            table_caption="Résultats des contrôles",
             col_widths=[avail_w * 0.44, avail_w * 0.28, avail_w * 0.28],
             col_aligns=["LEFT", "RIGHT", "RIGHT"],
+            image_path=Path(pie_path) if pie_path else None,
+            image_width_ratio=_PIE_SEC3_WIDTH_RATIO,
         )
     elif show_placeholder:
         builder.add_paragraph("Aucune donnée de résultat de contrôle sur la période.")
 
     builder.add_section("sec2_3", "2.3. Activité procédurale", level=2, toc_level=1)
-    builder.add_paragraph(
+    builder.append_pending_paragraph(
         "Les effectifs PEJ du tableau ci-dessous regroupent les saisines engagées à l’issue "
         "des contrôles réalisés sur la période et les saisines PEJ ouvertes hors activité de "
         "contrôle."
@@ -478,7 +539,7 @@ def _generate_synthese_pdf(
         for _, row in proc_theme.head(25).iterrows():
             tbl.append(
                 [
-                    str(row["theme"])[:45],
+                    _wrap_table_label(row["theme"]),
                     str(int(row.get("nb_pej", 0))),
                     str(int(row.get("nb_pa", 0))),
                 ]
@@ -490,15 +551,17 @@ def _generate_synthese_pdf(
             col_aligns=["LEFT", "RIGHT", "RIGHT"],
         )
     elif show_placeholder:
-        builder.add_paragraph("Aucune procédure sur la période.")
+        builder.append_pending_paragraph("Aucune procédure sur la période.")
+        builder.add_keep_together_block([])
 
     # ── 3. Activité par type d'usager ──
     builder.add_section("sec3", "3. Activité de police par type d'usager", start_on_new_page=True)
     builder.append_pending_paragraph(
         "Pour la partie contrôles : cumul des <b>effectifs</b> par type d'usager (chaque usager "
-        "renseigné sur une fiche est compté avec son effectif ; les totaux peuvent dépasser le "
-        "nombre de localisations de contrôle du fait des contrôles multi-usagers sur une même "
-        "localisation), des PEJ ouvertes à l'issue d'un contrôle et des PEJ hors fiche contrôle, "
+        "renseigné sur une fiche est compté avec son effectif ; ces effectifs sont calculés au "
+        "niveau des fiches de contrôle et ne se confondent donc pas avec le nombre de "
+        "localisations de contrôle), des PEJ ouvertes à l'issue d'un contrôle et des PEJ hors "
+        "fiche contrôle, "
         "ventilés par thème du plan de contrôle (détail en § 3.1). "
         "Pour la partie procédurale (§ 3.3) : une procédure ne comporte qu'un seul type d'usager."
     )

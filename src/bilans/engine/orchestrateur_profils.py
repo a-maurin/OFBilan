@@ -2517,7 +2517,7 @@ def _pdf_section_activite_par_types_usagers(
             labels,
             series,
             "Résultats des contrôles par type d'usager",
-            "Nombre",
+            "Contrôles",
             tmp_dir,
             "bar_resultats_par_type_usager.png",
             legend_fontsize=legend_fontsize,
@@ -3186,10 +3186,7 @@ def _generate_pdf(
             )
             if hdr and body:
                 if with_type_col:
-                    caption = pdf_metric_caption(
-                        "Résultats des contrôles par type d'usager et par domaine",
-                        "ctrl",
-                    )
+                    caption = "Résultats des contrôles par type d'usager et par domaine"
                 else:
                     caption = pdf_metric_caption("Résultats des contrôles par domaine", "ctrl")
                 if len(res_ud) > len(body):

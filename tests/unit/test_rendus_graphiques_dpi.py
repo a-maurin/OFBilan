@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from bilans.common import rendus_graphiques as rg
+from bilans.common.ofb_charte import COLOR_CHART_4, COLOR_GREY
 
 
 class _FakeFigure:
@@ -48,3 +49,9 @@ def test_horizontal_stacked_chart_defaults_to_global_300_dpi(monkeypatch, tmp_pa
 
     assert out == str(tmp_path / "stacked.png")
     assert captured["dpi"] == rg.DEFAULT_RASTER_EXPORT_DPI == 300
+
+
+def test_pie_segment_color_uses_grey_for_en_attente() -> None:
+    assert rg._pie_segment_color("En attente", "#ffffff") == COLOR_GREY
+    assert rg._pie_segment_color("Infraction", "#ffffff") == COLOR_CHART_4
+    assert rg._pie_segment_color("Conforme", "#123456") == "#123456"

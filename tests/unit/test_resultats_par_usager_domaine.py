@@ -42,6 +42,23 @@ def test_agg_resultats_domaine_en_attente() -> None:
     assert int(row["nb_controles"]) == 2
 
 
+def test_agg_resultats_domaine_consolide_par_fc_id() -> None:
+    df = pd.DataFrame(
+        {
+            "fc_id": ["FC-1", "FC-1"],
+            "domaine": ["Eau", "Eau"],
+            "resultat": ["Infraction", "Infraction"],
+            "type_usager": ["Collectivité 1", "Collectivité 1"],
+        }
+    )
+
+    out = agg_resultats_par_type_usager_domaine(df)
+    row = out.iloc[0]
+
+    assert int(row["nb_infraction"]) == 1
+    assert int(row["nb_controles"]) == 1
+
+
 def test_pdf_rows_mono_usager_aligne_colonnes_avec_en_attente() -> None:
     """Régression : 5 colonnes (domaine + 4 métriques) ne doit pas ajouter type_usager."""
     df = pd.DataFrame(

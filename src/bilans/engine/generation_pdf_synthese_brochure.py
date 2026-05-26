@@ -49,6 +49,7 @@ from bilans.engine.generation_pdf_synthese import (
     _ROOT,
     _build_synthese_key_figure_rows,
     _display_type_usager,
+    _KEY_FIGURES_GRAIN_NOTE,
     _load_csv_opt,
     _nb_non_conformes_brut,
     _pie_data_controles_par_type_usager,
@@ -835,6 +836,7 @@ def _generate_synthese_brochure_pdf(
         nb_pve=nb_pve,
     )
     _append_kpi_strip(builder, _flatten_key_figures(kf_rows), hero=True)
+    builder.add_paragraph(_KEY_FIGURES_GRAIN_NOTE)
     _append_spacer(builder, _BROCHURE_SECTION_GAP_MM)
 
     if has_maps:

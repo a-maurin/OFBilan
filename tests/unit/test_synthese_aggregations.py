@@ -14,6 +14,7 @@ from bilans.engine.synthese_aggregations import (
 )
 from bilans.common.utilitaires_metier import (
     agg_effectifs_usagers_par_theme,
+    agg_resultat_counts_par_type_usager,
     agg_resultat_effectifs_par_type_usager,
     format_type_usager_display,
     map_type_usager,
@@ -104,6 +105,76 @@ def test_resultat_effectifs_par_type_usager() -> None:
     assert int(out["Total"].sum()) == 5
 
 
+def test_resultat_counts_par_type_usager_dedupplique_par_fc_id() -> None:
+    point = pd.DataFrame(
+        {
+            "fc_id": ["FC-1", "FC-1"],
+            "type_usager": ["Collectivité 2", "Collectivité 2"],
+            "resultat": ["Conforme", "Conforme"],
+        }
+    )
+
+    out = agg_resultat_counts_par_type_usager(point)
+
+    assert int(out["Conforme"].sum()) == 1
+    assert int(out["Total"].sum()) == 1
+
+
+def test_resultat_effectifs_par_type_usager_dedupplique_par_fc_id() -> None:
+    point = pd.DataFrame(
+        {
+            "fc_id": ["FC-1", "FC-1"],
+            "type_usager": ["Collectivité 2", "Collectivité 2"],
+            "resultat": ["Conforme", "Conforme"],
+        }
+    )
+
+    out = agg_resultat_effectifs_par_type_usager(point)
+
+    assert int(out["Conforme"].sum()) == 2
+    assert int(out["Total"].sum()) == 2
+
+
+def test_resultat_effectifs_par_type_usager_journalise_conflit_fc_id(caplog) -> None:
+    point = pd.DataFrame(
+        {
+            "fc_id": ["FC-1", "FC-1"],
+            "type_usager": ["Collectivité 2", "Collectivité 2"],
+            "resultat": ["Conforme", "Infraction"],
+        }
+    )
+
+    with caplog.at_level("WARNING"):
+        out = agg_resultat_effectifs_par_type_usager(point)
+
+    assert "Conflit intra-fc_id sur resultat pour fc_id=FC-1" in caplog.text
+    assert int(out["Conforme"].sum()) == 2
+    assert int(out["Infraction"].sum()) == 0
+
+
+def test_resultat_effectifs_par_type_usager_prefere_valeur_plus_recente_et_informative() -> None:
+    point = pd.DataFrame(
+        {
+            "fc_id": ["FC-143615", "FC-143615"],
+            "date_ctrl": [pd.Timestamp("2022-11-01"), pd.Timestamp("2023-03-31")],
+            "type_usager": [
+                "Particulier 2",
+                "Particulier (usager de la nature + gestionnaire d'une propriété) 2",
+            ],
+            "resultat": ["Conforme", "Infraction"],
+        }
+    )
+
+    out = agg_resultat_effectifs_par_type_usager(point)
+    part = out.loc[
+        out["type_usager"] == "Particulier (usager de la nature + gestionnaire d'une propriété)"
+    ]
+
+    assert int(part["Infraction"].sum()) == 2
+    assert int(part["Total"].sum()) == 2
+    assert int(out.loc[out["type_usager"] == "Autre", "Total"].sum()) == 0
+
+
 def test_activite_par_type_usager_compte_ctrl_et_pej_hors() -> None:
     point = pd.DataFrame(
         {
@@ -168,6 +239,21 @@ def test_effectifs_usagers_par_theme() -> None:
     assert int(out["nb"].sum()) == 7
 
 
+def test_effectifs_usagers_par_theme_dedupplique_par_fc_id() -> None:
+    point = pd.DataFrame(
+        {
+            "fc_id": ["FC-1", "FC-1"],
+            "theme": ["T1", "T1"],
+            "type_usager": ["Collectivité 4", "Collectivité 4"],
+        }
+    )
+
+    out = agg_effectifs_usagers_par_theme(point)
+
+    assert int(out["nb"].sum()) == 4
+    assert int(out.loc[out["type_usager"] == "Collectivité", "nb"].sum()) == 4
+
+
 def test_map_type_usager_libelle_referentiel_pej() -> None:
     lib = "Agriculteur et autres acteurs agricoles"
     assert map_type_usager("pej", "USAGER", lib) == lib
@@ -216,6 +302,52 @@ def test_activite_usager_par_theme_pej_suite_controle() -> None:
     assert int(autre["nb_total"]) == 1
     assert int(coll["nb_effectifs"]) == 2
     assert int(coll["nb_pej_suite_controle"]) == 0
+
+
+def test_activite_usager_par_theme_dedupplique_effectifs_par_fc_id() -> None:
+    point = pd.DataFrame(
+        {
+            "dc_id": ["CTRL-1", "CTRL-1"],
+            "fc_id": ["FC-1", "FC-1"],
+            "theme": ["Thème A", "Thème A"],
+            "type_usager": ["Collectivité 2", "Collectivité 2"],
+            "resultat": ["Conforme", "Conforme"],
+        }
+    )
+    pej = pd.DataFrame(columns=["DC_ID", "ENTITE_ORIGINE_PROCEDURE", "THEME"])
+
+    out = activite_usager_par_theme(point, pej, "21")
+    coll = out[(out["type_usager"] == "Collectivité") & (out["theme"] == "Thème A")].iloc[0]
+
+    assert int(coll["nb_effectifs"]) == 2
+    assert int(coll["nb_total"]) == 2
+
+
+def test_activite_usager_par_theme_prefere_theme_et_type_plus_recents() -> None:
+    point = pd.DataFrame(
+        {
+            "dc_id": ["CTRL-143615", "CTRL-143615"],
+            "fc_id": ["FC-143615", "FC-143615"],
+            "date_ctrl": [pd.Timestamp("2022-11-01"), pd.Timestamp("2023-03-31")],
+            "theme": ["Travaux en cours d'eau", "Travaux en cours d'eau [2023]"],
+            "type_usager": [
+                "Particulier 2",
+                "Particulier (usager de la nature + gestionnaire d'une propriété) 2",
+            ],
+            "resultat": ["Conforme", "Infraction"],
+        }
+    )
+    pej = pd.DataFrame(columns=["DC_ID", "ENTITE_ORIGINE_PROCEDURE", "THEME"])
+
+    out = activite_usager_par_theme(point, pej, "21")
+    part = out[
+        (out["type_usager"] == "Particulier (usager de la nature + gestionnaire d'une propriété)")
+        & (out["theme"] == "Travaux en cours d'eau [2023]")
+    ].iloc[0]
+
+    assert int(part["nb_effectifs"]) == 2
+    assert int(part["nb_total"]) == 2
+    assert int(out.loc[out["type_usager"] == "Autre", "nb_effectifs"].sum()) == 0
 
 
 def test_activite_par_type_usager_pej_hors_ventile_par_categorie() -> None:

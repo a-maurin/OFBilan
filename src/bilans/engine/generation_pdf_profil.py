@@ -967,7 +967,7 @@ def _generate_pdf_content(
                 builder.add_key_figures(
                     [
                         (str(total_usagers), "Total effectifs usagers"),
-                        (str(nb_multi), "Localisations multi-usagers"),
+                        (str(nb_multi), "Fiches multi-usagers"),
                     ],
                     spacer_after_mm=2.0,
                 )
@@ -1080,10 +1080,8 @@ def _generate_pdf_content(
                         bar_path = chart_bar_horizontal_stacked(
                             labels,
                             series,
-                            pdf_metric_caption(
-                                "Résultats des contrôles par type d'usager", "ctrl"
-                            ),
-                            PDF_LABEL_CTRL_LOCATIONS_SHORT,
+                            "Résultats des contrôles par type d'usager",
+                            "Contrôles",
                             tmp_dir,
                             "bar_resultats_par_type_usager_global.png",
                             legend_fontsize=max(6.5, legend_fontsize - 0.5),
@@ -1155,9 +1153,7 @@ def _generate_pdf_content(
                     if is_block_enabled(presentation_cfg, "sec4.show_resultats_par_type_usager_table", True):
                         builder.add_table(
                             tbl_res,
-                            caption=pdf_metric_caption(
-                                "Résultats des contrôles par type d'usager", "ctrl"
-                            ),
+                            caption="Résultats des contrôles par type d'usager",
                             col_widths=col_widths,
                             col_aligns=["LEFT"] + ["RIGHT"] * (len(tbl_res[0]) - 1),
                             keep_together=True,

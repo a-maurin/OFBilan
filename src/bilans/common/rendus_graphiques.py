@@ -59,6 +59,16 @@ _KEYWORDS_INFRACTION = (
 _KEYWORDS_ATTENTE = ("en attente", "attente")
 
 
+def _pie_segment_color(label: str, base_color: str) -> str:
+    """Couleur OFB d'un segment de camembert selon son libellé métier."""
+    lbl = str(label).lower()
+    if any(k in lbl for k in _KEYWORDS_INFRACTION):
+        return COLOR_CHART_4
+    if any(k in lbl for k in _KEYWORDS_ATTENTE):
+        return COLOR_GREY
+    return base_color
+
+
 def apply_mpl_style() -> None:
     """Style matplotlib pour les graphiques exportés en PNG."""
     plt.rcParams["font.family"] = _pick_mpl_font()
@@ -177,19 +187,13 @@ def chart_pie(
     labels = list(data.keys())
     values = list(data.values())
     fig_w = CHART_FIG_WIDTH * figure_scale if figsize is None else (figsize[0] * figure_scale)
-    # Palette : on force une couleur rouge douce (COLOR_CHART_4) pour les parts
-    # correspondant aux infractions / non-conformes, les autres utilisent la
-    # palette standard CHART_PIE_COLORS.
+    # Palette : rouge doux pour les infractions / non-conformes, gris foncé
+    # pour l'attente, sinon palette standard CHART_PIE_COLORS.
     colors_pie = []
-    keywords_inf = _KEYWORDS_INFRACTION
     pie_palette = palette if palette else CHART_PIE_COLORS
     for i, lb in enumerate(labels):
         base = pie_palette[i % len(pie_palette)]
-        lbl = str(lb).lower()
-        if any(k in lbl for k in keywords_inf):
-            colors_pie.append(COLOR_CHART_4)
-        else:
-            colors_pie.append(base)
+        colors_pie.append(_pie_segment_color(lb, base))
     total = sum(values)
     if total:
         pcts = int_percents_largest_remainder([int(v) for v in values])
@@ -287,11 +291,7 @@ def chart_pie_legend_right(
     pie_palette = palette if palette else CHART_PIE_COLORS
     for i, lb in enumerate(labels):
         base = pie_palette[i % len(pie_palette)]
-        lbl = str(lb).lower()
-        if any(k in lbl for k in _KEYWORDS_INFRACTION):
-            colors_pie.append(COLOR_CHART_4)
-        else:
-            colors_pie.append(base)
+        colors_pie.append(_pie_segment_color(lb, base))
     total = sum(values)
     if total:
         pcts = int_percents_largest_remainder([int(v) for v in values])

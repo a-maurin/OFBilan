@@ -75,11 +75,13 @@ DEFAULT_PDF_PRESENTATION_CONFIG: dict[str, Any] = {
             "multi_usager_paragraph": (
                 "Lorsque des tableaux ou graphiques affichent des « effectifs » par type "
                 "d'usager, chaque usager renseigné sur une fiche est compté (contrôles "
-                "multi-usagers : plusieurs effectifs pour une même localisation). Les totaux "
-                "d'effectifs peuvent alors dépasser le nombre de localisations de contrôle. "
-                "Les colonnes ou indicateurs PEJ, PA et PVe correspondent à des nombres de "
-                "procédures (dossiers), et non à des localisations de contrôle ; ils sont "
-                "signalés comme tels dans les légendes des tableaux concernés."
+                "multi-usagers : plusieurs effectifs pour une même fiche de contrôle). Les "
+                "effectifs d'usagers sont ainsi comptés au niveau des fiches de contrôle, "
+                "tandis que les localisations correspondent aux points de contrôle ; selon les "
+                "cas, les effectifs peuvent donc être inférieurs ou supérieurs au nombre de "
+                "localisations. Les colonnes ou indicateurs PEJ, PA et PVe correspondent à des "
+                "nombres de procédures (dossiers), et non à des localisations de contrôle ; "
+                "ils sont signalés comme tels dans les légendes des tableaux concernés."
             ),
         },
         "sec6_methodology": {

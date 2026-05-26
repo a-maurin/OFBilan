@@ -47,6 +47,55 @@ def test_analyse_controles_global_minimal(tmp_path: Path) -> None:
         assert (tmp_path / filename).exists()
 
 
+def test_analyse_controles_global_consolide_exports_usagers_par_fc_id(tmp_path: Path) -> None:
+    core_mod = __import__("bilans.engine.agregations_profil", fromlist=["_dummy"])
+    analyse_controles = getattr(core_mod, "analyse_controles_" + "global")
+
+    df = pd.DataFrame(
+        [
+            {
+                "fc_id": "FC-1",
+                "dc_id": "CTRL-1",
+                "insee_comm": "21001",
+                "resultat": "Conforme",
+                "domaine": "Police de la nature",
+                "theme": "Chasse",
+                "type_usager": "Collectivité 2",
+            },
+            {
+                "fc_id": "FC-1",
+                "dc_id": "CTRL-1",
+                "insee_comm": "21001",
+                "resultat": "Conforme",
+                "domaine": "Police de la nature",
+                "theme": "Chasse",
+                "type_usager": "Collectivité 2",
+            },
+            {
+                "fc_id": "FC-2",
+                "dc_id": "CTRL-2",
+                "insee_comm": "21002",
+                "resultat": "Infraction",
+                "domaine": "Police de la nature",
+                "theme": "Pêche",
+                "type_usager": "Collectivité 1, Agriculteur 1",
+            },
+        ]
+    )
+
+    analyse_controles(df, tmp_path)
+
+    agg_usager = pd.read_csv(tmp_path / "controles_global_par_usager.csv", sep=";")
+    res_usager = pd.read_csv(tmp_path / "controles_global_resultats_par_type_usager.csv", sep=";")
+    cross = pd.read_csv(tmp_path / "controles_global_usager_par_domaine.csv", sep=";")
+    resume = pd.read_csv(tmp_path / "controles_global_usagers_resume.csv", sep=";")
+
+    assert int(agg_usager["nb"].sum()) == 4
+    assert int(res_usager["Total"].sum()) == 3
+    assert int(cross.drop(columns=["type_usager"]).sum().sum()) == 4
+    assert int(resume["nb_controles_multi_usagers"].iloc[0]) == 1
+
+
 def test_run_global_smoke(monkeypatch, tmp_path: Path) -> None:
     """
     Test de fumée sur run_global avec des loaders surchargés.
