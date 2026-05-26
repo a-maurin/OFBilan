@@ -115,34 +115,12 @@ def _chart_pie_compact_legend_kw(n_categories: int) -> dict[str, float | int]:
 # Camembert § 3 : taille maximale tout en laissant le 1er tableau § 3.1 (avant Agriculteur) sur la page 1.
 _PIE_SEC3_FIGURE_SCALE = 0.86
 _PIE_SEC3_WIDTH_RATIO = 0.82
-
 _SEC3_1_TABLE_NOTE = (
     "<i>Note : les effectifs sont dérivés des fiches de contrôle ; les PEJ suite contrôle, "
     "du type d'usager renseigné sur le dossier de saisine. En cas de divergence entre ces "
     "deux sources pour un même contrôle, une ligne peut afficher 0 effectif et une ou "
     "plusieurs PEJ.</i>"
 )
-
-_AGRICULTEUR_TYPE_PREFIX = "Agriculteur et autres acteurs agricoles"
-
-
-def _is_agriculteur_type_usager(label: str) -> bool:
-    return str(label or "").strip().startswith(_AGRICULTEUR_TYPE_PREFIX)
-
-
-def _split_types_before_agriculteur(type_order) -> tuple[list, list]:
-    """Types affichés sur la page 1 du § 3.1 vs à partir d'Agriculteur (page suivante)."""
-    before: list = []
-    from_agr: list = []
-    seen_agr = False
-    for tu in type_order:
-        if _is_agriculteur_type_usager(str(tu)):
-            seen_agr = True
-        if seen_agr:
-            from_agr.append(tu)
-        else:
-            before.append(tu)
-    return before, from_agr
 
 
 def _build_usager_theme_table_rows(sub: pd.DataFrame) -> list[list[str]]:
@@ -541,8 +519,7 @@ def _generate_synthese_pdf(
         "3.1. Thème de contrôle par type d'usager",
         level=2,
         toc_level=1,
-        append_to_pending=True,
-        compact=True,
+        start_on_new_page=True,
     )
     col_w_ut = [
         avail_w * 0.36,
@@ -559,33 +536,15 @@ def _generate_synthese_pdf(
             .sort_values(ascending=False)
             .index
         )
-        types_page1, types_from_agr = _split_types_before_agriculteur(type_order)
 
         def _subtable_for_type(tu) -> list[list[str]] | None:
             sub = act_ut[act_ut["type_usager"].astype(str) == str(tu)].copy()
             sub = sub.sort_values("nb_total", ascending=False, kind="stable")
-            sub = _filter_dataframe_min_pct(sub, value_col="nb_total", min_pct=0.01)
-            if sub is None or sub.empty:
+            if sub.empty:
                 return None
             return _build_usager_theme_table_rows(sub)
 
-        for tu in types_page1:
-            tbl = _subtable_for_type(tu)
-            if not tbl:
-                continue
-            builder.append_pending_table(
-                tbl,
-                caption=pdf_metric_caption(
-                    f"Thèmes de contrôle — {_display_type_usager(tu)}", "effectifs"
-                ),
-                col_widths=col_w_ut,
-                col_aligns=col_a_ut,
-                spacer_after_mm=1.0,
-            )
-        # Page 1 : intro + camembert (grand) + § 3.1 + tableaux avant Agriculteur.
-        builder.add_keep_together_block([])
-
-        for tu in types_from_agr:
+        for tu in type_order:
             tbl = _subtable_for_type(tu)
             if not tbl:
                 continue
@@ -596,7 +555,8 @@ def _generate_synthese_pdf(
                 ),
                 col_widths=col_w_ut,
                 col_aligns=col_a_ut,
-                keep_together=True,
+                keep_together=False,
+                keep_caption_with_table=True,
                 spacer_after_mm=1.0,
             )
         builder.add_paragraph(_SEC3_1_TABLE_NOTE)

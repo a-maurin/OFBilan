@@ -891,6 +891,7 @@ class PDFReportBuilder:
         spacer_after_mm: float = 4.0,
         max_rows_keep_together: int | None = None,
         max_cell_chars_before_split: int | None = None,
+        keep_caption_with_table: bool = True,
     ) -> None:
         block: List = []
         if caption:
@@ -949,7 +950,7 @@ class PDFReportBuilder:
             )
         block.append(tbl)
         block.append(Spacer(1, float(spacer_after_mm) * mm))
-        use_keep = bool(caption) or keep_together
+        use_keep = (bool(caption) and keep_caption_with_table) or keep_together
         if use_keep:
             if self._pending_section is not None:
                 self.story.append(KeepTogether(self._pending_section + block))
