@@ -19,6 +19,7 @@ src/bilans/common/bilan_config.py
 src/bilans/common/carte_helper.py
 src/bilans/common/chargeurs_donnees.py
 src/bilans/common/chart_display_config.py
+src/bilans/common/dataframe_rollup.py
 src/bilans/common/ofb_charte.py
 src/bilans/common/pdf_presentation_config.py
 src/bilans/common/pdf_report_builder.py

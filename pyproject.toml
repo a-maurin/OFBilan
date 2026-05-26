@@ -20,7 +20,6 @@ dependencies = [
   "python-calamine>=0.3.0",
   "openpyxl>=3.1",
   "Pillow>=10.0",
-  "svglib>=1.5.1",
 ]
 
 [project.optional-dependencies]
