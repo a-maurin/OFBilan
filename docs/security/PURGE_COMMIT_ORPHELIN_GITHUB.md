@@ -13,10 +13,19 @@ Un simple `git push --force` ne supprime pas ce cache côté GitHub.
 
 1. Ouvrir : https://support.github.com/contact
 2. Choisir **« Remove sensitive data cached in my repository »** (ou équivalent sécurité).
-3. Indiquer :
+3. Dans le champ **URL** (gist, PR, fichier, etc.), coller :
+
+   ```
+   https://github.com/a-maurin/Bilans_production/commit/b12d07930984e15cf3416663e4eccabc52635f1e
+   ```
+
+   C’est la page du commit orphelin : le message privé apparaît dans le **titre** de ce commit.
+
+4. Compléter le texte libre avec :
    - Dépôt : `a-maurin/Bilans_production`
    - SHA à purger : `b12d07930984e15cf3416663e4eccabc52635f1e`
    - Nature : message de commit contenant une correspondance professionnelle privée (nom d’un collègue).
+   - Préciser que le commit a été retiré de `main` par force-push mais reste accessible par ce lien direct.
 4. En attendant la purge, envisager de passer le dépôt en **privé** (Settings → Danger zone / Change visibility).
 
 ## Nettoyage local (déjà recommandé)
