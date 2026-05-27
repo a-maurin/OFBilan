@@ -3414,6 +3414,13 @@ def _generate_pdf(
                     {
                         "data_rows": tbl_nat,
                         "caption": "Analyse des NATINF relevées (PVe)",
+                        "col_widths": [
+                            avail_w * 0.26,
+                            avail_w * 0.34,
+                            avail_w * 0.30,
+                            avail_w * 0.10,
+                        ],
+                        "col_aligns": ["LEFT", "LEFT", "LEFT", "RIGHT"],
                     }
                 )
             zone_table: dict | None = None
@@ -3568,8 +3575,16 @@ def _generate_pdf(
             builder.add_table(
                 tbl_nat,
                 caption="Analyse des NATINF relevées (PEJ)",
-                keep_together=True,
-                max_rows_keep_together=25,
+                col_widths=[
+                    avail_w * 0.26,
+                    avail_w * 0.34,
+                    avail_w * 0.30,
+                    avail_w * 0.10,
+                ],
+                col_aligns=["LEFT", "LEFT", "LEFT", "RIGHT"],
+                keep_together=False,
+                # Forcer une coupe inter-lignes au-delà de ~12 lignes pour éviter LayoutError.
+                max_rows_keep_together=12,
                 max_cell_chars_before_split=2000,
             )
 
