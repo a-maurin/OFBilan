@@ -9,6 +9,8 @@ ref/programme/sig/**
 ref/programme/modele_ofb/**
 ref/programme/tables_reference/**
 !ref/programme/tables_reference/.gitkeep
+# Référentiel minimal requis par le moteur et la CI (pytest)
+!ref/programme/tables_reference/types_usagers.csv
 ref/hors_programme/**
 
 # Paquets ref/ et archives de distribution (transfert local, non versionnés)
