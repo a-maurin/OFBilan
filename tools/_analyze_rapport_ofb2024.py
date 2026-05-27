@@ -1,18 +1,35 @@
 """Analyse rapide du rapport d'activité OFB 2024 (référence brochure)."""
 from __future__ import annotations
 
+import os
 import re
+import sys
 from collections import Counter
 from pathlib import Path
 
 import fitz
 
-PDF = Path(r"c:\Users\aguirre.maurin\Downloads\rapport-activites-ofb2024.pdf")
-OUT = Path(__file__).resolve().parents[1] / "data" / "out" / "_ref_rapport_ofb2024"
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+OUT = PROJECT_ROOT / "data" / "out" / "_ref_rapport_ofb2024"
+DEFAULT_PDF = OUT / "rapport-activites-ofb2024.pdf"
+
+
+def _pdf_path() -> Path:
+    override = os.environ.get("RAPPORT_OFB2024_PDF", "").strip()
+    return Path(override) if override else DEFAULT_PDF
 
 
 def main() -> None:
-    doc = fitz.open(PDF)
+    pdf = _pdf_path()
+    if not pdf.is_file():
+        print(
+            f"PDF introuvable : {pdf}\n"
+            "Placez le fichier sous data/out/_ref_rapport_ofb2024/ "
+            "ou définissez RAPPORT_OFB2024_PDF.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+    doc = fitz.open(pdf)
     print("pages", doc.page_count)
     fills = Counter()
     for i in range(doc.page_count):

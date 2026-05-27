@@ -28,6 +28,7 @@ env/
 ############################
 # Fichiers Python compilés / caches
 ############################
+*.egg-info/
 __pycache__/
 *.py[cod]
 *.pyo

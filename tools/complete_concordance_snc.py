@@ -3,15 +3,24 @@ import os
 import re
 import unicodedata
 from difflib import SequenceMatcher
+from pathlib import Path
 
 
-BASE = r"c:\Users\aguirre.maurin\Documents\GitHub\Bilans_production"
+BASE = Path(__file__).resolve().parents[1]
 
-REF_PATH = os.path.join(
-    BASE, "ref", "hors_programme", "tables_reference", "Plans de contrôle OSCEAN 2024.csv"
+REF_PATH = (
+    BASE
+    / "ref"
+    / "hors_programme"
+    / "tables_reference"
+    / "Plans de contrôle OSCEAN 2024.csv"
 )
-CONC_PATH = os.path.join(
-    BASE, "ref", "hors_programme", "tables_reference", "concordance_snc_2023_vers_2024.csv"
+CONC_PATH = (
+    BASE
+    / "ref"
+    / "hors_programme"
+    / "tables_reference"
+    / "concordance_snc_2023_vers_2024.csv"
 )
 
 
