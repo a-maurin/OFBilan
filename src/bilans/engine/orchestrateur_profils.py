@@ -112,6 +112,7 @@ from bilans.common.pdf_table_sort import (
     sort_dataframe_desc,
 )
 from bilans.common.pdf_usagers_domaine_table import build_usagers_x_domaine_pdf_rows
+from bilans.common.pdf_utils import wrap_plain_text_for_pdf_paragraph
 from bilans.common.chart_display_config import load_chart_display_config, compute_pdf_ratios
 from bilans.common.rendus_graphiques import (
     chart_pie,
@@ -3383,7 +3384,7 @@ def _generate_pdf(
                         str(r.get("numero", "")),
                         str(r.get("date", "")),
                         c_val,
-                        str(r.get("thematique", "")),
+                        wrap_plain_text_for_pdf_paragraph(r.get("thematique", "")),
                     ]
                     if show_coeur_hors_pdf:
                         row_det.append(str(r.get("coeur_hors_coeur", "")))
@@ -3404,9 +3405,9 @@ def _generate_pdf(
                 tbl_nat = [["Thématique", "Libellé NATINF", "Nature d'infraction", "Nombre"]]
                 for _, r in pve_nat.head(20).iterrows():
                     tbl_nat.append([
-                        str(r.get("thematique", "")),
-                        str(r.get("libelle_natinf", "")),
-                        str(r.get("nature_infraction", "")),
+                        wrap_plain_text_for_pdf_paragraph(r.get("thematique", "")),
+                        wrap_plain_text_for_pdf_paragraph(r.get("libelle_natinf", "")),
+                        wrap_plain_text_for_pdf_paragraph(r.get("nature_infraction", "")),
                         str(int(r.get("nb", 0))),
                     ])
                 pve_table_specs.append(
@@ -3505,7 +3506,7 @@ def _generate_pdf(
                     str(r.get("numero", "")),
                     str(r.get("date", "")),
                     str(r.get("commune", "")),
-                    str(r.get("thematique", "")),
+                    wrap_plain_text_for_pdf_paragraph(r.get("thematique", "")),
                 ]
                 if show_coeur_hors_pdf:
                     row_pej.append(str(r.get("coeur_hors_coeur", "")))
@@ -3559,9 +3560,9 @@ def _generate_pdf(
             tbl_nat = [["Thématique", "Libellé NATINF", "Nature d'infraction", "Nombre"]]
             for _, r in pej_nat.head(20).iterrows():
                 tbl_nat.append([
-                    str(r.get("thematique", "")),
-                    str(r.get("libelle_natinf", "")),
-                    str(r.get("nature_infraction", "")),
+                    wrap_plain_text_for_pdf_paragraph(r.get("thematique", "")),
+                    wrap_plain_text_for_pdf_paragraph(r.get("libelle_natinf", "")),
+                    wrap_plain_text_for_pdf_paragraph(r.get("nature_infraction", "")),
                     str(int(r.get("nb", 0))),
                 ])
             builder.add_table(
@@ -3645,7 +3646,7 @@ def _generate_pdf(
                     str(r.get("numero", "")),
                     str(r.get("date", "")),
                     str(r.get("commune", "")),
-                    str(r.get("thematique", "")),
+                    wrap_plain_text_for_pdf_paragraph(r.get("thematique", "")),
                 ]
                 if show_coeur_hors_pdf:
                     row_pa.append(str(r.get("coeur_hors_coeur", "")))

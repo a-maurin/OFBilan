@@ -1,5 +1,7 @@
 """Helpers reportlab : tableaux OFB, chiffres clés."""
 import re
+import textwrap
+from html import escape
 
 from reportlab.lib import colors as rl_colors
 from reportlab.lib.styles import ParagraphStyle
@@ -60,6 +62,32 @@ def truncate_text_to_width(
             return candidate
         end -= 1
     return suffix
+
+
+def wrap_plain_text_for_pdf_paragraph(
+    value: object,
+    *,
+    wrap_width: int = 36,
+    max_lines: int = 16,
+) -> str:
+    """
+    Prépare du texte brut pour ``Paragraph`` dans une cellule de tableau : retours à la ligne
+    contrôlés et plafond de lignes pour éviter un ``LayoutError`` lorsque le libellé est très long.
+    """
+    raw = " ".join(str(value or "").split())
+    if not raw:
+        return ""
+    lines = textwrap.wrap(
+        raw,
+        width=max(8, int(wrap_width)),
+        break_long_words=True,
+        break_on_hyphens=True,
+    )
+    if len(lines) > int(max_lines):
+        lines = lines[: int(max_lines)]
+        if lines:
+            lines[-1] = lines[-1].rstrip() + "…"
+    return "<br/>".join(escape(line) for line in lines)
 
 
 class VerticalText(Flowable):

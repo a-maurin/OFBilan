@@ -915,6 +915,11 @@ class PDFReportBuilder:
         if bool(self._tables_layout.get("split_by_row")):
             return True
         n_rows = len(data_rows) if data_rows else 0
+        # Seuil minimal robuste : même si la config n'indique pas de split,
+        # certains tableaux (ex. NATINF détaillés) plantent si un tableau de
+        # ~13 lignes ne peut pas se scinder entre deux pages.
+        if n_rows > 12:
+            return True
         try:
             max_rows_keep = int(self._tables_layout.get("max_rows_keep_together", 8))
         except (TypeError, ValueError):
@@ -946,6 +951,7 @@ class PDFReportBuilder:
         """Légende + tableau : même page au début ; tableau long coupé entre les lignes."""
         if not data_rows:
             return
+        split_by_row = self._table_uses_split_by_row(data_rows)
         block: List = []
         if caption:
             block.append(Paragraph(caption, self.styles["TableCaption"]))
@@ -956,11 +962,17 @@ class PDFReportBuilder:
                 col_widths=col_widths,
                 col_aligns=col_aligns,
                 header_font_size=header_font_size,
-                split_by_row=self._table_uses_split_by_row(data_rows),
+                split_by_row=split_by_row,
             )
         )
         block.append(Spacer(1, float(gap_after_mm) * mm))
-        self.story.append(KeepTogether(block))
+        # Si le tableau doit être coupé entre les lignes, ne pas l'enfermer dans KeepTogether
+        # (sinon LayoutError si le tableau dépasse la hauteur utile d'une page).
+        if split_by_row:
+            for el in block:
+                self.story.append(el)
+        else:
+            self.story.append(KeepTogether(block))
     def add_table(
         self,
         data_rows: list,
