@@ -23,6 +23,7 @@ python -m bilans --profil chasse --profil agrainage --combine --date-deb ... --d
 
 Règles d'usage :
 
+- Après un run réussi, le gestionnaire de fichiers peut s’ouvrir sur le dossier de sortie du dernier profil. Désactiver avec `BILANS_OPEN_OUTPUT_DIR=0` ou en environnement CI (`CI` défini).
 - Les restrictions batch/combine sont pilotées par `capabilities.combine` et `capabilities.mix_batch` dans les profils YAML.
 - Sans `--profil`, la CLI affiche les profils disponibles et demande une sélection interactive.
 

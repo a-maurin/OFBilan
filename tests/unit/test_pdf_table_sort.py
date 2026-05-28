@@ -46,7 +46,10 @@ def test_sort_procedures_by_sum_nb_columns() -> None:
     assert out["domaine"].tolist() == ["Z", "Y", "X"]
 
 
-def test_pdf_column_label_pej_not_pj() -> None:
+def test_pdf_column_label_coeur_hors_coeur_is_zone() -> None:
+    assert pdf_column_label("coeur_hors_coeur") == "Zone"
+
+
     assert pdf_column_label("nb_pej") == PDF_LABEL_PEJ
     assert pdf_column_label("nb_pa") == "PA"
     assert "Pj" not in pdf_column_label("nb_pej")

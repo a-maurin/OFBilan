@@ -8,10 +8,60 @@ from __future__ import annotations
 
 import logging
 import sys
+from pathlib import Path
+from time import time
 
 from bilans.chemins_projet import PROJECT_ROOT, get_out_dir
+from bilans.common.reveal_in_file_manager import reveal_path_in_file_manager
 
 logger = logging.getLogger("bilans.engine")
+
+
+def resolve_profile_output_dir(profil_id: str, *, root: Path | None = None) -> Path:
+    """
+    Dossier ``data/out/<out_subdir>/`` où le moteur écrit pour ce profil (aligné global / thématique).
+    """
+    from bilans.engine.orchestrateur_profils import load_profile_config
+
+    base = root or PROJECT_ROOT
+    profile = load_profile_config(base, profil_id)
+    pipeline = str(profile.get("pipeline", "thematic")).strip().lower()
+    if pipeline == "global":
+        out_subdir = str(profile.get("out_subdir", f"bilan_{profile.get('id', 'global')}")).strip()
+        if not out_subdir:
+            out_subdir = "bilan_global"
+    else:
+        raw = profile.get("out_subdir")
+        if isinstance(raw, str) and raw.strip():
+            out_subdir = raw.strip()
+        else:
+            pid = str(profile.get("id", profil_id)).strip() or profil_id
+            out_subdir = f"bilan_{pid}"
+    return get_out_dir(out_subdir)
+
+
+def _list_generated_pdf_files(profil_id: str, started_at_epoch: float) -> list[Path]:
+    """Retourne les PDF générés/écrasés pendant le run du profil."""
+    out_dir = resolve_profile_output_dir(profil_id)
+    if not out_dir.exists():
+        return []
+    pdfs: list[Path] = []
+    for pdf_path in out_dir.glob("*.pdf"):
+        try:
+            if pdf_path.stat().st_mtime >= (started_at_epoch - 1.0):
+                pdfs.append(pdf_path.resolve())
+        except OSError:
+            continue
+    return sorted(pdfs, key=lambda p: p.name.lower())
+
+
+def _open_generated_pdfs(pdf_paths: list[Path]) -> None:
+    """Après un run CLI réussi : ouvre le(s) PDF généré(s) pour le dernier profil exécuté."""
+    for pdf_path in pdf_paths:
+        try:
+            reveal_path_in_file_manager(pdf_path)
+        except Exception as exc:
+            logger.warning("Ouverture du PDF %s : %s", pdf_path, exc)
 
 
 def _load_profiles(profils: list[str]) -> dict[str, dict]:
@@ -120,11 +170,14 @@ def run_profiles_batch(
         print(f"Bilan combiné : {', '.join(profils)}")
         out_combine = get_out_dir(f"bilan_combine_{'_'.join(profils)}")
         out_combine.mkdir(parents=True, exist_ok=True)
+        generated_pdfs_last_profile: list[Path] = []
         for pid in profils:
             print(f"  Exécution profil {pid}...")
+            started_at = time()
             ret = run_profile(pid, date_deb, date_fin, dept_code, options=cli_options)
             if ret != 0:
                 return ret
+            generated_pdfs_last_profile = _list_generated_pdf_files(pid, started_at)
         (out_combine / "README.txt").write_text(
             f"Bilan combiné : {', '.join(profils)}\n"
             f"Période : {date_deb} au {date_fin}, département {dept_code}.\n"
@@ -132,6 +185,7 @@ def run_profiles_batch(
             encoding="utf-8",
         )
         print(f"Résumé combiné dans {out_combine}")
+        _open_generated_pdfs(generated_pdfs_last_profile)
         return 0
 
     non_mixable = []
@@ -150,9 +204,13 @@ def run_profiles_batch(
         )
         return 1
 
+    generated_pdfs_last_profile = []
     for pid in profils:
         print(f"Exécution bilan {pid}...")
+        started_at = time()
         ret = run_profile(pid, date_deb, date_fin, dept_code, options=cli_options)
         if ret != 0:
             return ret
+        generated_pdfs_last_profile = _list_generated_pdf_files(pid, started_at)
+    _open_generated_pdfs(generated_pdfs_last_profile)
     return 0

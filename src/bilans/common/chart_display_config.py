@@ -33,6 +33,15 @@ DEFAULT_CHART_DISPLAY_CONFIG: dict[str, Any] = {
         "thematique_uniform_pie_min_ratio": 0.70,
         "thematique_uniform_pie_max_ratio": 0.82,
         "thematique_uniform_chart_scale": 1.0,
+        # Multiplicateurs matplotlib (hauteur) — section 2.1 barres / courbe ; camembert §2.2.
+        "thematique_sec21_figure_scale_mult": 1.55,
+        "thematique_sec22_resultats_pie_figure_scale_mult": 1.22,
+        "thematique_sec22_resultats_pie_width_ratio_mult": 1.12,
+        # Section 4 thématique — camembert « contrôles par type d'usager » (avant tableaux thèmes).
+        # width_ratio_mult : appliqué à pie_ratio_base * 0.80 (1.0 = comportement historique).
+        # figure_scale_mult : multiplicateur matplotlib dédié au seul camembert §4 activité usagers.
+        "thematique_sec4_activite_pie_width_ratio_mult": 1.0,
+        "thematique_sec4_activite_pie_figure_scale_mult": 1.0,
         # Taille matplotlib (avant insertion PDF) et légendes.
         "figure_scale": 1.0,
         "legend_fontsize": 8.0,
@@ -202,6 +211,21 @@ def compute_pdf_ratios(cfg: dict[str, Any]) -> dict[str, float]:
         ),
         "thematique_uniform_chart": _clamp_ratio(
             chart_base * float(pdf_cfg.get("thematique_uniform_chart_scale", 1.0))
+        ),
+        "thematique_sec21_figure_scale_mult": max(
+            0.5, min(2.5, float(pdf_cfg.get("thematique_sec21_figure_scale_mult", 1.55)))
+        ),
+        "thematique_sec22_resultats_pie_figure_scale_mult": max(
+            0.5, min(2.5, float(pdf_cfg.get("thematique_sec22_resultats_pie_figure_scale_mult", 1.22)))
+        ),
+        "thematique_sec22_resultats_pie_width_ratio_mult": max(
+            0.5, min(1.5, float(pdf_cfg.get("thematique_sec22_resultats_pie_width_ratio_mult", 1.12)))
+        ),
+        "thematique_sec4_activite_pie_width_ratio_mult": max(
+            0.5, min(1.5, float(pdf_cfg.get("thematique_sec4_activite_pie_width_ratio_mult", 1.0)))
+        ),
+        "thematique_sec4_activite_pie_figure_scale_mult": max(
+            0.5, min(2.0, float(pdf_cfg.get("thematique_sec4_activite_pie_figure_scale_mult", 1.0)))
         ),
         "figure_scale": max(0.7, min(1.6, float(pdf_cfg.get("figure_scale", 1.0)))),
         "legend_fontsize": max(6.0, min(12.0, float(pdf_cfg.get("legend_fontsize", 8.0)))),

@@ -17,6 +17,7 @@ from bilans.common.ofb_charte import (
     CHART_PIE_COLORS,
     CHART_BAR_GROUPED_COLORS,
     COLOR_CHART_4,
+    COLOR_CHART_AUTRE_RESULTAT,
     COLOR_GREY,
 )
 from bilans.common.percent_format import int_percents_largest_remainder
@@ -224,9 +225,12 @@ def chart_pie(
     # Cela garantit un disque de taille identique, tandis que la hauteur
     # de l'image s'adapte au nombre de lignes de légende.
     total_legend_lines = sum((lbl.count("\n") + 1) for lbl in legend_labels_wrapped) or 1
+    # Légende en ncol colonnes : approx. conservative du nombre de « rangs » verticaux
+    # (évite une figure trop haute quand ncol > 1).
+    effective_legend_rows = max(1, (total_legend_lines + ncol - 1) // ncol)
     pie_h_in = CHART_FIG_HEIGHT_PIE_COMPACT * figure_scale * CHART_PIE_DISK_SCALE
     legend_row_h_in = 0.20 * (leg_fs / CHART_LEGEND_FONT_SIZE_REF)
-    legend_h_in = 0.42 + total_legend_lines * legend_row_h_in
+    legend_h_in = 0.42 + effective_legend_rows * legend_row_h_in
     top_pad_in = 0.28
     gap_in = 0.08
     bottom_pad_in = 0.14
@@ -612,7 +616,9 @@ def chart_bar_horizontal_stacked(
     for i, (label, vals) in enumerate(series_items):
         vals_arr = np.array(vals, dtype=float)
         lbl = str(label).lower()
-        if any(k in lbl for k in keywords_inf):
+        if str(label).strip().lower() == "autre résultat":
+            color = COLOR_CHART_AUTRE_RESULTAT
+        elif any(k in lbl for k in keywords_inf):
             color = COLOR_CHART_4
         elif any(k in lbl for k in _KEYWORDS_ATTENTE):
             color = COLOR_GREY

@@ -808,12 +808,13 @@ def _generate_pdf_content(
     ]
     sec2_registry.render_many(sec2_order, {})
 
-    if is_section_enabled(presentation_cfg, "sec3", True):
-        builder.add_section("sec3", section_title["sec3"], start_on_new_page=True)
-        builder.add_paragraph(
-            f"Sur la période : {nb_pej} procédure(s) d'enquête judiciaire (PEJ), "
-            f"{nb_pa} procédure(s) administrative(s) (PA), {nb_pve} procès-verbal(aux) électronique(s) (PVe).",
-        )
+    def _render_sec3() -> None:
+        if is_section_enabled(presentation_cfg, "sec3", True):
+            builder.add_section("sec3", section_title["sec3"], start_on_new_page=True)
+            builder.add_paragraph(
+                f"Sur la période : {nb_pej} procédure(s) d'enquête judiciaire (PEJ), "
+                f"{nb_pa} procédure(s) administrative(s) (PA), {nb_pve} procès-verbal(aux) électronique(s) (PVe).",
+            )
 
     # 3.1 PVe
     def _render_sec31() -> None:
@@ -919,17 +920,19 @@ def _generate_pdf_content(
                 style="BodySmall",
             )
 
-    sec3_registry = SectionRegistry()
-    sec3_registry.register("sec31", lambda _ctx: _render_sec31())
-    sec3_registry.register("sec32", lambda _ctx: _render_sec32())
-    sec3_registry.register("sec33", lambda _ctx: _render_sec33())
+    def _render_sec3_bundle() -> None:
+        _render_sec3()
+        sec3_registry = SectionRegistry()
+        sec3_registry.register("sec31", lambda _ctx: _render_sec31())
+        sec3_registry.register("sec32", lambda _ctx: _render_sec32())
+        sec3_registry.register("sec33", lambda _ctx: _render_sec33())
 
-    sec3_order = [
-        sid
-        for sid in ("sec31", "sec32", "sec33")
-        if is_section_enabled(presentation_cfg, sid, True)
-    ]
-    sec3_registry.render_many(sec3_order, {})
+        sec3_order = [
+            sid
+            for sid in ("sec31", "sec32", "sec33")
+            if is_section_enabled(presentation_cfg, sid, True)
+        ]
+        sec3_registry.render_many(sec3_order, {})
 
     def _render_sec4() -> None:
         # Gabarit resserré : viser une section 4 sur une page A4 (hors cas extrêmes).
@@ -1162,9 +1165,24 @@ def _generate_pdf_content(
                             spacer_after_mm=sec4_tbl_sp,
                         )
 
-    sec4_registry = SectionRegistry()
-    sec4_registry.register("sec4", lambda _ctx: _render_sec4())
-    sec4_registry.render_many(["sec4"], {})
+    sec34_registry = SectionRegistry()
+    sec34_registry.register("sec3", lambda _ctx: _render_sec3_bundle())
+    sec34_registry.register("sec4", lambda _ctx: _render_sec4())
+    configured_order = (
+        presentation_cfg.get("sections", {}).get("order", [])
+        if isinstance(presentation_cfg.get("sections"), dict)
+        else []
+    )
+    sec34_order = [
+        sid
+        for sid in configured_order
+        if sid in {"sec3", "sec4"} and is_section_enabled(presentation_cfg, sid, True)
+    ]
+    if not sec34_order:
+        sec34_order = [
+            sid for sid in ("sec3", "sec4") if is_section_enabled(presentation_cfg, sid, True)
+        ]
+    sec34_registry.render_many(sec34_order, {})
 
     def _render_sec5map() -> None:
         if is_section_enabled(presentation_cfg, "sec5map", True):

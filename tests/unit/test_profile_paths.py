@@ -77,23 +77,30 @@ def test_load_profile_config_does_not_fallback_to_ref(tmp_path: Path) -> None:
 
 
 def test_run_profiles_batch_combine_uses_data_out_dir(tmp_path: Path, monkeypatch) -> None:
-    import bilans.engine.orchestrateur_profils as engine
     import bilans.common.carte_helper as carte_helper
     import bilans.engine.execution_lots_profils as runner
 
     calls: list[str] = []
 
-    def _fake_run_engine(
+    def _fake_run_profile(
         profil_id: str, date_deb: str, date_fin: str, dept_code: str, options: dict | None = None
     ) -> int:
         calls.append(profil_id)
+        out_dir = tmp_path / "data" / "out" / f"bilan_{profil_id}"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / f"{profil_id}.pdf").write_text("pdf", encoding="utf-8")
         return 0
 
-    monkeypatch.setattr(engine, "run_engine", _fake_run_engine)
+    monkeypatch.setattr(runner, "run_profile", _fake_run_profile)
     monkeypatch.setattr(carte_helper, "ensure_maps", lambda *a, **k: None)
     monkeypatch.setattr(carte_helper, "ensure_maps_for_profiles", lambda *a, **k: None)
     monkeypatch.setattr(
         "bilans.engine.execution_lots_profils.get_out_dir", lambda subdir: tmp_path / "data" / "out" / subdir
+    )
+    revealed: list[object] = []
+    monkeypatch.setattr(
+        "bilans.engine.execution_lots_profils.reveal_path_in_file_manager",
+        lambda p: revealed.append(p),
     )
 
     ret = runner.run_profiles_batch(
@@ -110,6 +117,44 @@ def test_run_profiles_batch_combine_uses_data_out_dir(tmp_path: Path, monkeypatc
     assert calls == ["chasse", "agrainage"]
     assert out_dir.exists()
     assert (out_dir / "README.txt").exists()
+    assert len(revealed) == 1
+    assert revealed[0] == (tmp_path / "data" / "out" / "bilan_agrainage" / "agrainage.pdf").resolve()
+
+
+def test_run_profiles_batch_sequential_reveals_last_output(tmp_path: Path, monkeypatch) -> None:
+    import bilans.common.carte_helper as carte_helper
+    import bilans.engine.execution_lots_profils as runner
+
+    def _fake_run_profile(
+        profil_id: str, date_deb: str, date_fin: str, dept_code: str, options: dict | None = None
+    ) -> int:
+        out_dir = tmp_path / "data" / "out" / f"bilan_{profil_id}"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / f"{profil_id}.pdf").write_text("pdf", encoding="utf-8")
+        return 0
+
+    monkeypatch.setattr(runner, "run_profile", _fake_run_profile)
+    monkeypatch.setattr(carte_helper, "ensure_maps_for_profiles", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "bilans.engine.execution_lots_profils.get_out_dir", lambda subdir: tmp_path / "data" / "out" / subdir
+    )
+    revealed: list[object] = []
+    monkeypatch.setattr(
+        "bilans.engine.execution_lots_profils.reveal_path_in_file_manager",
+        lambda p: revealed.append(p),
+    )
+
+    ret = runner.run_profiles_batch(
+        profils=["chasse", "agrainage"],
+        date_deb="2025-01-01",
+        date_fin="2025-12-31",
+        dept_code="21",
+        combine=False,
+        cli_options={},
+    )
+
+    assert ret == 0
+    assert revealed == [(tmp_path / "data" / "out" / "bilan_agrainage" / "agrainage.pdf").resolve()]
 
 
 def test_run_profiles_batch_rejects_global_mixed_with_other_profile() -> None:
@@ -124,4 +169,47 @@ def test_run_profiles_batch_rejects_global_mixed_with_other_profile() -> None:
         cli_options={},
     )
     assert ret == 1
+
+
+def test_run_profiles_batch_opens_all_generated_pdfs_for_last_profile(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import bilans.common.carte_helper as carte_helper
+    import bilans.engine.execution_lots_profils as runner
+
+    def _fake_run_profile(
+        profil_id: str, date_deb: str, date_fin: str, dept_code: str, options: dict | None = None
+    ) -> int:
+        out_dir = tmp_path / "data" / "out" / f"bilan_{profil_id}"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        if profil_id == "synthese_activite_PA_PJ":
+            (out_dir / "synthese_detail.pdf").write_text("pdf", encoding="utf-8")
+            (out_dir / "synthese_brochure.pdf").write_text("pdf", encoding="utf-8")
+        return 0
+
+    monkeypatch.setattr(runner, "run_profile", _fake_run_profile)
+    monkeypatch.setattr(carte_helper, "ensure_maps_for_profiles", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "bilans.engine.execution_lots_profils.get_out_dir", lambda subdir: tmp_path / "data" / "out" / subdir
+    )
+    revealed: list[Path] = []
+    monkeypatch.setattr(
+        "bilans.engine.execution_lots_profils.reveal_path_in_file_manager",
+        lambda p: revealed.append(Path(p)),
+    )
+
+    ret = runner.run_profiles_batch(
+        profils=["synthese_activite_PA_PJ"],
+        date_deb="2025-01-01",
+        date_fin="2025-12-31",
+        dept_code="21",
+        combine=False,
+        cli_options={},
+    )
+
+    assert ret == 0
+    assert revealed == [
+        (tmp_path / "data" / "out" / "bilan_synthese_activite_PA_PJ" / "synthese_brochure.pdf").resolve(),
+        (tmp_path / "data" / "out" / "bilan_synthese_activite_PA_PJ" / "synthese_detail.pdf").resolve(),
+    ]
 

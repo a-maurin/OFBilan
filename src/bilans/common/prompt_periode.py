@@ -6,8 +6,8 @@ les paramètres --date-deb, --date-fin, --dept-code ne sont pas fournis en CLI.
 """
 from __future__ import annotations
 
+import datetime as dt
 import sys
-from datetime import datetime
 from typing import Tuple
 
 
@@ -21,10 +21,20 @@ def _validate_date(s: str) -> bool:
     if not s:
         return False
     try:
-        datetime.strptime(s, "%Y-%m-%d")
+        dt.datetime.strptime(s, "%Y-%m-%d")
         return True
     except ValueError:
         return False
+
+
+def _default_date_deb() -> str:
+    """1er janvier de l'année en cours (mode interactif)."""
+    return f"{dt.datetime.now().year}-01-01"
+
+
+def _default_date_fin() -> str:
+    """Date du jour (mode interactif)."""
+    return dt.datetime.now().strftime("%Y-%m-%d")
 
 
 def ask_periode_dept(
@@ -54,6 +64,11 @@ def ask_periode_dept(
         if not _validate_date(deb) or not _validate_date(fin):
             raise ValueError("Format de date invalide (attendu YYYY-MM-DD).")
         return (deb, fin, dept)
+
+    if not date_deb_default:
+        date_deb_default = _default_date_deb()
+    if not date_fin_default:
+        date_fin_default = _default_date_fin()
 
     def _prompt(label: str, default: str | None, validator=None):
         default_str = default or ""

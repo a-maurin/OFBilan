@@ -34,6 +34,8 @@ from reportlab.platypus.tableofcontents import TableOfContents
 from PIL import Image as PILImage
 
 from bilans.common.ofb_charte import (
+    COLOR_CALLOUT_BG,
+    COLOR_NOTICE_BG,
     COLOR_PRIMARY,
     COLOR_SECONDARY,
     FONT_FAMILY,
@@ -45,6 +47,10 @@ from bilans.common.ofb_charte import (
     MARGIN_RIGHT,
     PAGE_H,
     PAGE_W,
+    SPACING_L,
+    SPACING_M,
+    SPACING_S,
+    SPACING_XXS,
     _get_styles,
     header_layout_metrics,
 )
@@ -66,6 +72,10 @@ THEMATIC_PIE_CHART_WIDTH_RATIO = 0.34
 _MAPS_SECTION_RESERVE_PT = 28 * mm
 _MAPS_VERTICAL_GAP_PT = 2 * mm
 _MAPS_HORIZONTAL_GAP_PT = 4 * mm
+# Carte seule : fraction < 1 pour éviter une coupe visuelle au bord droit (arrondis / centrage).
+_MAP_PAGE_WIDTH_FRACTION = 0.90
+# Retrait supplémentaire sur la largeur du bitmap dans la cellule (pt) — marge mécanique RL.
+_MAP_DRAW_INSET_PT = 4.0
 
 
 def compute_stacked_maps_width(
@@ -276,7 +286,7 @@ class PDFReportBuilder:
         box_h = font_size + 2 * pad_y
         box_x = (self._page_w - box_w) * 0.5
         box_bottom = box_top - box_h
-        canvas.setFillColor(rl_colors.HexColor("#E8EEF4"))
+        canvas.setFillColor(rl_colors.HexColor(COLOR_NOTICE_BG))
         canvas.setStrokeColor(rl_colors.HexColor(COLOR_PRIMARY))
         canvas.setLineWidth(0.6)
         canvas.rect(box_x, box_bottom, box_w, box_h, fill=1, stroke=1)
@@ -555,7 +565,7 @@ class PDFReportBuilder:
             self._pending_section = None
         style_key = heading_style if heading_style in self.styles else "Heading2"
         block.append(Paragraph(heading_text, self.styles[style_key]))
-        block.append(Spacer(1, 2 * mm))
+        block.append(Spacer(1, SPACING_S))
         w = self.avail_w * float(chart_width_ratio)
         if Path(chart_path).exists():
             try:
@@ -567,10 +577,10 @@ class PDFReportBuilder:
             img = RLImage(str(chart_path), width=w, height=w * ratio)
             img.hAlign = "CENTER"
             block.append(img)
-            block.append(Spacer(1, 2 * mm))
+            block.append(Spacer(1, SPACING_S))
         if table_caption:
             block.append(Paragraph(table_caption, self.styles["TableCaption"]))
-            block.append(Spacer(1, 1 * mm))
+            block.append(Spacer(1, SPACING_XXS))
         split_by_row = bool(self._tables_layout.get("split_by_row"))
         block.append(
             ofb_table(
@@ -587,12 +597,22 @@ class PDFReportBuilder:
     # ------------------------------------------------------------------
     # Key figures
     # ------------------------------------------------------------------
+    def extend_pending(self, flowables: List) -> None:
+        """Étend le bloc titre en attente ; sinon ajoute au story (comportement dégradé)."""
+        if not flowables:
+            return
+        if self._pending_section is not None:
+            self._pending_section.extend(flowables)
+        else:
+            self.story.extend(flowables)
+
     def add_key_figures(
         self,
         figures: List[Tuple[str, str]],
         *,
         spacer_after_mm: float = 2.0,
         density: str = "auto",
+        merge_with_next: bool = False,
     ) -> None:
         """figures = [(value_str, label_str), ...]"""
         if not figures:
@@ -602,8 +622,11 @@ class PDFReportBuilder:
         )
         spacer = Spacer(1, float(spacer_after_mm) * mm)
         if self._pending_section is not None:
-            self.story.append(KeepTogether(self._pending_section + [kf_table, spacer]))
-            self._pending_section = None
+            if merge_with_next:
+                self._pending_section.extend([kf_table, spacer])
+            else:
+                self.story.append(KeepTogether(self._pending_section + [kf_table, spacer]))
+                self._pending_section = None
         else:
             self.story.append(kf_table)
             self.story.append(spacer)
@@ -628,7 +651,7 @@ class PDFReportBuilder:
     def append_pending_paragraph(self, text: str, style: str = "BodyText") -> None:
         """Paragraphe ajouté au bloc en attente (sans flush immédiat)."""
         para = Paragraph(text, self.styles[style])
-        spacer = Spacer(1, 1 * mm)
+        spacer = Spacer(1, SPACING_XXS)
         if self._pending_section is not None:
             self._pending_section.extend([para, spacer])
         else:
@@ -663,7 +686,7 @@ class PDFReportBuilder:
         callout_table.setStyle(
             TableStyle(
                 [
-                    ("BACKGROUND", (0, 0), (-1, -1), rl_colors.HexColor("#EAF2F8")),
+                    ("BACKGROUND", (0, 0), (-1, -1), rl_colors.HexColor(COLOR_CALLOUT_BG)),
                     ("BOX", (0, 0), (-1, -1), 0.8, rl_colors.HexColor(COLOR_PRIMARY)),
                     ("LEFTPADDING", (0, 0), (-1, -1), 8),
                     ("RIGHTPADDING", (0, 0), (-1, -1), 8),
@@ -756,7 +779,7 @@ class PDFReportBuilder:
         block: List = []
         if caption:
             block.append(Paragraph(caption, self.styles["TableCaption"]))
-            block.append(Spacer(1, 1 * mm))
+            block.append(Spacer(1, SPACING_XXS))
         block.append(
             ofb_table(
                 data_rows,
@@ -779,39 +802,41 @@ class PDFReportBuilder:
         caption: str = "",
         col_widths: Optional[list] = None,
         col_aligns: Optional[list] = None,
+        *,
+        merge_with_next: bool = False,
     ) -> None:
         """Bandeau de chiffres clés + tableau dans un même KeepTogether pour éviter un débordement."""
         if not figures:
             return
         kf_table = key_figures_table(figures, self.styles)
-        spacer = Spacer(1, 4 * mm)
+        spacer = Spacer(1, SPACING_M)
         block: List = [kf_table, spacer]
         if caption:
             block.append(Paragraph(caption, self.styles["TableCaption"]))
-            block.append(Spacer(1, 2 * mm))
+            block.append(Spacer(1, SPACING_S))
         tbl = ofb_table(table_rows, col_widths=col_widths, col_aligns=col_aligns)
         block.append(tbl)
-        block.append(Spacer(1, 6 * mm))
+        block.append(Spacer(1, SPACING_L))
         if self._pending_section is not None:
-            self.story.append(KeepTogether(self._pending_section + block))
-            self._pending_section = None
+            if merge_with_next:
+                self._pending_section.extend(block)
+            else:
+                self.story.append(KeepTogether(self._pending_section + block))
+                self._pending_section = None
         else:
             for el in block:
                 self.story.append(el)
 
-    def add_key_figures_and_tables(
+    def _build_key_figures_and_tables_block(
         self,
         figures: List[Tuple[str, str]],
         tables: List[dict],
         *,
         compact: bool = False,
-    ) -> None:
-        """Bandeau + plusieurs tableaux dans un même KeepTogether (même page).
-        tables = [{"data_rows": ..., "caption": ..., "col_widths": ..., "col_aligns": ...}, ...]
-        compact=True : espacements verticaux réduits (ex. section PEJ sur une page).
-        """
+    ) -> List:
+        """Bandeau + tableaux (flowables) sans toucher au story ni au pending."""
         if not figures:
-            return
+            return []
         kf_table = key_figures_table(figures, self.styles)
         gap_kf = 2 * mm if compact else 4 * mm
         gap_cap = 1 * mm if compact else 2 * mm
@@ -832,9 +857,31 @@ class PDFReportBuilder:
             block.append(tbl)
             if i < n_tables - 1:
                 block.append(Spacer(1, gap_after_tbl))
+        return block
+
+    def add_key_figures_and_tables(
+        self,
+        figures: List[Tuple[str, str]],
+        tables: List[dict],
+        *,
+        compact: bool = False,
+        merge_with_next: bool = False,
+    ) -> None:
+        """Bandeau + plusieurs tableaux dans un même KeepTogether (même page).
+        tables = [{"data_rows": ..., "caption": ..., "col_widths": ..., "col_aligns": ...}, ...]
+        compact=True : espacements verticaux réduits (ex. section PEJ sur une page).
+        merge_with_next=True : garde le titre + bandeau + tableaux dans ``_pending_section``
+        jusqu'au prochain ``add_table`` (ex. détail PA / PEJ).
+        """
+        block = self._build_key_figures_and_tables_block(figures, tables, compact=compact)
+        if not block:
+            return
         if self._pending_section is not None:
-            self.story.append(KeepTogether(self._pending_section + block))
-            self._pending_section = None
+            if merge_with_next:
+                self._pending_section.extend(block)
+            else:
+                self.story.append(KeepTogether(self._pending_section + block))
+                self._pending_section = None
         else:
             for el in block:
                 self.story.append(el)
@@ -991,7 +1038,7 @@ class PDFReportBuilder:
         block: List = []
         if caption:
             block.append(Paragraph(caption, self.styles["TableCaption"]))
-            block.append(Spacer(1, 1 * mm))
+            block.append(Spacer(1, SPACING_XXS))
         split_by_row = bool(self._tables_layout.get("split_by_row"))
         if max_rows_keep_together is not None:
             max_rows_keep = int(max_rows_keep_together)
@@ -1079,7 +1126,7 @@ class PDFReportBuilder:
             self._pending_section = None
         if table_caption:
             block.append(Paragraph(table_caption, self.styles["TableCaption"]))
-            block.append(Spacer(1, 1 * mm))
+            block.append(Spacer(1, SPACING_XXS))
         split_by_row = bool(self._tables_layout.get("split_by_row"))
         block.append(
             ofb_table(
@@ -1090,7 +1137,7 @@ class PDFReportBuilder:
             )
         )
         if image_path is not None and Path(image_path).exists():
-            block.append(Spacer(1, 1 * mm))
+            block.append(Spacer(1, SPACING_XXS))
             w = self.avail_w * image_width_ratio
             try:
                 with PILImage.open(str(image_path)) as im:
@@ -1180,7 +1227,7 @@ class PDFReportBuilder:
         img.hAlign = "CENTER"
         block = [img]
         if caption:
-            block.append(Spacer(1, 2 * mm))
+            block.append(Spacer(1, SPACING_S))
             block.append(Paragraph(f"<i>{caption}</i>", self.styles["BodySmall"]))
         block.append(Spacer(1, float(spacer_after_mm) * mm))
         if self._pending_section is not None:
@@ -1190,9 +1237,49 @@ class PDFReportBuilder:
             for el in block:
                 self.story.append(el)
 
+    def _map_image_holder_table(self, path: Path, map_cell_w: float) -> Table:
+        """Table 1×1 largeur fixe : centre l'image et évite un débordement perçu au bord du cadre."""
+        draw_w = max(1.0, float(map_cell_w) - _MAP_DRAW_INSET_PT)
+        img = self._scaled_image_flowable(Path(path), draw_w)
+        holder = Table([[img]], colWidths=[map_cell_w])
+        holder.setStyle(
+            TableStyle(
+                [
+                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                    ("TOPPADDING", (0, 0), (-1, -1), 0),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                    ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ]
+            )
+        )
+        holder.hAlign = "CENTER"
+        return holder
+
+    def _map_display_width(self, path: Path) -> float:
+        """Largeur pour une carte seule tenant dans la hauteur utile (réserve titre / légende)."""
+        ratio = self._image_aspect_ratio(path)
+        return compute_stacked_maps_width(
+            self.avail_w, self.avail_h, [ratio], width_fraction=_MAP_PAGE_WIDTH_FRACTION
+        )
+
     def add_map(self, path: Path, caption: str = "") -> None:
-        """Add a map image (full width)."""
-        self.add_image(path, width_ratio=1.0, caption=caption)
+        """Ajoute une carte dimensionnée pour occuper au mieux la zone utile de la page."""
+        if not Path(path).exists():
+            return
+        map_cell_w = self._map_display_width(path)
+        block: List = [self._map_image_holder_table(Path(path), map_cell_w)]
+        if caption:
+            block.append(Spacer(1, 2 * mm))
+            block.append(Paragraph(f"<i>{caption}</i>", self.styles["BodySmall"]))
+        block.append(Spacer(1, SPACING_S))
+        if self._pending_section is not None:
+            self.story.append(KeepTogether(self._pending_section + block))
+            self._pending_section = None
+        else:
+            for el in block:
+                self.story.append(el)
 
     def _image_aspect_ratio(self, path: Path) -> float:
         try:
@@ -1217,66 +1304,29 @@ class PDFReportBuilder:
         layout: str = "vertical",
         captions: list[str] | None = None,
     ) -> None:
-        """Ajoute une ou deux cartes sur la page courante (côte à côte ou empilées)."""
+        """
+        Ajoute toutes les cartes PNG : une carte par page, taille maximisée dans la zone utile.
+
+        Le paramètre ``layout`` est conservé pour compatibilité d'appel mais n'est plus utilisé
+        (l'ancien mode deux cartes sur une même page n'est plus proposé pour les PDF standard).
+        """
+        del layout  # compatibilité d'API ; brochure ne passe pas par cette méthode.
         existing = [Path(p) for p in paths if p and Path(p).exists()]
         if not existing:
             return
-        if len(existing) == 1:
-            cap = (captions or [""])[0] if captions else ""
-            self.add_map(existing[0], caption=cap)
-            return
-
-        layout_norm = str(layout).strip().lower()
-        vertical = layout_norm in ("vertical", "verticale", "empilees", "stacked")
-        pair = existing[:2]
-        caps = captions or ["", ""]
-        block: list = []
-
-        if vertical:
-            ratios = [self._image_aspect_ratio(path) for path in pair]
-            map_w = compute_stacked_maps_width(self.avail_w, self.avail_h, ratios)
-            for i, path in enumerate(pair):
-                block.append(self._scaled_image_flowable(path, map_w))
-                cap = caps[i] if i < len(caps) else ""
-                if cap:
-                    block.append(Spacer(1, 1 * mm))
-                    block.append(Paragraph(f"<i>{cap}</i>", self.styles["BodySmall"]))
-                if i < len(pair) - 1:
-                    block.append(Spacer(1, 2 * mm))
-        else:
-            gap = _MAPS_HORIZONTAL_GAP_PT
-            ratios = [self._image_aspect_ratio(path) for path in pair]
-            col_w = compute_side_by_side_maps_width(self.avail_w, self.avail_h, ratios)
-            cells = [self._scaled_image_flowable(path, col_w) for path in pair]
-            table = Table([cells], colWidths=[col_w, col_w])
-            table.hAlign = "CENTER"
-            block.append(table)
-            row_caps = [caps[i] if i < len(caps) and caps[i] else "" for i in range(2)]
-            if any(row_caps):
-                cap_cells = []
-                for cap in row_caps:
-                    cap_cells.append(
-                        Paragraph(f"<i>{cap}</i>", self.styles["BodySmall"]) if cap else ""
-                    )
-                block.append(Spacer(1, 1 * mm))
-                cap_table = Table([cap_cells], colWidths=[col_w, col_w])
-                cap_table.hAlign = "CENTER"
-                block.append(cap_table)
-
-        block.append(Spacer(1, 3 * mm))
-        if self._pending_section is not None:
-            self.story.append(KeepTogether(self._pending_section + block))
-            self._pending_section = None
-        else:
-            for el in block:
-                self.story.append(el)
+        caps = list(captions) if captions else []
+        for i, path in enumerate(existing):
+            if i > 0:
+                self.add_page_break()
+            cap = caps[i] if i < len(caps) else ""
+            self.add_map(path, caption=cap)
 
     # ------------------------------------------------------------------
     # Text
     # ------------------------------------------------------------------
     def add_paragraph(self, text: str, style: str = "BodyText") -> None:
         para = Paragraph(text, self.styles[style])
-        spacer = Spacer(1, 1 * mm)
+        spacer = Spacer(1, SPACING_XXS)
         if self._pending_section is not None:
             self.story.append(KeepTogether(self._pending_section + [para, spacer]))
             self._pending_section = None
@@ -1299,9 +1349,9 @@ class PDFReportBuilder:
     def add_methodology(self, html_text: str) -> None:
         block = [
             Paragraph("Méthodologie", self.styles["Heading2"]),
-            Spacer(1, 2 * mm),
+            Spacer(1, SPACING_S),
             Paragraph(html_text, self.styles["BodyText"]),
-            Spacer(1, 4 * mm),
+            Spacer(1, SPACING_M),
         ]
         if self._pending_section is not None:
             self.story.append(KeepTogether(self._pending_section + block))
@@ -1326,9 +1376,9 @@ class PDFReportBuilder:
         tbl = ofb_table(rows, col_widths=col_widths, col_aligns=col_aligns)
         block = [
             Paragraph("Glossaire", self.styles["Heading2"]),
-            Spacer(1, 2 * mm),
+            Spacer(1, SPACING_S),
             tbl,
-            Spacer(1, 4 * mm),
+            Spacer(1, SPACING_M),
         ]
         if self._pending_section is not None:
             self.story.append(KeepTogether(self._pending_section + block))

@@ -1,4 +1,4 @@
-"""Audit cohérence des comptages profil synthese_activite_PA_PJ (département 21, 2025)."""
+"""Audit cohérence des comptages profil synthese_activite_PA_PJ (département 21, 2025), dont PVe (resume + pve_global_resume)."""
 from __future__ import annotations
 
 import sys
@@ -87,6 +87,18 @@ def main() -> int:
         "resume nb_pej_hors",
         int(resume.iloc[0]["nb_pej_hors_controle"]) == len(hors),
         f"{resume.iloc[0]['nb_pej_hors_controle']} vs {len(hors)}",
+    )
+    nb_pve_global_csv = int(pve_res.iloc[0]["nb_pve_global"]) if not pve_res.empty else -1
+    _chk(
+        "pve_global_resume nb_pve_global = len(pve)",
+        nb_pve_global_csv == len(pve),
+        f"{nb_pve_global_csv} vs {len(pve)}",
+    )
+    nb_pve_resume = int(resume.iloc[0]["nb_pve"]) if not resume.empty and "nb_pve" in resume.columns else -1
+    _chk(
+        "synthese_resume nb_pve = len(pve)",
+        nb_pve_resume == len(pve),
+        f"{nb_pve_resume} vs {len(pve)}",
     )
     _chk("effectifs §1 = sum Total res_eff", True, f"{eff_total} (indépendant de {len(point)} loc.)")
 

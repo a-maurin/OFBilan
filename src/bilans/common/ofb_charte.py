@@ -46,10 +46,15 @@ from reportlab.pdfbase.ttfonts import TTFont
 COLOR_PRIMARY = "#003A76"
 COLOR_SECONDARY = "#1E4E85"
 COLOR_GREY = "#333333"
+# Barres empilées horizontales : série « Autre résultat » (aligné sur le gris foncé charte).
+COLOR_CHART_AUTRE_RESULTAT = COLOR_GREY
 COLOR_TABLE_HEADER_BG = rl_colors.HexColor("#003A76")
 COLOR_TABLE_HEADER_FG = rl_colors.white
 COLOR_TABLE_ALT_ROW = rl_colors.HexColor("#F0F4F8")
 COLOR_TABLE_BORDER = rl_colors.HexColor("#CCCCCC")
+# Couleurs d'appoint utilisées par les encarts PDF.
+COLOR_NOTICE_BG = "#E8EEF4"
+COLOR_CALLOUT_BG = "#EAF2F8"
 
 # Couleurs pour les graphiques (camemberts, barres groupées) — aucune couleur en dur dans les scripts de bilan
 COLOR_CHART_1 = COLOR_PRIMARY  # bleu OFB
@@ -70,6 +75,11 @@ MARGIN_RIGHT = 8.5 * mm
 MARGIN_BOTTOM = 28 * mm
 # Marge haute par défaut (recalculée dans PDFReportBuilder selon le nombre de lignes d'en-tête).
 MARGIN_TOP = 17 * mm
+SPACING_XXS = 1 * mm
+SPACING_XS = 1.5 * mm
+SPACING_S = 2 * mm
+SPACING_M = 4 * mm
+SPACING_L = 6 * mm
 
 _HEADER_LINE_STEP = 3.2 * mm
 _HEADER_GAP_RULE = 2.5 * mm

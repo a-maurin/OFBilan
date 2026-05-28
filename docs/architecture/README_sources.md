@@ -8,6 +8,7 @@ Ce document résume les sources exploitées par le programme.
 - PEJ : `data/sources/suivi_procedure_enq_judiciaire_*.ods`
 - PA : `data/sources/suivi_procedure_administrative_*.ods`
 - PVe : `data/sources/Stats_PVe_OFB*`
+- audit des totaux PVe (définitions, protocole, outils) : [`docs/audit_pve_fiabilite.md`](../audit_pve_fiabilite.md)
 - faits PJ géolocalisés : `data/sources/sig/points_infractions_pj/localisation_infrac_FAITS_*`
 - référentiels actifs : `ref/programme/` (tables, SIG, charte OFB) ;
 - archives hors runtime : `ref/hors_programme/`

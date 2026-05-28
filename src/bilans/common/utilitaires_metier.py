@@ -1329,7 +1329,7 @@ def build_tab_resultats_controles(
         def _coeur_hors_txt(mask: pd.Series) -> str:
             c = int((mask & is_coeur).sum())
             h = int((mask & is_hors).sum())
-            return f"Cœur: {c} / Hors-cœur: {h}"
+            return f"Cœur: {c} / Aire d'adhésion: {h}"
 
         details_rows: list[dict[str, Any]] = [
             {

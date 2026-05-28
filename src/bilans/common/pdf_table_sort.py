@@ -31,6 +31,7 @@ _PDF_COLUMN_LABELS: dict[str, str] = {
     "nb_pve": "PVe",
     "nb_controles": PDF_LABEL_CTRL_LOCATIONS_SHORT,
     "resultat": "Résultat",
+    "coeur_hors_coeur": "Zone",
 }
 
 _METRIC_SUFFIX_CTRL = " (localisations de contrôle)"

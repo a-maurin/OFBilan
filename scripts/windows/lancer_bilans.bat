@@ -25,12 +25,14 @@ echo ===============================================
 echo   Bilans - Par profil (global ou thematiques)
 echo ===============================================
 echo.
-set /p "DATE_DEB=Date de debut (YYYY-MM-DD ou YYYY) [2025-01-01] > "
-set /p "DATE_FIN=Date de fin   (YYYY-MM-DD ou YYYY) [2026-12-31] > "
+for /f "usebackq delims=" %%T in (`powershell -NoProfile -Command "(Get-Date).ToString('yyyy-MM-dd')"`) do set "DATE_FIN_DEFAULT=%%T"
+for /f "usebackq delims=" %%T in (`powershell -NoProfile -Command "$y=(Get-Date).Year; '{0}-01-01' -f $y"`) do set "DATE_DEB_DEFAULT=%%T"
+set /p "DATE_DEB=Date de debut (YYYY-MM-DD ou YYYY) [!DATE_DEB_DEFAULT!] > "
+set /p "DATE_FIN=Date de fin   (YYYY-MM-DD ou YYYY) [!DATE_FIN_DEFAULT!] > "
 set /p "DEPT=Code departement (Cote d'Or) [21] > "
 
-if "!DATE_DEB!"=="" set "DATE_DEB=2025-01-01"
-if "!DATE_FIN!"=="" set "DATE_FIN=2026-12-31"
+if "!DATE_DEB!"=="" set "DATE_DEB=!DATE_DEB_DEFAULT!"
+if "!DATE_FIN!"=="" set "DATE_FIN=!DATE_FIN_DEFAULT!"
 if "!DEPT!"=="" set "DEPT=21"
 
 REM Si l'utilisateur saisit uniquement une annee (4 chiffres)

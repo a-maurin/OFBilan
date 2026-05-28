@@ -146,6 +146,16 @@ pdf:
   thematique_uniform_pie_min_ratio: 0.70
   thematique_uniform_pie_max_ratio: 0.82
   thematique_uniform_chart_scale: 1.00
+  # Multiplicateurs §2.1 (barres + courbe) et camembert « Répartition des résultats » (§2.2).
+  thematique_sec21_figure_scale_mult: 1.55
+  thematique_sec22_resultats_pie_figure_scale_mult: 1.22
+  thematique_sec22_resultats_pie_width_ratio_mult: 1.12
+
+  # Section 4 — camembert « contrôles par type d'usager » (avant tableaux « Thèmes de contrôle »).
+  # width_ratio_mult : facteur sur (pie_ratio_base * 0.80) ; 1.0 = historique.
+  # figure_scale_mult : échelle matplotlib réservée à ce seul camembert.
+  thematique_sec4_activite_pie_width_ratio_mult: 1.12
+  thematique_sec4_activite_pie_figure_scale_mult: 1.0
 
   # Taille matplotlib globale et légendes.
   # - figure_scale: agrandit/réduit la taille native des graphiques (avant insertion PDF)
@@ -153,4 +163,4 @@ pdf:
   # - legend_ncol_max: nombre maximal de colonnes dans les légendes
   figure_scale: 1.00
   legend_fontsize: 8
-  legend_ncol_max: 1
+  legend_ncol_max: 4

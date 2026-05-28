@@ -15,7 +15,7 @@ DEFAULT_PDF_PRESENTATION_CONFIG: dict[str, Any] = {
     "defaults": {
         "title": {
             "model": "three_lines",
-            "line1": "Bilan des activites de police administrative et judiciaire",
+            "line1": "Bilan des activités de police\nde l'environnement de l'OFB",
             "line2_mode": "profile_label",  # profile_label | fixed | none
             "line2_fixed": "",
             "line3_mode": "department",  # department | fixed
@@ -469,22 +469,77 @@ def is_section_enabled(
     return bool(val)
 
 
+def _resolve_blocks_node(effective_cfg: dict[str, Any], block_id: str) -> Any:
+    """Valeur du nœud effective.blocks pour un chemin pointé (ex. sec31.max_detail_rows)."""
+    blocks = effective_cfg.get("blocks", {})
+    if not isinstance(blocks, dict):
+        return None
+    node: Any = blocks
+    for part in str(block_id).split("."):
+        if not isinstance(node, dict) or part not in node:
+            return None
+        node = node[part]
+    return node
+
+
 def is_block_enabled(
     effective_cfg: dict[str, Any],
     block_id: str,
     default: bool = True,
 ) -> bool:
     """Vrai si le bloc est activé dans effective.blocks (supporte les clés imbriquées via '.')."""
-    blocks = effective_cfg.get("blocks", {})
-    if not isinstance(blocks, dict):
+    val = _resolve_blocks_node(effective_cfg, block_id)
+    if val is None:
         return default
-    node: Any = blocks
-    for part in str(block_id).split("."):
-        if not isinstance(node, dict) or part not in node:
-            return default
-        node = node[part]
-    val = node
     return bool(val)
+
+
+def get_block_int(
+    effective_cfg: dict[str, Any],
+    block_id: str,
+    default: int = 0,
+) -> int:
+    """
+    Entier dans effective.blocks (clés imbriquées via '.').
+
+    Pour ``sec31.max_detail_rows`` : 0 ou absent = pas de plafond sur le tableau détail ;
+    entier > 0 = nombre maximal de lignes affichées.
+    """
+    val = _resolve_blocks_node(effective_cfg, block_id)
+    if val is None:
+        return int(default)
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return int(default)
+
+
+def slice_proc_detail_for_pdf(
+    detail_df: Any,
+    effective_cfg: dict[str, Any],
+    block_prefix: str,
+) -> tuple[Any, int]:
+    """Retourne (dataframe tronqué selon max_detail_rows, nombre total de lignes)."""
+    if detail_df is None or getattr(detail_df, "empty", True):
+        return detail_df, 0
+    total = int(len(detail_df))
+    cap = get_block_int(effective_cfg, f"{block_prefix}.max_detail_rows", default=0)
+    if cap <= 0:
+        return detail_df, total
+    return detail_df.head(cap), total
+
+
+def format_proc_detail_caption(
+    base_caption: str,
+    *,
+    shown: int,
+    total: int,
+    cap: int,
+) -> str:
+    """Suffixe « N premiers sur T » si le plafond YAML tronque le détail."""
+    if cap > 0 and shown < total:
+        return f"{base_caption} ({shown} premiers sur {total})"
+    return base_caption
 
 
 def resolve_sections_for_toc(
@@ -585,7 +640,7 @@ def build_title_lines_from_cfg(
     ``fixed``) provoque un retour à la ligne dans le même paragraphe sur la
     page de garde, mais est aplati en espace dans l'en-tête de page courant.
     """
-    default_line1 = "Bilan des activités de police administrative et judiciaire"
+    default_line1 = "Bilan des activités de police\nde l'environnement de l'OFB"
 
     title_cfg = effective_cfg.get("title", {}) if isinstance(effective_cfg, dict) else {}
     if not isinstance(title_cfg, dict):

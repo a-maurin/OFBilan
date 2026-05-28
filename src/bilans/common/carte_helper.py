@@ -89,7 +89,13 @@ def resolve_map_layout(
     profile: dict | None = None,
     presentation_cfg: dict | None = None,
 ) -> str:
-    """Disposition des cartes sur la page : ``horizontal`` ou ``vertical``."""
+    """
+    Disposition demandée pour les cartes : ``horizontal`` ou ``vertical``.
+
+    Note : le rendu PDF standard applique désormais une carte par page ; cette
+    information reste utile pour compatibilité de configuration et pour les
+    usages spécifiques (ex. brochure).
+    """
     carto = (profile or {}).get("cartographie") or {}
     if isinstance(carto, dict):
         mode = str(carto.get("disposition") or carto.get("layout") or "").strip().lower()
