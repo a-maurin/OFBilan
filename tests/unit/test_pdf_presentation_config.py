@@ -6,8 +6,11 @@ from bilans.common.pdf_presentation_config import (
     INTERNAL_DIFFUSION_TITLE_NOTICE,
     apply_diffusion_pdf_suffix,
     build_title_lines_from_cfg,
+    format_proc_detail_caption,
+    get_block_int,
     is_block_enabled,
     is_section_enabled,
+    slice_proc_detail_for_pdf,
     normalize_diffusion,
     diffusion_pdf_suffix,
     should_show_internal_diffusion_title_notice,
@@ -156,6 +159,34 @@ def test_nested_block_lookup_supports_dotted_path() -> None:
     assert is_block_enabled(cfg, "sec22res.unknown_flag", default=True) is True
 
 
+def test_get_block_int_max_detail_rows() -> None:
+    cfg = {"blocks": {"sec31": {"max_detail_rows": 25}}}
+    assert get_block_int(cfg, "sec31.max_detail_rows", default=0) == 25
+    assert get_block_int(cfg, "sec31.missing", default=7) == 7
+    assert get_block_int({"blocks": {}}, "sec31.max_detail_rows", default=0) == 0
+
+
+def test_slice_proc_detail_for_pdf() -> None:
+    df = pd.DataFrame({"numero": [str(i) for i in range(29)]})
+    cfg_all = {"blocks": {"sec31": {"max_detail_rows": 0}}}
+    shown, total = slice_proc_detail_for_pdf(df, cfg_all, "sec31")
+    assert len(shown) == 29
+    assert total == 29
+
+    cfg_cap = {"blocks": {"sec31": {"max_detail_rows": 25}}}
+    shown2, total2 = slice_proc_detail_for_pdf(df, cfg_cap, "sec31")
+    assert len(shown2) == 25
+    assert total2 == 29
+
+
+def test_format_proc_detail_caption_truncation() -> None:
+    base = "Detail des PVe"
+    assert format_proc_detail_caption(base, shown=25, total=29, cap=25) == (
+        "Detail des PVe (25 premiers sur 29)"
+    )
+    assert format_proc_detail_caption(base, shown=29, total=29, cap=0) == base
+
+
 def test_sections_order_and_enabled_resolution() -> None:
     effective = {
         "sections": {
@@ -282,6 +313,55 @@ def test_types_usager_cible_sec4_pression_controle() -> None:
         root, scope="thematique", profile_id="types_usager"
     )
     assert is_section_enabled(resolved_usager["effective"], "sec4", True) is True
+
+
+def test_agrainage_pdf_sections_order_and_titles() -> None:
+    """Profil agrainage : ordre narratif et numérotation de sections stabilisés."""
+    root = Path(__file__).resolve().parents[2]
+    resolved = resolve_pdf_presentation_config(root, scope="thematique", profile_id="agrainage")
+    effective = resolved["effective"]
+
+    sections_cfg = effective.get("sections", {})
+    order = sections_cfg.get("order", []) if isinstance(sections_cfg, dict) else []
+    titles = sections_cfg.get("titles", {}) if isinstance(sections_cfg, dict) else {}
+
+    assert order == [
+        "sec1",
+        "sec2_chap",
+        "sec21",
+        "sec22dom",
+        "sec22theme",
+        "sec22res",
+        "sec4",
+        "sec3",
+        "sec31",
+        "sec32",
+        "sec33",
+        "sec5map",
+        "sec6",
+    ]
+    assert titles.get("sec22dom") == "2.2. Résultats des contrôles"
+    assert titles.get("sec22theme") == "2.3. Analyse par zone"
+    assert titles.get("sec22res") == "2.4. Synthèse croisée par zone"
+    assert titles.get("sec4") == "2.5. Activité de contrôle par type d’usager"
+
+    section_defs = [
+        ("sec1", "1. Chiffres clés"),
+        ("sec2_chap", "2. Contrôles"),
+        ("sec21", "2.1. Indicateurs mensuels"),
+        ("sec22dom", "2.2. Résultats des contrôles"),
+        ("sec22theme", "2.3. Analyse par zone"),
+        ("sec22res", "2.4. Synthèse croisée par zone"),
+        ("sec4", "2.5. Activité de contrôle par type d’usager"),
+        ("sec3", "3. Procédures (PEJ, PA, PVe)"),
+        ("sec31", "3.1 Procès-verbaux électroniques (PVe)"),
+        ("sec32", "3.2 Procédures d’enquête judiciaire (PEJ)"),
+        ("sec33", "3.3 Procédures administratives (PA)"),
+        ("sec5map", "5. Localisation cartographique des contrôles"),
+        ("sec6", "6. Annexes"),
+    ]
+    toc = resolve_sections_for_toc(effective, section_defs)
+    assert [sid for sid, _ in toc] == order
 
 
 def test_sec6_methodology_config_resolution() -> None:

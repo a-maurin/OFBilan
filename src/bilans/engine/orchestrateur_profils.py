@@ -95,9 +95,12 @@ from bilans.common.pdf_presentation_config import (
     resolve_sections_for_toc,
     resolve_tables_layout,
     resolve_title_page_config,
+    format_proc_detail_caption,
+    get_block_int,
     is_block_enabled,
     is_section_enabled,
     should_show_placeholder,
+    slice_proc_detail_for_pdf,
 )
 from bilans.common.pdf_table_sort import (
     PDF_LABEL_CTRL_LOCATIONS,
@@ -520,7 +523,7 @@ def prompt_cartography_integration(
     elif scope == "global":
         section_hint = "section 5 (localisation cartographique)"
     else:
-        section_hint = "section 5 du bilan (même page si deux fichiers)"
+        section_hint = "section 5 du bilan (une carte par page)"
     print("\n--- Cartographie ---")
     print(f"Pour intégrer les cartes dans le bilan PDF ({section_hint}) :")
     print(f"  - dossier : {cartes_dir}")
@@ -536,7 +539,7 @@ def prompt_cartography_integration(
         elif resolved_opts.get("brochure"):
             dispo = "côte à côte"
         else:
-            dispo = "côte à côte" if layout_hint == "horizontal" else "l'une au-dessus de l'autre"
+            dispo = "une carte par page (PDF standard)"
         print(f"  - si les deux PNG sont présents, elles seront affichées {dispo}.")
 
     _copy_to_clipboard(expected_names[0])
@@ -1206,7 +1209,7 @@ def _run_spatial_analyses(
         ].replace(0, pd.NA)
         results["agg_pnf"] = agg_pnf
         results["point_with_pnf"] = pt
-        # Bilan PNF : présenter Cœur/Hors-cœur (hors-cœur = aire d'adhésion).
+        # Bilan PNF : détail par zone (cœur vs aire d'adhésion).
         if str(profil_id or "").strip().lower() in {"pnf", "pnf_foret"}:
             rows = []
             if "pnf_zone_sig" in pt.columns:
@@ -1234,7 +1237,7 @@ def _run_spatial_analyses(
                 )
                 rows.append(
                     {
-                        "PNF": "Hors-cœur (aire d'adhésion)",
+                        "PNF": "Aire d'adhésion",
                         "nb_controles": nb_h,
                         "nb_non_conforme": nb_nc_h,
                         "taux_non_conformite": (nb_nc_h / nb_h) if nb_h > 0 else pd.NA,
@@ -1265,10 +1268,18 @@ def _run_spatial_analyses(
                 results["zone_pve"] = pd.DataFrame(
                     [
                         {"zone": "Cœur", "nb": nb_coeur},
-                        {"zone": "Hors-cœur (aire d'adhésion)", "nb": nb_aire},
+                        {"zone": "Aire d'adhésion", "nb": nb_aire},
                     ]
                 )
             else:
+                base_z = base_z.copy()
+                # Décompte ensembliste (hors TUB et hors PNF) : si une PVe est TUB et PNF,
+                # une soustraction stricte (total − nb_tub − nb_pnf) la compte deux fois en moins.
+                insee = pve_filtered[pve_insee].astype(str).str.zfill(5)
+                in_tub = insee.isin(tub_codes)
+                in_pnf = insee.isin(pnf_codes)
+                nb_hors_tub_pnf = int((~in_tub & ~in_pnf).sum())
+                base_z.loc[base_z["zone"] == "Département", "nb"] = nb_hors_tub_pnf
                 results["zone_pve"] = base_z
 
     if (need_pnf or need_tub) and not pej_filtered.empty:
@@ -1558,7 +1569,7 @@ def _run_aggregations(
             results["synthese_zone"] = synth
 
     # Copier les résultats spatiaux dans le dict principal
-    for k in ("agg_pnf", "agg_pnf_detail", "zone_ctrl", "zone_pve", "zone_pej"):
+    for k in ("agg_pnf", "agg_pnf_detail", "zone_ctrl", "zone_pve", "zone_pej", "tub_codes", "pnf_codes"):
         if k in spatial:
             results[k] = spatial[k]
 
@@ -1640,7 +1651,7 @@ def _run_aggregations(
                 ana["libelle_natinf"] = ana.get("libelle_natinf", ana["natinf"])
                 results["pej_natinf_analysis"] = ana[["thematique", "libelle_natinf", "nature_infraction", "nb"]]
 
-    # Détails procédures (format unifié PVe/PEJ/PA) + colonne Cœur/Hors-cœur
+    # Détails procédures (format unifié PVe/PEJ/PA) + colonne zone (ex-PNF)
     def _coeur_hors_coeur_from_zone(v: Any) -> str:
         if v is None or pd.isna(v):
             return "n.d."
@@ -1649,8 +1660,10 @@ def _run_aggregations(
             return "n.d."
         if s == "Coeur_PNF":
             return "Cœur"
-        if s in {"Aire_adhesion_PNF", "Hors_perimetres_sig"}:
-            return "Hors-cœur"
+        if s == "Aire_adhesion_PNF":
+            return "Aire d'adhésion"
+        if s == "Hors_perimetres_sig":
+            return "Hors PNF"
         return "n.d."
 
     pnf_by_dc: dict[str, str] = {}
@@ -1766,7 +1779,7 @@ def _run_aggregations(
             else:
                 out["coeur_hors_coeur"] = "n.d."
             # PEJ / PA : la commune affichée peut venir de NOM_COM_FAITS ou des points (DC_ID) alors que
-            # NOM_COM reste vide — aligner le libellé Cœur/Hors-cœur sur `out["commune"]`, pas sur la seule
+            # NOM_COM reste vide — aligner la zone sur `out["commune"]`, pas sur la seule
             # colonne candidate d'origine.
             if proc_type in ("PEJ", "PA"):
                 if pnf_zone_by_commune_nom:
@@ -1783,7 +1796,7 @@ def _run_aggregations(
                     )
                 if pnf_zone_by_insee:
                     insee_s = pd.Series(pd.NA, index=d.index, dtype="string")
-                    for col in ("insee_comm", "INSEE_COM"):
+                    for col in ("insee_comm", "INSEE_COM", "INF-INSEE"):
                         if col not in d.columns:
                             continue
                         cand = (
@@ -1803,6 +1816,33 @@ def _run_aggregations(
                         out["coeur_hors_coeur"] = from_insee.where(
                             from_insee.ne("n.d."), out["coeur_hors_coeur"]
                         )
+            if proc_type in ("PEJ", "PA"):
+                pnf_codes_s = results.get("pnf_codes")
+                if not isinstance(pnf_codes_s, set):
+                    _, pnf_codes_s = load_tub_pnf_codes(PROJECT_ROOT)
+                pnf_codes_s = pnf_codes_s or set()
+                ch = out["coeur_hors_coeur"].astype(str).str.strip()
+                mask_nd = ch.isin(["", "n.d.", "nan", "None", "<na>"])
+                insee_detail = pd.Series(pd.NA, index=d.index, dtype="string")
+                for col in ("insee_comm", "INSEE_COM", "INF-INSEE"):
+                    if col not in d.columns:
+                        continue
+                    cand = (
+                        d[col]
+                        .astype(str)
+                        .str.strip()
+                        .str.extract(r"(\d{1,5})", expand=False)
+                        .fillna("")
+                        .str.zfill(5)
+                    )
+                    cand = cand.mask(~cand.str.fullmatch(r"\d{5}", na=False), pd.NA)
+                    insee_detail = insee_detail.fillna(cand)
+                if mask_nd.any() and insee_detail.notna().any():
+                    hors_pnf = insee_detail.notna() & ~insee_detail.astype(str).isin(
+                        {str(x).zfill(5) for x in pnf_codes_s}
+                    )
+                    idx = mask_nd & hors_pnf
+                    out.loc[idx, "coeur_hors_coeur"] = "Hors PNF"
         out["type_procedure"] = proc_type
         return out.fillna("")
 
@@ -1831,17 +1871,17 @@ def _run_aggregations(
         ["theme", "THEME", "domaine", "DOMAINE"],
     )
 
-    # Bilan PNF : export / PDF « PEJ par zone » = Cœur vs hors-cœur (comme PVe), dérivé du détail.
+    # Bilan PNF : export / PDF « PEJ par zone » = Cœur vs aire d'adhésion / hors PNF, dérivé du détail.
     if str(profil_id or "").strip().lower() in {"pnf", "pnf_foret"}:
         pej_det = results.get("pej_detail")
         if isinstance(pej_det, pd.DataFrame) and not pej_det.empty and "coeur_hors_coeur" in pej_det.columns:
             ch = pej_det["coeur_hors_coeur"].astype(str).str.strip()
             nb_coeur = int((ch == "Cœur").sum())
-            nb_hors = int((ch == "Hors-cœur").sum())
+            nb_hors = int((ch == "Aire d'adhésion").sum()) + int((ch == "Hors PNF").sum())
             results["zone_pej"] = pd.DataFrame(
                 [
                     {"zone": "Cœur", "nb": nb_coeur},
-                    {"zone": "Hors-cœur (aire d'adhésion)", "nb": nb_hors},
+                    {"zone": "Aire d'adhésion", "nb": nb_hors},
                 ]
             )
 
@@ -2418,11 +2458,14 @@ def _pdf_section_activite_par_types_usagers(
     legend_fontsize: float,
     legend_ncol_max: int,
     figure_scale: float,
+    pie_figure_scale: float | None = None,
 ) -> None:
     """Section VIII : activité par types d'usagers (camembert, tableaux par type, barres horizontales empilées)."""
     ctrl_ut = results.get("ctrl_par_usager_theme")
     if ctrl_ut is None or ctrl_ut.empty:
         return
+
+    pie_fs = float(pie_figure_scale) if pie_figure_scale is not None else float(figure_scale)
 
     total_ctrl_lignes = float(ctrl_ut["nb_controles"].sum()) or 1.0
     sum_par_type = ctrl_ut.groupby("type_usager")["nb_controles"].sum()
@@ -2440,7 +2483,7 @@ def _pdf_section_activite_par_types_usagers(
                 legend_fontsize=legend_fontsize,
                 legend_ncol_max=legend_ncol_max,
             ),
-            figure_scale=figure_scale,
+            figure_scale=pie_fs,
         )
         builder.add_image(Path(pie_path), width_ratio=pie_ratio, spacer_after_mm=0.8)
 
@@ -2691,6 +2734,24 @@ def _generate_pdf(
     legend_fontsize = float(chart_ratios.get("legend_fontsize", 8.0))
     legend_ncol_max = int(chart_ratios.get("legend_ncol_max", 4.0))
     figure_scale = float(chart_ratios.get("figure_scale", 1.0))
+    sec4_act_pie_width_mult = float(
+        chart_ratios.get("thematique_sec4_activite_pie_width_ratio_mult", 1.0)
+    )
+    sec4_act_pie_figure_mult = float(
+        chart_ratios.get("thematique_sec4_activite_pie_figure_scale_mult", 1.0)
+    )
+    figure_scale_sec21 = figure_scale * float(
+        chart_ratios.get("thematique_sec21_figure_scale_mult", 1.55)
+    )
+    legend_fontsize_sec21 = min(12.0, legend_fontsize + 1.25)
+    figure_scale_sec22_pie = figure_scale * float(
+        chart_ratios.get("thematique_sec22_resultats_pie_figure_scale_mult", 1.22)
+    )
+    sec22_pie_width_ratio = min(
+        0.95,
+        pie_ratio_base
+        * float(chart_ratios.get("thematique_sec22_resultats_pie_width_ratio_mult", 1.12)),
+    )
 
     # Correspondance code INSEE → nom de commune pour les tableaux PDF
     insee_to_nom = load_communes_noms(PROJECT_ROOT)
@@ -2729,6 +2790,22 @@ def _generate_pdf(
         ("sec5", "5. Localisation cartographique des contrôles"),
         ("sec6", "6. Annexes"),
     ]
+    if profil_id == "agrainage":
+        section_defs = [
+            ("sec1", "1. Chiffres clés"),
+            ("sec2", "2. Contrôles"),
+            ("sec21", _sec21_titre_defaut),
+            ("sec22", "2.2. Résultats des contrôles"),
+            ("sec22theme", "2.3. Analyse par zone"),
+            ("sec22res", "2.4. Synthèse croisée par zone"),
+            ("sec3", "3. Procédures"),
+            ("sec31", "3.1 Procès verbaux électroniques (Pve)"),
+            ("sec32", "3.2 Procédures d'enquête judiciaire (PEJ)"),
+            ("sec33", "3.3 Procédures administratives"),
+            ("sec4", "2.5. Activité de contrôle par type d’usager"),
+            ("sec5", "5. Localisation cartographique des contrôles"),
+            ("sec6", "6. Annexes"),
+        ]
     resolved_section_defs = resolve_section_titles(presentation_cfg, section_defs)
     sections = resolved_section_defs
     sections_toc = resolve_sections_for_toc(presentation_cfg, resolved_section_defs)
@@ -2938,9 +3015,9 @@ def _generate_pdf(
                 PDF_LABEL_CTRL_LOCATIONS,
                 tmp_dir,
                 "bar_annuel_ctrl_stacked.png",
-                legend_fontsize=legend_fontsize,
+                legend_fontsize=legend_fontsize_sec21,
                 legend_ncol_max=legend_ncol_max,
-                figure_scale=figure_scale,
+                figure_scale=figure_scale_sec21,
             )
             if is_block_enabled(presentation_cfg, "sec21.show_chart_controles", True):
                 builder.add_image(Path(stacked_path), width_ratio=chart_ratio_base)
@@ -2953,9 +3030,9 @@ def _generate_pdf(
             if has_proc and is_block_enabled(presentation_cfg, "sec21.show_chart_procedures", True):
                 stacked_proc_path = chart_bar_stacked(
                     period_labels, series_proc, titre_proc, "Nombre", tmp_dir, "bar_annuel_proc_stacked.png",
-                    legend_fontsize=legend_fontsize,
+                    legend_fontsize=legend_fontsize_sec21,
                     legend_ncol_max=legend_ncol_max,
-                    figure_scale=figure_scale,
+                    figure_scale=figure_scale_sec21,
                 )
                 builder.add_image(Path(stacked_proc_path), width_ratio=chart_ratio_base)
             if vent_temp_type not in ("mensuelle", "hebdomadaire") and is_block_enabled(
@@ -2972,9 +3049,9 @@ def _generate_pdf(
                         "Évolution du taux de non-conformité",
                         "Taux (%)",
                         tmp_dir, "line_annuel_taux_inf.png",
-                        legend_fontsize=legend_fontsize,
+                        legend_fontsize=legend_fontsize_sec21,
                         legend_ncol_max=legend_ncol_max,
-                        figure_scale=figure_scale,
+                        figure_scale=figure_scale_sec21,
                     )
                     builder.add_image(Path(line_path), width_ratio=chart_ratio_base)
         elif show_placeholder:
@@ -3113,7 +3190,7 @@ def _generate_pdf(
                 bool(results.get("_pdf_show_coeur_hors_coeur", True))
                 and "coeur_hors_coeur" in tr_u.columns
             )
-            hdr = ["Résultat", "Nombre", "Taux"] + (["Cœur/Hors-cœur"] if show_coeur_col else [])
+            hdr = ["Résultat", "Nombre", "Taux"] + (["Zone"] if show_coeur_col else [])
             tbl = [hdr]
             top_mask = tr_u["resultat"].isin(["Conforme", "Non-conforme", "En attente"])
             top_counts = tr_u.loc[top_mask, "nb"].astype(int).tolist()
@@ -3218,7 +3295,7 @@ def _generate_pdf(
             return
         # Pour le profil agrainage, expliciter la source et le filtrage des contrôles.
         if profil_id == "agrainage" and is_block_enabled(presentation_cfg, "sec22.show_intro_text", True):
-            builder.add_paragraph(
+            builder.append_pending_paragraph(
                 "Contrôles liés à l’agrainage identifiés dans les points de contrôle OSCEAN "
                 "(champ « nom_dossie » ou « nom_dossier » contenant « agrain »)."
             )
@@ -3226,7 +3303,7 @@ def _generate_pdf(
         if tab_res_ctrl is not None and not tab_res_ctrl.empty and is_block_enabled(presentation_cfg, "sec22.show_table", True):
             tr = tab_res_ctrl
             show_coeur_col = bool(results.get("_pdf_show_coeur_hors_coeur", True)) and "coeur_hors_coeur" in tr.columns
-            hdr = ["Résultat", "Nombre", "Taux"] + (["Cœur/Hors-cœur"] if show_coeur_col else [])
+            hdr = ["Résultat", "Nombre", "Taux"] + (["Zone"] if show_coeur_col else [])
             tbl = [hdr]
             top_mask = tr["resultat"].isin(["Conforme", "Non-conforme", "En attente"])
             top_counts = tr.loc[top_mask, "nb"].astype(int).tolist()
@@ -3272,7 +3349,7 @@ def _generate_pdf(
                             legend_fontsize=legend_fontsize,
                             legend_ncol_max=legend_ncol_max,
                         ),
-                        figure_scale=figure_scale,
+                        figure_scale=figure_scale_sec22_pie,
                     )
                 )
             if pie_path is not None and pie_path.exists():
@@ -3282,7 +3359,7 @@ def _generate_pdf(
                     col_widths=cw,
                     col_aligns=ca,
                     image_path=pie_path,
-                    image_width_ratio=pie_ratio_base,
+                    image_width_ratio=sec22_pie_width_ratio,
                 )
             else:
                 builder.add_table(
@@ -3372,9 +3449,15 @@ def _generate_pdf(
                 and not pve_detail.empty
             ):
                 base_cols = ["Numéro", "Date", "Commune", "Thématique"]
-                hdr_det = base_cols + (["Cœur/Hors-cœur"] if show_coeur_hors_pdf else [])
+                hdr_det = base_cols + (["Zone"] if show_coeur_hors_pdf else [])
                 tbl_det = [hdr_det]
-                for _, r in pve_detail.head(25).iterrows():
+                pve_det_show, pve_det_total = slice_proc_detail_for_pdf(
+                    pve_detail, presentation_cfg, "sec31"
+                )
+                pve_det_cap = get_block_int(
+                    presentation_cfg, "sec31.max_detail_rows", default=0
+                )
+                for _, r in pve_det_show.iterrows():
                     c_raw = str(r.get("commune", "")).strip()
                     if c_raw.isdigit():
                         c_val = _nom_commune(c_raw)
@@ -3389,10 +3472,17 @@ def _generate_pdf(
                     if show_coeur_hors_pdf:
                         row_det.append(str(r.get("coeur_hors_coeur", "")))
                     tbl_det.append(row_det)
+                cap_det = pdf_metric_caption("Détail des PVe", "proc")
+                cap_det = format_proc_detail_caption(
+                    cap_det,
+                    shown=len(pve_det_show),
+                    total=pve_det_total,
+                    cap=pve_det_cap,
+                )
                 pve_table_specs.append(
                     {
                         "data_rows": tbl_det,
-                        "caption": pdf_metric_caption("Détail des PVe", "proc"),
+                        "caption": cap_det,
                         "col_aligns": ["LEFT"] * len(hdr_det),
                     }
                 )
@@ -3428,7 +3518,10 @@ def _generate_pdf(
             if is_block_enabled(presentation_cfg, "sec31.show_zone_table", True) and zone_pve is not None:
                 tbl = [["Zone", "Nombre"]]
                 for _, row in zone_pve.iterrows():
-                    tbl.append([str(row["zone"]), str(int(row["nb"]))])
+                    zname = str(row["zone"])
+                    if zname == "Département":
+                        zname = "Département (hors PNF/TUB)"
+                    tbl.append([zname, str(int(row["nb"]))])
                 zone_table = {
                     "data_rows": tbl,
                     "caption": "PVe par zone",
@@ -3455,6 +3548,11 @@ def _generate_pdf(
             append_to_pending=_begin_sec3_subsection("sec32"),
         )
         pej_detail = results.get("pej_detail")
+        merge_pej_detail_next = (
+            is_block_enabled(presentation_cfg, "sec32.show_detail_table", True)
+            and isinstance(pej_detail, pd.DataFrame)
+            and not pej_detail.empty
+        )
         pej_top = results.get("pej_top_infractions")
         has_infractions = pej_top is not None and not pej_top.empty
 
@@ -3496,19 +3594,27 @@ def _generate_pdf(
                 caption=caption_infra_pej,
                 col_widths=[avail_w * 0.75, avail_w * 0.25],
                 col_aligns=["LEFT", "RIGHT"],
+                merge_with_next=merge_pej_detail_next,
             )
         else:
-            builder.add_key_figures([(str(nb_pej), "PEJ")])
+            builder.add_key_figures(
+                [(str(nb_pej), "PEJ")],
+                merge_with_next=merge_pej_detail_next,
+            )
         if (
             is_block_enabled(presentation_cfg, "sec32.show_detail_table", True)
             and isinstance(pej_detail, pd.DataFrame)
             and not pej_detail.empty
         ):
             hdr_pej = ["Numéro", "Date", "Commune", "Thématique"] + (
-                ["Cœur/Hors-cœur"] if show_coeur_hors_pdf else []
+                ["Zone"] if show_coeur_hors_pdf else []
             )
             tbl_det = [hdr_pej]
-            for _, r in pej_detail.head(25).iterrows():
+            pej_det_show, pej_det_total = slice_proc_detail_for_pdf(
+                pej_detail, presentation_cfg, "sec32"
+            )
+            pej_det_cap = get_block_int(presentation_cfg, "sec32.max_detail_rows", default=0)
+            for _, r in pej_det_show.iterrows():
                 row_pej = [
                     str(r.get("numero", "")),
                     str(r.get("date", "")),
@@ -3518,9 +3624,16 @@ def _generate_pdf(
                 if show_coeur_hors_pdf:
                     row_pej.append(str(r.get("coeur_hors_coeur", "")))
                 tbl_det.append(row_pej)
+            cap_pej = pdf_metric_caption("Détail des PEJ", "proc")
+            cap_pej = format_proc_detail_caption(
+                cap_pej,
+                shown=len(pej_det_show),
+                total=pej_det_total,
+                cap=pej_det_cap,
+            )
             builder.add_table(
                 tbl_det,
-                caption=pdf_metric_caption("Détail des PEJ", "proc"),
+                caption=cap_pej,
                 col_aligns=["LEFT"] * len(hdr_pej),
             )
         zone_pej = results.get("zone_pej")
@@ -3629,15 +3742,25 @@ def _generate_pdf(
                     "col_widths": None,
                     "col_aligns": col_aligns,
                 })
+        pa_detail = results.get("pa_detail")
+        merge_pa_detail_next = (
+            is_block_enabled(presentation_cfg, "sec33.show_detail_table", True)
+            and isinstance(pa_detail, pd.DataFrame)
+            and not pa_detail.empty
+        )
         show_kf = is_block_enabled(presentation_cfg, "sec33.show_key_figures", True)
         if show_kf and proc_tables:
             builder.add_key_figures_and_tables(
                 [(str(nb_pa), "PA")],
                 proc_tables,
                 compact=True,
+                merge_with_next=merge_pa_detail_next,
             )
         elif show_kf:
-            builder.add_key_figures([(str(nb_pa), "PA")])
+            builder.add_key_figures(
+                [(str(nb_pa), "PA")],
+                merge_with_next=merge_pa_detail_next,
+            )
         elif proc_tables:
             for spec in proc_tables:
                 builder.add_table(
@@ -3646,17 +3769,20 @@ def _generate_pdf(
                     col_aligns=spec.get("col_aligns"),
                     keep_together=True,
                 )
-        pa_detail = results.get("pa_detail")
         if (
             is_block_enabled(presentation_cfg, "sec33.show_detail_table", True)
             and isinstance(pa_detail, pd.DataFrame)
             and not pa_detail.empty
         ):
             hdr_pa = ["Numéro", "Date", "Commune", "Thématique"] + (
-                ["Cœur/Hors-cœur"] if show_coeur_hors_pdf else []
+                ["Zone"] if show_coeur_hors_pdf else []
             )
             tbl_det = [hdr_pa]
-            for _, r in pa_detail.head(25).iterrows():
+            pa_det_show, pa_det_total = slice_proc_detail_for_pdf(
+                pa_detail, presentation_cfg, "sec33"
+            )
+            pa_det_cap = get_block_int(presentation_cfg, "sec33.max_detail_rows", default=0)
+            for _, r in pa_det_show.iterrows():
                 row_pa = [
                     str(r.get("numero", "")),
                     str(r.get("date", "")),
@@ -3666,20 +3792,27 @@ def _generate_pdf(
                 if show_coeur_hors_pdf:
                     row_pa.append(str(r.get("coeur_hors_coeur", "")))
                 tbl_det.append(row_pa)
+            cap_pa = pdf_metric_caption("Détail des PA", "proc")
+            cap_pa = format_proc_detail_caption(
+                cap_pa,
+                shown=len(pa_det_show),
+                total=pa_det_total,
+                cap=pa_det_cap,
+            )
             builder.add_table(
                 tbl_det,
-                caption=pdf_metric_caption("Détail des PA", "proc"),
+                caption=cap_pa,
                 col_aligns=["LEFT"] * len(hdr_pa),
             )
 
-    sec3_registry = SectionRegistry()
-    sec3_registry.register("sec31", lambda _ctx: _render_sec31())
-    sec3_registry.register("sec32", lambda _ctx: _render_sec32())
-    sec3_registry.register("sec33", lambda _ctx: _render_sec33())
+    def _render_sec3_bundle() -> None:
+        sec3_registry = SectionRegistry()
+        sec3_registry.register("sec31", lambda _ctx: _render_sec31())
+        sec3_registry.register("sec32", lambda _ctx: _render_sec32())
+        sec3_registry.register("sec33", lambda _ctx: _render_sec33())
+        sec3_registry.render_many(sec3_order, {})
 
-    sec3_registry.render_many(sec3_order, {})
-
-    # Le détail Cœur/Hors-cœur des contrôles est désormais intégré au tableau
+    # Le détail zone (ex-PNF) des contrôles est désormais intégré au tableau
     # « Résultats des contrôles » (partie 2.2) pour éviter une sous-partie dédiée.
 
     # ── ZONE TUB / HORS ZONE TUB ─
@@ -3779,9 +3912,13 @@ def _generate_pdf(
     if zone_ctrl is not None and options.get("tub", False):
         if profil_id == "agrainage":
             # Pour le bilan agrainage, l'analyse par zone est intégrée comme
-            # sous-partie de la section "Contrôles agrainage" (niveau 2).
-            # On ne consomme donc pas de nouvelle entrée du sommaire.
-            builder.add_section(f"{sections[1][0]}_zone", "Analyse par zone", level=2)
+            # sous-partie TOC dédiée de la section "Contrôles" (niveau 2).
+            builder.add_section(
+                "sec22theme",
+                section_title.get("sec22theme", "2.3. Analyse par zone"),
+                level=2,
+                toc_level=1,
+            )
         else:
             builder.add_section("sec_ctrl_zone", "Analyse par zone", level=2)
         tbl = [["Zone", "Nb total", "Nb conforme", "Contrôles non-conformes", "Taux de non-conformité"]]
@@ -3815,7 +3952,15 @@ def _generate_pdf(
     # ── SYNTHÈSE CROISÉE ──
     synth = results.get("synthese_zone")
     if synth is not None:
-        builder.add_section("sec_ctrl_synthese", "Synthèse croisée par zone", level=2)
+        if profil_id == "agrainage":
+            builder.add_section(
+                "sec22res",
+                section_title.get("sec22res", "2.4. Synthèse croisée par zone"),
+                level=2,
+                toc_level=1,
+            )
+        else:
+            builder.add_section("sec_ctrl_synthese", "Synthèse croisée par zone", level=2)
         # Renommer les colonnes pour expliciter la signification des données
         col_labels = []
         for c in synth.columns:
@@ -3843,8 +3988,18 @@ def _generate_pdf(
         # Section dense : on conserve un saut de page dédié.
 
     # ── ACTIVITÉ PAR TYPES D'USAGERS (hors profil dédié « analyses.type_usager ») ──
-    if is_section_enabled(presentation_cfg, "sec4", True):
-        builder.add_section("sec4", section_title["sec4"], start_on_new_page=True, compact=True)
+    def _render_sec4() -> None:
+        if not is_section_enabled(presentation_cfg, "sec4", True):
+            return
+        sec4_title = section_title["sec4"]
+        sec4_toc_level = 1 if str(sec4_title).lstrip().startswith("2.") else 0
+        builder.add_section(
+            "sec4",
+            sec4_title,
+            start_on_new_page=True,
+            compact=True,
+            toc_level=sec4_toc_level,
+        )
         if results.get("_pdf_show_pression_controle_usagers"):
             _pdf_section_pression_controle_usagers(
                 builder,
@@ -3860,21 +4015,38 @@ def _generate_pdf(
             )
             builder.add_spacer(4)
         elif results.get("_pdf_show_activite_usagers"):
+            base_sec4_fs = max(0.88, float(figure_scale) * 0.88)
+            sec4_pie_fs = max(
+                0.7, min(1.6, base_sec4_fs * sec4_act_pie_figure_mult)
+            )
+            sec4_pie_ratio = min(
+                0.98,
+                max(0.1, pie_ratio_base * 0.80 * sec4_act_pie_width_mult),
+            )
             _pdf_section_activite_par_types_usagers(
                 builder,
                 results,
                 tmp_dir,
                 avail_w,
                 presentation_cfg=presentation_cfg,
-                pie_ratio=pie_ratio_base * 0.80,
+                pie_ratio=sec4_pie_ratio,
                 bar_ratio=chart_ratio_base * 0.88,
                 legend_fontsize=max(6.5, legend_fontsize - 0.5),
                 legend_ncol_max=legend_ncol_max,
-                figure_scale=max(0.88, float(figure_scale) * 0.88),
+                figure_scale=base_sec4_fs,
+                pie_figure_scale=sec4_pie_fs,
             )
             builder.add_spacer(4)
         elif show_placeholder:
             builder.add_paragraph("Aucune donnée d'activité par type d'usager pour la période.")
+
+    sec34_registry = SectionRegistry()
+    sec34_registry.register("sec3", lambda _ctx: _render_sec3_bundle())
+    sec34_registry.register("sec4", lambda _ctx: _render_sec4())
+    sec34_order = [sid for sid, _ in sections_toc if sid in {"sec3", "sec4"}]
+    if not sec34_order:
+        sec34_order = ["sec3", "sec4"]
+    sec34_registry.render_many(sec34_order, {})
 
     # ── CARTOGRAPHIE ──
     builder.add_section("sec5", section_title["sec5"], start_on_new_page=True)
