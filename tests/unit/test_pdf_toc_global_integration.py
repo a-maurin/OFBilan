@@ -15,7 +15,7 @@ from bilans.common.pdf_toc_inspection import (
     assert_section_headings_order,
     extract_pdf_section_headings,
 )
-from tests.unit.pdf_toc_test_support import patch_pdf_charts
+from pdf_toc_test_support import patch_pdf_charts
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "pdf_toc_global"
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
