@@ -11,8 +11,13 @@ Jeux CSV minimaux pour les tests d’intégration dans `tests/unit/test_pdf_toc_
 | `pdf_toc_chasse/` | thématique `chasse` | `tab_resultats_controles` |
 | `pdf_toc_global/` | global | `controles_global_par_domaine`, `controles_global_resultats_controles`, résumés PEJ/PA/PVe |
 
-Commande :
+Commandes :
 
 ```bash
+# Jeux TOC + présentation PDF
 python -m pytest tests/unit/test_pdf_toc_agrainage_integration.py tests/unit/test_pdf_toc_global_integration.py tests/unit/test_pdf_presentation_config.py -q
+
+# Suite complète (comme la CI)
+python -m pytest -q
+# ou : .\scripts\verify.ps1  /  ./scripts/verify.sh
 ```

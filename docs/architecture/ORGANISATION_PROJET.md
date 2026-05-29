@@ -6,7 +6,7 @@ sans refonte du moteur metier.
 
 ## Sources de verite
 
-- `scripts/` : wrappers d'execution (Windows/Linux).
+- `scripts/` : wrappers d'execution (Windows/Linux) et verification (`verify.ps1` / `verify.sh` pour pytest, `verify_ref_layout.*` pour `ref/`).
 - `src/bilans/` : code applicatif principal (moteur profilé, cartographie, common).
 - `config/` : configuration de pilotage versionnee (profils, options metier, presentation).
 - `ref/programme/` : referentiels lus par l'application (tables, SIG, charte OFB) ;
@@ -27,6 +27,7 @@ Wrappers maintenus :
 - Entree script console (apres installation) : `bilans`
 - Fichier de packaging : `pyproject.toml`
 - Pas de point d'entree legacy conserve : la CLI officielle est `python -m bilans`.
+- Tests : `pip install -e .[dev]` puis `python -m pytest -q` (ou `scripts/verify.ps1` / `scripts/verify.sh`) ; CI `.github/workflows/tests.yml`.
 
 ## Rationalisation config/ref (phase 3)
 

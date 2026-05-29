@@ -21,6 +21,14 @@ Installation :
 pip install -e .
 ```
 
+Pour le développement et les tests :
+
+```bash
+pip install -e .[dev]
+```
+
+Après installation, la commande console `bilans` est équivalente à `python -m bilans`.
+
 ## Exécution
 
 **Rupture CLI :** l’option `--mode` n’est plus utilisée ; utilisez `--profil` (dont `global`). Voir `docs/migration/cli_moteur_unique.md`.
@@ -55,6 +63,20 @@ Scripts de lancement :
 - Windows : `scripts/windows/lancer_bilans.bat`, `scripts/windows/generer_cartes.bat`, `scripts/windows/parametrer_cartes.bat`
 - Linux : `scripts/linux/lancer_bilans.sh`, `scripts/linux/generer_cartes.sh`, `scripts/linux/parametrer_cartes.sh`
 
+## Tests et CI
+
+Vérification locale (identique à la CI GitHub, voir `.github/workflows/tests.yml`) :
+
+```bash
+python -m pytest -q
+```
+
+Sous Windows : `.\scripts\verify.ps1` — sous Linux : `./scripts/verify.sh` (même commande `pytest`).
+
+Les tests couvrent `tests/unit/` et `tests/smoke/` (`testpaths` dans `pyproject.toml`). Ils doivent rester hermétiques (pas de dépendance à `data/sources/`).
+
+Fixtures PDF (ordre des sections / sommaire) : `tests/fixtures/pdf_toc/README.md`.
+
 ## Données attendues
 
 Le programme lit les fichiers d’entrée dans `data/sources/`.
@@ -78,9 +100,10 @@ Les résultats sont écrits dans `data/out/` :
 ## Organisation du dépôt
 
 - `src/bilans/` : code applicatif principal ;
-- `config/` : configuration de pilotage (profils, présentation PDF, graphiques) ;
+- `config/` : configuration de pilotage (profils, présentation PDF, graphiques) — voir `config/README.md` ;
 - `config/profils_bilan/_defaults.yaml` : socle YAML commun (pipeline, adapters agrégation/PDF, capacités par défaut) fusionné avec chaque profil ;
-- `ref/programme/` : référentiels lus par l’application ; `ref/hors_programme/` : archives hors runtime ;
+- `ref/programme/` : référentiels lus par l’application ; `ref/hors_programme/` : archives hors runtime — voir `ref/README.md` ;
+- `scripts/` : lanceurs Windows/Linux, vérification tests (`verify.ps1` / `verify.sh`) et arborescence `ref/` (`verify_ref_layout.*`) ;
 - `data/` : données d’entrée locales et sorties générées ;
 - `docs/` : documentation d’architecture, d’usage et de migration ;
 - `tests/` : tests unitaires et tests smoke.
@@ -88,6 +111,8 @@ Les résultats sont écrits dans `data/out/` :
 ## Références
 
 - Description des sources : `docs/architecture/README_sources.md`
+- Organisation détaillée : `docs/architecture/ORGANISATION_PROJET.md`
+- Migration CLI (`--profil`) : `docs/migration/cli_moteur_unique.md`
 - Vérification arborescence `ref/` : `scripts/verify_ref_layout.ps1` ou `python scripts/verify_ref_layout.py`
 - Schéma des données : `docs/architecture/data_schema.md`
 - Licence : Apache License 2.0 (`LICENSE`)

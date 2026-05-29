@@ -5,6 +5,7 @@ Ce document décrit la génération des cartes utilisées dans les bilans.
 ## Prérequis
 
 - QGIS/OSGeo installé ;
+- Python ≥ 3.10 et package installé (`pip install -e .`) ;
 - projet QGIS présent : `ref/programme/sig/bilans_carte.qgz` ;
 - données opérationnelles disponibles dans `data/sources/` et `data/sources/sig/`.
 
