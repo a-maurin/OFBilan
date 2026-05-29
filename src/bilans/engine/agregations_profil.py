@@ -9,6 +9,7 @@ from bilans.common.chargeurs_donnees import load_natinf_ref
 from bilans.common.utilitaires_metier import (
     agg_effectifs_usagers,
     agg_effectifs_usagers_par_domaine,
+    agg_procedures_dossiers_par_domaine,
     agg_resultat_counts_par_type_usager,
     build_tab_resultats,
     build_tab_resultats_controles,
@@ -261,6 +262,34 @@ def analyse_pej_pa_global(
 
     nb_pa = count_pa_induites_par_controles(point)
     pd.DataFrame([{"nb_pa_global": nb_pa}]).to_csv(out_dir / "pa_global_resume.csv", sep=";", index=False)
+
+    if "type_usager" in point.columns:
+        proc_ud = agg_procedures_dossiers_par_domaine(
+            pej_dept,
+            pa_lignes,
+            with_type_usager=True,
+            source_table="point_ctrl",
+            source_champ="type_usager",
+        )
+        if not proc_ud.empty and "type_usager" in proc_ud.columns:
+            metrics = [c for c in ("nb_pej", "nb_pa") if c in proc_ud.columns]
+            proc_ut = proc_ud.groupby("type_usager", as_index=False)[metrics].sum()
+            if metrics:
+                proc_ut["_vol"] = proc_ut[metrics].fillna(0).sum(axis=1)
+                proc_ut = proc_ut.sort_values("_vol", ascending=False, kind="stable").drop(
+                    columns=["_vol"]
+                )
+            proc_ut.to_csv(
+                out_dir / "procedures_global_par_type_usager.csv",
+                sep=";",
+                index=False,
+            )
+        else:
+            pd.DataFrame(columns=["type_usager", "nb_pej", "nb_pa"]).to_csv(
+                out_dir / "procedures_global_par_type_usager.csv",
+                sep=";",
+                index=False,
+            )
 
 
 def analyse_pve_global(pve: pd.DataFrame, out_dir: Path) -> None:

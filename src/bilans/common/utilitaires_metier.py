@@ -1373,25 +1373,42 @@ def build_tab_resultats_controles(
     return res_ctrl
 
 
+ZONE_KEY_DEPARTEMENT = "Département"
+ZONE_LABEL_DEPARTEMENT_HORS = "Département (hors zone TUB/PNF)"
+
+
+def zone_table_display_label(zone: str) -> str:
+    """Libellé PDF/affichage pour la colonne zone (clé interne « Département » inchangée)."""
+    if str(zone).strip() == ZONE_KEY_DEPARTEMENT:
+        return ZONE_LABEL_DEPARTEMENT_HORS
+    return str(zone)
+
+
+def _mask_hors_tub_pnf(insee: pd.Series, tub_codes: set, pnf_codes: set) -> pd.Series:
+    """Communes ni en zone TUB ni en zone PNF (décompte ensembliste, sans double soustraction)."""
+    return ~insee.isin(tub_codes) & ~insee.isin(pnf_codes)
+
+
 def _zone_summary(
     df: pd.DataFrame,
     col_insee: str,
     tub_codes: set,
     pnf_codes: set,
 ) -> pd.DataFrame:
-    """Calcule nb_total, nb_conforme, nb_non_conforme pour dept / TUB / PNF."""
+    """Calcule nb_total, nb_conforme, nb_non_conforme pour dept hors TUB/PNF, TUB et PNF."""
     insee = df[col_insee].astype(str).str.zfill(5)
     rows = []
 
-    total = len(df)
-    if "resultat" in df.columns:
-        nb_nc_dept = count_controles_non_conformes_oscean(df["resultat"])
+    sub_dep = df[_mask_hors_tub_pnf(insee, tub_codes, pnf_codes)]
+    total = len(sub_dep)
+    if "resultat" in sub_dep.columns and not sub_dep.empty:
+        nb_nc_dept = count_controles_non_conformes_oscean(sub_dep["resultat"])
     else:
         nb_nc_dept = 0
     nb_conf_dept = total - nb_nc_dept
     rows.append(
         {
-            "zone": "Département",
+            "zone": ZONE_KEY_DEPARTEMENT,
             "nb_total": total,
             "nb_conforme": nb_conf_dept,
             "nb_non_conforme": nb_nc_dept,
@@ -1444,7 +1461,10 @@ def _zone_count(
     """Compte simple par zone (pour PVe / PEJ sans colonne 'resultat')."""
     insee = df[col_insee].astype(str).str.zfill(5)
     rows = [
-        {"zone": "Département", "nb": len(df)},
+        {
+            "zone": ZONE_KEY_DEPARTEMENT,
+            "nb": int(_mask_hors_tub_pnf(insee, tub_codes, pnf_codes).sum()),
+        },
         {"zone": "Zone TUB", "nb": int(insee.isin(tub_codes).sum())},
         {"zone": "PNF", "nb": int(insee.isin(pnf_codes).sum())},
     ]

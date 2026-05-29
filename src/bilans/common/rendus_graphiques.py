@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 import textwrap
+import warnings
 from pathlib import Path
 
 import geopandas as gpd
@@ -129,7 +130,13 @@ def _tight_with_legend_space(
     right: float = 0.96,
 ) -> None:
     """Marges figure (légende sous l'axe ou à droite selon le graphique)."""
-    fig.tight_layout(rect=(left, bottom, right, top))
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message=".*Tight layout not applied.*",
+            category=UserWarning,
+        )
+        fig.tight_layout(rect=(left, bottom, right, top))
 
 
 def save_chart(
@@ -882,5 +889,11 @@ def _make_map(
         va="bottom",
     )
 
-    fig.tight_layout()
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message=".*Tight layout not applied.*",
+            category=UserWarning,
+        )
+        fig.tight_layout()
     return save_chart(fig, tmp_dir, name)

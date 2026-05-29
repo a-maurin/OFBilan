@@ -1,9 +1,24 @@
 """Chargement/fusion de la configuration de présentation PDF (YAML)."""
 from __future__ import annotations
 
+import warnings
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
+
+# Alias sémantiques (migration progressive) → identifiants historiques internes.
+SECTION_ID_ALIASES: dict[str, str] = {
+    "sec_usagers": "sec4",
+    "sec_procedures": "sec3",
+}
+
+# Sous-sections du chapitre « Activité par type d'usager » (ID interne sec4, numérotation PDF 3.x).
+SEC4_SUBSECTION_DEFAULTS: tuple[tuple[str, str], ...] = (
+    ("sec41", "3.1. Thème de contrôle par type d'usager"),
+    ("sec42", "3.2. Résultats des contrôles par type d'usager"),
+    ("sec43", "3.3. Procédures d'enquête judiciaire (PEJ) par type d'usager"),
+    ("sec44", "3.4. Procédures administratives (PA) par type d'usager"),
+)
 
 
 DEFAULT_PDF_PRESENTATION_CONFIG: dict[str, Any] = {
@@ -45,7 +60,7 @@ DEFAULT_PDF_PRESENTATION_CONFIG: dict[str, Any] = {
             },
         },
         "sections": {
-            "order": ["sec1", "sec2", "sec3", "sec4", "sec5", "sec6"],
+            "order": ["sec1", "sec2", "sec4", "sec3", "sec5", "sec6"],
             "enabled": {},
             "titles": {
                 "sec22dom": "2.2. Nombre de localisations de contrôles par domaines",
@@ -237,6 +252,25 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
     return out
 
 
+def _hoist_legacy_section_titles(node: dict[str, Any]) -> None:
+    """
+    Compatibilité : ``titles`` au même niveau que ``sections`` (ancien YAML)
+    → fusion dans ``sections.titles``.
+    """
+    legacy = node.get("titles")
+    if not isinstance(legacy, dict):
+        return
+    sections = node.get("sections")
+    if not isinstance(sections, dict):
+        return
+    nested = sections.get("titles")
+    if isinstance(nested, dict):
+        sections["titles"] = _deep_merge(legacy, nested)
+    else:
+        sections["titles"] = deepcopy(legacy)
+    del node["titles"]
+
+
 def _normalize_config(data: dict[str, Any]) -> dict[str, Any]:
     """Normalisation minimale des clés attendues."""
     out = deepcopy(data)
@@ -248,6 +282,12 @@ def _normalize_config(data: dict[str, Any]) -> dict[str, Any]:
     out.setdefault("scopes", {})
     out.setdefault("profiles", {})
     out.setdefault("feature_registry", {})
+    for scope_cfg in out.get("scopes", {}).values():
+        if isinstance(scope_cfg, dict):
+            _hoist_legacy_section_titles(scope_cfg)
+    for profile_cfg in out.get("profiles", {}).values():
+        if isinstance(profile_cfg, dict):
+            _hoist_legacy_section_titles(profile_cfg)
     return out
 
 
@@ -321,6 +361,10 @@ def resolve_pdf_presentation_config(
             # Overlay hors scope profil : règles communes de diffusion externe.
             overlay = {k: v for k, v in ext_cfg.items() if k != "scope"}
             effective = _deep_merge(effective, overlay)
+
+    registry = raw.get("feature_registry", {})
+    if isinstance(registry, dict):
+        apply_feature_registry_to_effective(effective, scope, registry)
 
     return {
         "version": raw.get("version", 1),
@@ -453,6 +497,63 @@ def get_effective_pdf_presentation(
     return effective if isinstance(effective, dict) else {}
 
 
+def feature_registry_allows_scope(rule: Any, scope: str) -> bool:
+    """
+    Indique si une entrée ``feature_registry`` autorise la section pour ce moteur.
+
+    Valeurs attendues : ``both``, ``global``, ``thematique`` (insensible à la casse).
+    """
+    r = str(rule or "both").strip().lower()
+    s = str(scope or "").strip().lower()
+    if r in ("both", "all", ""):
+        return True
+    return r == s
+
+
+def apply_feature_registry_to_effective(
+    effective_cfg: dict[str, Any],
+    scope: str,
+    feature_registry: dict[str, Any],
+) -> None:
+    """
+    Désactive les sections hors périmètre moteur via ``sections.enabled``.
+
+    Une clé déjà présente dans ``sections.enabled`` (profil ou scope) n'est pas écrasée.
+    """
+    sections = effective_cfg.setdefault("sections", {})
+    enabled = sections.setdefault("enabled", {})
+    if not isinstance(enabled, dict):
+        enabled = {}
+        sections["enabled"] = enabled
+    for sid, rule in feature_registry.items():
+        canonical = normalize_section_id(str(sid), emit_alias_warning=False)
+        if canonical in enabled or str(sid) in enabled:
+            continue
+        if not feature_registry_allows_scope(rule, scope):
+            enabled[canonical] = False
+
+
+def normalize_section_id(section_id: str, *, emit_alias_warning: bool = False) -> str:
+    """
+    Résout un identifiant de section (alias sémantique → ID historique interne).
+
+    Les alias ``sec_usagers`` / ``sec_procedures`` restent acceptés dans le YAML
+    avec un avertissement de dépréciation.
+    """
+    sid = str(section_id or "").strip()
+    if not sid:
+        return sid
+    canonical = SECTION_ID_ALIASES.get(sid, sid)
+    if emit_alias_warning and canonical != sid:
+        warnings.warn(
+            f"Identifiant de section PDF déprécié « {sid} » : utiliser « {canonical} » "
+            f"(alias maintenu pour rétrocompatibilité).",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+    return canonical
+
+
 def is_section_enabled(
     effective_cfg: dict[str, Any],
     section_id: str,
@@ -465,8 +566,13 @@ def is_section_enabled(
     enabled = sections.get("enabled", {})
     if not isinstance(enabled, dict):
         return default
-    val = enabled.get(section_id, default)
-    return bool(val)
+    sid = normalize_section_id(section_id, emit_alias_warning=False)
+    if sid in enabled:
+        return bool(enabled[sid])
+    for alias, canonical in SECTION_ID_ALIASES.items():
+        if canonical == sid and alias in enabled:
+            return bool(enabled[alias])
+    return default
 
 
 def _resolve_blocks_node(effective_cfg: dict[str, Any], block_id: str) -> Any:
@@ -542,6 +648,42 @@ def format_proc_detail_caption(
     return base_caption
 
 
+def inject_sec4_subsections(
+    section_defs: list[tuple[str, str]],
+) -> list[tuple[str, str]]:
+    """Insère les sous-sections 3.x immédiatement après ``sec4`` dans la liste de définition."""
+    out: list[tuple[str, str]] = []
+    for sid, title in section_defs:
+        out.append((sid, title))
+        if sid == "sec4":
+            out.extend(SEC4_SUBSECTION_DEFAULTS)
+    return out
+
+
+def resolve_sec2_render_order(
+    sections_toc: list[tuple[str, str]],
+    *,
+    include_zone_subsections: bool,
+) -> list[str]:
+    """
+    Ordre de rendu des sous-parties du chapitre 2 (piloté par ``sections_toc``).
+
+    ``include_zone_subsections`` : True pour le profil agrainage (sec22theme / sec22res).
+    """
+    allowed = (
+        {"sec21", "sec22", "sec22theme", "sec22res"}
+        if include_zone_subsections
+        else {"sec21", "sec22"}
+    )
+    order = [sid for sid, _ in sections_toc if sid in allowed]
+    if order:
+        return order
+    fallback = ["sec21", "sec22"]
+    if include_zone_subsections:
+        fallback.extend(["sec22theme", "sec22res"])
+    return [sid for sid in fallback if sid in allowed]
+
+
 def resolve_sections_for_toc(
     effective_cfg: dict[str, Any],
     section_defs: list[tuple[str, str]],
@@ -560,7 +702,11 @@ def resolve_sections_for_toc(
 
     order_raw = sections_cfg.get("order", [])
     order = order_raw if isinstance(order_raw, list) else []
-    order_ids = [str(x).strip() for x in order if str(x).strip()]
+    order_ids = [
+        normalize_section_id(str(x).strip(), emit_alias_warning=True)
+        for x in order
+        if str(x).strip()
+    ]
 
     ordered: list[tuple[str, str]] = []
     seen: set[str] = set()
@@ -599,7 +745,13 @@ def resolve_section_titles(
 
     out: list[tuple[str, str]] = []
     for sid, default_title in section_defs:
-        custom = titles_cfg.get(sid, default_title)
+        custom = titles_cfg.get(sid)
+        if custom is None:
+            for alias, canonical in SECTION_ID_ALIASES.items():
+                if canonical == sid and alias in titles_cfg:
+                    custom = titles_cfg[alias]
+                    break
+        custom = custom if custom is not None else default_title
         title = str(custom).strip() if custom is not None else ""
         out.append((sid, title or default_title))
     return out

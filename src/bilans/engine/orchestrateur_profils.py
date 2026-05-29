@@ -57,6 +57,7 @@ from bilans.common.utilitaires_metier import (
     get_dept_name,
     _zone_summary,
     _zone_count,
+    zone_table_display_label,
     agg_effectifs_usagers,
     agg_effectifs_usagers_par_domaine,
     agg_controles_par_type_usager_domaine,
@@ -79,18 +80,22 @@ from bilans.common.pdf_report_builder import (
     PDFReportBuilder,
 )
 from bilans.common.pdf_shared_sections import (
+    add_procedures_par_type_usager_subsection,
     add_standard_cover_and_toc,
     add_standard_notice_methodology,
     build_filtered_glossary_rows,
     build_sec6_methodology_context,
     build_sec6_methodology_html,
     load_glossary_config,
+    summarize_procedures_par_type_usager,
 )
 from bilans.common.pdf_presentation_config import (
     apply_diffusion_pdf_suffix,
     build_title_lines_from_cfg,
     normalize_dept_typography,
     resolve_pdf_presentation_config,
+    inject_sec4_subsections,
+    resolve_sec2_render_order,
     resolve_section_titles,
     resolve_sections_for_toc,
     resolve_tables_layout,
@@ -1272,14 +1277,6 @@ def _run_spatial_analyses(
                     ]
                 )
             else:
-                base_z = base_z.copy()
-                # Décompte ensembliste (hors TUB et hors PNF) : si une PVe est TUB et PNF,
-                # une soustraction stricte (total − nb_tub − nb_pnf) la compte deux fois en moins.
-                insee = pve_filtered[pve_insee].astype(str).str.zfill(5)
-                in_tub = insee.isin(tub_codes)
-                in_pnf = insee.isin(pnf_codes)
-                nb_hors_tub_pnf = int((~in_tub & ~in_pnf).sum())
-                base_z.loc[base_z["zone"] == "Département", "nb"] = nb_hors_tub_pnf
                 results["zone_pve"] = base_z
 
     if (need_pnf or need_tub) and not pej_filtered.empty:
@@ -2453,6 +2450,7 @@ def _pdf_section_activite_par_types_usagers(
     avail_w: float,
     *,
     presentation_cfg: dict[str, Any],
+    section_title: dict[str, str],
     pie_ratio: float,
     bar_ratio: float,
     legend_fontsize: float,
@@ -2470,8 +2468,20 @@ def _pdf_section_activite_par_types_usagers(
     total_ctrl_lignes = float(ctrl_ut["nb_controles"].sum()) or 1.0
     sum_par_type = ctrl_ut.groupby("type_usager")["nb_controles"].sum()
 
-    # 1) Camembert : même modèle que « Répartition des résultats » (chart_pie par défaut + ratio PDF identique).
     pie_data = {str(k): int(v) for k, v in sum_par_type.items()}
+    show_themes = is_block_enabled(
+        presentation_cfg, "sec4.show_table_themes_par_type_usager", True
+    )
+    if pie_data or show_themes:
+        if is_section_enabled(presentation_cfg, "sec41", True):
+            builder.add_section(
+                "sec41",
+                section_title.get("sec41", "3.1. Thème de contrôle par type d'usager"),
+                level=2,
+                toc_level=1,
+            )
+
+    # 1) Camembert : même modèle que « Répartition des résultats » (chart_pie par défaut + ratio PDF identique).
     if pie_data:
         pie_path = chart_pie(
             pie_data,
@@ -2488,7 +2498,7 @@ def _pdf_section_activite_par_types_usagers(
         builder.add_image(Path(pie_path), width_ratio=pie_ratio, spacer_after_mm=0.8)
 
     # 2) Un tableau par type d'usager : thèmes (nb + % du total général + % du sous-total type)
-    if is_block_enabled(presentation_cfg, "sec4.show_table_themes_par_type_usager", True):
+    if show_themes:
         type_order = sum_par_type.sort_values(ascending=False).index
         first_tbl = True
         for tu in type_order:
@@ -2639,8 +2649,15 @@ def _pdf_section_activite_par_types_usagers(
         n_other_cols = len(tbl_res[0]) - 1
         other_w = (avail_w - first_col_w) / float(max(1, n_other_cols))
         col_widths = [first_col_w] + [other_w] * n_other_cols
+        if is_section_enabled(presentation_cfg, "sec42", True):
+            builder.add_section(
+                "sec42",
+                section_title.get("sec42", "3.2. Résultats des contrôles par type d'usager"),
+                level=2,
+                toc_level=1,
+            )
         builder.add_heading_chart_table_keep_together(
-            heading_text="Résultats des contrôles par type d'usager",
+            heading_text="",
             heading_style="Heading2",
             chart_path=Path(bar_path),
             chart_width_ratio=bar_ratio,
@@ -2651,6 +2668,15 @@ def _pdf_section_activite_par_types_usagers(
             header_font_size=7.5,
             trailing_spacer_mm=1.0,
         )
+
+    proc_summary = summarize_procedures_par_type_usager(results.get("proc_par_usager_domaine"))
+    add_procedures_par_type_usager_subsection(
+        builder,
+        proc_summary,
+        avail_w=avail_w,
+        presentation_cfg=presentation_cfg,
+        section_title=section_title,
+    )
 
 
 def _generate_pdf(
@@ -2779,33 +2805,34 @@ def _generate_pdf(
     )
     section_defs = [
         ("sec1", "1. Chiffres clés"),
-        ("sec2", "2. Contrôles"),
+        ("sec2", "2. Activité de contrôle"),
         ("sec21", _sec21_titre_defaut),
         ("sec22", "2.2. Résultats des contrôles"),
-        ("sec3", "3. Procédures"),
-        ("sec31", "3.1 Procès verbaux électroniques (Pve)"),
-        ("sec32", "3.2 Procédures d'enquête judiciaire (PEJ)"),
-        ("sec33", "3.3 Procédures administratives"),
-        ("sec4", "4. Activité de contrôle par type d’usager"),
+        ("sec4", "3. Activité par type d’usager"),
+        ("sec3", "4. Procédures (PEJ, PA, PVe)"),
+        ("sec31", "4.1 Procès-verbaux électroniques (PVe)"),
+        ("sec32", "4.2 Procédures d’enquête judiciaire (PEJ)"),
+        ("sec33", "4.3 Procédures administratives (PA)"),
         ("sec5", "5. Localisation cartographique des contrôles"),
         ("sec6", "6. Annexes"),
     ]
     if profil_id == "agrainage":
         section_defs = [
             ("sec1", "1. Chiffres clés"),
-            ("sec2", "2. Contrôles"),
+            ("sec2", "2. Activité de contrôle"),
             ("sec21", _sec21_titre_defaut),
             ("sec22", "2.2. Résultats des contrôles"),
             ("sec22theme", "2.3. Analyse par zone"),
             ("sec22res", "2.4. Synthèse croisée par zone"),
-            ("sec3", "3. Procédures"),
-            ("sec31", "3.1 Procès verbaux électroniques (Pve)"),
-            ("sec32", "3.2 Procédures d'enquête judiciaire (PEJ)"),
-            ("sec33", "3.3 Procédures administratives"),
-            ("sec4", "2.5. Activité de contrôle par type d’usager"),
+            ("sec4", "3. Activité par type d’usager"),
+            ("sec3", "4. Procédures (PEJ, PA, PVe)"),
+            ("sec31", "4.1 Procès-verbaux électroniques (PVe)"),
+            ("sec32", "4.2 Procédures d’enquête judiciaire (PEJ)"),
+            ("sec33", "4.3 Procédures administratives (PA)"),
             ("sec5", "5. Localisation cartographique des contrôles"),
             ("sec6", "6. Annexes"),
         ]
+    section_defs = inject_sec4_subsections(section_defs)
     resolved_section_defs = resolve_section_titles(presentation_cfg, section_defs)
     sections = resolved_section_defs
     sections_toc = resolve_sections_for_toc(presentation_cfg, resolved_section_defs)
@@ -2905,7 +2932,7 @@ def _generate_pdf(
         builder.add_paragraph(
             "Les données de cette partie concernent uniquement l'activité de contrôle "
             "au titre de la police administrative. Pour les données exhaustives relatives "
-            "à l'activité de police judiciaire, se référer à la partie 3. Procédures."
+            "à l'activité de police judiciaire, se référer à la partie 4. Procédures."
         )
 
     # ── ANALYSE DE L'ENSEMBLE DE LA PÉRIODE DU BILAN / RÉSULTATS ──
@@ -3371,14 +3398,196 @@ def _generate_pdf(
         elif show_placeholder:
             builder.add_paragraph("Aucune donnée de résultat disponible sur la période.")
         # On ne force pas systématiquement un saut de page ici.
+        if profil_id == "agrainage":
+            _render_zone_tub_block()
+
+    def _render_zone_tub_block() -> None:
+        """Bloc Zone TUB / hors zone TUB (sans entrée TOC dédiée)."""
+        if not options.get("tub", False):
+            return
+        pt = results.get("point_with_pnf")
+        tub_codes = results.get("tub_codes") or set()
+        if pt is None or pt.empty or not tub_codes:
+            return
+        insee_col = _get_insee_col(pt)
+        if not insee_col:
+            return
+        insee = pt[insee_col].astype(str).str.zfill(5)
+        mask_tub = insee.isin(tub_codes)
+        sub_tub = pt[mask_tub]
+        sub_hors = pt[~mask_tub]
+        if sub_tub.empty:
+            return
+
+        def _nc_non_conf(sub: pd.DataFrame) -> int:
+            if "resultat" in sub.columns and not sub.empty:
+                return count_controles_non_conformes_oscean(sub["resultat"])
+            return 0
+
+        total_tub = len(sub_tub)
+        nc_tub = _nc_non_conf(sub_tub)
+        total_hors_tub = len(sub_hors)
+        nc_hors_tub = _nc_non_conf(sub_hors)
+        data_tub = [
+            {
+                "zone": "Zone TUB",
+                "nb_controles": total_tub,
+                "nb_non_conforme": nc_tub,
+                "taux_non_conformite": nc_tub / total_tub if total_tub > 0 else pd.NA,
+            },
+            {
+                "zone": "Hors zone TUB",
+                "nb_controles": total_hors_tub,
+                "nb_non_conforme": nc_hors_tub,
+                "taux_non_conformite": (
+                    nc_hors_tub / total_hors_tub if total_hors_tub > 0 else pd.NA
+                ),
+            },
+        ]
+        agg_tub = sort_dataframe_desc(pd.DataFrame(data_tub), ["nb_controles"])
+        if profil_id != "agrainage":
+            builder.add_section("sec_tub", "Zone TUB / Hors zone TUB")
+        tbl = [["Zone", "Nb contrôles", "Contrôles non-conformes", "Taux de non-conformité"]]
+        grp_labels, series_ctrl_tub = [], {"Contrôles": [], "Non conformes": []}
+        for _, row in agg_tub.iterrows():
+            t = format_pct_int_from_rate(row.get("taux_non_conformite"))
+            tbl.append(
+                [
+                    str(row["zone"]),
+                    str(int(row["nb_controles"])),
+                    str(int(row["nb_non_conforme"])),
+                    t,
+                ]
+            )
+            grp_labels.append(str(row["zone"]))
+            series_ctrl_tub["Contrôles"].append(int(row["nb_controles"]))
+            series_ctrl_tub["Non conformes"].append(int(row["nb_non_conforme"]))
+        builder.add_table(
+            tbl,
+            caption=pdf_metric_caption("Contrôles – Zone TUB vs Hors zone TUB", "ctrl"),
+            col_widths=[
+                avail_w * 0.30,
+                avail_w * 0.23,
+                avail_w * 0.23,
+                avail_w * 0.24,
+            ],
+            col_aligns=["LEFT", "RIGHT", "RIGHT", "RIGHT"],
+        )
+        if grp_labels:
+            bar_tub_path = chart_bar_grouped(
+                grp_labels,
+                series_ctrl_tub,
+                "Contrôles : Zone TUB vs Hors zone TUB",
+                "Nombre",
+                tmp_dir,
+                "bar_tub.png",
+            )
+            builder.add_image(Path(bar_tub_path), width_ratio=chart_ratio_base)
+
+    def _render_sec22theme() -> None:
+        if profil_id != "agrainage":
+            return
+        if not is_section_enabled(presentation_cfg, "sec22theme", True):
+            return
+        zone_ctrl_local = results.get("zone_ctrl")
+        if zone_ctrl_local is None or not options.get("tub", False):
+            return
+        builder.add_section(
+            "sec22theme",
+            section_title.get("sec22theme", "2.3. Analyse par zone"),
+            level=2,
+            toc_level=1,
+        )
+        tbl = [
+            [
+                "Zone",
+                "Nb total",
+                "Nb conforme",
+                "Contrôles non-conformes",
+                "Taux de non-conformité",
+            ]
+        ]
+        for _, row in zone_ctrl_local.iterrows():
+            t = format_pct_int_from_rate(row.get("taux_non_conformite"))
+            tbl.append(
+                [
+                    zone_table_display_label(str(row["zone"])),
+                    str(int(row["nb_total"])),
+                    str(int(row["nb_conforme"])),
+                    str(int(row["nb_non_conforme"])),
+                    t,
+                ]
+            )
+        builder.add_table(
+            tbl,
+            caption=pdf_metric_caption(
+                "Contrôles par zone (Département hors zone TUB/PNF, TUB, PNF)", "ctrl"
+            ),
+            col_widths=[
+                avail_w * 0.25,
+                avail_w * 0.18,
+                avail_w * 0.19,
+                avail_w * 0.19,
+                avail_w * 0.19,
+            ],
+            col_aligns=["LEFT", "RIGHT", "RIGHT", "RIGHT", "RIGHT"],
+        )
+
+    def _render_sec22res() -> None:
+        if profil_id != "agrainage":
+            return
+        if not is_section_enabled(presentation_cfg, "sec22res", True):
+            return
+        synth_local = results.get("synthese_zone")
+        if synth_local is None:
+            return
+        builder.add_section(
+            "sec22res",
+            section_title.get("sec22res", "2.4. Synthèse croisée par zone"),
+            level=2,
+            toc_level=1,
+        )
+        col_labels = []
+        for c in synth_local.columns:
+            if c == "ctrl_total":
+                col_labels.append(PDF_LABEL_CTRL_LOCATIONS)
+            elif c == "ctrl_infraction":
+                col_labels.append("Contrôles non-conformes")
+            elif c == "pve_nb":
+                col_labels.append("Nombre d'infractions relevées par PVe")
+            elif c == "pej_nb":
+                col_labels.append(PDF_LABEL_PEJ_COUNT)
+            else:
+                col_labels.append(str(c))
+        tbl = [col_labels]
+        for _, row in synth_local.iterrows():
+            cells = []
+            for col_name, v in row.items():
+                if col_name == "zone":
+                    cells.append(zone_table_display_label(str(v)))
+                elif isinstance(v, (int, float)) and pd.notna(v):
+                    cells.append(str(int(v)))
+                else:
+                    cells.append(str(v))
+            tbl.append(cells)
+        builder.add_table(
+            tbl,
+            caption=(
+                "Synthèse croisée par zone : contrôles non-conformes, "
+                "PEJ et infractions relevées par PVe."
+            ),
+        )
 
     sec2_registry = SectionRegistry()
     sec2_registry.register("sec21", lambda _ctx: _render_sec21())
     sec2_registry.register("sec22", lambda _ctx: _render_sec22())
+    sec2_registry.register("sec22theme", lambda _ctx: _render_sec22theme())
+    sec2_registry.register("sec22res", lambda _ctx: _render_sec22res())
 
-    sec2_order = [sid for sid, _ in sections_toc if sid in {"sec21", "sec22"}]
-    if not sec2_order:
-        sec2_order = ["sec21", "sec22"]
+    sec2_order = resolve_sec2_render_order(
+        sections_toc,
+        include_zone_subsections=(profil_id == "agrainage"),
+    )
     sec2_registry.render_many(sec2_order, {})
 
     sec3_order = [sid for sid, _ in sections_toc if sid in {"sec31", "sec32", "sec33"}]
@@ -3518,10 +3727,12 @@ def _generate_pdf(
             if is_block_enabled(presentation_cfg, "sec31.show_zone_table", True) and zone_pve is not None:
                 tbl = [["Zone", "Nombre"]]
                 for _, row in zone_pve.iterrows():
-                    zname = str(row["zone"])
-                    if zname == "Département":
-                        zname = "Département (hors PNF/TUB)"
-                    tbl.append([zname, str(int(row["nb"]))])
+                    tbl.append(
+                        [
+                            zone_table_display_label(str(row["zone"])),
+                            str(int(row["nb"])),
+                        ]
+                    )
                 zone_table = {
                     "data_rows": tbl,
                     "caption": "PVe par zone",
@@ -3640,7 +3851,12 @@ def _generate_pdf(
         if is_block_enabled(presentation_cfg, "sec32.show_zone_table", True) and zone_pej is not None:
             tbl_z = [["Zone", "Nombre"]]
             for _, row in zone_pej.iterrows():
-                tbl_z.append([str(row["zone"]), str(int(row["nb"]))])
+                tbl_z.append(
+                    [
+                        zone_table_display_label(str(row["zone"])),
+                        str(int(row["nb"])),
+                    ]
+                )
             builder.add_table(
                 tbl_z,
                 caption=pdf_metric_caption("PEJ par zone", "proc"),
@@ -3665,12 +3881,6 @@ def _generate_pdf(
                 caption=pdf_metric_caption("PEJ par suite donnée", "proc"),
                               col_widths=[avail_w * 0.6, avail_w * 0.4],
                               col_aligns=["LEFT", "RIGHT"])
-        if is_type_usager and nb_ctrl > 0:
-            _render_proc_par_domaine_theme(
-                ("nb_pej",),
-                caption_domaine=pdf_metric_caption("Procédures par domaine", "proc"),
-                caption_theme=pdf_metric_caption("Procédures par thème", "proc"),
-            )
         pej_nat = results.get("pej_natinf_analysis")
         if (
             is_block_enabled(presentation_cfg, "sec32.show_natinf_analysis", True)
@@ -3712,22 +3922,13 @@ def _generate_pdf(
             if show_placeholder:
                 builder.add_paragraph("Aucune procédure administrative sur la période.")
             return
-        cap_dom = pdf_metric_caption("Procédures par domaine", "proc")
-        cap_theme = pdf_metric_caption("Procédures par thème", "proc")
         proc_tables: list[dict] = []
-        if is_type_usager and nb_ctrl > 0:
-            proc_tables = _proc_domaine_theme_table_specs(
-                ("nb_pa",),
-                caption_domaine=cap_dom,
-                caption_theme=cap_theme,
-            )
-        else:
-            pa_theme = results.get("pa_par_theme")
-            if (
-                pa_theme is not None
-                and not pa_theme.empty
-                and is_block_enabled(presentation_cfg, "sec33.show_theme_table", True)
-            ):
+        pa_theme = results.get("pa_par_theme")
+        if (
+            pa_theme is not None
+            and not pa_theme.empty
+            and is_block_enabled(presentation_cfg, "sec33.show_theme_table", True)
+        ):
                 df = pa_theme.head(10).copy()
                 tbl = [list(df.columns)]
                 for _, row in df.iterrows():
@@ -3812,193 +4013,86 @@ def _generate_pdf(
         sec3_registry.register("sec33", lambda _ctx: _render_sec33())
         sec3_registry.render_many(sec3_order, {})
 
-    # Le détail zone (ex-PNF) des contrôles est désormais intégré au tableau
-    # « Résultats des contrôles » (partie 2.2) pour éviter une sous-partie dédiée.
-
-    # ── ZONE TUB / HORS ZONE TUB ─
-    # Affichée uniquement si l'option tub est activée dans le profil / YAML.
-    zone_ctrl = results.get("zone_ctrl")
-    if options.get("tub", False) and zone_ctrl is not None and not zone_ctrl.empty:
-        # On dérive Zone TUB / Hors zone TUB à partir du récapitulatif départemental.
-        df_zone = zone_ctrl.copy()
-        # Ligne départementale
-        dep = df_zone[df_zone["zone"] == "Département"].iloc[0]
-        total_dep = int(dep["nb_total"])
-        nc_dep = int(dep["nb_non_conforme"])
-        conf_dep = int(dep["nb_conforme"])
-
-        # Ligne TUB (peut être absente si aucune commune TUB dans le département)
-        tub_rows = df_zone[df_zone["zone"] == "Zone TUB"]
-        if not tub_rows.empty:
-            tub = tub_rows.iloc[0]
-            total_tub = int(tub["nb_total"])
-            nc_tub = int(tub["nb_non_conforme"])
-            conf_tub = int(tub["nb_conforme"])
-
-            total_hors_tub = max(total_dep - total_tub, 0)
-            nc_hors_tub = max(nc_dep - nc_tub, 0)
-            conf_hors_tub = max(conf_dep - conf_tub, 0)
-
-            data_tub = [
-                {
-                    "zone": "Zone TUB",
-                    "nb_controles": total_tub,
-                    "nb_non_conforme": nc_tub,
-                    "taux_non_conformite": (
-                        nc_tub / total_tub if total_tub > 0 else pd.NA
-                    ),
-                },
-                {
-                    "zone": "Hors zone TUB",
-                    "nb_controles": total_hors_tub,
-                    "nb_non_conforme": nc_hors_tub,
-                    "taux_non_conformite": (
-                        nc_hors_tub / total_hors_tub
-                        if total_hors_tub > 0
-                        else pd.NA
-                    ),
-                },
+    # Profils à zones hors agrainage (PNF, etc.) : blocs zone / synthèse hors registry YAML.
+    if profil_id != "agrainage":
+        _render_zone_tub_block()
+        zone_ctrl_legacy = results.get("zone_ctrl")
+        if zone_ctrl_legacy is not None and options.get("tub", False):
+            builder.add_section("sec_ctrl_zone", "Analyse par zone", level=2)
+            tbl = [
+                [
+                    "Zone",
+                    "Nb total",
+                    "Nb conforme",
+                    "Contrôles non-conformes",
+                    "Taux de non-conformité",
+                ]
             ]
-            agg_tub = sort_dataframe_desc(pd.DataFrame(data_tub), ["nb_controles"])
-
-            # Pour l'agrainage, on ne crée pas de nouvelle section de niveau I/II :
-            # le bloc Zone TUB fait partie de la section « Zones d'intérêt ».
-            if profil_id != "agrainage":
-                builder.add_section("sec_tub", "Zone TUB / Hors zone TUB")
-            tbl = [["Zone", "Nb contrôles", "Contrôles non-conformes", "Taux de non-conformité"]]
-            grp_labels, series_ctrl_tub = [], {"Contrôles": [], "Non conformes": []}
-            for _, row in agg_tub.iterrows():
+            for _, row in zone_ctrl_legacy.iterrows():
                 t = format_pct_int_from_rate(row.get("taux_non_conformite"))
                 tbl.append(
                     [
-                        str(row["zone"]),
-                        str(int(row["nb_controles"])),
+                        zone_table_display_label(str(row["zone"])),
+                        str(int(row["nb_total"])),
+                        str(int(row["nb_conforme"])),
                         str(int(row["nb_non_conforme"])),
                         t,
                     ]
                 )
-                grp_labels.append(str(row["zone"]))
-                series_ctrl_tub["Contrôles"].append(int(row["nb_controles"]))
-                series_ctrl_tub["Non conformes"].append(int(row["nb_non_conforme"]))
             builder.add_table(
                 tbl,
                 caption=pdf_metric_caption(
-                    "Contrôles – Zone TUB vs Hors zone TUB", "ctrl"
+                    "Contrôles par zone (Département hors zone TUB/PNF, TUB, PNF)", "ctrl"
                 ),
                 col_widths=[
-                    avail_w * 0.30,
-                    avail_w * 0.23,
-                    avail_w * 0.23,
-                    avail_w * 0.24,
+                    avail_w * 0.25,
+                    avail_w * 0.18,
+                    avail_w * 0.19,
+                    avail_w * 0.19,
+                    avail_w * 0.19,
                 ],
-                col_aligns=["LEFT", "RIGHT", "RIGHT", "RIGHT"],
+                col_aligns=["LEFT", "RIGHT", "RIGHT", "RIGHT", "RIGHT"],
             )
-            if grp_labels:
-                bar_tub_path = chart_bar_grouped(
-                    grp_labels,
-                    series_ctrl_tub,
-                    "Contrôles : Zone TUB vs Hors zone TUB",
-                    "Nombre",
-                    tmp_dir,
-                    "bar_tub.png",
-                )
-                builder.add_image(Path(bar_tub_path), width_ratio=chart_ratio_base)
-            # Pour l'agrainage, on place l'ensemble de la section « Zones d'intérêt »
-            # (PNF + TUB) sur une seule page. Un saut de page unique est ajouté ici.
-            if profil_id == "agrainage":
-                builder.add_page_break()
-    # ── ANALYSE PAR ZONE ──
-    zone_ctrl = results.get("zone_ctrl")
-    if zone_ctrl is not None and options.get("tub", False):
-        if profil_id == "agrainage":
-            # Pour le bilan agrainage, l'analyse par zone est intégrée comme
-            # sous-partie TOC dédiée de la section "Contrôles" (niveau 2).
-            builder.add_section(
-                "sec22theme",
-                section_title.get("sec22theme", "2.3. Analyse par zone"),
-                level=2,
-                toc_level=1,
-            )
-        else:
-            builder.add_section("sec_ctrl_zone", "Analyse par zone", level=2)
-        tbl = [["Zone", "Nb total", "Nb conforme", "Contrôles non-conformes", "Taux de non-conformité"]]
-        for _, row in zone_ctrl.iterrows():
-            t = format_pct_int_from_rate(row.get("taux_non_conformite"))
-            tbl.append(
-                [
-                    str(row["zone"]),
-                    str(int(row["nb_total"])),
-                    str(int(row["nb_conforme"])),
-                    str(int(row["nb_non_conforme"])),
-                    t,
-                ]
-            )
-        builder.add_table(
-            tbl,
-            caption=pdf_metric_caption(
-                "Contrôles par zone (Département, TUB, PNF)", "ctrl"
-            ),
-            col_widths=[
-                avail_w * 0.25,
-                avail_w * 0.18,
-                avail_w * 0.19,
-                avail_w * 0.19,
-                avail_w * 0.19,
-            ],
-            col_aligns=["LEFT", "RIGHT", "RIGHT", "RIGHT", "RIGHT"],
-        )
-        # Section dense : on conserve un saut de page dédié.
-
-    # ── SYNTHÈSE CROISÉE ──
-    synth = results.get("synthese_zone")
-    if synth is not None:
-        if profil_id == "agrainage":
-            builder.add_section(
-                "sec22res",
-                section_title.get("sec22res", "2.4. Synthèse croisée par zone"),
-                level=2,
-                toc_level=1,
-            )
-        else:
+        synth_legacy = results.get("synthese_zone")
+        if synth_legacy is not None:
             builder.add_section("sec_ctrl_synthese", "Synthèse croisée par zone", level=2)
-        # Renommer les colonnes pour expliciter la signification des données
-        col_labels = []
-        for c in synth.columns:
-            if c == "ctrl_total":
-                col_labels.append(PDF_LABEL_CTRL_LOCATIONS)
-            elif c == "ctrl_infraction":
-                col_labels.append("Contrôles non-conformes")
-            elif c == "pve_nb":
-                col_labels.append("Nombre d'infractions relevées par PVe")
-            elif c == "pej_nb":
-                col_labels.append(PDF_LABEL_PEJ_COUNT)
-            else:
-                col_labels.append(str(c))
-        tbl = [col_labels]
-        for _, row in synth.iterrows():
-            tbl.append([str(int(v)) if isinstance(v, (int, float)) and pd.notna(v)
-                        else str(v) for v in row.values])
-        builder.add_table(
-            tbl,
-            caption=(
-                "Synthèse croisée par zone : contrôles non-conformes, "
-                "PEJ et infractions relevées par PVe."
-            ),
-        )
-        # Section dense : on conserve un saut de page dédié.
+            col_labels = []
+            for c in synth_legacy.columns:
+                if c == "ctrl_total":
+                    col_labels.append(PDF_LABEL_CTRL_LOCATIONS)
+                elif c == "ctrl_infraction":
+                    col_labels.append("Contrôles non-conformes")
+                elif c == "pve_nb":
+                    col_labels.append("Nombre d'infractions relevées par PVe")
+                elif c == "pej_nb":
+                    col_labels.append(PDF_LABEL_PEJ_COUNT)
+                else:
+                    col_labels.append(str(c))
+            tbl = [col_labels]
+            for _, row in synth_legacy.iterrows():
+                tbl.append(
+                    [
+                        str(int(v)) if isinstance(v, (int, float)) and pd.notna(v) else str(v)
+                        for v in row.values
+                    ]
+                )
+            builder.add_table(
+                tbl,
+                caption=(
+                    "Synthèse croisée par zone : contrôles non-conformes, "
+                    "PEJ et infractions relevées par PVe."
+                ),
+            )
 
     # ── ACTIVITÉ PAR TYPES D'USAGERS (hors profil dédié « analyses.type_usager ») ──
     def _render_sec4() -> None:
         if not is_section_enabled(presentation_cfg, "sec4", True):
             return
-        sec4_title = section_title["sec4"]
-        sec4_toc_level = 1 if str(sec4_title).lstrip().startswith("2.") else 0
         builder.add_section(
             "sec4",
-            sec4_title,
+            section_title["sec4"],
             start_on_new_page=True,
             compact=True,
-            toc_level=sec4_toc_level,
         )
         if results.get("_pdf_show_pression_controle_usagers"):
             _pdf_section_pression_controle_usagers(
@@ -4029,6 +4123,7 @@ def _generate_pdf(
                 tmp_dir,
                 avail_w,
                 presentation_cfg=presentation_cfg,
+                section_title=section_title,
                 pie_ratio=sec4_pie_ratio,
                 bar_ratio=chart_ratio_base * 0.88,
                 legend_fontsize=max(6.5, legend_fontsize - 0.5),
@@ -4072,7 +4167,8 @@ def _generate_pdf(
 
     # ── ANNEXES ──
     builder.add_section("sec6", section_title["sec6"], start_on_new_page=True)
-    has_zone_table = zone_ctrl is not None and not zone_ctrl.empty
+    zone_ctrl_annex = results.get("zone_ctrl")
+    has_zone_table = zone_ctrl_annex is not None and not zone_ctrl_annex.empty
     has_pnf = bool(options.get("pnf", False)) and results.get("agg_pnf") is not None
     has_tub = bool(options.get("tub", False)) and has_zone_table
     is_pnf_profile = str(profil_id).strip().lower() in {"pnf", "pnf_foret"}

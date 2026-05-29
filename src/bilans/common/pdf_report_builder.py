@@ -539,7 +539,67 @@ class PDFReportBuilder:
             merged.extend(self._pending_section)
             self._pending_section = None
         merged.extend(flowables)
-        self.story.append(KeepTogether(merged))
+        if self._should_keep_block_together(merged):
+            self.story.append(KeepTogether(merged))
+        else:
+            self.story.extend(merged)
+
+    def _should_keep_block_together(self, flowables: List) -> bool:
+        """Heuristique anti-pages vides: éviter KeepTogether sur blocs lourds."""
+        if not flowables:
+            return False
+        table_count = sum(1 for f in flowables if isinstance(f, Table))
+        image_count = sum(1 for f in flowables if isinstance(f, RLImage))
+        if image_count > 0:
+            return False
+        if table_count > 1:
+            return False
+        return True
+
+    def _append_with_pending(self, block: List, *, keep_together: bool) -> None:
+        """Ajoute un bloc en gérant le titre pending avec KeepTogether optionnel."""
+        has_pending = self._pending_section is not None
+        pending: List = []
+        if has_pending:
+            pending = list(self._pending_section or [])
+            self._pending_section = None
+        if not has_pending:
+            if keep_together:
+                self.story.append(KeepTogether(block))
+            else:
+                attach_count = self._leading_title_chunk_len(block)
+                self.story.append(KeepTogether(block[:attach_count]))
+                self.story.extend(block[attach_count:])
+            return
+        if not block:
+            self.story.extend(pending)
+            return
+        merged: List = pending + block
+        if keep_together:
+            self.story.append(KeepTogether(merged))
+            return
+        # Règle stricte: un titre (section/sous-section ou titre local de bloc)
+        # reste lié au premier contenu afférent, même en pagination souple.
+        attach_count = self._leading_title_chunk_len(block)
+        self.story.append(KeepTogether(pending + block[:attach_count]))
+        self.story.extend(block[attach_count:])
+
+    def _leading_title_chunk_len(self, block: List) -> int:
+        """
+        Taille minimale d'un préfixe à garder ensemble:
+        - titre local (Paragraph) + spacers immédiats + premier contenu réel,
+        - sinon au moins le premier élément.
+        """
+        if not block:
+            return 0
+        if not isinstance(block[0], Paragraph):
+            return 1
+        idx = 1
+        while idx < len(block) and isinstance(block[idx], Spacer):
+            idx += 1
+        if idx < len(block):
+            return idx + 1
+        return 1
 
     def add_heading_chart_table_keep_together(
         self,
@@ -560,12 +620,10 @@ class PDFReportBuilder:
         saut de page n'isole le titre du contenu (cas fréquent en fin de page).
         """
         block: List = []
-        if self._pending_section is not None:
-            block.extend(self._pending_section)
-            self._pending_section = None
-        style_key = heading_style if heading_style in self.styles else "Heading2"
-        block.append(Paragraph(heading_text, self.styles[style_key]))
-        block.append(Spacer(1, SPACING_S))
+        if str(heading_text or "").strip():
+            style_key = heading_style if heading_style in self.styles else "Heading2"
+            block.append(Paragraph(heading_text, self.styles[style_key]))
+            block.append(Spacer(1, SPACING_S))
         w = self.avail_w * float(chart_width_ratio)
         if Path(chart_path).exists():
             try:
@@ -592,7 +650,10 @@ class PDFReportBuilder:
             )
         )
         block.append(Spacer(1, float(trailing_spacer_mm) * mm))
-        self.story.append(KeepTogether(block))
+        self._append_with_pending(
+            block,
+            keep_together=self._should_keep_block_together(block),
+        )
 
     # ------------------------------------------------------------------
     # Key figures
@@ -713,11 +774,10 @@ class PDFReportBuilder:
         )
         if not block:
             return
-        if self._pending_section is not None:
-            self.story.append(KeepTogether(self._pending_section + block))
-            self._pending_section = None
-        else:
-            self.story.extend(block)
+        self._append_with_pending(
+            block,
+            keep_together=self._should_keep_block_together(block),
+        )
 
     def append_pending_callout_box(
         self,
@@ -1093,15 +1153,10 @@ class PDFReportBuilder:
         block.append(tbl)
         block.append(Spacer(1, float(spacer_after_mm) * mm))
         use_keep = (bool(caption) and keep_caption_with_table) or keep_together
-        if use_keep:
-            if self._pending_section is not None:
-                self.story.append(KeepTogether(self._pending_section + block))
-                self._pending_section = None
-            else:
-                self.story.append(KeepTogether(block))
-        elif self._pending_section is not None:
-            self.story.append(KeepTogether(self._pending_section + block))
-            self._pending_section = None
+        if self._pending_section is not None:
+            self._append_with_pending(block, keep_together=use_keep)
+        elif use_keep:
+            self.story.append(KeepTogether(block))
         else:
             for el in block:
                 self.story.append(el)
@@ -1121,9 +1176,6 @@ class PDFReportBuilder:
         + graphique PNG dans un seul ``KeepTogether`` (ex. section VII PNF).
         """
         block: List = []
-        if self._pending_section is not None:
-            block.extend(self._pending_section)
-            self._pending_section = None
         if table_caption:
             block.append(Paragraph(table_caption, self.styles["TableCaption"]))
             block.append(Spacer(1, SPACING_XXS))
@@ -1149,7 +1201,8 @@ class PDFReportBuilder:
             img.hAlign = "CENTER"
             block.append(img)
         block.append(Spacer(1, 1 * mm))
-        self.story.append(KeepTogether(block))
+        keep_block = self._should_keep_block_together(block) and not split_by_row
+        self._append_with_pending(block, keep_together=keep_block)
 
     def add_tables_keep_together(
         self,
@@ -1165,9 +1218,6 @@ class PDFReportBuilder:
         if not table_specs:
             return
         block: List = []
-        if self._pending_section is not None:
-            block.extend(self._pending_section)
-            self._pending_section = None
         split_by_row = bool(self._tables_layout.get("split_by_row"))
         rendered = 0
         for spec in table_specs:
@@ -1193,7 +1243,10 @@ class PDFReportBuilder:
         if not rendered:
             return
         block.append(Spacer(1, float(trailing_spacer_mm) * mm))
-        self.story.append(KeepTogether(block))
+        self._append_with_pending(
+            block,
+            keep_together=self._should_keep_block_together(block),
+        )
 
     # ------------------------------------------------------------------
     # Images / Charts
@@ -1230,12 +1283,10 @@ class PDFReportBuilder:
             block.append(Spacer(1, SPACING_S))
             block.append(Paragraph(f"<i>{caption}</i>", self.styles["BodySmall"]))
         block.append(Spacer(1, float(spacer_after_mm) * mm))
-        if self._pending_section is not None:
-            self.story.append(KeepTogether(self._pending_section + block))
-            self._pending_section = None
-        else:
-            for el in block:
-                self.story.append(el)
+        self._append_with_pending(
+            block,
+            keep_together=False,
+        )
 
     def _map_image_holder_table(self, path: Path, map_cell_w: float) -> Table:
         """Table 1×1 largeur fixe : centre l'image et évite un débordement perçu au bord du cadre."""

@@ -7,12 +7,15 @@ from typing import Any
 
 from bilans.common.pdf_presentation_config import (
     DEFAULT_PDF_PRESENTATION_CONFIG,
+    is_block_enabled,
+    is_section_enabled,
     normalize_diffusion,
     resolve_cover_subtitle,
     resolve_notice_methodology_config,
     resolve_sec6_methodology_config,
     resolve_title_page_config,
 )
+from bilans.common.pdf_table_sort import pdf_metric_caption
 
 _VENTILATION_READER_LABELS: dict[str, str] = {
     "hebdomadaire": "indicateurs regroupés par semaine",
@@ -453,3 +456,109 @@ def load_glossary_config(root: Path) -> dict:
             continue
         result["abbreviations"].append({"id": id_, "label": label, "definition": definition})
     return result if result["abbreviations"] else default_cfg
+
+
+def summarize_procedures_par_type_usager(
+    proc_par_domaine: Any,
+) -> Any:
+    """Agrège PEJ/PA par type d'usager à partir d'un tableau domaine×usager."""
+    import pandas as pd
+
+    if proc_par_domaine is None or getattr(proc_par_domaine, "empty", True):
+        return pd.DataFrame(columns=["type_usager", "nb_pej", "nb_pa"])
+    if "type_usager" not in proc_par_domaine.columns:
+        return pd.DataFrame(columns=["type_usager", "nb_pej", "nb_pa"])
+    metrics = [c for c in ("nb_pej", "nb_pa") if c in proc_par_domaine.columns]
+    if not metrics:
+        return pd.DataFrame(columns=["type_usager", "nb_pej", "nb_pa"])
+    out = proc_par_domaine.groupby("type_usager", as_index=False)[metrics].sum()
+    if metrics:
+        out["_sort"] = out[metrics].fillna(0).sum(axis=1)
+        out = out.sort_values("_sort", ascending=False, kind="stable").drop(columns=["_sort"])
+    return out.reset_index(drop=True)
+
+
+def add_procedures_par_type_usager_subsection(
+    builder: Any,
+    summary: Any,
+    *,
+    avail_w: float,
+    presentation_cfg: dict[str, Any] | None,
+    section_title: dict[str, str] | None = None,
+) -> None:
+    """Sous-parties PEJ/PA ventilées par type d'usager (section Activité par type d'usager)."""
+    import pandas as pd
+
+    cfg = presentation_cfg if isinstance(presentation_cfg, dict) else {}
+    titles = section_title if isinstance(section_title, dict) else {}
+    if summary is None or getattr(summary, "empty", True):
+        return
+    if not isinstance(summary, pd.DataFrame):
+        return
+
+    show_pej = is_block_enabled(cfg, "sec4.show_table_pej_par_type_usager", True)
+    show_pa = is_block_enabled(cfg, "sec4.show_table_pa_par_type_usager", True)
+    if not show_pej and not show_pa:
+        return
+
+    if (
+        show_pej
+        and is_section_enabled(cfg, "sec43", True)
+        and "nb_pej" in summary.columns
+        and int(summary["nb_pej"].fillna(0).sum()) > 0
+    ):
+        tbl = [["Type d'usager", "Nombre PEJ"]]
+        for _, row in summary.iterrows():
+            nb = int(row.get("nb_pej", 0) or 0)
+            if nb <= 0:
+                continue
+            tbl.append([str(row["type_usager"]), str(nb)])
+        if len(tbl) > 1:
+            builder.add_section(
+                "sec43",
+                titles.get(
+                    "sec43",
+                    "3.3. Procédures d'enquête judiciaire (PEJ) par type d'usager",
+                ),
+                level=2,
+                toc_level=1,
+            )
+            builder.add_table(
+                tbl,
+                caption=pdf_metric_caption("PEJ par type d'usager", "proc"),
+                col_widths=[avail_w * 0.62, avail_w * 0.38],
+                col_aligns=["LEFT", "RIGHT"],
+                keep_together=True,
+                spacer_after_mm=1.0,
+            )
+
+    if (
+        show_pa
+        and is_section_enabled(cfg, "sec44", True)
+        and "nb_pa" in summary.columns
+        and int(summary["nb_pa"].fillna(0).sum()) > 0
+    ):
+        tbl = [["Type d'usager", "Nombre PA"]]
+        for _, row in summary.iterrows():
+            nb = int(row.get("nb_pa", 0) or 0)
+            if nb <= 0:
+                continue
+            tbl.append([str(row["type_usager"]), str(nb)])
+        if len(tbl) > 1:
+            builder.add_section(
+                "sec44",
+                titles.get(
+                    "sec44",
+                    "3.4. Procédures administratives (PA) par type d'usager",
+                ),
+                level=2,
+                toc_level=1,
+            )
+            builder.add_table(
+                tbl,
+                caption=pdf_metric_caption("PA par type d'usager", "proc"),
+                col_widths=[avail_w * 0.62, avail_w * 0.38],
+                col_aligns=["LEFT", "RIGHT"],
+                keep_together=True,
+                spacer_after_mm=1.0,
+            )

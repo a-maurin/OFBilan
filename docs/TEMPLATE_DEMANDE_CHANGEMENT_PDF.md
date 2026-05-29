@@ -17,10 +17,26 @@ Copier-coller ce template dans le chat, puis remplir les champs.
 - **Département / période de test**:
 - **Impact attendu**: [ ] Présentation uniquement [ ] Présentation + contenu [ ] Contenu métier/calcul
 
+### Numérotation canonique (référence)
+
+| Chapitre PDF | ID interne (historique) | Alias YAML acceptés |
+|--------------|-------------------------|---------------------|
+| 1. Chiffres clés | `sec1` | — |
+| 2. Activité de contrôle | `sec2`, `sec21`, `sec22`, … | — |
+| 3. Activité par type d'usager | `sec4` | `sec_usagers` (déprécié) |
+| 4. Procédures (PEJ, PA, PVe) | `sec3`, `sec31`…`sec33` | `sec_procedures` (déprécié) |
+| 5. Cartographie | `sec5` / `sec5map` (global) | — |
+| 6. Annexes | `sec6` | — |
+
+Pilotage : `config/presentation/pdf_presentation.yaml` (`sections.order`, `sections.titles`, `blocks.*`, `feature_registry`).  
+Profils à zones (PNF, etc.) : exceptions documentées dans le handoff harmonisation.
+
+Tests de non-régression TOC (ordre des titres) : `tests/fixtures/pdf_toc/README.md`.
+
 ## 3) Changement demandé
 
 - **Ce qu'il faut changer** (description claire):
-- **Section(s) concernée(s)** (ex: `sec21`, `sec22res`, `sec31`):
+- **Section(s) concernée(s)** (ex: `sec21`, `sec22res`, `sec31` — ou alias `sec_usagers` / `sec_procedures`):
 - **Bloc(s) concerné(s)** (ex: `blocks.sec22res.show_pie`):
 - **Ordre des sections** (si concerné):
 - **Comportement données manquantes**: [ ] `show_placeholder` [ ] `hide_silently` [ ] Sans changement

@@ -19,6 +19,11 @@ from bilans.common.pdf_presentation_config import (
     resolve_notice_methodology_config,
     resolve_sec6_methodology_config,
     resolve_section_titles,
+    normalize_section_id,
+    resolve_sec2_render_order,
+    apply_feature_registry_to_effective,
+    feature_registry_allows_scope,
+    inject_sec4_subsections,
     resolve_sections_for_toc,
     resolve_tables_layout,
     resolve_title_page_config,
@@ -316,7 +321,7 @@ def test_types_usager_cible_sec4_pression_controle() -> None:
 
 
 def test_agrainage_pdf_sections_order_and_titles() -> None:
-    """Profil agrainage : ordre narratif et numérotation de sections stabilisés."""
+    """Profil agrainage : ch.2 contrôles, ch.3 usagers, ch.4 procédures."""
     root = Path(__file__).resolve().parents[2]
     resolved = resolve_pdf_presentation_config(root, scope="thematique", profile_id="agrainage")
     effective = resolved["effective"]
@@ -327,41 +332,131 @@ def test_agrainage_pdf_sections_order_and_titles() -> None:
 
     assert order == [
         "sec1",
-        "sec2_chap",
+        "sec2",
         "sec21",
-        "sec22dom",
+        "sec22",
         "sec22theme",
         "sec22res",
         "sec4",
+        "sec41",
+        "sec42",
+        "sec43",
+        "sec44",
         "sec3",
         "sec31",
         "sec32",
         "sec33",
-        "sec5map",
+        "sec5",
         "sec6",
     ]
-    assert titles.get("sec22dom") == "2.2. Résultats des contrôles"
-    assert titles.get("sec22theme") == "2.3. Analyse par zone"
-    assert titles.get("sec22res") == "2.4. Synthèse croisée par zone"
-    assert titles.get("sec4") == "2.5. Activité de contrôle par type d’usager"
+    assert titles.get("sec22") == "2.2. Résultats des contrôles"
+    assert titles.get("sec4") == "3. Activité par type d’usager"
+    assert titles.get("sec3") == "4. Procédures (PEJ, PA, PVe)"
 
-    section_defs = [
-        ("sec1", "1. Chiffres clés"),
-        ("sec2_chap", "2. Contrôles"),
-        ("sec21", "2.1. Indicateurs mensuels"),
-        ("sec22dom", "2.2. Résultats des contrôles"),
-        ("sec22theme", "2.3. Analyse par zone"),
-        ("sec22res", "2.4. Synthèse croisée par zone"),
-        ("sec4", "2.5. Activité de contrôle par type d’usager"),
-        ("sec3", "3. Procédures (PEJ, PA, PVe)"),
-        ("sec31", "3.1 Procès-verbaux électroniques (PVe)"),
-        ("sec32", "3.2 Procédures d’enquête judiciaire (PEJ)"),
-        ("sec33", "3.3 Procédures administratives (PA)"),
-        ("sec5map", "5. Localisation cartographique des contrôles"),
-        ("sec6", "6. Annexes"),
-    ]
+    section_defs = inject_sec4_subsections(
+        [
+            ("sec1", "1. Chiffres clés"),
+            ("sec2", "2. Activité de contrôle"),
+            ("sec21", "2.1. Indicateurs mensuels"),
+            ("sec22", "2.2. Résultats des contrôles"),
+            ("sec22theme", "2.3. Analyse par zone"),
+            ("sec22res", "2.4. Synthèse croisée par zone"),
+            ("sec4", "3. Activité par type d’usager"),
+            ("sec3", "4. Procédures (PEJ, PA, PVe)"),
+            ("sec31", "4.1 Procès-verbaux électroniques (PVe)"),
+            ("sec32", "4.2 Procédures d’enquête judiciaire (PEJ)"),
+            ("sec33", "4.3 Procédures administratives (PA)"),
+            ("sec5", "5. Localisation cartographique des contrôles"),
+            ("sec6", "6. Annexes"),
+        ]
+    )
     toc = resolve_sections_for_toc(effective, section_defs)
     assert [sid for sid, _ in toc] == order
+    assert titles.get("sec42") == "3.2. Résultats des contrôles par type d'usager"
+
+
+def test_thematique_default_sections_usagers_before_procedures() -> None:
+    root = Path(__file__).resolve().parents[2]
+    resolved = resolve_pdf_presentation_config(root, scope="thematique", profile_id="chasse")
+    order = resolved["effective"]["sections"]["order"]
+    assert order.index("sec4") < order.index("sec3")
+    titles = resolved["effective"]["sections"]["titles"]
+    assert "3." in str(titles.get("sec4", ""))
+
+
+def test_feature_registry_disables_cross_scope_sections() -> None:
+    root = Path(__file__).resolve().parents[2]
+    them = resolve_pdf_presentation_config(root, scope="thematique", profile_id="chasse")
+    eff_t = them["effective"]
+    assert is_section_enabled(eff_t, "sec22", True) is True
+    assert is_section_enabled(eff_t, "sec22dom", True) is False
+    assert is_section_enabled(eff_t, "sec5", True) is True
+    assert is_section_enabled(eff_t, "sec5map", True) is False
+
+    glob = resolve_pdf_presentation_config(root, scope="global", profile_id=None)
+    eff_g = glob["effective"]
+    assert is_section_enabled(eff_g, "sec22", True) is False
+    assert is_section_enabled(eff_g, "sec22dom", True) is True
+    assert is_section_enabled(eff_g, "sec5map", True) is True
+    assert is_section_enabled(eff_g, "sec5", True) is False
+
+
+def test_feature_registry_explicit_enabled_overrides_registry() -> None:
+    effective = {"sections": {"enabled": {"sec22dom": True}}}
+    apply_feature_registry_to_effective(
+        effective,
+        "thematique",
+        {"sec22dom": "global"},
+    )
+    assert effective["sections"]["enabled"]["sec22dom"] is True
+
+
+def test_feature_registry_allows_scope_rules() -> None:
+    assert feature_registry_allows_scope("both", "global") is True
+    assert feature_registry_allows_scope("global", "global") is True
+    assert feature_registry_allows_scope("global", "thematique") is False
+    assert feature_registry_allows_scope("thematique", "thematique") is True
+
+
+def test_hoist_legacy_scope_titles_into_sections_titles(tmp_path: Path) -> None:
+    _write_yaml(
+        tmp_path,
+        """
+version: 1
+defaults:
+  sections:
+    order: [sec1]
+scopes:
+  thematique:
+    sections:
+      order: [sec4, sec3]
+    titles:
+      sec4: "3. Usagers"
+      sec3: "4. Procédures"
+""".strip(),
+    )
+    resolved = resolve_pdf_presentation_config(
+        tmp_path, scope="thematique", profile_id=None, diffusion="interne"
+    )
+    titles = resolved["effective"]["sections"]["titles"]
+    assert titles.get("sec4") == "3. Usagers"
+    assert titles.get("sec3") == "4. Procédures"
+
+
+def test_summarize_procedures_par_type_usager() -> None:
+    from bilans.common.pdf_shared_sections import summarize_procedures_par_type_usager
+
+    df = pd.DataFrame(
+        [
+            {"type_usager": "A", "domaine": "d1", "nb_pej": 2, "nb_pa": 1},
+            {"type_usager": "A", "domaine": "d2", "nb_pej": 1, "nb_pa": 0},
+            {"type_usager": "B", "domaine": "d1", "nb_pej": 0, "nb_pa": 3},
+        ]
+    )
+    out = summarize_procedures_par_type_usager(df)
+    row_a = out.loc[out["type_usager"] == "A"].iloc[0]
+    assert int(row_a["nb_pej"]) == 3
+    assert int(row_a["nb_pa"]) == 1
 
 
 def test_sec6_methodology_config_resolution() -> None:

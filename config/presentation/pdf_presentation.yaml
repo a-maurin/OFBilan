@@ -15,10 +15,15 @@ version: 1
 # sections:
 # - order   : ordre souhaité des sections du PDF
 # - enabled : activation/désactivation d'une section
+# Alias dépréciés (warning) : sec_usagers → sec4, sec_procedures → sec3
 #
 # blocks:
 # - activation fine des sous-blocs (tableaux, graphiques, cartes, etc.)
 # - supporte des clés imbriquées (ex: sec22res.show_pie)
+#
+# feature_registry (racine du fichier) :
+# - both | global | thematique → section utilisable par ce moteur PDF
+# - fusionné dans sections.enabled (false) si hors scope, sauf surcharge explicite
 # -----------------------------------------------------------------------------
 
 behavior:
@@ -66,6 +71,8 @@ defaults:
 
   sections:
     order: ["sec1", "sec2", "sec3", "sec4", "sec5", "sec6"]
+    # sec3/sec4 : identifiants historiques — sec4 = chapitre « Activité par type d'usager »,
+    # sec3 = chapitre « Procédures » (numérotation PDF via titles / section_defs).
     enabled: {}
     # Surcharge optionnelle des libellés de sections par identifiant.
     titles:
@@ -176,10 +183,12 @@ defaults:
       show_table_usagers: true
       show_pie_usagers: true
       show_table_usagers_x_domaine: true
-      # Tableaux « Thèmes de contrôle — <type d'usager> » (section 4, bilan thématique).
+      # Tableaux « Thèmes de contrôle — <type d'usager> » (chapitre 3, bilan thématique).
       show_table_themes_par_type_usager: true
       show_resultats_par_type_usager_chart: true
       show_resultats_par_type_usager_table: true
+      show_table_pej_par_type_usager: true
+      show_table_pa_par_type_usager: true
     sec5:
       show_map: true
       show_map_fallback_message: true
@@ -197,7 +206,18 @@ scopes:
     title_page:
       subtitle_mode: none
     sections:
-      order: ["sec1", "sec2_chap", "sec21", "sec22dom", "sec22theme", "sec22res", "sec3", "sec31", "sec32", "sec33", "sec4", "sec5map", "sec6"]
+      order: ["sec1", "sec2_chap", "sec21", "sec22dom", "sec22theme", "sec22res", "sec4", "sec41", "sec42", "sec43", "sec44", "sec3", "sec31", "sec32", "sec33", "sec5map", "sec6"]
+      titles:
+        sec2_chap: "2. Activité de contrôle"
+        sec4: "3. Activité par type d’usager"
+        sec41: "3.1. Thème de contrôle par type d'usager"
+        sec42: "3.2. Résultats des contrôles par type d'usager"
+        sec43: "3.3. Procédures d'enquête judiciaire (PEJ) par type d'usager"
+        sec44: "3.4. Procédures administratives (PA) par type d'usager"
+        sec3: "4. Procédures (PEJ, PA, PVe)"
+        sec31: "4.1 Procès-verbaux électroniques (PVe)"
+        sec32: "4.2 Procédures d’enquête judiciaire (PEJ)"
+        sec33: "4.3 Procédures administratives (PA)"
 
   thematique:
     title:
@@ -205,19 +225,38 @@ scopes:
     title_page:
       subtitle_mode: none
     sections:
-      order: ["sec1", "sec2", "sec21", "sec22", "sec3", "sec31", "sec32", "sec33", "sec4", "sec5", "sec6"]
+      order: ["sec1", "sec2", "sec21", "sec22", "sec4", "sec41", "sec42", "sec43", "sec44", "sec3", "sec31", "sec32", "sec33", "sec5", "sec6"]
+      titles:
+        sec2: "2. Activité de contrôle"
+        sec4: "3. Activité par type d’usager"
+        sec41: "3.1. Thème de contrôle par type d'usager"
+        sec42: "3.2. Résultats des contrôles par type d'usager"
+        sec43: "3.3. Procédures d'enquête judiciaire (PEJ) par type d'usager"
+        sec44: "3.4. Procédures administratives (PA) par type d'usager"
+        sec3: "4. Procédures (PEJ, PA, PVe)"
+        sec31: "4.1 Procès-verbaux électroniques (PVe)"
+        sec32: "4.2 Procédures d’enquête judiciaire (PEJ)"
+        sec33: "4.3 Procédures administratives (PA)"
+        sec5: "5. Localisation cartographique des contrôles"
 
 profiles:
-  # Agrainage : repositionnement des sections sans changement de contenus.
+  # Agrainage : sections zone (2.x) puis usagers (3) puis procédures (4).
   agrainage:
     sections:
-      order: ["sec1", "sec2_chap", "sec21", "sec22dom", "sec22theme", "sec22res", "sec4", "sec3", "sec31", "sec32", "sec33", "sec5map", "sec6"]
+      order: ["sec1", "sec2", "sec21", "sec22", "sec22theme", "sec22res", "sec4", "sec41", "sec42", "sec43", "sec44", "sec3", "sec31", "sec32", "sec33", "sec5", "sec6"]
       titles:
-        sec22dom: "2.2. Résultats des contrôles"
+        sec22: "2.2. Résultats des contrôles"
         sec22theme: "2.3. Analyse par zone"
         sec22res: "2.4. Synthèse croisée par zone"
-        sec4: "2.5. Activité de contrôle par type d’usager"
-        sec3: "3. Procédures (PEJ, PA, PVe)"
+        sec4: "3. Activité par type d’usager"
+        sec41: "3.1. Thème de contrôle par type d'usager"
+        sec42: "3.2. Résultats des contrôles par type d'usager"
+        sec43: "3.3. Procédures d'enquête judiciaire (PEJ) par type d'usager"
+        sec44: "3.4. Procédures administratives (PA) par type d'usager"
+        sec3: "4. Procédures (PEJ, PA, PVe)"
+        sec31: "4.1 Procès-verbaux électroniques (PVe)"
+        sec32: "4.2 Procédures d’enquête judiciaire (PEJ)"
+        sec33: "4.3 Procédures administratives (PA)"
 
   # Exemple: profil thématique PNF
   pnf:
@@ -243,7 +282,8 @@ profiles:
       enabled:
         sec4: true
       titles:
-        sec4: "4. Pression de contrôle au regard de l'ensemble des types d'usagers"
+        sec4: "3. Pression de contrôle au regard de l'ensemble des types d'usagers"
+        sec3: "4. Procédures (PEJ, PA, PVe)"
     blocks:
       sec4:
         show_intro_text: true
@@ -313,16 +353,23 @@ profiles:
       sec33:
         show_detail_table: false
 
+# Sections « propres » à un moteur (l'autre moteur les désactive par défaut).
 feature_registry:
   sec21: both
   sec22: thematique
   sec22dom: global
-  sec22theme: global
-  sec22res: global
+  sec22theme: both
+  sec22res: both
   sec31: both
   sec32: both
   sec33: both
   sec4: both
+  sec41: thematique
+  sec42: both
+  sec43: both
+  sec44: both
   sec5: thematique
   sec5map: global
   sec6: both
+  sec_usagers: both
+  sec_procedures: both

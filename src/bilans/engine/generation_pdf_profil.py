@@ -23,6 +23,7 @@ from bilans.common.pdf_presentation_config import (
     is_section_enabled,
     normalize_dept_typography,
     resolve_pdf_presentation_config,
+    inject_sec4_subsections,
     resolve_section_titles,
     resolve_sections_for_toc,
     resolve_tables_layout,
@@ -42,12 +43,14 @@ from bilans.common.pdf_table_sort import (
 )
 from bilans.common.pdf_usagers_domaine_table import build_usagers_x_domaine_pdf_rows
 from bilans.common.pdf_shared_sections import (
+    add_procedures_par_type_usager_subsection,
     add_standard_cover_and_toc,
     add_standard_notice_methodology,
     build_filtered_glossary_rows,
     build_sec6_methodology_context,
     build_sec6_methodology_html,
     load_glossary_config,
+    summarize_procedures_par_type_usager,
 )
 from bilans.common.percent_format import (
     format_pct_int_from_rate,
@@ -296,19 +299,20 @@ def _generate_pdf_content(
     )
     section_defs = [
         ("sec1", "1. Chiffres clés"),
-        ("sec2_chap", "2. Contrôles"),
+        ("sec2_chap", "2. Activité de contrôle"),
         ("sec21", sec21_titre),
         ("sec22dom", "2.2. Nombre de localisations de contrôles par domaines"),
         ("sec22theme", "2.3. Nombre de contrôles par thèmes"),
         ("sec22res", "2.4. Résultats des contrôles"),
-        ("sec3", "3. Procédures (PEJ, PA, PVe)"),
-        ("sec31", "3.1 Procès-verbaux électroniques (PVe)"),
-        ("sec32", "3.2 Procédures d’enquête judiciaire (PEJ)"),
-        ("sec33", "3.3 Procédures administratives (PA)"),
-        ("sec4", "4. Activité de contrôle par type d’usager"),
+        ("sec4", "3. Activité par type d’usager"),
+        ("sec3", "4. Procédures (PEJ, PA, PVe)"),
+        ("sec31", "4.1 Procès-verbaux électroniques (PVe)"),
+        ("sec32", "4.2 Procédures d’enquête judiciaire (PEJ)"),
+        ("sec33", "4.3 Procédures administratives (PA)"),
         ("sec5map", "5. Localisation cartographique des contrôles"),
         ("sec6", "6. Annexes"),
     ]
+    section_defs = inject_sec4_subsections(section_defs)
     resolved_section_defs = resolve_section_titles(presentation_cfg, section_defs)
     sections = resolve_sections_for_toc(presentation_cfg, resolved_section_defs)
     section_title = {sid: title for sid, title in resolved_section_defs}
@@ -1054,6 +1058,13 @@ def _generate_pdf_content(
                 and res_usager is not None
                 and not res_usager.empty
             ):
+                if is_section_enabled(presentation_cfg, "sec42", True):
+                    builder.add_section(
+                        "sec42",
+                        section_title["sec42"],
+                        level=2,
+                        toc_level=1,
+                    )
                 df_ru = res_usager.copy()
                 required_cols = {"type_usager", "Conforme", "Infraction", "Manquement"}
                 if required_cols.issubset(set(df_ru.columns)):
@@ -1165,6 +1176,21 @@ def _generate_pdf_content(
                             spacer_after_mm=sec4_tbl_sp,
                         )
 
+        if is_section_enabled(presentation_cfg, "sec4", True):
+            proc_precomputed = _load_csv_opt(out_dir, "procedures_global_par_type_usager.csv")
+            if proc_precomputed is not None and "type_usager" in proc_precomputed.columns:
+                proc_summary = proc_precomputed
+            else:
+                proc_by_dom = _load_csv_opt(out_dir, "procedures_par_type_usager_domaine.csv")
+                proc_summary = summarize_procedures_par_type_usager(proc_by_dom)
+            add_procedures_par_type_usager_subsection(
+                builder,
+                proc_summary,
+                avail_w=avail_w,
+                presentation_cfg=presentation_cfg,
+                section_title=section_title,
+            )
+
     sec34_registry = SectionRegistry()
     sec34_registry.register("sec3", lambda _ctx: _render_sec3_bundle())
     sec34_registry.register("sec4", lambda _ctx: _render_sec4())
@@ -1180,7 +1206,9 @@ def _generate_pdf_content(
     ]
     if not sec34_order:
         sec34_order = [
-            sid for sid in ("sec3", "sec4") if is_section_enabled(presentation_cfg, sid, True)
+            sid
+            for sid in ("sec4", "sec3")
+            if is_section_enabled(presentation_cfg, sid, True)
         ]
     sec34_registry.render_many(sec34_order, {})
 
