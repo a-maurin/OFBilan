@@ -40,7 +40,9 @@ from bilans.common.pdf_table_sort import (
     PDF_LABEL_NON_CONFORME_LOCATIONS,
     PDF_LABEL_PEJ_COUNT,
     pdf_metric_caption,
+    resultat_controle_label_for_pdf,
     sort_dataframe_desc as _sort_desc,
+    sort_tab_resultats_controles_for_pdf,
 )
 from bilans.common.pdf_usagers_domaine_table import (
     build_usagers_x_domaine_pdf_rows,
@@ -70,6 +72,11 @@ from bilans.common.carte_helper import (
     expected_map_filenames,
     resolve_map_layout,
     resolve_profile_map_paths,
+)
+from bilans.common.cartographie_config import (
+    expected_map_filenames_for_selection,
+    has_cartography_catalog,
+    resolve_selected_map_paths,
 )
 from reportlab.lib.units import mm
 from reportlab.platypus import Image as RLImage, Paragraph, Spacer
@@ -155,7 +162,7 @@ def _build_rows_resultats_controles_pdf(tr: pd.DataFrame) -> list[list[str]]:
             j += 1
         else:
             t = "n.d."
-        tbl.append([rlib, str(nbv), t])
+        tbl.append([resultat_controle_label_for_pdf(rlib), str(nbv), t])
     return tbl
 
 
@@ -264,13 +271,22 @@ def _generate_pdf_content(
     nb_pve = int(pve_resume["nb_pve_global"].iloc[0]) if pve_resume is not None and not pve_resume.empty else 0
 
     dept_name_typo = normalize_dept_typography(get_dept_name(dept_code))
-    map_id = str(profile.get("_map_id") or "global").strip() or "global"
-    global_map_paths = (
-        resolve_profile_map_paths(map_id, presentation_cfg=presentation_cfg)
-        if cartes
-        else []
-    )
-    global_map_layout = resolve_map_layout(presentation_cfg=presentation_cfg) if cartes else "vertical"
+    map_captions: list[str] = []
+    if cartes and has_cartography_catalog(profile):
+        selected = list(profile.get("_cartes_selection") or [])
+        global_map_paths, map_captions = resolve_selected_map_paths(profile, selected)
+        global_map_layout = resolve_map_layout(profile=profile, presentation_cfg=presentation_cfg)
+        map_id = str(profile.get("id", "global")).strip() or "global"
+    elif cartes:
+        map_id = str(profile.get("_map_id") or "global").strip() or "global"
+        global_map_paths = resolve_profile_map_paths(
+            map_id, profile=profile, presentation_cfg=presentation_cfg
+        )
+        global_map_layout = resolve_map_layout(profile=profile, presentation_cfg=presentation_cfg)
+    else:
+        map_id = str(profile.get("_map_id") or "global").strip() or "global"
+        global_map_paths = []
+        global_map_layout = "vertical"
 
     resolved_output_name = str(output_filename or "").strip() or "bilan_global.pdf"
     pdf_path = apply_diffusion_pdf_suffix(out_dir / resolved_output_name, diffusion)
@@ -294,7 +310,8 @@ def _generate_pdf_content(
     agg_domaine = _sort_desc(agg_domaine, ["nb"])
     agg_theme = _sort_desc(agg_theme, ["nb"])
     tab_resultats = _sort_desc(tab_resultats, ["nb"])
-    tab_resultats_controles = _sort_desc(tab_resultats_controles, ["nb"])
+    if tab_resultats_controles is not None and not tab_resultats_controles.empty:
+        tab_resultats_controles = sort_tab_resultats_controles_for_pdf(tab_resultats_controles)
     agg_usager = _sort_desc(agg_usager, ["nb"])
     res_usager = _sort_desc(res_usager, ["Total", "Conforme", "Infraction", "Manquement"])
     cross_usager_dom = _sort_desc(cross_usager_dom, ["total"])
@@ -1246,9 +1263,19 @@ def _generate_pdf_content(
                 "Répartition spatiale des contrôles et procédures sur le département "
                 "(générateur cartographique).",
             )
-            builder.add_maps(global_map_paths, layout=global_map_layout)
+            builder.add_maps(
+                global_map_paths,
+                layout=global_map_layout,
+                captions=map_captions or None,
+            )
         elif is_section_enabled(presentation_cfg, "sec5map", True) and show_map_fallback and show_placeholder:
-            expected = expected_map_filenames(map_id, presentation_cfg=presentation_cfg)
+            if has_cartography_catalog(profile):
+                selected = list(profile.get("_cartes_selection") or [])
+                expected = expected_map_filenames_for_selection(profile, selected)
+            else:
+                expected = expected_map_filenames(
+                    map_id, profile=profile, presentation_cfg=presentation_cfg
+                )
             files_hint = ", ".join(f"<b>{n}</b>" for n in expected) or f"<b>carte_{map_id}.png</b>"
             builder.add_paragraph(
                 f"<i>Carte(s) non disponible(s). Déposez {files_hint} dans le dossier des cartes pour "

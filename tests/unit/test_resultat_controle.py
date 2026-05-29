@@ -33,6 +33,13 @@ def test_build_tab_resultats_controles_agrege_en_attente() -> None:
         }
     )
     tab = build_tab_resultats_controles(point)
+    assert [str(x).strip() for x in tab["resultat"]] == [
+        "Conforme",
+        "Non-conforme",
+        "Dont manquement",
+        "Dont infraction",
+        "En attente",
+    ]
     assert int(tab.loc[tab["resultat"] == "Conforme", "nb"].sum()) == 1
     assert int(tab.loc[tab["resultat"] == "Non-conforme", "nb"].sum()) == 2
     assert int(tab.loc[tab["resultat"] == "En attente", "nb"].sum()) == 3

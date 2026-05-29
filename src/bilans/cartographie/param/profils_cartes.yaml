@@ -157,6 +157,25 @@ profiles:
         symbology_ref: points_usagers_cibles
         layer_name: point_ctrl_20260205_wgs84
 
+  global_domaines:
+    id: global_domaines
+    title: "Bilan global — Contrôles par domaines — Côte-d'Or"
+    layout_name: "Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or"
+    output_filename: carte_global_domaines.png
+    date_deb: "2025-01-01"
+    date_fin: "2026-02-05"
+    title_main: "Contrôles par domaines — Côte-d'Or"
+    subtitle: ""
+    layout_title_item_id: titre_principal
+    layout_subtitle_item_id: sous_titre
+    layers:
+      pochoir_sd21:
+        symbology_ref: pochoir
+        layer_name: pochoir_sd21
+      point_ctrl_20260205_wgs84:
+        symbology_ref: points_global_domaines
+        layer_name: point_ctrl_20260205_wgs84
+
   procedures_pve:
     id: procedures_pve
     title: "Bilan procédures judiciaires et PVe — Côte-d'Or"
@@ -194,3 +213,45 @@ profiles:
       point_ctrl_20260205_wgs84:
         symbology_ref: points_chasse
         layer_name: point_ctrl_20260205_wgs84
+
+  synthese_activite_PA_PJ:
+    id: synthese_activite_PA_PJ
+    title: "Synthèse PA/PJ — Contrôles — Côte-d'Or"
+    layout_name: "Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or"
+    output_filename: carte_synthese_activite_PA_PJ.png
+    date_deb: "2025-01-01"
+    date_fin: "2026-02-05"
+    title_main: "Synthèse — Contrôles — Côte-d'Or"
+    subtitle: ""
+    layout_title_item_id: titre_principal
+    layout_subtitle_item_id: sous_titre
+    layers:
+      pochoir_sd21:
+        symbology_ref: pochoir
+        layer_name: pochoir_sd21
+      point_ctrl_20260205_wgs84:
+        symbology_ref: points_global
+        layer_name: point_ctrl_20260205_wgs84
+
+  synthese_activite_PA_PJ_2:
+    id: synthese_activite_PA_PJ_2
+    title: "Synthèse PA/PJ — Procédures — Côte-d'Or"
+    layout_name: "Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or"
+    output_filename: carte_synthese_activite_PA_PJ_2.png
+    date_deb: "2025-01-01"
+    date_fin: "2026-02-05"
+    title_main: "Synthèse — Procédures — Côte-d'Or"
+    subtitle: ""
+    layout_title_item_id: titre_principal
+    layout_subtitle_item_id: sous_titre
+    layers:
+      pochoir_sd21:
+        symbology_ref: pochoir
+        layer_name: pochoir_sd21
+      point_ctrl_20260205_wgs84:
+        symbology_ref: points_chasse
+        layer_name: point_ctrl_20260205_wgs84
+      localisation_infrac_FAITS_20260205:
+        legend_label: Procédures judiciaires (FAITS)
+        filter_type: pj
+        layer_name: localisation_infrac_FAITS_20260205

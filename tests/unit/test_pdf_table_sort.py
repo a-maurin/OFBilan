@@ -8,9 +8,11 @@ from bilans.common.pdf_table_sort import (
     PDF_LABEL_PEJ,
     pdf_column_label,
     prepare_pdf_results_sec23_sorting,
+    resultat_controle_label_for_pdf,
     sort_dataframe_desc,
     sort_dataframe_desc_by_sum,
     sort_detail_dataframe_by_date_desc,
+    sort_tab_resultats_controles_for_pdf,
 )
 
 
@@ -63,6 +65,34 @@ def test_pdf_metric_caption_suffixes() -> None:
     assert pdf_metric_caption("PEJ par thème", "proc") == "PEJ par thème"
     assert "effectif" in pdf_metric_caption("Répartition par type", "effectifs").lower()
     assert pdf_metric_caption("Effectifs par type", "effectifs") == "Effectifs par type"
+
+
+def test_sort_tab_resultats_controles_for_pdf_fixed_order() -> None:
+    df = pd.DataFrame(
+        {
+            "resultat": [
+                "En attente",
+                "    Dont manquement",
+                "Conforme",
+                "    Dont infraction",
+                "Non-conforme",
+            ],
+            "nb": [1, 0, 75, 36, 36],
+        }
+    )
+    out = sort_tab_resultats_controles_for_pdf(df)
+    assert [str(x).strip() for x in out["resultat"]] == [
+        "Conforme",
+        "Non-conforme",
+        "Dont manquement",
+        "Dont infraction",
+        "En attente",
+    ]
+
+
+def test_resultat_controle_label_for_pdf_indents_dont_rows() -> None:
+    assert resultat_controle_label_for_pdf("    Dont infraction").startswith("&nbsp;")
+    assert "Dont infraction" in resultat_controle_label_for_pdf("    Dont infraction")
 
 
 def test_prepare_pdf_results_sec23_sorting() -> None:

@@ -1300,10 +1300,124 @@ def build_tab_resultats(point: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+ZONE_LECTEUR_COEUR = "Coeur de parc"
+ZONE_LECTEUR_AIRE = "Aire d'adhésion"
+ZONE_LECTEUR_TUB = "Zone TUB"
+ZONE_LECTEUR_HORS = "Hors PNF/TUB"
+ZONE_LECTEUR_ORDER: tuple[str, ...] = (
+    ZONE_LECTEUR_COEUR,
+    ZONE_LECTEUR_AIRE,
+    ZONE_LECTEUR_TUB,
+    ZONE_LECTEUR_HORS,
+)
+
+
+def coalesced_insee_series(df: pd.DataFrame) -> pd.Series:
+    """Code INSEE normalisé (5 chiffres) par ligne, colonnes usuelles combinées."""
+    if df.empty:
+        return pd.Series(pd.NA, index=df.index, dtype="string")
+    out = pd.Series(pd.NA, index=df.index, dtype="string")
+    for col in ("insee_comm", "insee_commun", "INSEE_COM", "INF-INSEE"):
+        if col not in df.columns:
+            continue
+        cand = (
+            df[col]
+            .astype(str)
+            .str.extract(r"(\d{1,5})", expand=False)
+            .fillna("")
+            .str.zfill(5)
+        )
+        cand = cand.mask(~cand.str.fullmatch(r"\d{5}", na=False), pd.NA)
+        out = out.fillna(cand)
+    return out
+
+
+def _normalize_insee_code(insee: Any) -> str | None:
+    if insee is None or (isinstance(insee, float) and pd.isna(insee)):
+        return None
+    s = str(insee).strip()
+    if not s or s.lower() in {"nan", "none", "<na>"}:
+        return None
+    m = re.search(r"(\d{1,5})", s)
+    if not m:
+        return None
+    code = m.group(1).zfill(5)
+    return code if re.fullmatch(r"\d{5}", code) else None
+
+
+def zone_lecteur_label(
+    pnf_zone_sig: Any,
+    insee: Any,
+    tub_codes: set[str] | set,
+) -> str:
+    """Libellé lecteur (une zone) : priorité cœur / aire SIG, puis TUB, sinon hors PNF/TUB."""
+    if pnf_zone_sig is not None and not (isinstance(pnf_zone_sig, float) and pd.isna(pnf_zone_sig)):
+        sig = str(pnf_zone_sig).strip()
+        if sig == "Coeur_PNF":
+            return ZONE_LECTEUR_COEUR
+        if sig == "Aire_adhesion_PNF":
+            return ZONE_LECTEUR_AIRE
+    code = _normalize_insee_code(insee)
+    if not code:
+        return "n.d."
+    tub = {str(c).zfill(5) for c in tub_codes}
+    if code in tub:
+        return ZONE_LECTEUR_TUB
+    return ZONE_LECTEUR_HORS
+
+
+def classify_zone_lecteur_series(
+    df: pd.DataFrame,
+    tub_codes: set[str] | set,
+    *,
+    pnf_zone_col: str = "pnf_zone_sig",
+) -> pd.Series:
+    """Série de libellés lecteur (4 zones exclusives) pour chaque ligne."""
+    tub = {str(c).zfill(5) for c in tub_codes}
+    insee = coalesced_insee_series(df)
+    out = pd.Series(ZONE_LECTEUR_HORS, index=df.index, dtype="string")
+    if pnf_zone_col in df.columns:
+        z = df[pnf_zone_col].astype("string")
+        out = out.mask(z.eq("Coeur_PNF"), ZONE_LECTEUR_COEUR)
+        out = out.mask(z.eq("Aire_adhesion_PNF"), ZONE_LECTEUR_AIRE)
+        hors_sig = ~z.isin(["Coeur_PNF", "Aire_adhesion_PNF"])
+    else:
+        hors_sig = pd.Series(True, index=df.index)
+    in_tub = insee.astype("string").isin(tub)
+    out = out.mask(hors_sig & in_tub, ZONE_LECTEUR_TUB)
+    return out
+
+
+def format_zone_lecteur_counts(zones: pd.Series, mask: pd.Series) -> str:
+    """Format « Label : n, … » pour les zones avec n > 0."""
+    sub = zones.loc[mask]
+    parts: list[str] = []
+    for label in ZONE_LECTEUR_ORDER:
+        n = int((sub == label).sum())
+        if n > 0:
+            parts.append(f"{label} : {n}")
+    return ", ".join(parts)
+
+
+def zone_lecteur_counts_for_pdf_cell(text: str) -> str:
+    """Présentation PDF : une zone par ligne (``<br/>``), sans modifier les données agrégées."""
+    from xml.sax.saxutils import escape
+
+    raw = str(text or "").strip()
+    if not raw or raw == "n.d.":
+        return raw
+    if ", " not in raw:
+        return escape(raw)
+    parts = [p.strip() for p in raw.split(", ") if p.strip()]
+    return "<br/>".join(escape(p) for p in parts)
+
+
 def build_tab_resultats_controles(
     point: pd.DataFrame,
     *,
     distinction_coeur_hors_coeur: bool = False,
+    zone_lecteur_4_zones: bool = False,
+    tub_codes: set[str] | set | None = None,
 ) -> pd.DataFrame:
     """Construit le tableau synthétique « Résultats des contrôles » (section 2.2)."""
     nb_total = len(point)
@@ -1317,7 +1431,42 @@ def build_tab_resultats_controles(
     nb_en_attente = int((r_norm == "En attente").sum())
     nb_nc = nb_inf + nb_manq
 
-    if distinction_coeur_hors_coeur:
+    show_zone_col = distinction_coeur_hors_coeur or zone_lecteur_4_zones
+    tub_set = tub_codes if isinstance(tub_codes, set) else set()
+
+    if show_zone_col and zone_lecteur_4_zones:
+        zones = classify_zone_lecteur_series(point, tub_set)
+
+        def _zone_txt(mask: pd.Series) -> str:
+            return format_zone_lecteur_counts(zones, mask)
+
+        details_rows: list[dict[str, Any]] = [
+            {
+                "resultat": "Conforme",
+                "nb": nb_conf,
+                "coeur_hors_coeur": _zone_txt(r_norm.eq("Conforme")),
+            },
+            {
+                "resultat": "Non-conforme",
+                "nb": nb_nc,
+                "coeur_hors_coeur": _zone_txt(r_norm.isin(["Infraction", "Manquement"])),
+            },
+            {
+                "resultat": "    Dont manquement",
+                "nb": nb_manq,
+                "coeur_hors_coeur": _zone_txt(r_norm.eq("Manquement")),
+            },
+            {
+                "resultat": "    Dont infraction",
+                "nb": nb_inf,
+                "coeur_hors_coeur": _zone_txt(r_norm.eq("Infraction")),
+            },
+        ]
+        if nb_en_attente > 0:
+            details_rows.append(
+                {"resultat": "En attente", "nb": nb_en_attente, "coeur_hors_coeur": "n.d."}
+            )
+    elif show_zone_col and distinction_coeur_hors_coeur:
         z = (
             point["pnf_zone_sig"].astype(str)
             if "pnf_zone_sig" in point.columns
@@ -1331,7 +1480,7 @@ def build_tab_resultats_controles(
             h = int((mask & is_hors).sum())
             return f"Cœur: {c} / Aire d'adhésion: {h}"
 
-        details_rows: list[dict[str, Any]] = [
+        details_rows = [
             {
                 "resultat": "Conforme",
                 "nb": nb_conf,
@@ -1343,14 +1492,14 @@ def build_tab_resultats_controles(
                 "coeur_hors_coeur": _coeur_hors_txt(r_norm.isin(["Infraction", "Manquement"])),
             },
             {
-                "resultat": "    Dont infraction",
-                "nb": nb_inf,
-                "coeur_hors_coeur": _coeur_hors_txt(r_norm.eq("Infraction")),
-            },
-            {
                 "resultat": "    Dont manquement",
                 "nb": nb_manq,
                 "coeur_hors_coeur": _coeur_hors_txt(r_norm.eq("Manquement")),
+            },
+            {
+                "resultat": "    Dont infraction",
+                "nb": nb_inf,
+                "coeur_hors_coeur": _coeur_hors_txt(r_norm.eq("Infraction")),
             },
         ]
         if nb_en_attente > 0:
@@ -1361,8 +1510,8 @@ def build_tab_resultats_controles(
         details_rows = [
             {"resultat": "Conforme", "nb": nb_conf},
             {"resultat": "Non-conforme", "nb": nb_nc},
-            {"resultat": "    Dont infraction", "nb": nb_inf},
             {"resultat": "    Dont manquement", "nb": nb_manq},
+            {"resultat": "    Dont infraction", "nb": nb_inf},
         ]
         if nb_en_attente > 0:
             details_rows.append({"resultat": "En attente", "nb": nb_en_attente})

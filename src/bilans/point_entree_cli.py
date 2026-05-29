@@ -143,6 +143,16 @@ def main() -> int:
         help="Afficher les types d'usagers du référentiel (types_usagers.csv) et quitter.",
     )
     parser.add_argument(
+        "--carte",
+        action="append",
+        dest="cartes_profil",
+        metavar="ID",
+        help=(
+            "Profil cartographique à intégrer (profil global à catalogue). "
+            "Répétable ; utiliser « all » pour toutes les cartes du catalogue."
+        ),
+    )
+    parser.add_argument(
         "--cartes",
         action=argparse.BooleanOptionalAction,
         default=None,
@@ -237,6 +247,8 @@ def main() -> int:
             return 1
     if args.cartes is not None:
         cli_options["cartes"] = args.cartes
+    if args.cartes_profil:
+        cli_options["cartes_profil"] = args.cartes_profil
     if args.pnf is not None:
         cli_options["pnf"] = args.pnf
     if args.diffusion is not None:

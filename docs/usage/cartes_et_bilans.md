@@ -1,41 +1,59 @@
-## Cartes et bilans : convention de nommage
+## Cartes et bilans : chaîne d'intégration
 
-Les bilans PDF intègrent des cartes pré-générées stockées dans `data/out/generateur_de_cartes`.
+Les bilans PDF intègrent des cartes PNG stockées dans `data/out/generateur_de_cartes/`.
 
-### Nom des fichiers de cartes
+Entrée officielle : `python -m bilans --profil <id> [--cartes] [--no-cartes]`.
+
+### Nom des fichiers
 
 - **Format général** : `carte_<map_id>.png`
-- Exemples usuels :
-  - `carte_agrainage.png`
-  - `carte_chasse.png`
-  - `carte_global.png` (bilan `--profil global`)
-  - `carte_global_usagers.png` (carte par types d’usagers, autre usage)
-  - `carte_procedures_pve.png`
+- **Profil global (catalogue)** : fichiers déclarés dans `config/profils_bilan/global.yaml` → `cartographie.catalog`
+  - `carte_global.png`, `carte_global_usagers.png`, `carte_procedures_pve.png`, `carte_global_domaines.png`
+- **Synthèse PA/PJ** : `carte_synthese_activite_PA_PJ.png`, `carte_synthese_activite_PA_PJ_2.png`
+- **Types d'usagers ciblé** : `carte_{map_id}.png` (map_id = codes usagers sélectionnés, ex. `AGR`)
 
-Pour le profil `types_usager_cible`, le `map_id` est construit à partir de la
-sélection d’usagers (ex. `carte_Agriculteur_Collectivite.png`).
+### Modes cartographiques (profil YAML)
 
-### Recherche des cartes côté code
+Résolus par `src/bilans/common/cartographie_config.py` :
 
-- Dans `src/bilans/common/carte_helper.py` :
-  - `find_map(profile_id)` cherche successivement :
-    - `data/out/generateur_de_cartes/carte_<profile_id>.png`,
-    - `data/out/generateur_de_cartes/<profile_id>.png`,
-    - puis tout fichier `*<profile_id>*.png`.
-  - `find_maps_for_bilan("bilan_global")` agrège les cartes standards du bilan
-    global : `global`, `agrainage`, `chasse`, `procedures_pve`.
+| Mode | Profils | Génération QGIS | PDF |
+|------|---------|-----------------|-----|
+| `catalog` | `global` | Sélection utilisateur (4 vues) | Toutes les cartes choisies, une par page |
+| `synthese` | `synthese_activite_PA_PJ` | 2 profils QGIS dédiés | 2 PNG déclarés dans `cartographie.fichiers` |
+| `dedie` | agrainage, chasse, piegeage, procedures_pve, types_usager, pnf_foret… | Entrée dans `profils_cartes.yaml` | `carte_<profil_id>.png` ou alias (`global_usagers`) |
+| `thematique_ref` | Thématiques keywords (défaut) | Auto depuis `ref_themes_ctrl.csv` + surcharge keywords | `carte_<profil_id>.png` |
+| `manuel` | `types_usager_cible` | Aucune (dépôt manuel) | Motifs `carte_{map_id}.png` |
+| `none` | — | Aucune | Section carto désactivée ou fallback |
 
-- Dans `python -m bilans` (CLI officielle) :
-  - `ensure_maps("bilan_global", ...)` est appelé avant le bilan global,
-  - `ensure_maps_for_profiles([...], ...)` est appelé pour les bilans thématiques.
+Mode explicite via `cartographie.mode` dans le YAML profil ; sinon inféré depuis `filter.type` et `pipeline`.
+
+### Flux CLI
+
+1. `run_profiles_batch` agrège les profils QGIS via `resolve_map_profiles_for_batch`.
+2. `ensure_maps_for_profiles` cherche les PNG existants, tente QGIS pour les manquants (non bloquant).
+3. Le moteur résout les chemins PDF via `resolve_profile_map_paths` / catalogue global.
+4. Carte absente → message fallback dans le PDF, bilan terminé normalement.
+
+### Options CLI utiles
+
+```bash
+# Global : sous-ensemble de cartes
+python -m bilans --profil global --cartes --carte global --carte global_domaines
+python -m bilans --profil global --cartes --carte all
+
+# Désactiver les cartes
+python -m bilans --profil chasse --no-cartes
+```
+
+### Fichiers de référence
+
+- Profils bilan : `config/profils_bilan/<id>.yaml`
+- Profils QGIS : `src/bilans/cartographie/param/profil_cartes.yaml`
+- Symbologies : `src/bilans/cartographie/param/symbologies.yaml`
+- Alignement filtres : `docs/usage/filtrage_bilans_et_cartes.md`
 
 ### Bonnes pratiques
 
-- Lors de l’ajout d’un nouveau profil de carte :
-  - choisir un `map_id` explicite et stable (sans espaces),
-  - générer les cartes sous la forme `carte_<map_id>.png`,
-  - si nécessaire, mettre à jour le mapping dans `find_maps_for_bilan`.
-- En cas de carte manquante :
-  - le bilan continue à être généré ; un warning est simplement émis dans la
-    console, sans bloquer l’exécution.
-
+- Nouveau profil thématique : id YAML = id dans `ref/programme/tables_reference/ref_themes_ctrl.csv` → profil QGIS auto.
+- Keywords atypiques (ex. pollutions_urbaines) : alignés automatiquement via `filter.keywords` → filtre QGIS `point_ctrl_keywords`.
+- Override ponctuel : `cartographie.profil_qgis` ou `cartographie.keywords` dans le YAML profil.

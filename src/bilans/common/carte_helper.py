@@ -177,28 +177,13 @@ def expected_map_filenames(
     return names
 
 
-def find_maps_for_bilan(bilan_type: str) -> List[Path]:
-    """Return all pre-generated map PNGs relevant to a bilan type."""
-    profile_map = {
-        "bilan_global": ["global", "agrainage", "chasse", "procedures_pve"],
-        "bilan_agrainage": ["agrainage"],
-        "bilan_chasse": ["chasse"],
-        "bilan_procedures": ["procedures_pve"],
-    }
-    profile_ids = profile_map.get(bilan_type, [bilan_type])
-    result = []
-    for pid in profile_ids:
-        m = find_map(pid)
-        if m:
-            result.append(m)
-    return result
-
-
 def generate_maps(
     profile_ids: List[str],
     date_deb: Optional[str] = None,
     date_fin: Optional[str] = None,
     dept_code: Optional[str] = None,
+    *,
+    bilan_profiles: dict[str, dict] | None = None,
 ) -> List[Path]:
     """
     Try to generate maps via QGIS. Returns list of generated map paths.
@@ -210,7 +195,16 @@ def generate_maps(
 
     try:
         from bilans.cartographie.production_cartographique import run_export
-        run_export(profile_ids, date_deb=date_deb, date_fin=date_fin, dept_code=dept_code)
+        from bilans.common.cartographie_config import build_qgis_overrides_from_bilan_profiles
+
+        qgis_overrides = build_qgis_overrides_from_bilan_profiles(bilan_profiles)
+        run_export(
+            profile_ids,
+            date_deb=date_deb,
+            date_fin=date_fin,
+            dept_code=dept_code,
+            qgis_overrides=qgis_overrides,
+        )
     except Exception as e:
         logger.warning("Échec génération cartes QGIS : %s", e)
         return []
@@ -223,39 +217,13 @@ def generate_maps(
     return generated
 
 
-def ensure_maps(
-    bilan_type: str,
-    date_deb: Optional[str] = None,
-    date_fin: Optional[str] = None,
-    dept_code: Optional[str] = None,
-) -> List[Path]:
-    """
-    Return map paths for a bilan. Generates them if missing and QGIS is available.
-    Bilans can call this and integrate the returned paths into their PDF.
-    """
-    existing = find_maps_for_bilan(bilan_type)
-    if existing:
-        return existing
-
-    profile_map = {
-        "bilan_global": ["global", "agrainage", "chasse", "procedures_pve"],
-        "bilan_agrainage": ["agrainage"],
-        "bilan_chasse": ["chasse"],
-        "bilan_procedures": ["procedures_pve"],
-    }
-    profile_ids = profile_map.get(bilan_type, [bilan_type])
-    generated = generate_maps(profile_ids, date_deb, date_fin, dept_code)
-    if generated:
-        return generated
-
-    return find_maps_for_bilan(bilan_type)
-
-
 def ensure_maps_for_profiles(
     profile_ids: List[str],
     date_deb: Optional[str] = None,
     date_fin: Optional[str] = None,
     dept_code: Optional[str] = None,
+    *,
+    bilan_profiles: dict[str, dict] | None = None,
 ) -> List[Path]:
     """
     Ensure that maps exist for a list of cartographic profiles.
@@ -288,7 +256,13 @@ def ensure_maps_for_profiles(
 
     generated: List[Path] = []
     if missing:
-        generated = generate_maps(missing, date_deb=date_deb, date_fin=date_fin, dept_code=dept_code)
+        generated = generate_maps(
+            missing,
+            date_deb=date_deb,
+            date_fin=date_fin,
+            dept_code=dept_code,
+            bilan_profiles=bilan_profiles,
+        )
 
     # Retourne l'ensemble des cartes trouvées / générées, sans doublons
     result: List[Path] = []

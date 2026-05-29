@@ -33,6 +33,7 @@ FilterType = Literal[
     "point_ctrl_piegeage",
     "point_ctrl_global",
     "point_ctrl_theme",
+    "point_ctrl_keywords",
     "",
 ]
 
@@ -89,6 +90,9 @@ class ProfileConfig:
     layout_subtitle_item_id: str = "sous_titre"
     # Pour profils par défaut : id du thème (ref_themes_ctrl) pour le filtre point_ctrl_theme
     theme_id: Optional[str] = None
+    # Mots-clés bilan (filtre point_ctrl_keywords), alignés sur filter.keywords du profil YAML
+    keywords: Optional[List[str]] = None
+    keyword_columns: Optional[List[str]] = None
 
 
 @dataclass

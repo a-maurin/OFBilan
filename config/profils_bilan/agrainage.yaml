@@ -26,6 +26,10 @@ periode_analyse:
     type: auto
     seuil_jours: 366
 
+# Colonne Zone PDF : Coeur de parc, Aire d'adhésion, Zone TUB, Hors PNF/TUB
+analyses:
+  zone_lecteur_4_zones: true
+
 options:
   pnf:
     label: "Analyse PNF / hors PNF"

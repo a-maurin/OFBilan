@@ -8,15 +8,22 @@ output_filename: bilan_global.pdf
 capabilities:
   combine: false
   mix_batch: false
-  map_profiles:
-  - global
-  - agrainage
-  - chasse
-  - procedures_pve
+  map_profiles: []
 
 cartographie:
-  fichiers:
-    - carte_global.png
+  catalog:
+    - id: global
+      label: "Contrôles"
+      fichier: carte_global.png
+    - id: global_usagers
+      label: "Types d'usagers"
+      fichier: carte_global_usagers.png
+    - id: procedures_pve
+      label: "Procédures"
+      fichier: carte_procedures_pve.png
+    - id: global_domaines
+      label: "Domaines"
+      fichier: carte_global_domaines.png
 aggregation:
   adapter: run_profile_aggregations
 pdf:
@@ -35,3 +42,12 @@ options:
     label: "Intégration des cartes"
     default: true
     ask: false
+  cartes_selection:
+    label: "Cartes à intégrer au PDF"
+    type: multi_choice
+    default:
+      - global
+      - global_usagers
+      - procedures_pve
+      - global_domaines
+    ask: true

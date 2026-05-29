@@ -64,6 +64,44 @@ def pdf_column_label(col: str) -> str:
     return key.replace("_", " ").title()
 
 
+_RESULTATS_CONTROLES_ROW_ORDER: tuple[str, ...] = (
+    "Conforme",
+    "Non-conforme",
+    "Dont manquement",
+    "Dont infraction",
+    "En attente",
+)
+
+
+def resultat_controle_label_for_pdf(resultat: object) -> str:
+    """Libellé cellule PDF : indentation des sous-lignes « Dont … » via ``&nbsp;``."""
+    label = str(resultat or "").strip()
+    if label in ("Dont infraction", "Dont manquement"):
+        return f"&nbsp;&nbsp;&nbsp;{label}"
+    return label
+
+
+def sort_tab_resultats_controles_for_pdf(df: pd.DataFrame) -> pd.DataFrame:
+    """Ordre fixe des lignes du tableau « Résultats des contrôles » (ne pas trier par nb)."""
+    if df.empty or "resultat" not in df.columns:
+        return df
+
+    def _rank(val: object) -> int:
+        key = str(val or "").strip()
+        try:
+            return _RESULTATS_CONTROLES_ROW_ORDER.index(key)
+        except ValueError:
+            return len(_RESULTATS_CONTROLES_ROW_ORDER)
+
+    tmp = df.copy()
+    tmp["_pdf_row_order"] = tmp["resultat"].map(_rank)
+    return (
+        tmp.sort_values("_pdf_row_order", ascending=True, kind="stable")
+        .drop(columns=["_pdf_row_order"])
+        .reset_index(drop=True)
+    )
+
+
 def sort_dataframe_desc(df: pd.DataFrame | None, columns: list[str]) -> pd.DataFrame | None:
     """Trie un DataFrame par la première colonne numérique disponible (ordre décroissant)."""
     if df is None or df.empty:
@@ -115,7 +153,6 @@ def prepare_pdf_results_sec23_sorting(results: dict) -> None:
     column_sorts: list[tuple[str, list[str]]] = [
         ("usager_effectifs", ["nb"]),
         ("tab_resultats", ["nb"]),
-        ("tab_resultats_controles", ["nb"]),
         ("pve_top_infractions", ["nb"]),
         ("pve_natinf_analysis", ["nb"]),
         ("zone_pve", ["nb"]),
@@ -135,6 +172,10 @@ def prepare_pdf_results_sec23_sorting(results: dict) -> None:
         value = results.get(key)
         if isinstance(value, pd.DataFrame) and not value.empty:
             results[key] = sort_dataframe_desc(value, cols)
+
+    tab_res_ctrl = results.get("tab_resultats_controles")
+    if isinstance(tab_res_ctrl, pd.DataFrame) and not tab_res_ctrl.empty:
+        results["tab_resultats_controles"] = sort_tab_resultats_controles_for_pdf(tab_res_ctrl)
 
     for key in ("proc_par_usager_domaine", "proc_par_usager_theme"):
         value = results.get(key)

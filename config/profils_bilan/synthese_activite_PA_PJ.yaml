@@ -39,8 +39,13 @@ capabilities:
   mix_batch: false
   map_profiles:
     - synthese_activite_PA_PJ
+    - synthese_activite_PA_PJ_2
 
 cartographie:
+  mode: synthese
+  map_profiles:
+    - synthese_activite_PA_PJ
+    - synthese_activite_PA_PJ_2
   fichiers:
     - carte_synthese_activite_PA_PJ.png
     - carte_synthese_activite_PA_PJ_2.png

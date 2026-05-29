@@ -74,6 +74,8 @@ from bilans.common.utilitaires_metier import (
     agg_resultat_counts_par_type_usager,
     build_tab_resultats,
     build_tab_resultats_controles,
+    zone_lecteur_counts_for_pdf_cell,
+    zone_lecteur_label,
 )
 from bilans.common.ofb_charte import Spinner
 from bilans.common.pdf_report_builder import (
@@ -118,6 +120,7 @@ from bilans.common.pdf_table_sort import (
     pdf_column_label,
     pdf_metric_caption,
     prepare_pdf_results_sec23_sorting,
+    resultat_controle_label_for_pdf,
     sort_dataframe_desc,
 )
 from bilans.common.pdf_usagers_domaine_table import (
@@ -139,8 +142,16 @@ from bilans.common.rendus_graphiques import (
 )
 from bilans.common.carte_helper import (
     expected_map_filenames,
+    ensure_maps_for_profiles,
     resolve_map_layout,
     resolve_profile_map_paths,
+)
+from bilans.common.cartographie_config import (
+    ask_cartes_selection,
+    expected_map_filenames_for_selection,
+    has_cartography_catalog,
+    resolve_cartes_selection,
+    resolve_selected_map_paths,
 )
 from bilans.engine.registre_sections_pdf import SectionRegistry
 
@@ -367,6 +378,14 @@ def _run_global_profile_via_yaml(
     if options.get("chart_preset") and not chart_preset:
         chart_preset = options.get("chart_preset")
     resolved_opts = ask_interactive_options(profile, resolved_opts)
+    resolved_opts = _finalize_cartes_selection(
+        profile,
+        resolved_opts,
+        options,
+        date_deb=date_deb,
+        date_fin=date_fin,
+        dept_code=dept_code,
+    )
     root = PROJECT_ROOT
     prompt_cartography_integration(
         root=root,
@@ -480,6 +499,47 @@ def _copy_to_clipboard(text: str) -> None:
         _log.debug("Copie presse-papiers (clip) indisponible: %s", exc)
 
 
+def _finalize_cartes_selection(
+    profile: dict,
+    resolved_opts: dict,
+    cli_options: dict | None,
+    *,
+    date_deb: str | None = None,
+    date_fin: str | None = None,
+    dept_code: str | None = None,
+) -> dict:
+    """Résout la sélection de cartes (catalogue) et tente de générer les PNG manquants."""
+    if not resolved_opts.get("cartes", False) or not has_cartography_catalog(profile):
+        profile.pop("_cartes_selection", None)
+        return resolved_opts
+
+    selection = resolve_cartes_selection(profile, resolved_opts)
+    sel_cfg = (profile.get("options") or {}).get("cartes_selection") or {}
+    cli = cli_options or {}
+    if (
+        isinstance(sel_cfg, dict)
+        and sel_cfg.get("ask", False)
+        and "cartes_profil" not in cli
+        and "cartes_selection" not in cli
+        and sys.stdin.isatty()
+    ):
+        selection = ask_cartes_selection(profile, selection)
+
+    profile["_cartes_selection"] = selection
+    resolved_opts["cartes_selection"] = selection
+    if selection:
+        profil_id = str(profile.get("id", "")).strip()
+        bilan_key = profil_id or "global"
+        ensure_maps_for_profiles(
+            selection,
+            date_deb=date_deb,
+            date_fin=date_fin,
+            dept_code=dept_code,
+            bilan_profiles={bilan_key: profile},
+        )
+    return resolved_opts
+
+
 def resolve_profile_map_id(profile: dict, profil_id: str) -> str:
     """Identifiant cartographique pour retrouver les PNG (profil global, thématique, usager ciblé)."""
     existing = profile.get("_map_id")
@@ -510,13 +570,35 @@ def prompt_cartography_integration(
     """
     if not resolved_opts.get("cartes", False) or not sys.stdin.isatty():
         return
-    map_id = (map_id or resolve_profile_map_id(profile, profil_id)).strip() or profil_id
-    profile["_map_id"] = map_id
-    scope = str(profile.get("presentation_scope", "thematique")).strip() or "thematique"
+
     cartes_dir = get_cartes_dir()
+    scope = str(profile.get("presentation_scope", "thematique")).strip() or "thematique"
     pres_cfg = resolve_pdf_presentation_config(
         root, scope=scope, profile_id=profil_id
     ).get("effective", {})
+
+    if has_cartography_catalog(profile):
+        selection = profile.get("_cartes_selection") or resolve_cartes_selection(profile, resolved_opts)
+        expected_names = expected_map_filenames_for_selection(profile, selection)
+        section_hint = "section 5 (localisation cartographique — une carte par page)"
+        print("\n--- Cartographie ---")
+        print(f"Pour intégrer les cartes dans le bilan PDF ({section_hint}) :")
+        print(f"  - dossier : {cartes_dir}")
+        for name in expected_names:
+            print(f"  - fichier : {name}")
+        if len(expected_names) >= 2:
+            print("  - les cartes sélectionnées seront affichées une par page.")
+        if expected_names:
+            _copy_to_clipboard(expected_names[0])
+            print("(Le premier nom de fichier attendu a été copié dans le presse-papiers si possible.)")
+        try:
+            input("Appuyez sur Entrée une fois les cartes prêtes (renommées et placées au bon endroit)... ")
+        except (EOFError, KeyboardInterrupt):
+            pass
+        return
+
+    map_id = (map_id or resolve_profile_map_id(profile, profil_id)).strip() or profil_id
+    profile["_map_id"] = map_id
     expected_names = expected_map_filenames(
         map_id,
         profile=profile,
@@ -591,7 +673,11 @@ def ask_interactive_options(profile: dict, current_opts: dict) -> dict:
     askable = [
         (key, cfg)
         for key, cfg in options_config.items()
-        if isinstance(cfg, dict) and cfg.get("ask", False) and key not in current_opts
+        if isinstance(cfg, dict)
+        and cfg.get("ask", False)
+        and key not in current_opts
+        and cfg.get("type") != "multi_choice"
+        and not isinstance(cfg.get("default"), list)
     ]
     if not askable:
         return result
@@ -1328,7 +1414,10 @@ def _run_aggregations(
         distinction_coeur_hors_coeur = bool(analyses_cfg["distinction_coeur_hors_coeur"])
     else:
         distinction_coeur_hors_coeur = bool(options.get("pnf", False))
-    results["_pdf_show_coeur_hors_coeur"] = distinction_coeur_hors_coeur
+    zone_lecteur_4_zones = bool(analyses_cfg.get("zone_lecteur_4_zones", False))
+    results["_pdf_show_coeur_hors_coeur"] = distinction_coeur_hors_coeur or zone_lecteur_4_zones
+    results["_zone_lecteur_4_zones"] = zone_lecteur_4_zones
+    tub_codes_lecteur = spatial.get("tub_codes") if isinstance(spatial.get("tub_codes"), set) else set()
 
     nb_ctrl = len(point_filtered)
     nb_pej = len(pej_filtered)
@@ -1352,6 +1441,8 @@ def _run_aggregations(
         results["tab_resultats_controles"] = build_tab_resultats_controles(
             point_filtered,
             distinction_coeur_hors_coeur=distinction_coeur_hors_coeur,
+            zone_lecteur_4_zones=zone_lecteur_4_zones,
+            tub_codes=tub_codes_lecteur,
         )
     else:
         results["total_controles_reference"] = int(nb_ctrl)
@@ -1670,6 +1761,59 @@ def _run_aggregations(
             return "Hors PNF"
         return "n.d."
 
+    tub_codes_proc = results.get("tub_codes") if isinstance(results.get("tub_codes"), set) else tub_codes_lecteur
+
+    def _resolve_proc_zone_sig_series(
+        d: pd.DataFrame,
+        out_commune: pd.Series,
+        proc_type: str,
+        com_col: str | None,
+    ) -> pd.Series:
+        sig = pd.Series(pd.NA, index=d.index, dtype="string")
+        if "pnf_zone_sig" in d.columns:
+            sig = d["pnf_zone_sig"].astype("string")
+        if proc_type == "PVe" and com_col == "INF-INSEE" and pnf_zone_by_insee:
+            from_insee = (
+                d[com_col]
+                .astype(str)
+                .str.strip()
+                .str.extract(r"(\d{1,5})", expand=False)
+                .fillna("")
+                .str.zfill(5)
+                .map(pnf_zone_by_insee)
+            )
+            sig = sig.fillna(from_insee.astype("string"))
+        elif "DC_ID" in d.columns and pnf_by_dc:
+            sig = sig.fillna(
+                d["DC_ID"].astype(str).str.strip().map(pnf_by_dc).astype("string")
+            )
+        if proc_type in ("PEJ", "PA"):
+            if pnf_zone_by_commune_nom:
+                zc = (
+                    out_commune.astype(str)
+                    .str.strip()
+                    .str.lower()
+                    .replace({"": pd.NA, "nan": pd.NA, "none": pd.NA, "<na>": pd.NA})
+                )
+                sig = sig.fillna(zc.map(pnf_zone_by_commune_nom).astype("string"))
+            insee_s = _coalesced_insee_for_pnf_mask(d)
+            if pnf_zone_by_insee and insee_s.notna().any():
+                sig = sig.fillna(insee_s.map(pnf_zone_by_insee).astype("string"))
+        return sig
+
+    def _apply_zone_lecteur_column(
+        d: pd.DataFrame,
+        out: pd.DataFrame,
+        proc_type: str,
+        com_col: str | None,
+    ) -> None:
+        sig = _resolve_proc_zone_sig_series(d, out["commune"], proc_type, com_col)
+        insee_s = _coalesced_insee_for_pnf_mask(d)
+        out["coeur_hors_coeur"] = [
+            zone_lecteur_label(sig.iat[i], insee_s.iat[i], tub_codes_proc)
+            for i in range(len(d))
+        ]
+
     pnf_by_dc: dict[str, str] = {}
     nom_commune_by_dc: dict[str, str] = {}
     dc_col_points = "DC_ID" if "DC_ID" in point_filtered.columns else ("dc_id" if "dc_id" in point_filtered.columns else None)
@@ -1725,7 +1869,7 @@ def _run_aggregations(
         if df is None or df.empty:
             cols = (
                 ["numero", "date", "commune", "thematique", "coeur_hors_coeur", "type_procedure"]
-                if distinction_coeur_hors_coeur
+                if distinction_coeur_hors_coeur or zone_lecteur_4_zones
                 else ["numero", "date", "commune", "thematique", "type_procedure"]
             )
             return pd.DataFrame(columns=cols)
@@ -1755,7 +1899,9 @@ def _run_aggregations(
             out["commune"] = out["commune"].fillna(
                 d["DC_ID"].astype(str).str.strip().map(nom_commune_by_dc)
             )
-        if distinction_coeur_hors_coeur:
+        if zone_lecteur_4_zones:
+            _apply_zone_lecteur_column(d, out, proc_type, com_col)
+        elif distinction_coeur_hors_coeur:
             if proc_type == "PVe" and com_col == "INF-INSEE" and pnf_zone_by_insee:
                 out["coeur_hors_coeur"] = (
                     d[com_col]
@@ -2800,6 +2946,14 @@ def _generate_pdf(
     nb_pa = results.get("nb_pa", 0)
     nb_pve = results.get("nb_pve", 0)
     show_coeur_hors_pdf = bool(results.get("_pdf_show_coeur_hors_coeur", True))
+    zone_lecteur_4_zones_pdf = bool(results.get("_zone_lecteur_4_zones", False))
+
+    def _zone_cell_for_pdf(raw: object) -> str:
+        txt = str(raw or "n.d.")
+        if zone_lecteur_4_zones_pdf:
+            return zone_lecteur_counts_for_pdf_cell(txt)
+        return txt
+
     tab_resultats = results.get("tab_resultats")
     is_type_usager = profile.get("analyses", {}).get("type_usager", False)
     is_procedures = profile["filter"]["type"] == "procedures"
@@ -3254,9 +3408,9 @@ def _generate_pdf(
                     j += 1
                 else:
                     t = "n.d."
-                row_cells = [rlib, str(nbv), t]
+                row_cells = [resultat_controle_label_for_pdf(rlib), str(nbv), t]
                 if show_coeur_col:
-                    row_cells.append(str(row.get("coeur_hors_coeur", "n.d.")))
+                    row_cells.append(_zone_cell_for_pdf(row.get("coeur_hors_coeur", "n.d.")))
                 tbl.append(row_cells)
             if show_coeur_col:
                 cw_res = [avail_w * 0.42, avail_w * 0.14, avail_w * 0.16, avail_w * 0.28]
@@ -3367,9 +3521,9 @@ def _generate_pdf(
                     j += 1
                 else:
                     t = "n.d."
-                row_cells = [rlib, str(nbv), t]
+                row_cells = [resultat_controle_label_for_pdf(rlib), str(nbv), t]
                 if show_coeur_col:
-                    row_cells.append(str(row.get("coeur_hors_coeur", "n.d.")))
+                    row_cells.append(_zone_cell_for_pdf(row.get("coeur_hors_coeur", "n.d.")))
                 tbl.append(row_cells)
             if show_coeur_col:
                 cw = [avail_w * 0.42, avail_w * 0.14, avail_w * 0.16, avail_w * 0.28]

@@ -23,6 +23,10 @@ periode_analyse:
 analyses:
   type_usager: true
 
+cartographie:
+  mode: dedie
+  profil_qgis: global_usagers
+
 options:
   cartes:
     label: "Intégration des cartes"

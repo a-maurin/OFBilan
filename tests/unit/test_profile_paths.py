@@ -92,7 +92,6 @@ def test_run_profiles_batch_combine_uses_data_out_dir(tmp_path: Path, monkeypatc
         return 0
 
     monkeypatch.setattr(runner, "run_profile", _fake_run_profile)
-    monkeypatch.setattr(carte_helper, "ensure_maps", lambda *a, **k: None)
     monkeypatch.setattr(carte_helper, "ensure_maps_for_profiles", lambda *a, **k: None)
     monkeypatch.setattr(
         "bilans.engine.execution_lots_profils.get_out_dir", lambda subdir: tmp_path / "data" / "out" / subdir

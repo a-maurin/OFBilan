@@ -116,28 +116,23 @@ def run_profiles_batch(
 
     try:
         from bilans.common.carte_helper import ensure_maps_for_profiles
+        from bilans.common.cartographie_config import resolve_map_profiles_for_batch
 
         map_profiles: list[str] = []
         for pid in profils:
             prof = profiles_cfg.get(pid, {})
-            caps = prof.get("capabilities", {}) if isinstance(prof, dict) else {}
-            if not isinstance(caps, dict):
-                caps = {}
-            raw = caps.get("map_profiles", [])
-            if isinstance(raw, list):
-                for item in raw:
-                    s = str(item).strip()
-                    if s and s not in map_profiles:
-                        map_profiles.append(s)
-            elif raw is not None:
-                s = str(raw).strip()
-                if s and s not in map_profiles:
-                    map_profiles.append(s)
+            for map_id in resolve_map_profiles_for_batch(prof, pid, cli_options):
+                if map_id not in map_profiles:
+                    map_profiles.append(map_id)
 
         if map_profiles:
             try:
                 ensure_maps_for_profiles(
-                    map_profiles, date_deb=date_deb, date_fin=date_fin, dept_code=dept_code
+                    map_profiles,
+                    date_deb=date_deb,
+                    date_fin=date_fin,
+                    dept_code=dept_code,
+                    bilan_profiles=profiles_cfg,
                 )
             except Exception as e:
                 logger.warning("Cartes profils : %s", e)

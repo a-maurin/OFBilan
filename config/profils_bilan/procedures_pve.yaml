@@ -20,4 +20,11 @@ periode_analyse:
     type: auto
     seuil_jours: 366
 
-options: {}
+cartographie:
+  mode: dedie
+
+options:
+  cartes:
+    label: "Intégration des cartes"
+    default: true
+    ask: false

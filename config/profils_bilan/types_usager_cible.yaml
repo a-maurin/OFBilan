@@ -23,6 +23,7 @@ analyses:
 #   carte_{map_id}.png  et  carte_{map_id}_2.png  (map_id = code court du type, ex. AGR)
 # disposition: verticale  pour les empiler sur la page
 cartographie:
+  mode: manuel
   fichiers:
     - carte_{map_id}.png
     - carte_{map_id}_2.png

@@ -48,6 +48,23 @@ from bilans.chemins_projet import get_qgis_project_path
 _DEFAULT_QGIS_PROJECT = get_qgis_project_path()
 
 
+def _load_ref_themes_ctrl_safe(root: Path) -> list:
+    """Charge ref_themes_ctrl (bilans ou contexte QGIS legacy)."""
+    try:
+        from bilans.common.chargeurs_donnees import load_ref_themes_ctrl
+
+        return load_ref_themes_ctrl(root)
+    except Exception as exc:
+        logger.debug("Chargeur bilans ref_themes_ctrl : %s", exc)
+    try:
+        from common.loaders import load_ref_themes_ctrl
+
+        return load_ref_themes_ctrl(root)
+    except Exception as exc:
+        logger.warning("ref_themes_ctrl indisponible : %s", exc)
+        return []
+
+
 def _resolve_qgis_project_path(configured: str) -> str:
     """Return a valid QGIS project path, checking env var > configured > default."""
     env = os.getenv("CARTO_PROJECT_QGIS_PATH", "").strip()
@@ -206,8 +223,7 @@ def _load_profiles_from_param() -> Optional[Dict[str, "ProfileConfig"]]:
 
     # Profils cartes par défaut : thèmes de ref_themes_ctrl sans entrée dans le YAML
     try:
-        from common.loaders import load_ref_themes_ctrl
-        themes = load_ref_themes_ctrl(PROJECT_ROOT)
+        themes = _load_ref_themes_ctrl_safe(PROJECT_ROOT)
         point_ctrl_layer = "point_ctrl_20260205_wgs84"
         layout_default = "Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or"
         for t in themes:
@@ -624,6 +640,55 @@ def _build_point_ctrl_theme_expression(
     )
 
 
+def _build_point_ctrl_keywords_expression(
+    field_names: set,
+    date_deb: str,
+    date_fin: str,
+    config,
+    keywords: list[str],
+    columns: list[str] | None = None,
+) -> Optional[str]:
+    """Filtre points de contrôle par mots-clés (aligné filtres bilan thématiques)."""
+    if not keywords:
+        return None
+
+    col_map = {
+        "theme": "theme" if "theme" in field_names else None,
+        "type_actio": "type_action" if "type_action" in field_names else "type_actio" if "type_actio" in field_names else None,
+        "type_action": "type_action" if "type_action" in field_names else "type_actio" if "type_actio" in field_names else None,
+        "nom_dossie": "nom_dossier" if "nom_dossier" in field_names else "nom_dossie" if "nom_dossie" in field_names else None,
+        "nom_dossier": "nom_dossier" if "nom_dossier" in field_names else "nom_dossie" if "nom_dossie" in field_names else None,
+    }
+    use_columns = columns or ["theme", "type_actio", "nom_dossie"]
+    resolved_cols: list[str] = []
+    for col in use_columns:
+        mapped = col_map.get(col, col if col in field_names else None)
+        if mapped and mapped not in resolved_cols:
+            resolved_cols.append(mapped)
+
+    required = {"date_ctrl", "num_depart"}
+    if not required.issubset(field_names) or not resolved_cols:
+        return None
+
+    deb_ymd = date_deb.replace("-", "")
+    fin_ymd = date_fin.replace("-", "")
+    depart = getattr(config, "departement_code", "21")
+
+    like_parts: list[str] = []
+    for kw in keywords:
+        kw_esc = str(kw).replace("'", "''")
+        for col in resolved_cols:
+            like_parts.append(f'"{col}" LIKE \'%{kw_esc}%\'')
+    if not like_parts:
+        return None
+    text_cond = "(" + " OR ".join(like_parts) + ")"
+    return (
+        f'{text_cond} AND "num_depart" = {repr(depart)} AND '
+        f'(substr("date_ctrl", 7, 4) || substr("date_ctrl", 4, 2) || substr("date_ctrl", 1, 2)) >= \'{deb_ymd}\' AND '
+        f'(substr("date_ctrl", 7, 4) || substr("date_ctrl", 4, 2) || substr("date_ctrl", 1, 2)) <= \'{fin_ymd}\''
+    )
+
+
 def _build_point_ctrl_piegeage_expression(field_names: set, date_deb: str, date_fin: str, config) -> Optional[str]:
     """Filtre points de contrôle piégeage : nom_dossie/theme/type_actio contient un mot-clé piégeage."""
     nom_col = None
@@ -734,8 +799,7 @@ def apply_date_filter(
         expr = _build_point_ctrl_global_expression(field_names, date_deb, date_fin, use_config)
     elif filter_type == "point_ctrl_theme" and profile and getattr(profile, "theme_id", None):
         try:
-            from common.loaders import load_ref_themes_ctrl
-            themes = load_ref_themes_ctrl(PROJECT_ROOT)
+            themes = _load_ref_themes_ctrl_safe(PROJECT_ROOT)
             theme_entry = next((t for t in themes if t["id"] == profile.theme_id), None)
             theme_label = theme_entry["label"] if theme_entry else profile.theme_id.replace("_", " ")
             expr = _build_point_ctrl_theme_expression(
@@ -743,6 +807,15 @@ def apply_date_filter(
             )
         except Exception as e:
             logger.warning("Filtre point_ctrl_theme : impossible de charger le label pour %s : %s", profile.theme_id, e)
+    elif filter_type == "point_ctrl_keywords" and profile and getattr(profile, "keywords", None):
+        expr = _build_point_ctrl_keywords_expression(
+            field_names,
+            date_deb,
+            date_fin,
+            use_config,
+            list(profile.keywords or []),
+            list(profile.keyword_columns or []) or None,
+        )
 
     if not filter_type:
         return
@@ -1189,11 +1262,44 @@ def _save_config_to_file(cfg: "GlobalConfig") -> None:
     write_config_file(cfg, cfg_path)
 
 
+def _apply_qgis_override_to_profile(prof: "ProfileConfig", override: dict) -> "ProfileConfig":
+    """Applique mots-clés bilan sur un profil QGIS (filtre point_ctrl_keywords)."""
+    if not override or not prof:
+        return prof
+    from dataclasses import replace
+
+    keywords = override.get("keywords")
+    columns = override.get("keyword_columns")
+    updates: dict = {}
+    if keywords:
+        updates["keywords"] = [str(k).strip() for k in keywords if str(k).strip()]
+    if columns:
+        updates["keyword_columns"] = [str(c).strip() for c in columns if str(c).strip()]
+    if not updates:
+        return prof
+
+    prof = replace(prof, **updates)
+    new_layers: dict = {}
+    for key, lcfg in prof.layers.items():
+        layer_name = str(getattr(lcfg, "layer_name", "") or key).lower()
+        if "point_ctrl" in layer_name and lcfg.filter_type in (
+            "point_ctrl_theme",
+            "point_ctrl_global",
+            "",
+        ):
+            new_layers[key] = replace(lcfg, filter_type="point_ctrl_keywords")
+        else:
+            new_layers[key] = lcfg
+    return replace(prof, layers=new_layers)
+
+
 def run_export(
     profile_ids: List[str],
     date_deb: Optional[str] = None,
     date_fin: Optional[str] = None,
     dept_code: Optional[str] = None,
+    *,
+    qgis_overrides: Optional[Dict[str, dict]] = None,
 ) -> None:
     """Génère les cartes en mode non interactif à partir de la config."""
     CONFIG = get_effective_config()
@@ -1231,6 +1337,9 @@ def run_export(
         if not prof:
             logger.warning("Profil '%s' inconnu. Ignoré.", pid)
             continue
+
+        if qgis_overrides and config_id in qgis_overrides:
+            prof = _apply_qgis_override_to_profile(prof, qgis_overrides[config_id])
 
         # Surcharge éventuelle des dates de période par la ligne de commande
         if date_deb:
@@ -1342,8 +1451,7 @@ def main() -> None:
         # Liste officielle depuis ref/ref_themes_ctrl.csv (aligné avec les bilans)
         try:
             sys.path.insert(0, str(PROJECT_ROOT))
-            from common.loaders import load_ref_themes_ctrl
-            themes = load_ref_themes_ctrl(Path(PROJECT_ROOT))
+            themes = _load_ref_themes_ctrl_safe(Path(PROJECT_ROOT))
             profile_ids = [t["id"] for t in themes] if themes else []
         except Exception as e:
             logger.debug("Chargement ref_themes_ctrl échoué (%s), fallback sur config.", e)

@@ -86,6 +86,16 @@ points_global_usagers:
   symbol_shape: circle
   visible: true
 
+points_global_domaines:
+  legend_label: Contrôles par domaine
+  filter_type: point_ctrl_global
+  renderer_type: categorized
+  field: 'coalesce("domaine", ''Hors domaine'')'
+  palette: "#003A76,#53AB60,#F4A261,#E76F51,#90BF83,#4296CE,#264653,#2A9D8F"
+  symbol_size_mm: 3.8
+  symbol_shape: circle
+  visible: true
+
 points_usagers_agriculteurs:
   legend_label: "Contrôles agriculteurs"
   filter_type: point_ctrl_global

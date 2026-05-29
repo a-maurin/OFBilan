@@ -26,6 +26,10 @@ periode_analyse:
     type: auto
     seuil_jours: 366
 
+cartographie:
+  mode: dedie
+  profil_qgis: pnf
+
 options:
   pnf:
     label: "Analyse PNF / hors PNF (après restriction périmètre)"
