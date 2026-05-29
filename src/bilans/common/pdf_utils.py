@@ -4,6 +4,7 @@ import textwrap
 from html import escape
 
 from reportlab.lib import colors as rl_colors
+from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.pdfbase import pdfmetrics
 from reportlab.platypus import Flowable, Paragraph, Spacer, Table, TableStyle
@@ -90,14 +91,31 @@ def wrap_plain_text_for_pdf_paragraph(
     return "<br/>".join(escape(line) for line in lines)
 
 
+def _header_wrap_chars_for_col(col_width_pt: float, font_size: float) -> int:
+    """Estime le nombre de caractères par ligne d'en-tête pour une largeur de colonne (pt)."""
+    try:
+        char_w = pdfmetrics.stringWidth("n", FONT_FAMILY, font_size)
+    except Exception:
+        char_w = float(font_size) * 0.55
+    return max(8, int((float(col_width_pt) - 12.0) / max(char_w, 1.0)))
+
+
 class VerticalText(Flowable):
     """Texte affiché verticalement (-90°) pour en-têtes de colonnes étroites."""
 
-    def __init__(self, text: str, style=None, *, pad_x_pt: float = 0.0):
+    def __init__(
+        self,
+        text: str,
+        style=None,
+        *,
+        pad_x_pt: float = 0.0,
+        max_lines: int = 6,
+    ):
         super().__init__()
         self.text = str(text)
         self.style = style or _CELL_HEADER
         self.pad_x_pt = float(pad_x_pt)
+        self.max_lines = max(1, int(max_lines))
         self._lines: list[str] = [self.text]
 
     def _split_lines(self, avail_width: float) -> list[str]:
@@ -105,26 +123,34 @@ class VerticalText(Flowable):
         if not txt:
             return [""]
         leading = max(float(getattr(self.style, "leading", 0) or 0), float(self.style.fontSize) + 1.5)
-        # Nombre de lignes verticales qu'on peut afficher dans la largeur de cellule.
-        # Forçage minimal de 2 lignes pour les libellés longs afin d'éviter
-        # un rendu vertical monobloc illisible.
-        max_lines = int(max(1, (avail_width - 6) // leading))
-        if len(txt) > 22:
-            max_lines = max(2, max_lines)
-        max_lines = min(4, max_lines)
+        # Segments empilés horizontalement dans la cellule : chaque segment = une « colonne » de texte vertical.
+        width_cap = int(max(1, (avail_width - 6) // leading))
+        max_lines = min(self.max_lines, max(width_cap, 2 if len(txt) > 22 else 1))
         if max_lines <= 1:
             return [txt]
-        words = txt.split(" ")
-        lines = [""]
-        for w in words:
-            cur = lines[-1]
-            trial = f"{cur} {w}".strip()
-            # Heuristique de compaction pour répartir sur plusieurs lignes.
-            target = max(8, int(len(txt) / max_lines))
-            if len(cur) > 0 and len(trial) > target and len(lines) < max_lines:
-                lines.append(w)
-            else:
-                lines[-1] = trial
+        try:
+            char_w = max(
+                pdfmetrics.stringWidth("n", self.style.fontName, self.style.fontSize),
+                self.style.fontSize * 0.45,
+            )
+        except Exception:
+            char_w = self.style.fontSize * 0.5
+        wrap_w = max(6, int((avail_width - 4) / max(char_w, 1.0)))
+        wrapped = textwrap.wrap(
+            txt,
+            width=wrap_w,
+            break_long_words=True,
+            break_on_hyphens=True,
+        )
+        if not wrapped:
+            return [txt]
+        if len(wrapped) <= max_lines:
+            return wrapped
+        lines = wrapped[: max_lines - 1]
+        tail = " ".join(wrapped[max_lines - 1 :])
+        if len(tail) > wrap_w:
+            tail = tail[: max(1, wrap_w - 1)].rstrip() + "…"
+        lines.append(tail)
         return lines
 
     def wrap(self, availWidth: float, availHeight: float):
@@ -136,12 +162,11 @@ class VerticalText(Flowable):
             text_width = max(len(line) for line in self._lines) * self.style.fontSize * 0.6
         leading = max(float(getattr(self.style, "leading", 0) or 0), float(self.style.fontSize) + 1.5)
         self._block_w = len(self._lines) * leading + 6
-        # Après rotation -90°, l'encombrement vertical du libellé suit surtout la longueur du texte.
-        # Ne pas plafonner trop bas sur availHeight (première passe ReportLab) pour éviter la coupe.
         stack_extra = max(0, len(self._lines) - 1) * 6.0
-        need_h = text_width + 26.0 + stack_extra
-        cap = float(availHeight) if (availHeight and float(availHeight) > 1.0) else 10_000.0
-        self._height = max(float(self.style.fontSize) * 5.0, min(cap, need_h))
+        need_h = text_width + 30.0 + stack_extra
+        # Ne pas plafonner sur availHeight : ReportLab peut proposer une hauteur provisoire trop basse
+        # et couper les libellés verticaux longs (domaines OFB).
+        self._height = max(float(self.style.fontSize) * 5.0, need_h)
         return (availWidth, self._height)
 
     def draw(self):
@@ -177,21 +202,42 @@ def ofb_table_wide(
     *,
     split_by_row: bool = False,
     vertical_header_pad_x_pt: float = 0.0,
+    vertical_header_max_lines: int = 6,
+    vertical_header_font_size: float = 7.0,
+    vertical_header_row_padding_pt: float = 8.0,
+    header_layout: str = "vertical",
 ):
-    """Tableau OFB avec en-têtes de colonnes 1..n en texte vertical (lisibles quand beaucoup de colonnes).
+    """Tableau OFB à en-têtes larges (colonnes domaine, etc.).
 
-    data_rows[0] = première ligne (en-têtes) : cellule 0 = Paragraph, cellules 1..n = VerticalText.
-    Si col_widths est None, on calcule : première colonne ~28% de avail_w, reste réparti à égalité.
+    ``header_layout`` :
+    - ``vertical`` : colonnes 1..n en texte vertical (-90°) ;
+    - ``horizontal_wrap`` : en-têtes en ``Paragraph`` multi-lignes (meilleure lisibilité
+      pour les libellés longs type domaines OFB).
     """
     if not data_rows:
         return Table([], colWidths=[])
 
-    # Police légèrement réduite pour les en-têtes verticaux (libellés longs, colonnes étroites).
+    vh_fs = max(6.0, float(vertical_header_font_size))
+    vh_leading = max(vh_fs + 1.5, vh_fs * 1.25)
+    vh_pad = max(4.0, float(vertical_header_row_padding_pt))
+    vh_max_lines = max(1, int(vertical_header_max_lines))
     cell_header_vert = ParagraphStyle(
         "CellHeaderVert",
         parent=_CELL_HEADER,
-        fontSize=7.5,
-        leading=9.5,
+        fontSize=vh_fs,
+        leading=vh_leading,
+    )
+    cell_header_wrap = ParagraphStyle(
+        "CellHeaderWrap",
+        parent=_CELL_HEADER,
+        fontSize=vh_fs,
+        leading=vh_leading,
+        alignment=TA_CENTER,
+    )
+    use_horizontal_wrap = str(header_layout or "vertical").strip().lower() in (
+        "horizontal",
+        "horizontal_wrap",
+        "wrap",
     )
 
     avail_w = avail_w or _AVail_W
@@ -228,7 +274,20 @@ def ofb_table_wide(
         for ci, cell in enumerate(row):
             cell_str = str(cell) if cell is not None else ""
             if ri == 0:
-                if ci == 0:
+                col_w = col_widths[ci] if col_widths and ci < len(col_widths) else None
+                if use_horizontal_wrap:
+                    wrap_chars = _header_wrap_chars_for_col(
+                        float(col_w) if col_w is not None else avail_w / max(1, n_cols),
+                        vh_fs,
+                    )
+                    html = wrap_plain_text_for_pdf_paragraph(
+                        cell_str,
+                        wrap_width=wrap_chars,
+                        max_lines=vh_max_lines,
+                    )
+                    hdr_style = _CELL_HEADER if ci == 0 else cell_header_wrap
+                    new_row.append(Paragraph(html, hdr_style))
+                elif ci == 0:
                     new_row.append(Paragraph(cell_str, _CELL_HEADER))
                 else:
                     new_row.append(
@@ -236,6 +295,7 @@ def ofb_table_wide(
                             cell_str,
                             cell_header_vert,
                             pad_x_pt=vertical_header_pad_x_pt,
+                            max_lines=vh_max_lines,
                         )
                     )
             else:
@@ -245,21 +305,25 @@ def ofb_table_wide(
         # Compléter la ligne si nécessaire
         while len(new_row) < n_cols:
             if ri == 0:
-                new_row.append(
-                    VerticalText(
-                        "",
-                        cell_header_vert,
-                        pad_x_pt=vertical_header_pad_x_pt,
+                if use_horizontal_wrap:
+                    new_row.append(Paragraph("", cell_header_wrap))
+                else:
+                    new_row.append(
+                        VerticalText(
+                            "",
+                            cell_header_vert,
+                            pad_x_pt=vertical_header_pad_x_pt,
+                            max_lines=vh_max_lines,
+                        )
                     )
-                )
             else:
                 new_row.append(Paragraph("", _CELL_NORMAL))
         wrapped.append(new_row)
 
     style_cmds = [
         ("BACKGROUND", (0, 0), (-1, 0), COLOR_TABLE_HEADER_BG),
-        ("BOTTOMPADDING", (0, 0), (-1, 0), 5),
-        ("TOPPADDING", (0, 0), (-1, 0), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, 0), vh_pad),
+        ("TOPPADDING", (0, 0), (-1, 0), vh_pad),
         ("LEFTPADDING", (0, 0), (-1, 0), 6),
         ("RIGHTPADDING", (0, 0), (-1, 0), 6),
         ("BOTTOMPADDING", (0, 1), (-1, -1), 3),
@@ -270,6 +334,8 @@ def ofb_table_wide(
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("ALIGN", (0, 0), (0, 0), "LEFT"),
     ]
+    if use_horizontal_wrap and n_cols > 1:
+        style_cmds.append(("ALIGN", (1, 0), (-1, 0), "CENTER"))
     for i in range(1, len(wrapped)):
         if i % 2 == 0:
             style_cmds.append(("BACKGROUND", (0, i), (-1, i), COLOR_TABLE_ALT_ROW))

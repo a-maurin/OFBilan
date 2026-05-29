@@ -142,7 +142,15 @@ defaults:
     split_by_row: false
     vertical_header:
       pad_x_pt: 0
+      max_lines: 6
+      font_size: 7.0
+      row_padding_pt: 8.0
     usagers_x_domaine:
+      # horizontal_wrap : libellés domaine lisibles (évite la coupe des en-têtes verticaux)
+      header_layout: horizontal_wrap
+      header_font_size: 7.0
+      header_wrap_max_lines: 5
+      first_column_width_ratio: 0.20
       max_domain_columns: 14
       max_usager_rows: 15
       overflow_note_separator: " "

@@ -319,6 +319,7 @@ def test_resolve_tables_layout_merges_yaml_over_defaults() -> None:
     assert resolved["split_by_row"] is True
     assert resolved["usagers_x_domaine"]["max_domain_columns"] == 2
     assert "vertical_header" in resolved
+    assert resolved["vertical_header"].get("max_lines") == 6
 
 
 def test_build_usagers_x_domaine_truncates_columns_and_note() -> None:

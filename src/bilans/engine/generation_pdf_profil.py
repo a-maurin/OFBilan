@@ -42,7 +42,13 @@ from bilans.common.pdf_table_sort import (
     pdf_metric_caption,
     sort_dataframe_desc as _sort_desc,
 )
-from bilans.common.pdf_usagers_domaine_table import build_usagers_x_domaine_pdf_rows
+from bilans.common.pdf_usagers_domaine_table import (
+    build_usagers_x_domaine_pdf_rows,
+    resolve_usagers_x_domaine_header_layout,
+    resolve_usagers_x_domaine_header_font_size,
+    resolve_usagers_x_domaine_header_max_lines,
+    usagers_x_domaine_col_widths,
+)
 from bilans.common.pdf_shared_sections import (
     add_procedures_par_type_usager_subsection,
     add_standard_cover_and_toc,
@@ -1037,8 +1043,7 @@ def _generate_pdf_content(
                 )
                 if tbl_cross:
                     n_dom = len(tbl_cross[0]) - 1
-                    other_w = (avail_w * 0.76) / max(1, n_dom)
-                    col_widths = [avail_w * 0.24] + [other_w] * n_dom
+                    col_widths = usagers_x_domaine_col_widths(avail_w, n_dom, tables_layout)
                     col_aligns = ["LEFT"] + ["RIGHT"] * n_dom
                     cap = pdf_metric_caption("Usagers × Domaine", "effectifs")
                     if overflow_html:
@@ -1049,6 +1054,15 @@ def _generate_pdf_content(
                         col_widths=col_widths,
                         col_aligns=col_aligns,
                         wide_headers=True,
+                        wide_header_layout=resolve_usagers_x_domaine_header_layout(
+                            tables_layout
+                        ),
+                        wide_header_font_size=resolve_usagers_x_domaine_header_font_size(
+                            tables_layout
+                        ),
+                        wide_header_max_lines=resolve_usagers_x_domaine_header_max_lines(
+                            tables_layout
+                        ),
                         keep_together=True,
                         spacer_after_mm=sec4_tbl_sp,
                     )

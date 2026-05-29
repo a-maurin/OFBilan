@@ -7,6 +7,82 @@ from typing import Any
 import pandas as pd
 
 
+def usagers_x_domaine_col_widths(
+    avail_w: float,
+    n_domain_cols: int,
+    tables_layout: dict[str, Any] | None,
+) -> list[float]:
+    """Largeurs de colonnes pour le tableau Usagers × Domaine (1ère colonne + domaines)."""
+    cfg_root = tables_layout if isinstance(tables_layout, dict) else {}
+    cfg = cfg_root.get("usagers_x_domaine")
+    if not isinstance(cfg, dict):
+        cfg = {}
+    try:
+        ratio = float(cfg.get("first_column_width_ratio", 0.20))
+    except (TypeError, ValueError):
+        ratio = 0.20
+    ratio = max(0.12, min(0.35, ratio))
+    n_dom = max(0, int(n_domain_cols))
+    first_w = float(avail_w) * ratio
+    if n_dom <= 0:
+        return [first_w]
+    rest_w = (float(avail_w) - first_w) / n_dom
+    return [first_w] + [rest_w] * n_dom
+
+
+def resolve_usagers_x_domaine_header_layout(tables_layout: dict[str, Any] | None) -> str:
+    """Mode d'en-tête pour Usagers × Domaine : ``horizontal_wrap`` (défaut) ou ``vertical``."""
+    cfg_root = tables_layout if isinstance(tables_layout, dict) else {}
+    cfg = cfg_root.get("usagers_x_domaine")
+    if not isinstance(cfg, dict):
+        cfg = {}
+    mode = str(cfg.get("header_layout", "horizontal_wrap")).strip().lower()
+    if mode in ("vertical", "verticale"):
+        return "vertical"
+    return "horizontal_wrap"
+
+
+def resolve_usagers_x_domaine_header_font_size(
+    tables_layout: dict[str, Any] | None,
+    *,
+    fallback: float = 7.0,
+) -> float:
+    cfg_root = tables_layout if isinstance(tables_layout, dict) else {}
+    uxd = cfg_root.get("usagers_x_domaine")
+    vh = cfg_root.get("vertical_header")
+    for block in (uxd, vh):
+        if isinstance(block, dict) and block.get("header_font_size") is not None:
+            try:
+                return float(block["header_font_size"])
+            except (TypeError, ValueError):
+                pass
+        if isinstance(block, dict) and block.get("font_size") is not None:
+            try:
+                return float(block["font_size"])
+            except (TypeError, ValueError):
+                pass
+    return float(fallback)
+
+
+def resolve_usagers_x_domaine_header_max_lines(
+    tables_layout: dict[str, Any] | None,
+    *,
+    fallback: int = 5,
+) -> int:
+    cfg_root = tables_layout if isinstance(tables_layout, dict) else {}
+    uxd = cfg_root.get("usagers_x_domaine")
+    vh = cfg_root.get("vertical_header")
+    for block in (uxd, vh):
+        if isinstance(block, dict):
+            for key in ("header_wrap_max_lines", "max_lines"):
+                if block.get(key) is not None:
+                    try:
+                        return max(1, int(block[key]))
+                    except (TypeError, ValueError):
+                        pass
+    return max(1, int(fallback))
+
+
 def build_usagers_x_domaine_pdf_rows(
     cross_df: pd.DataFrame,
     *,

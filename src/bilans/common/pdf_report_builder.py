@@ -1239,8 +1239,11 @@ class PDFReportBuilder:
         col_aligns: Optional[list] = None,
         keep_together: bool = True,
         wide_headers: bool = False,
+        wide_header_layout: str | None = None,
         *,
         header_font_size: float | None = None,
+        wide_header_font_size: float | None = None,
+        wide_header_max_lines: int | None = None,
         spacer_after_mm: float = 4.0,
         max_rows_keep_together: int | None = None,
         max_cell_chars_before_split: int | None = None,
@@ -1279,11 +1282,39 @@ class PDFReportBuilder:
             split_by_row = True
         vh = self._tables_layout.get("vertical_header")
         pad_x = 0.0
+        vh_max_lines = 6
+        vh_font_size = 7.0
+        vh_row_pad = 8.0
         if isinstance(vh, dict):
             try:
                 pad_x = float(vh.get("pad_x_pt", 0.0))
             except (TypeError, ValueError):
                 pad_x = 0.0
+            try:
+                vh_max_lines = int(vh.get("max_lines", 6))
+            except (TypeError, ValueError):
+                vh_max_lines = 6
+            try:
+                vh_font_size = float(vh.get("font_size", 7.0))
+            except (TypeError, ValueError):
+                vh_font_size = 7.0
+            try:
+                vh_row_pad = float(vh.get("row_padding_pt", 8.0))
+            except (TypeError, ValueError):
+                vh_row_pad = 8.0
+        wh_layout = str(wide_header_layout or "vertical").strip().lower()
+        wh_font = vh_font_size
+        if wide_header_font_size is not None:
+            try:
+                wh_font = float(wide_header_font_size)
+            except (TypeError, ValueError):
+                pass
+        wh_max_lines = vh_max_lines
+        if wide_header_max_lines is not None:
+            try:
+                wh_max_lines = int(wide_header_max_lines)
+            except (TypeError, ValueError):
+                pass
         if wide_headers:
             tbl = ofb_table_wide(
                 data_rows,
@@ -1292,6 +1323,10 @@ class PDFReportBuilder:
                 avail_w=self.avail_w,
                 split_by_row=split_by_row,
                 vertical_header_pad_x_pt=pad_x,
+                vertical_header_max_lines=wh_max_lines,
+                vertical_header_font_size=wh_font,
+                vertical_header_row_padding_pt=vh_row_pad,
+                header_layout=wh_layout,
             )
         else:
             tbl = ofb_table(

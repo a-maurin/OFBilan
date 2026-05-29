@@ -120,7 +120,13 @@ from bilans.common.pdf_table_sort import (
     prepare_pdf_results_sec23_sorting,
     sort_dataframe_desc,
 )
-from bilans.common.pdf_usagers_domaine_table import build_usagers_x_domaine_pdf_rows
+from bilans.common.pdf_usagers_domaine_table import (
+    build_usagers_x_domaine_pdf_rows,
+    resolve_usagers_x_domaine_header_layout,
+    resolve_usagers_x_domaine_header_font_size,
+    resolve_usagers_x_domaine_header_max_lines,
+    usagers_x_domaine_col_widths,
+)
 from bilans.common.pdf_utils import wrap_plain_text_for_pdf_paragraph
 from bilans.common.chart_display_config import load_chart_display_config, compute_pdf_ratios
 from bilans.common.rendus_graphiques import (
@@ -3196,16 +3202,27 @@ def _generate_pdf(
                     tables_layout=tables_layout,
                 )
                 if tbl:
-                    n_cols = len(tbl[0])
-                    col_aligns = ["LEFT"] + ["RIGHT"] * (n_cols - 1)
+                    n_dom = len(tbl[0]) - 1
+                    col_widths = usagers_x_domaine_col_widths(avail_w, n_dom, tables_layout)
+                    col_aligns = ["LEFT"] + ["RIGHT"] * n_dom
                     cap = pdf_metric_caption("Usagers × Domaine", "effectifs")
                     if overflow_html:
                         cap = f"{cap}<br/><br/>{overflow_html}"
                     builder.add_table(
                         tbl,
                         caption=cap,
+                        col_widths=col_widths,
                         col_aligns=col_aligns,
                         wide_headers=True,
+                        wide_header_layout=resolve_usagers_x_domaine_header_layout(
+                            tables_layout
+                        ),
+                        wide_header_font_size=resolve_usagers_x_domaine_header_font_size(
+                            tables_layout
+                        ),
+                        wide_header_max_lines=resolve_usagers_x_domaine_header_max_lines(
+                            tables_layout
+                        ),
                     )
 
         tab_res_ctrl = results.get("tab_resultats_controles")

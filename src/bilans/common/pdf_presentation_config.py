@@ -211,11 +211,21 @@ DEFAULT_PDF_PRESENTATION_CONFIG: dict[str, Any] = {
             "vertical_header": {
                 # Décalage horizontal fin (pt) après centrage des libellés verticaux.
                 "pad_x_pt": 0.0,
+                # Segments empilés pour libellés longs (ex. domaines) ; hauteur de ligne d'en-tête adaptée.
+                "max_lines": 6,
+                "font_size": 7.0,
+                "row_padding_pt": 8.0,
             },
             "usagers_x_domaine": {
                 # Nombre maximal de colonnes « domaine » affichées (tri décroissant sur le volume).
                 # null ou <= 0 : pas de limite sur les colonnes.
                 "max_domain_columns": 14,
+                # horizontal_wrap (défaut) ou vertical pour les en-têtes de colonnes domaine.
+                "header_layout": "horizontal_wrap",
+                "header_font_size": 7.0,
+                "header_wrap_max_lines": 5,
+                # Part de largeur pour la colonne type_usager (reste réparti entre les domaines).
+                "first_column_width_ratio": 0.20,
                 # Nombre maximal de lignes « type d'usager » (tri décroissant sur le volume).
                 # null ou <= 0 : pas de limite sur les lignes.
                 "max_usager_rows": 15,
