@@ -98,6 +98,7 @@ from bilans.common.pdf_presentation_config import (
     resolve_sec2_render_order,
     resolve_section_titles,
     resolve_sections_for_toc,
+    resolve_charte_config,
     resolve_tables_layout,
     resolve_title_page_config,
     format_proc_detail_caption,
@@ -2729,6 +2730,7 @@ def _generate_pdf(
         diffusion,
     )
     tables_layout = resolve_tables_layout(presentation_cfg)
+    charte_cfg = resolve_charte_config(presentation_cfg)
     title_page_cfg = resolve_title_page_config(
         PROJECT_ROOT, scope="thematique", profile_id=profil_id
     )
@@ -2738,6 +2740,7 @@ def _generate_pdf(
         title=f"Bilan thématique – {display_label}",
         author="Office français de la biodiversité",
         tables_layout=tables_layout,
+        charte_config=charte_cfg,
         diffusion=diffusion,
         title_page_config=title_page_cfg,
     )

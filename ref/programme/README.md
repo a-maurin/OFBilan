@@ -24,6 +24,17 @@ Contenu lu par le code (`bilans.common.chargeurs_donnees`, moteur de bilans, car
 
 ## `modele_ofb/`
 
-Images charte graphique : logo horizontal, bandeau (`image5`), fond et pied de page PDF (`image4`, `image3`).
+Images charte graphique (extraites du modèle Word `word/OFB_RAPPORT SIMPLE COM EXTERNE WORD 365.dotx`) :
+
+| Fichier | Rôle PDF |
+|---------|----------|
+| `image5.jpg` | Bandeau Marianne + OFB (page de garde, haut) |
+| `image6.jpeg` | Fond décoratif bleu (page de garde, bas) |
+| `image3.jpeg` | Filigrane courbes (pages intérieures, bas-droite) |
+| `image4.png` / `image4.jpeg` | Variante filigrane (option `footer_deco`, désactivée par défaut) |
+
+Source de vérité visuelle : le `.dotx` dans `modele_ofb/word/`.
+
+Constantes Python (`bilans.common.ofb_charte`) : `IMG_BANNER`, `IMG_TITLE_DECO`, `IMG_FILIGRANE`, `IMG_FILIGRANE_ALT` — pilotées par `config/presentation/pdf_presentation.yaml` → `defaults.charte`.
 
 Chemins résolus via `bilans.chemins_projet.get_ref_programme_dir()`.

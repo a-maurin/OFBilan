@@ -21,6 +21,11 @@ version: 1
 # - activation fine des sous-blocs (tableaux, graphiques, cartes, etc.)
 # - supporte des clés imbriquées (ex: sec22res.show_pie)
 #
+# charte:
+# - filigranes, bandeaux et décors OFB (modèle dotx)
+# - pages intérieures : un filigrane bas-droite (filigrane_height_ratio)
+# - ne pilote pas le texte de pied de page (footer_line1/2 dans PDFReportBuilder)
+#
 # feature_registry (racine du fichier) :
 # - both | global | thematique → section utilisable par ce moteur PDF
 # - fusionné dans sections.enabled (false) si hors scope, sauf surcharge explicite
@@ -62,12 +67,30 @@ defaults:
     subtitle_fixed: ""
     # Mention « diffusion restreinte » (page de garde, --diffusion interne uniquement).
     internal_diffusion_notice:
+      # logo_banner_top_ratio : obsolète (bandeau bas) ; calage via charte.title_page.banner_height_mm
       logo_banner_top_ratio: 0.86
       gap_below_logo_banner_mm: 10
       font_size: 8
       pad_x_mm: 4
       pad_y_mm: 2
       # text: ""  # vide = libellé par défaut dans pdf_presentation_config.py
+
+  charte:
+    # Clés assets ↔ constantes Python (ofb_charte) : banner, title_page_deco, watermark, footer_deco
+    assets:
+      banner: image5.jpg
+      title_page_deco: image6.jpeg
+      watermark: image3.jpeg
+      footer_deco: image4.jpeg
+    title_page:
+      banner_height_mm: 42
+      deco_height_ratio: 0.50
+      deco_align: bottom_right
+    content_page:
+      watermark_enabled: true
+      filigrane_height_ratio: 0.50
+      filigrane_align: bottom_right
+      footer_deco_enabled: false
 
   sections:
     order: ["sec1", "sec2", "sec3", "sec4", "sec5", "sec6"]
@@ -328,6 +351,8 @@ profiles:
           text: "Les graphiques par type d'usager peuvent compter plusieurs usagers pour une même localisation de contrôle."
         - when: diffusion_externe
           text: "Version de synthèse sans listes nominatives de procédures."
+        - when: always
+          text: "<b>Réalisation :</b> service départemental de la Côte d'Or."
 
   # Contrôles sécheresse : pas de tableaux « par zone » PVe/PEJ (découpages type PNF/TUB).
   controles_secheresse:

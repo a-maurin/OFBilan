@@ -19,6 +19,7 @@ from bilans.common.pdf_presentation_config import (
     build_title_lines_from_cfg,
     is_section_enabled,
     normalize_dept_typography,
+    resolve_charte_config,
     resolve_pdf_presentation_config,
     resolve_title_page_config,
     should_show_placeholder,
@@ -392,12 +393,14 @@ def _generate_synthese_pdf(
     safe_name = dept_name.replace(" ", "_").replace("'", "")
     pdf_name = output_filename or f"{profil_id}_{safe_name}.pdf"
     pdf_path = apply_diffusion_pdf_suffix(out_dir / pdf_name, diffusion)
+    charte_cfg = resolve_charte_config(presentation_cfg)
     title_page_cfg = resolve_title_page_config(_ROOT, scope=scope, profile_id=profil_id)
     builder = PDFReportBuilder(
         pdf_path=pdf_path,
         header_title=report_header,
         title=report_header,
         author="Office français de la biodiversité",
+        charte_config=charte_cfg,
         diffusion=diffusion,
         title_page_config=title_page_cfg,
     )

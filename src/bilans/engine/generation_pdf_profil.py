@@ -22,6 +22,7 @@ from bilans.common.pdf_presentation_config import (
     is_block_enabled,
     is_section_enabled,
     normalize_dept_typography,
+    resolve_charte_config,
     resolve_pdf_presentation_config,
     inject_sec4_subsections,
     resolve_section_titles,
@@ -323,6 +324,7 @@ def _generate_pdf_content(
     report_header = " — ".join(line.strip() for line in header_title_lines if line.strip())
 
     tables_layout = resolve_tables_layout(presentation_cfg)
+    charte_cfg = resolve_charte_config(presentation_cfg)
     title_page_cfg = resolve_title_page_config(_ROOT, scope=scope, profile_id=profile_id)
     builder = PDFReportBuilder(
         pdf_path=pdf_path,
@@ -330,6 +332,7 @@ def _generate_pdf_content(
         title=" — ".join(header_title_lines),
         author="Office français de la biodiversité",
         tables_layout=tables_layout,
+        charte_config=charte_cfg,
         diffusion=diffusion,
         title_page_config=title_page_cfg,
     )

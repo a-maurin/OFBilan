@@ -703,7 +703,8 @@ def _brochure_methodology_html(
         f"ventilation {ventilation_mode} — diffusion {diff} — "
         "effectifs d'usagers contrôlés (chaque usager sur une fiche) ; "
         "contrôles = localisations OSCEAN ; "
-        "PEJ = suite à contrôle et saisines hors fiche contrôle.</i>"
+        "PEJ = suite à contrôle et saisines hors fiche contrôle. — "
+        "<b>Réalisation :</b> service départemental de la Côte d'Or.</i>"
     )
 
 

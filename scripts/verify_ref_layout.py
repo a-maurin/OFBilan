@@ -48,7 +48,9 @@ def main() -> int:
         "programme/modele_ofb/bloc-marque-RF-OFB_horizontal.jpg",
         "programme/modele_ofb/word/media/image3.jpeg",
         "programme/modele_ofb/word/media/image4.png",
+        "programme/modele_ofb/word/media/image4.jpeg",
         "programme/modele_ofb/word/media/image5.jpg",
+        "programme/modele_ofb/word/media/image6.jpeg",
     ]
     for rel in expected:
         if not (ref / rel).exists():

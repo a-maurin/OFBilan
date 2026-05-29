@@ -193,6 +193,12 @@ DEFAULT_PDF_PRESENTATION_CONFIG: dict[str, Any] = {
                         "reproduites."
                     ),
                 },
+                {
+                    "when": "always",
+                    "text": (
+                        "<b>Réalisation :</b> service départemental de la Côte d'Or."
+                    ),
+                },
             ],
         },
         # Mise en page des tableaux PDF (ReportLab) — préférer le pilotage YAML.
@@ -224,6 +230,36 @@ DEFAULT_PDF_PRESENTATION_CONFIG: dict[str, Any] = {
                 ),
                 # Enveloppe HTML ; {note} = parties concaténées (colonnes / lignes).
                 "overflow_note_wrap": "<i>{note}</i>",
+            },
+        },
+        # Éléments visuels OFB (filigranes, bandeaux) — calibrés sur le modèle Word dotx.
+        # Le texte de pied de page (coordonnées SD départemental) reste géré par PDFReportBuilder.
+        "charte": {
+            "assets": {
+                "banner": "image5.jpg",
+                "title_page_deco": "image6.jpeg",
+                "watermark": "image3.jpeg",
+                "footer_deco": "image4.jpeg",
+            },
+            "title_page": {
+                # Bandeau Marianne + OFB en haut (header2 dotx ≈ 42 mm).
+                "banner_height_mm": 42.0,
+                # Fond décoratif bleu bas de page de garde (footer2 dotx, image6).
+                "deco_height_ratio": 0.50,
+                "deco_align": "bottom_right",
+            },
+            "content_page": {
+                "watermark_enabled": True,
+                # Filigrane courbes : une seule instance, ancrée bas-droite (comme visuel page de garde).
+                "filigrane_height_ratio": 0.50,
+                "filigrane_align": "bottom_right",
+                # Conservé pour compatibilité ; ignoré si filigrane_height_ratio est défini.
+                "watermark_height_mm": None,
+                "footer_deco_enabled": False,
+                "footer_deco_width_mm": 96.7,
+                "footer_deco_height_mm": 104.5,
+                "footer_deco_margin_left_mm": 0.0,
+                "footer_deco_margin_bottom_mm": 18.0,
             },
         },
         "blocks": {},
@@ -472,6 +508,39 @@ def resolve_tables_layout(effective_cfg: dict[str, Any] | None) -> dict[str, Any
     if isinstance(user, dict) and user:
         return _deep_merge(base, user)
     return base
+
+
+def resolve_charte_config(effective_cfg: dict[str, Any] | None) -> dict[str, Any]:
+    """Fusionne la section ``charte`` (filigranes, bandeaux) avec les valeurs par défaut."""
+    base = deepcopy(
+        (DEFAULT_PDF_PRESENTATION_CONFIG.get("defaults") or {}).get("charte") or {}
+    )
+    if not isinstance(effective_cfg, dict):
+        return base
+    user = effective_cfg.get("charte")
+    if isinstance(user, dict) and user:
+        return _deep_merge(base, user)
+    return base
+
+
+def resolve_charte_config_from_root(
+    root: Path,
+    *,
+    scope: str,
+    profile_id: str | None = None,
+    diffusion: str | None = None,
+) -> dict[str, Any]:
+    """Retourne la configuration effective de la charte graphique PDF."""
+    resolved = resolve_pdf_presentation_config(
+        root,
+        scope=scope,
+        profile_id=profile_id,
+        diffusion=diffusion,
+    )
+    effective = resolved.get("effective", {})
+    if not isinstance(effective, dict):
+        return resolve_charte_config({})
+    return resolve_charte_config(effective)
 
 
 def resolve_sec6_methodology_config(effective_cfg: dict[str, Any]) -> dict[str, Any]:

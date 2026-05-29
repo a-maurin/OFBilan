@@ -126,9 +126,45 @@ def _ref_img(name: str) -> Path:
     return ref_dir / "modele_ofb" / "word" / "media" / name
 
 
-IMG_LOGO_BANNER = _ref_img("image5.jpg")
-IMG_BACKGROUND = _ref_img("image4.png")
-IMG_FOOTER_DECO = _ref_img("image3.jpeg")
+# Médias charte OFB (ref/programme/modele_ofb/word/media/) — clés alignées sur defaults.charte.assets (YAML).
+IMG_BANNER = _ref_img("image5.jpg")
+IMG_TITLE_DECO = _ref_img("image6.jpeg")
+IMG_FILIGRANE = _ref_img("image3.jpeg")
+IMG_FILIGRANE_ALT = _ref_img("image4.png")
+
+# Alias historiques (rétro-compatibilité).
+IMG_LOGO_BANNER = IMG_BANNER
+IMG_TITLE_PAGE_DECO = IMG_TITLE_DECO
+IMG_FOOTER_DECO = IMG_FILIGRANE
+IMG_BACKGROUND = IMG_FILIGRANE_ALT
+
+CHARTE_ASSET_DEFAULT_FILES: dict[str, str] = {
+    "banner": "image5.jpg",
+    "title_page_deco": "image6.jpeg",
+    "watermark": "image3.jpeg",
+    "footer_deco": "image4.jpeg",
+}
+
+
+def charte_asset_path(
+    assets_cfg: dict | None,
+    key: str,
+    default_filename: str,
+    *,
+    fallback: Path | None = None,
+) -> Path:
+    """Résout un fichier média charte depuis la config YAML (nom relatif à word/media/)."""
+    name = default_filename
+    if isinstance(assets_cfg, dict):
+        raw = assets_cfg.get(key)
+        if raw is not None and str(raw).strip():
+            name = str(raw).strip()
+    path = _ref_img(name)
+    if path.exists():
+        return path
+    if fallback is not None and fallback.exists():
+        return fallback
+    return path
 
 
 # ---------------------------------------------------------------------------

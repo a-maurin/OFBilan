@@ -21,6 +21,8 @@ def test_build_sec6_methodology_html_includes_zone_line() -> None:
     )
     assert "Période" in html
     assert "cœur" in html or "coeur" in html.lower()
+    assert "Réalisation" in html
+    assert "service départemental de la Côte d'Or" in html
 
 
 def test_build_sec6_methodology_html_diffusion_externe() -> None:

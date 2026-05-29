@@ -25,6 +25,8 @@ from bilans.common.pdf_presentation_config import (
     feature_registry_allows_scope,
     inject_sec4_subsections,
     resolve_sections_for_toc,
+    resolve_charte_config,
+    resolve_charte_config_from_root,
     resolve_tables_layout,
     resolve_title_page_config,
     should_show_placeholder,
@@ -257,6 +259,53 @@ def test_build_title_lines_from_cfg_supports_line_break_in_same_cover_paragraph(
         "",
     ]
     assert header_lines[0] == "Synthèse des activités de police de l'environnement"
+
+
+def test_resolve_charte_config_defaults() -> None:
+    cfg = resolve_charte_config({})
+    assert cfg["assets"]["banner"] == "image5.jpg"
+    assert cfg["title_page"]["banner_height_mm"] == 42.0
+    assert cfg["content_page"]["filigrane_height_ratio"] == 0.50
+    assert cfg["content_page"]["filigrane_align"] == "bottom_right"
+    assert cfg["content_page"]["footer_deco_enabled"] is False
+
+
+def test_resolve_charte_config_merges_yaml_over_defaults() -> None:
+    effective = {
+        "charte": {
+            "title_page": {"banner_height_mm": 38},
+            "content_page": {"watermark_enabled": False, "filigrane_height_ratio": 0.40},
+        }
+    }
+    resolved = resolve_charte_config(effective)
+    assert resolved["title_page"]["banner_height_mm"] == 38
+    assert resolved["title_page"]["deco_height_ratio"] == 0.50
+    assert resolved["content_page"]["watermark_enabled"] is False
+    assert resolved["content_page"]["filigrane_height_ratio"] == 0.40
+
+
+def test_resolve_charte_config_from_root(tmp_path: Path) -> None:
+    _write_yaml(
+        tmp_path,
+        """
+version: 1
+defaults:
+  charte:
+    content_page:
+      footer_deco_width_mm: 80
+""".strip(),
+    )
+    cfg = resolve_charte_config_from_root(tmp_path, scope="thematique")
+    assert cfg["content_page"]["footer_deco_width_mm"] == 80
+    assert cfg["assets"]["title_page_deco"] == "image6.jpeg"
+
+
+def test_resolve_charte_config_from_root_project_yaml() -> None:
+    root = Path(__file__).resolve().parents[2]
+    cfg = resolve_charte_config_from_root(root, scope="thematique", profile_id="chasse")
+    assert cfg["title_page"]["banner_height_mm"] == 42
+    assert cfg["content_page"]["filigrane_align"] == "bottom_right"
+    assert cfg["content_page"]["footer_deco_enabled"] is False
 
 
 def test_resolve_tables_layout_merges_yaml_over_defaults() -> None:

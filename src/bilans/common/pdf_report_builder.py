@@ -39,9 +39,10 @@ from bilans.common.ofb_charte import (
     COLOR_PRIMARY,
     COLOR_SECONDARY,
     FONT_FAMILY,
-    IMG_BACKGROUND,
-    IMG_FOOTER_DECO,
-    IMG_LOGO_BANNER,
+    IMG_BANNER,
+    IMG_FILIGRANE,
+    IMG_FILIGRANE_ALT,
+    IMG_TITLE_DECO,
     MARGIN_BOTTOM,
     MARGIN_LEFT,
     MARGIN_RIGHT,
@@ -52,9 +53,11 @@ from bilans.common.ofb_charte import (
     SPACING_S,
     SPACING_XXS,
     _get_styles,
+    charte_asset_path,
     header_layout_metrics,
 )
 from bilans.common.pdf_presentation_config import (
+    resolve_charte_config,
     resolve_internal_diffusion_notice_config,
     resolve_tables_layout,
     should_show_internal_diffusion_title_notice,
@@ -131,6 +134,7 @@ class PDFReportBuilder:
         author: str = "OFB",
         *,
         tables_layout: dict[str, Any] | None = None,
+        charte_config: dict[str, Any] | None = None,
         diffusion: str = "interne",
         title_page_config: dict[str, Any] | None = None,
         content_only: bool = False,
@@ -180,6 +184,9 @@ class PDFReportBuilder:
         self.avail_h = self._page_h - margin_top - self._margin_bottom
         self._tables_layout = deepcopy(
             tables_layout if tables_layout is not None else resolve_tables_layout({})
+        )
+        self._charte = deepcopy(
+            charte_config if charte_config is not None else resolve_charte_config({})
         )
         self._diffusion = str(diffusion or "interne").strip().lower()
         self._internal_diffusion_notice = resolve_internal_diffusion_notice_config(
@@ -253,14 +260,15 @@ class PDFReportBuilder:
     # ------------------------------------------------------------------
     # Page backgrounds
     # ------------------------------------------------------------------
-    def _logo_banner_top_ratio(self) -> float:
+    def _title_page_banner_height_pt(self) -> float:
+        title_cfg = self._charte.get("title_page", {}) if isinstance(self._charte, dict) else {}
         try:
-            return float(self._internal_diffusion_notice.get("logo_banner_top_ratio", 0.86))
+            return float(title_cfg.get("banner_height_mm", 42.0)) * mm
         except (TypeError, ValueError):
-            return 0.86
+            return 42.0 * mm
 
     def _draw_internal_diffusion_notice_on_title_page(self, canvas) -> None:
-        """Bandeau discret sur la page de garde (diffusion interne uniquement)."""
+        """Bandeau discret sous le bandeau Marianne (diffusion interne uniquement)."""
         if not should_show_internal_diffusion_title_notice(self._diffusion):
             return
         cfg = self._internal_diffusion_notice
@@ -278,7 +286,8 @@ class PDFReportBuilder:
             gap_below_banner = float(cfg.get("gap_below_logo_banner_mm", 10)) * mm
         except (TypeError, ValueError):
             pad_x, pad_y, gap_below_banner = 4 * mm, 2 * mm, 10 * mm
-        box_top = self._page_h * self._logo_banner_top_ratio() - gap_below_banner
+        banner_h = self._title_page_banner_height_pt()
+        box_top = self._page_h - banner_h - gap_below_banner
         canvas.saveState()
         canvas.setFont(font_name, font_size)
         text_w = canvas.stringWidth(text, font_name, font_size)
@@ -295,33 +304,175 @@ class PDFReportBuilder:
         canvas.restoreState()
 
     def _title_page_bg(self, canvas, doc):
-        banner_top = self._logo_banner_top_ratio()
-        banner_h = max(0.0, min(1.0, 1.0 - banner_top))
+        title_cfg = self._charte.get("title_page", {}) if isinstance(self._charte, dict) else {}
+        assets = self._charte.get("assets", {}) if isinstance(self._charte, dict) else {}
+        try:
+            deco_ratio = float(title_cfg.get("deco_height_ratio", 0.50))
+        except (TypeError, ValueError):
+            deco_ratio = 0.50
+        deco_ratio = max(0.0, min(1.0, deco_ratio))
+        banner_h = self._title_page_banner_height_pt()
+
+        deco_path = charte_asset_path(
+            assets,
+            "title_page_deco",
+            "image6.jpeg",
+            fallback=IMG_TITLE_DECO,
+        )
+        banner_path = charte_asset_path(
+            assets,
+            "banner",
+            "image5.jpg",
+            fallback=IMG_BANNER,
+        )
+
         canvas.saveState()
-        if IMG_BACKGROUND.exists():
+        if deco_path.exists() and deco_ratio > 0:
+            deco_h = self._page_h * deco_ratio
             canvas.drawImage(
-                str(IMG_BACKGROUND), 0, 0,
-                width=self._page_w, height=self._page_h * banner_top,
-                preserveAspectRatio=False, mask="auto",
+                str(deco_path),
+                0,
+                0,
+                width=self._page_w,
+                height=deco_h,
+                preserveAspectRatio=False,
+                mask="auto",
             )
-        if IMG_LOGO_BANNER.exists():
+        if banner_path.exists() and banner_h > 0:
             canvas.drawImage(
-                str(IMG_LOGO_BANNER), 0, self._page_h * banner_top,
-                width=self._page_w, height=self._page_h * banner_h,
-                preserveAspectRatio=False, mask="auto",
+                str(banner_path),
+                0,
+                self._page_h - banner_h,
+                width=self._page_w,
+                height=banner_h,
+                preserveAspectRatio=False,
+                mask="auto",
             )
         canvas.restoreState()
         self._draw_internal_diffusion_notice_on_title_page(canvas)
 
+    def _content_page_cfg(self) -> dict[str, Any]:
+        cfg = self._charte.get("content_page", {}) if isinstance(self._charte, dict) else {}
+        return cfg if isinstance(cfg, dict) else {}
+
+    def _charte_assets_cfg(self) -> dict[str, Any]:
+        assets = self._charte.get("assets", {}) if isinstance(self._charte, dict) else {}
+        return assets if isinstance(assets, dict) else {}
+
+    def _footer_text_zone_top_pt(self) -> float:
+        """Sommet réservé au texte footer_line1/2 (coordonnées inchangées)."""
+        y_foot = 8 * mm
+        return y_foot + 12 + 7
+
+    def _filigrane_image_size_pt(self, path: Path) -> tuple[float, float]:
+        """Retourne (largeur, hauteur) en pt pour le filigrane bas-droite."""
+        cfg = self._content_page_cfg()
+        align = str(cfg.get("filigrane_align", "bottom_right")).strip().lower()
+        ratio_raw = cfg.get("filigrane_height_ratio")
+        height_pt: float | None = None
+        if ratio_raw is not None:
+            try:
+                ratio = max(0.0, min(1.0, float(ratio_raw)))
+                if ratio > 0:
+                    height_pt = self._page_h * ratio
+            except (TypeError, ValueError):
+                height_pt = None
+        if height_pt is None:
+            mm_raw = cfg.get("watermark_height_mm")
+            try:
+                height_pt = float(mm_raw) * mm if mm_raw is not None else self._page_h * 0.50
+            except (TypeError, ValueError):
+                height_pt = self._page_h * 0.50
+        if height_pt <= 0:
+            return 0.0, 0.0
+
+        aspect = 2480 / 1440
+        try:
+            with PILImage.open(path) as im:
+                if im.height > 0:
+                    aspect = im.width / im.height
+        except OSError:
+            pass
+
+        width_pt = height_pt * aspect
+        if align in {"bottom_right", "bottom-right", "bottomright"} and width_pt > self._page_w:
+            width_pt = self._page_w
+            height_pt = width_pt / aspect
+        return width_pt, height_pt
+
+    def _draw_content_page_watermark(self, canvas) -> None:
+        """Filigrane unique bas-droite (image3), sans doublon footer_deco."""
+        cfg = self._content_page_cfg()
+        if not cfg.get("watermark_enabled", True):
+            return
+        path = charte_asset_path(
+            self._charte_assets_cfg(),
+            "watermark",
+            "image3.jpeg",
+            fallback=IMG_FILIGRANE,
+        )
+        if not path.exists():
+            return
+
+        width_pt, height_pt = self._filigrane_image_size_pt(path)
+        if width_pt <= 0 or height_pt <= 0:
+            return
+
+        align = str(cfg.get("filigrane_align", "bottom_right")).strip().lower()
+        if align in {"bottom_right", "bottom-right", "bottomright"}:
+            x = self._page_w - width_pt
+            y = 0.0
+        else:
+            x = 0.0
+            y = 0.0
+
+        canvas.drawImage(
+            str(path),
+            x,
+            y,
+            width=width_pt,
+            height=height_pt,
+            preserveAspectRatio=False,
+            mask="auto",
+        )
+
+    def _draw_content_page_footer_deco(self, canvas) -> None:
+        cfg = self._content_page_cfg()
+        if not cfg.get("footer_deco_enabled", True):
+            return
+        try:
+            deco_w = float(cfg.get("footer_deco_width_mm", 96.7)) * mm
+            deco_h = float(cfg.get("footer_deco_height_mm", 104.5)) * mm
+            margin_left = float(cfg.get("footer_deco_margin_left_mm", 0.0)) * mm
+            margin_above_text = float(cfg.get("footer_deco_margin_bottom_mm", 18.0)) * mm
+        except (TypeError, ValueError):
+            deco_w, deco_h = 96.7 * mm, 104.5 * mm
+            margin_left, margin_above_text = 0.0, 18.0 * mm
+        if deco_w <= 0 or deco_h <= 0:
+            return
+        path = charte_asset_path(
+            self._charte_assets_cfg(),
+            "footer_deco",
+            "image4.jpeg",
+            fallback=IMG_FILIGRANE_ALT,
+        )
+        if not path.exists():
+            return
+        deco_bottom = self._footer_text_zone_top_pt() + margin_above_text
+        canvas.drawImage(
+            str(path),
+            margin_left,
+            deco_bottom,
+            width=deco_w,
+            height=deco_h,
+            preserveAspectRatio=False,
+            mask="auto",
+        )
+
     def _header_footer(self, canvas, doc):
         canvas.saveState()
-        if IMG_FOOTER_DECO.exists():
-            canvas.drawImage(
-                str(IMG_FOOTER_DECO),
-                self._page_w - 60 * mm, 0,
-                width=60 * mm, height=7 * mm,
-                preserveAspectRatio=False, mask="auto",
-            )
+        self._draw_content_page_watermark(canvas)
+        self._draw_content_page_footer_deco(canvas)
         canvas.setStrokeColor(rl_colors.HexColor(COLOR_PRIMARY))
         canvas.setLineWidth(2)
         y_rule = getattr(self, "_header_rule_y", self._page_h - 12 * mm)

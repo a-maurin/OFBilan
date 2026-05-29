@@ -7,7 +7,10 @@ from bilans.engine.generation_pdf_synthese import (
     _rollup_small_categories,
     _wrap_table_label,
 )
-from bilans.engine.generation_pdf_synthese_brochure import _theme_pct_strings_brochure
+from bilans.engine.generation_pdf_synthese_brochure import (
+    _brochure_methodology_html,
+    _theme_pct_strings_brochure,
+)
 
 
 def test_key_figures_grain_note_explains_difference_briefly() -> None:
@@ -103,3 +106,15 @@ def test_build_usager_theme_table_rows_keeps_full_theme_label() -> None:
     rows = _build_usager_theme_table_rows(df)
 
     assert rows[1][0] == "Protection des milieux naturels et de la biodiversite remarquable"
+
+
+def test_brochure_methodology_html_includes_realisation() -> None:
+    html = _brochure_methodology_html(
+        date_deb=pd.Timestamp("2025-01-01"),
+        date_fin=pd.Timestamp("2025-12-31"),
+        ventilation_mode="globale",
+        diffusion="externe",
+    )
+
+    assert "Réalisation" in html
+    assert "service départemental de la Côte d'Or" in html
