@@ -28,5 +28,4 @@ jobs:
           pip install -e .[dev]
 
       - name: Run targeted tests
-        run: |
-          pytest -q tests/unit tests/smoke
+        run: python -m pytest -q

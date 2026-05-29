@@ -34,3 +34,7 @@ include-package-data = true
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["bilans*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/unit", "tests/smoke"]
+pythonpath = ["."]
