@@ -1321,6 +1321,9 @@ def export_layout(
                 item.setText(title_text)
             elif subtitle_id and item_id == subtitle_id:
                 item.setText(subtitle_text)
+        elif isinstance(item, QgsLayoutItemLegend):
+            # Supprimer la légende native QGIS car nous la générons avec Pillow post-export
+            layout.removeLayoutItem(item)
 
     _apply_legend_labels(layout, prof, legend_labels_map=legend_labels_map)
     # Bandeau logos République française + OFB en haut de la carte
@@ -1684,11 +1687,6 @@ def run_export(
                     legend_data.append(legend_info)
 
         out_path = out_dir / prof.output_filename
-        # Masquer les légendes existantes dans la mise en page (demande utilisateur)
-        if layout is not None:
-            for item in layout.items():
-                if item.type() == 65642:  # QgsLayoutItemLegend
-                    item.setVisibility(False)
 
         export_layout(prof, out_path, dpi=dpi, fmt=fmt, legend_labels_map=legend_labels_map or None)
 
