@@ -1895,15 +1895,15 @@ def _draw_legend_on_image(image_path, legend_data):
         logger.error("Erreur d'ouverture de l'image %s : %s", image_path.name, e)
         return
 
-    padding = 20
-    rect_size = 20
-    line_spacing = 30
-    title_spacing = 35
-    section_spacing = 15
+    padding = 30
+    rect_size = 35
+    line_spacing = 50
+    title_spacing = 55
+    section_spacing = 20
 
     try:
-        font_title = ImageFont.truetype("arialbd.ttf", 22)
-        font_text = ImageFont.truetype("arial.ttf", 18)
+        font_title = ImageFont.truetype("arialbd.ttf", 34)
+        font_text = ImageFont.truetype("arial.ttf", 28)
     except IOError:
         font_title = ImageFont.load_default()
         font_text = ImageFont.load_default()
@@ -1935,13 +1935,17 @@ def _draw_legend_on_image(image_path, legend_data):
     total_h -= section_spacing
     total_w = max_w + padding * 2
 
-    margin_left = 40
-    margin_bottom = 120
+    margin_right = 60
+    margin_top = 300  # Sous le bandeau bleu et les titres
     img_w, img_h = img.size
-    start_x = margin_left
-    start_y = img_h - margin_bottom - total_h
-    if start_y < 0:
-        start_y = 40
+    
+    start_x = img_w - total_w - margin_right
+    if start_x < 0:
+        start_x = 40
+        
+    start_y = margin_top
+    if start_y + total_h > img_h:
+        start_y = max(40, img_h - total_h - 40)
 
     overlay = Image.new('RGBA', img.size, (255, 255, 255, 0))
     overlay_draw = ImageDraw.Draw(overlay)
