@@ -7,7 +7,12 @@ from pathlib import Path
 import pandas as pd
 from PIL import Image as PILImage
 
-from bilans.common.chart_display_config import compute_pdf_ratios, load_chart_display_config
+from bilans.common.chart_display_config import (
+    clamp_uniform_pie_ratio,
+    compute_pdf_ratios,
+    load_chart_display_config,
+    resolve_reference_pie_display,
+)
 from bilans.common.dataframe_rollup import rollup_small_categories
 from bilans.common.rendus_graphiques import (
     chart_bar_horizontal_stacked,
@@ -295,17 +300,16 @@ def _generate_pdf_content(
     legend_ncol_max = int(chart_ratios.get("legend_ncol_max", 4.0))
     figure_scale = float(chart_ratios.get("figure_scale", 1.0))
 
-    pie_min_ratio = float(chart_ratios["global_uniform_pie_min_ratio"])
-    pie_max_ratio = float(chart_ratios["global_uniform_pie_max_ratio"])
-    if pie_min_ratio > pie_max_ratio:
-        pie_min_ratio, pie_max_ratio = pie_max_ratio, pie_min_ratio
-    pie_ratio_uniform = min(
-        pie_max_ratio,
-        max(pie_min_ratio, chart_ratios.get("global_uniform_pie", pie_min_ratio)),
+    pie_ratio_uniform = clamp_uniform_pie_ratio(
+        chart_ratios,
+        uniform_key="global_uniform_pie",
+        min_key="global_uniform_pie_min_ratio",
+        max_key="global_uniform_pie_max_ratio",
     )
-    pie_ratio_domaine = pie_ratio_uniform
-    pie_ratio_resultats = pie_ratio_uniform
-    pie_ratio_usagers = pie_ratio_uniform
+    ref_pie = resolve_reference_pie_display(chart_ratios, pie_ratio_uniform)
+    ref_pie_w = ref_pie["width_ratio"]
+    ref_pie_fs = ref_pie["figure_scale"]
+    ref_pie_legend_fs = ref_pie["legend_fontsize"]
 
     agg_domaine = _sort_desc(agg_domaine, ["nb"])
     agg_theme = _sort_desc(agg_theme, ["nb"])
@@ -642,12 +646,12 @@ def _generate_pdf_content(
                         "pie_domaine.png",
                         **_chart_pie_compact_legend_kw(
                             len(pie_data),
-                            legend_fontsize=legend_fontsize,
+                            legend_fontsize=ref_pie_legend_fs,
                             legend_ncol_max=legend_ncol_max,
                         ),
-                        figure_scale=figure_scale,
+                        figure_scale=ref_pie_fs,
                     )
-                    builder.add_image(Path(pie_path), width_ratio=pie_ratio_domaine)
+                    builder.add_image(Path(pie_path), width_ratio=ref_pie_w)
         elif show_placeholder:
             builder.add_paragraph("Aucune donnée domaine disponible.")
         builder.add_spacer(4)
@@ -764,8 +768,6 @@ def _generate_pdf_content(
             block.append(Spacer(1, 2 * mm))
             pie_res = {str(r["resultat"]): int(r["nb"]) for _, r in tab_resultats.iterrows()}
 
-        pie_scale = figure_scale * 0.82
-        pie_width_ratio = pie_ratio_resultats * 0.88
         if show_res_pie and pie_res:
             pie_path = chart_pie(
                 pie_res,
@@ -774,13 +776,13 @@ def _generate_pdf_content(
                 "pie_global_resultats.png",
                 **_chart_pie_compact_legend_kw(
                     len(pie_res),
-                    legend_fontsize=legend_fontsize,
+                    legend_fontsize=ref_pie_legend_fs,
                     legend_ncol_max=legend_ncol_max,
                 ),
-                figure_scale=pie_scale,
+                figure_scale=ref_pie_fs,
             )
             block.append(Spacer(1, 1 * mm))
-            block.append(_mk_centered_image(Path(pie_path), pie_width_ratio))
+            block.append(_mk_centered_image(Path(pie_path), ref_pie_w))
             block.append(Spacer(1, 1.5 * mm))
 
         if (
@@ -966,8 +968,6 @@ def _generate_pdf_content(
 
     def _render_sec4() -> None:
         # Gabarit resserré : viser une section 4 sur une page A4 (hors cas extrêmes).
-        sec4_figure_scale = figure_scale * 0.64
-        sec4_pie_w = pie_ratio_usagers * 0.74
         sec4_bar_w = float(chart_ratios.get("global_type_usager_bar_ratio", chart_bar_w)) * 0.86
         sec4_tbl_sp = 1.0
         sec4_img_sp = 0.8
@@ -1028,14 +1028,14 @@ def _generate_pdf_content(
                         "pie_usagers.png",
                         **_chart_pie_compact_legend_kw(
                             len(pie_data),
-                            legend_fontsize=max(6.5, legend_fontsize - 0.5),
+                            legend_fontsize=ref_pie_legend_fs,
                             legend_ncol_max=legend_ncol_max,
                         ),
-                        figure_scale=sec4_figure_scale,
+                        figure_scale=ref_pie_fs,
                     )
                     builder.add_image(
                         Path(pie_path),
-                        width_ratio=sec4_pie_w,
+                        width_ratio=ref_pie_w,
                         spacer_after_mm=sec4_img_sp,
                     )
 

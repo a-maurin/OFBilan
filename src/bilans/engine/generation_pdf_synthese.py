@@ -39,6 +39,12 @@ from bilans.common.pdf_table_sort import (
     sort_dataframe_desc as _sort_desc,
 )
 from bilans.common.percent_format import format_pct_int_from_rate, tab_counts_to_pct_strings
+from bilans.common.chart_display_config import (
+    clamp_uniform_pie_ratio,
+    compute_pdf_ratios,
+    load_chart_display_config,
+    resolve_reference_pie_display,
+)
 from bilans.common.rendus_graphiques import apply_mpl_style, chart_bar_horizontal_stacked, chart_pie
 from bilans.common.utilitaires_metier import (
     _load_csv_opt,
@@ -116,14 +122,15 @@ def _filter_dataframe_min_pct(
     return out.sort_values(by=value_col, ascending=False, kind="stable").reset_index(drop=True)
 
 
-def _chart_pie_compact_legend_kw(n_categories: int) -> dict[str, float | int]:
+def _chart_pie_compact_legend_kw(
+    n_categories: int,
+    *,
+    legend_fontsize: float = 9.0,
+) -> dict[str, float | int]:
     ncol = min(n_categories, 2) if n_categories > 4 else min(n_categories, 3)
-    return {"legend_fontsize": 7.0, "legend_ncol": max(1, ncol)}
+    return {"legend_fontsize": legend_fontsize, "legend_ncol": max(1, ncol)}
 
 
-# Camembert § 3 : taille maximale tout en laissant le 1er tableau § 3.1 (avant Agriculteur) sur la page 1.
-_PIE_SEC3_FIGURE_SCALE = 0.86
-_PIE_SEC3_WIDTH_RATIO = 0.82
 _SEC3_1_TABLE_NOTE = (
     "<i>Note : les effectifs sont dérivés des fiches de contrôle ; les PEJ suite contrôle, "
     "du type d'usager renseigné sur le dossier de saisine. En cas de divergence entre ces "
@@ -337,6 +344,18 @@ def _generate_synthese_pdf(
     behavior_cfg = resolved.get("behavior", {}) if isinstance(resolved, dict) else {}
     show_placeholder = should_show_placeholder(behavior_cfg if isinstance(behavior_cfg, dict) else None)
 
+    chart_ratios = compute_pdf_ratios(load_chart_display_config(_ROOT))
+    pie_ratio_uniform = clamp_uniform_pie_ratio(
+        chart_ratios,
+        uniform_key="global_uniform_pie",
+        min_key="global_uniform_pie_min_ratio",
+        max_key="global_uniform_pie_max_ratio",
+    )
+    ref_pie = resolve_reference_pie_display(chart_ratios, pie_ratio_uniform)
+    ref_pie_w = ref_pie["width_ratio"]
+    ref_pie_fs = ref_pie["figure_scale"]
+    ref_pie_legend_fs = ref_pie["legend_fontsize"]
+
     dept_name = get_dept_name(dept_code)
     dept_name_typo = normalize_dept_typography(dept_name)
     profile_label = str(profile.get("label", profil_id))
@@ -518,7 +537,8 @@ def _generate_synthese_pdf(
                 "",
                 tmp_dir,
                 "pie_synthese_resultats_controles.png",
-                figure_scale=_PIE_SEC3_FIGURE_SCALE,
+                figure_scale=ref_pie_fs,
+                legend_fontsize=ref_pie_legend_fs,
             )
         builder.add_table_and_image_keep_together(
             tbl_pdf,
@@ -526,7 +546,7 @@ def _generate_synthese_pdf(
             col_widths=[avail_w * 0.44, avail_w * 0.28, avail_w * 0.28],
             col_aligns=["LEFT", "RIGHT", "RIGHT"],
             image_path=Path(pie_path) if pie_path else None,
-            image_width_ratio=_PIE_SEC3_WIDTH_RATIO,
+            image_width_ratio=ref_pie_w,
         )
     elif show_placeholder:
         builder.add_paragraph("Aucune donnée de résultat de contrôle sur la période.")
@@ -577,12 +597,15 @@ def _generate_synthese_pdf(
             tmp_dir,
             "pie_synthese_controles_par_type_usager.png",
             legend_percent_only=True,
-            figure_scale=_PIE_SEC3_FIGURE_SCALE,
-            **_chart_pie_compact_legend_kw(len(pie_data)),
+            figure_scale=ref_pie_fs,
+            **_chart_pie_compact_legend_kw(
+                len(pie_data),
+                legend_fontsize=ref_pie_legend_fs,
+            ),
         )
         builder.append_pending_image(
             Path(pie_path),
-            width_ratio=_PIE_SEC3_WIDTH_RATIO,
+            width_ratio=ref_pie_w,
             spacer_after_mm=0.4,
         )
 

@@ -46,6 +46,7 @@ __pycache__/
 *.log
 *.tmp
 ~$*.docx
+/*.png
 
 ############################
 # Fichiers de configuration IDE

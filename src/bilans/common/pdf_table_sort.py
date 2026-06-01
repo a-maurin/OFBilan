@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pandas as pd
 
+from bilans.common.utilitaires_metier import ZONE_PEJ_LECTEUR_TABLE_ORDER
+
 _COUNT_COLUMNS_PRIORITY = (
     "nb_controles",
     "nb_total",
@@ -148,6 +150,17 @@ def sort_detail_dataframe_by_date_desc(
     )
 
 
+def sort_zone_pej_for_pdf(df: pd.DataFrame) -> pd.DataFrame:
+    """Ordre lecteur fixe pour le tableau PEJ par zone ; sinon tri décroissant par effectif."""
+    if df is None or df.empty or "zone" not in df.columns:
+        return df
+    zones = df["zone"].astype(str)
+    if zones.isin(ZONE_PEJ_LECTEUR_TABLE_ORDER).any():
+        ordered = pd.Categorical(zones, categories=list(ZONE_PEJ_LECTEUR_TABLE_ORDER), ordered=True)
+        return df.assign(_zone_ord=ordered).sort_values("_zone_ord").drop(columns="_zone_ord")
+    return sort_dataframe_desc(df, ["nb"])
+
+
 def prepare_pdf_results_sec23_sorting(results: dict) -> None:
     """Applique le tri décroissant aux données des tableaux des parties 2 et 3 (in-place)."""
     column_sorts: list[tuple[str, list[str]]] = [
@@ -159,7 +172,6 @@ def prepare_pdf_results_sec23_sorting(results: dict) -> None:
         ("pej_top_infractions", ["nb"]),
         ("pej_par_theme", ["nb_pej", "nb"]),
         ("pej_natinf_analysis", ["nb"]),
-        ("zone_pej", ["nb"]),
         ("pej_clotur", ["nb"]),
         ("pej_suite", ["nb"]),
         ("res_par_usager_domaine", ["nb_controles", "nb_conforme", "nb_manquement", "nb_infraction"]),
@@ -172,6 +184,10 @@ def prepare_pdf_results_sec23_sorting(results: dict) -> None:
         value = results.get(key)
         if isinstance(value, pd.DataFrame) and not value.empty:
             results[key] = sort_dataframe_desc(value, cols)
+
+    zone_pej = results.get("zone_pej")
+    if isinstance(zone_pej, pd.DataFrame) and not zone_pej.empty:
+        results["zone_pej"] = sort_zone_pej_for_pdf(zone_pej)
 
     tab_res_ctrl = results.get("tab_resultats_controles")
     if isinstance(tab_res_ctrl, pd.DataFrame) and not tab_res_ctrl.empty:

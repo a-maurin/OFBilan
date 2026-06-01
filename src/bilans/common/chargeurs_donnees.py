@@ -9,7 +9,12 @@ import pandas as pd
 import re
 
 from bilans.chemins_projet import ref_programme
-from bilans.common.utilitaires_metier import filtre_periode
+from bilans.common.utilitaires_metier import (
+    coalesced_insee_series,
+    extract_insee_code_series,
+    filtre_periode,
+    series_as_python_str,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -518,20 +523,13 @@ def _load_pnf_from_shp(root: Path) -> Optional[pd.DataFrame]:
         None,
     )
 
-    insee_series = (
-        gdf[insee_col]
-        .astype(str)
-        .str.strip()
-        .str.extract(r"(\d{1,5})", expand=False)
-        .fillna("")
-        .str.zfill(5)
-    )
+    insee_series = extract_insee_code_series(gdf[insee_col])
     out = pd.DataFrame({"CODE_INSEE": insee_series})
     if nom_col is not None:
-        out["NOM"] = gdf[nom_col].astype(str).str.strip()
+        out["NOM"] = series_as_python_str(gdf[nom_col]).map(str.strip)
 
     out = out.drop_duplicates(subset=["CODE_INSEE"]).reset_index(drop=True)
-    out = out[out["CODE_INSEE"].str.match(r"^[0-9]{5}$", na=False)]
+    out = out[out["CODE_INSEE"].notna()]
     out = out[out["CODE_INSEE"].ne("00000")]
     return out
 
@@ -943,26 +941,8 @@ def enrich_with_pnforet_sig_zones(
 
 
 def _coalesced_insee_for_pnf_overlay(df: pd.DataFrame) -> pd.Series:
-    """
-    Code INSEE normalisé (5 chiffres) par ligne, en combinant les colonnes usuelles.
-    Aligné sur bilan_thematique_engine._coalesced_insee_for_pnf_mask.
-    """
-    if df is None or df.empty:
-        return pd.Series(pd.NA, index=df.index, dtype="string")
-    out = pd.Series(pd.NA, index=df.index, dtype="string")
-    for col in ("insee_comm", "insee_commun", "INSEE_COM", "INF-INSEE"):
-        if col not in df.columns:
-            continue
-        raw = df[col]
-        cand = (
-            raw.astype(str)
-            .str.extract(r"(\d{1,5})", expand=False)
-            .fillna("")
-            .str.zfill(5)
-        )
-        cand = cand.mask(~cand.str.fullmatch(r"\d{5}", na=False), pd.NA)
-        out = out.fillna(cand)
-    return out
+    """Code INSEE normalisé (5 chiffres) par ligne — délègue à ``coalesced_insee_series``."""
+    return coalesced_insee_series(df)
 
 
 def _load_pnf_commune_zone_by_insee_from_csv(root: Path) -> dict[str, str]:

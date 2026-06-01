@@ -177,6 +177,15 @@ def expected_map_filenames(
     return names
 
 
+_qgis_app = None
+
+def get_qgis_app():
+    global _qgis_app
+    if _qgis_app is None:
+        from bilans.cartographie.production_cartographique import init_qgis_headless
+        _qgis_app = init_qgis_headless()
+    return _qgis_app
+
 def generate_maps(
     profile_ids: List[str],
     date_deb: Optional[str] = None,
@@ -198,6 +207,9 @@ def generate_maps(
         from bilans.common.cartographie_config import build_qgis_overrides_from_bilan_profiles
 
         qgis_overrides = build_qgis_overrides_from_bilan_profiles(bilan_profiles)
+        
+        # L'instance QgsApplication doit être initialisée une seule fois
+        app = get_qgis_app()
         run_export(
             profile_ids,
             date_deb=date_deb,

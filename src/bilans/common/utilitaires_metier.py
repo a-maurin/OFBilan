@@ -17,6 +17,36 @@ def _norm_key(s: str) -> str:
     return (s or "").strip().lower()
 
 
+def series_as_python_str(series: pd.Series) -> pd.Series:
+    """
+    Série texte en dtype object (hors backend PyArrow).
+
+    Sous le Python QGIS, ``astype(str)`` peut produire ``string[pyarrow]`` et faire
+    échouer ``str.contains`` (RE2 / ``match_substring_regex`` absent).
+    """
+    return series.fillna("").map(str).astype(object)
+
+
+def series_str_contains(
+    series: pd.Series,
+    pat: str,
+    *,
+    regex: bool = False,
+) -> pd.Series:
+    """Recherche insensible à la casse via ``re`` (compatible Python QGIS / PyArrow)."""
+    s = series_as_python_str(series)
+    if regex:
+        cre = re.compile(pat, re.IGNORECASE)
+        return s.map(lambda val: bool(cre.search(val)))
+    needle = pat.lower()
+    return s.map(lambda val: needle in val.lower())
+
+
+def extract_insee_code_series(series: pd.Series) -> pd.Series:
+    """Code INSEE 5 chiffres par valeur, ou ``pd.NA`` (sans ``str.extract`` / PyArrow)."""
+    return series_as_python_str(series).map(lambda val: _normalize_insee_code(val) or pd.NA)
+
+
 @functools.lru_cache(maxsize=1)
 def _load_types_usagers_mapping() -> dict[tuple[str, str, str], str]:
     """Charge ref/programme/tables_reference/types_usagers.csv (mapping type_usager)."""
@@ -1310,25 +1340,22 @@ ZONE_LECTEUR_ORDER: tuple[str, ...] = (
     ZONE_LECTEUR_TUB,
     ZONE_LECTEUR_HORS,
 )
+ZONE_PEJ_LOCALISATION_ATTENTE = "Localisation en attente"
+ZONE_PEJ_LECTEUR_TABLE_ORDER: tuple[str, ...] = (
+    *ZONE_LECTEUR_ORDER,
+    ZONE_PEJ_LOCALISATION_ATTENTE,
+)
 
 
 def coalesced_insee_series(df: pd.DataFrame) -> pd.Series:
     """Code INSEE normalisé (5 chiffres) par ligne, colonnes usuelles combinées."""
-    if df.empty:
+    if df is None or df.empty:
         return pd.Series(pd.NA, index=df.index, dtype="string")
     out = pd.Series(pd.NA, index=df.index, dtype="string")
     for col in ("insee_comm", "insee_commun", "INSEE_COM", "INF-INSEE"):
         if col not in df.columns:
             continue
-        cand = (
-            df[col]
-            .astype(str)
-            .str.extract(r"(\d{1,5})", expand=False)
-            .fillna("")
-            .str.zfill(5)
-        )
-        cand = cand.mask(~cand.str.fullmatch(r"\d{5}", na=False), pd.NA)
-        out = out.fillna(cand)
+        out = out.fillna(extract_insee_code_series(df[col]))
     return out
 
 
@@ -1342,6 +1369,8 @@ def _normalize_insee_code(insee: Any) -> str | None:
     if not m:
         return None
     code = m.group(1).zfill(5)
+    if code == "00000":
+        return None
     return code if re.fullmatch(r"\d{5}", code) else None
 
 
@@ -1524,6 +1553,23 @@ def build_tab_resultats_controles(
 
 ZONE_KEY_DEPARTEMENT = "Département"
 ZONE_LABEL_DEPARTEMENT_HORS = "Département (hors zone TUB/PNF)"
+
+
+def build_zone_pej_from_proc_detail_lecteur(pej_detail: pd.DataFrame) -> pd.DataFrame:
+    """
+    Tableau « PEJ par zone » (profil lecteur 4 zones) dérivé du détail procédures.
+    Les lignes sans localisation exploitable (``n.d.``) sont regroupées sous
+    « Localisation en attente ».
+    """
+    if pej_detail is None or pej_detail.empty or "coeur_hors_coeur" not in pej_detail.columns:
+        return pd.DataFrame(columns=["zone", "nb"])
+    ch = pej_detail["coeur_hors_coeur"].astype(str).str.strip()
+    pending = ch.isin(["n.d.", "nan", "None", "", "<na>"])
+    rows: list[dict[str, int | str]] = []
+    for label in ZONE_LECTEUR_ORDER:
+        rows.append({"zone": label, "nb": int((ch == label).sum())})
+    rows.append({"zone": ZONE_PEJ_LOCALISATION_ATTENTE, "nb": int(pending.sum())})
+    return pd.DataFrame(rows)
 
 
 def zone_table_display_label(zone: str) -> str:

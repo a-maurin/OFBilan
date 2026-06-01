@@ -9,12 +9,15 @@ from bilans.common.utilitaires_metier import (
     ZONE_LECTEUR_COEUR,
     ZONE_LECTEUR_HORS,
     ZONE_LECTEUR_TUB,
+    ZONE_PEJ_LOCALISATION_ATTENTE,
     build_tab_resultats_controles,
+    build_zone_pej_from_proc_detail_lecteur,
     classify_zone_lecteur_series,
     format_zone_lecteur_counts,
     zone_lecteur_counts_for_pdf_cell,
     zone_lecteur_label,
 )
+from bilans.common.pdf_table_sort import sort_zone_pej_for_pdf
 
 
 def test_zone_lecteur_label_priorite_sig_puis_tub() -> None:
@@ -24,6 +27,31 @@ def test_zone_lecteur_label_priorite_sig_puis_tub() -> None:
     assert zone_lecteur_label("Hors_perimetres_sig", "21001", tub) == ZONE_LECTEUR_TUB
     assert zone_lecteur_label("Hors_perimetres_sig", "21999", tub) == ZONE_LECTEUR_HORS
     assert zone_lecteur_label(None, None, tub) == "n.d."
+    assert zone_lecteur_label(None, "00000", tub) == "n.d."
+
+
+def test_build_zone_pej_from_proc_detail_lecteur_includes_attente() -> None:
+    det = pd.DataFrame(
+        {
+            "coeur_hors_coeur": [
+                ZONE_LECTEUR_COEUR,
+                "n.d.",
+                ZONE_LECTEUR_TUB,
+            ]
+        }
+    )
+    z = build_zone_pej_from_proc_detail_lecteur(det)
+    assert int(z.loc[z["zone"] == ZONE_LECTEUR_COEUR, "nb"].iloc[0]) == 1
+    assert int(z.loc[z["zone"] == ZONE_PEJ_LOCALISATION_ATTENTE, "nb"].iloc[0]) == 1
+    assert int(z.loc[z["zone"] == ZONE_LECTEUR_TUB, "nb"].iloc[0]) == 1
+    assert list(z["zone"]) == list(sort_zone_pej_for_pdf(z)["zone"])
+
+
+def test_coalesced_insee_ignores_empty_column_phantom_00000() -> None:
+    from bilans.engine.orchestrateur_profils import _coalesced_insee_for_pnf_mask
+
+    df = pd.DataFrame({"insee_comm": [pd.NA]})
+    assert _coalesced_insee_for_pnf_mask(df).isna().all()
 
 
 def test_classify_zone_lecteur_series_exclusive() -> None:

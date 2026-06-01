@@ -1,0 +1,85 @@
+# Mise en page des exports layout QGIS (option C : application à l'export).
+# Calibré sur le layout « Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or » (page 210×210 mm).
+# Une seule légende conservée, colonne droite (fusion des deux emplacements d'origine).
+
+enabled: true
+default_template: carre_210
+auto_template_from_page: true
+
+# Ids d'éléments titre par layout QGIS (si différents de titre_principal / sous_titre)
+layout_title_ids:
+  "Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or":
+    title_item_id: "Bilan 2025 2026 - Agrainage illicite - Côte d'Or"
+  "Bilan – Chasse – SD21":
+    title_item_id: titre_principal
+  "Synthese_activité":
+    title_item_id: titre_principal
+
+templates:
+  carre_210:
+    page:
+      width_mm: 210
+      height_mm: 210
+    map:
+      x_mm: -0.15
+      y_mm: 10
+      width_mm: 210.15
+      height_mm: 200
+    legend:
+      single: true
+      hide_extra: true
+      x_mm: 154
+      y_mm: 10
+      width_mm: 56
+      height_mm: 98
+    scalebar:
+      x_mm: 4
+      y_mm: 184
+      width_mm: 38.786
+      height_mm: 13.222
+    logo_bas_droite:
+      x_mm: 151.79
+      y_mm: 186.258
+      width_mm: 58.21
+      height_mm: 24
+      picture_id: logo_ofb_bas_droite
+      skip_if_qgis_picture: true
+    bandeau_haut:
+      y_mm: 0
+      height_mm: 25
+      height_max_fraction: 0.15
+      picture_id: bandeau_logos_ofb
+
+  a4_paysage:
+    page:
+      width_mm: 297
+      height_mm: 210
+    map:
+      x_mm: 5.836
+      y_mm: 10
+      width_mm: 232
+      height_mm: 189.85
+    legend:
+      single: true
+      hide_extra: true
+      x_mm: 232.15
+      y_mm: 24.716
+      width_mm: 61.15
+      height_mm: 103.034
+    scalebar:
+      x_mm: 4
+      y_mm: 184
+      width_mm: 37.785
+      height_mm: 13.222
+    logo_bas_droite:
+      x_mm: 234
+      y_mm: 184
+      width_mm: 63
+      height_mm: 26
+      picture_id: logo_ofb_bas_droite
+      skip_if_qgis_picture: true
+    bandeau_haut:
+      y_mm: 0
+      height_mm: 25
+      height_max_fraction: 0.15
+      picture_id: bandeau_logos_ofb

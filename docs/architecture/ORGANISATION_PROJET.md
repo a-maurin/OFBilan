@@ -18,7 +18,7 @@ sans refonte du moteur metier.
 
 Wrappers maintenus :
 
-- Windows : `scripts/windows/lancer_bilans.bat`, `scripts/windows/generer_cartes.bat`, `scripts/windows/parametrer_cartes.bat`
+- Windows : `scripts/windows/lancer_bilans.bat`, `scripts/windows/lancer_bilans_qgis.bat`, `scripts/windows/generer_cartes.bat`, `scripts/windows/parametrer_cartes.bat`
 - Linux : `scripts/linux/lancer_bilans.sh`, `scripts/linux/generer_cartes.sh`, `scripts/linux/parametrer_cartes.sh`
 
 ## CLI et packaging (phase 2)

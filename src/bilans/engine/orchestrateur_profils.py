@@ -52,6 +52,9 @@ from bilans.common.percent_format import (
 )
 from bilans.common.utilitaires_metier import (
     est_chasse_point,
+    coalesced_insee_series,
+    extract_insee_code_series,
+    series_str_contains,
     contient_natinf,
     count_controles_non_conformes_oscean,
     get_dept_name,
@@ -76,6 +79,8 @@ from bilans.common.utilitaires_metier import (
     build_tab_resultats_controles,
     zone_lecteur_counts_for_pdf_cell,
     zone_lecteur_label,
+    build_zone_pej_from_proc_detail_lecteur,
+    ZONE_PEJ_LOCALISATION_ATTENTE,
 )
 from bilans.common.ofb_charte import Spinner
 from bilans.common.pdf_report_builder import (
@@ -131,7 +136,12 @@ from bilans.common.pdf_usagers_domaine_table import (
     usagers_x_domaine_col_widths,
 )
 from bilans.common.pdf_utils import wrap_plain_text_for_pdf_paragraph
-from bilans.common.chart_display_config import load_chart_display_config, compute_pdf_ratios
+from bilans.common.chart_display_config import (
+    clamp_uniform_pie_ratio,
+    compute_pdf_ratios,
+    load_chart_display_config,
+    resolve_reference_pie_display,
+)
 from bilans.common.rendus_graphiques import (
     chart_pie,
     chart_bar,
@@ -580,6 +590,13 @@ def prompt_cartography_integration(
     if has_cartography_catalog(profile):
         selection = profile.get("_cartes_selection") or resolve_cartes_selection(profile, resolved_opts)
         expected_names = expected_map_filenames_for_selection(profile, selection)
+        
+        all_exist = all((cartes_dir / name).exists() for name in expected_names) if expected_names else False
+        if all_exist:
+            print("\n--- Cartographie ---")
+            print(f"Les {len(expected_names)} cartes attendues ont été générées ou trouvées avec succès dans {cartes_dir}.")
+            return
+
         section_hint = "section 5 (localisation cartographique — une carte par page)"
         print("\n--- Cartographie ---")
         print(f"Pour intégrer les cartes dans le bilan PDF ({section_hint}) :")
@@ -604,6 +621,19 @@ def prompt_cartography_integration(
         profile=profile,
         presentation_cfg=pres_cfg if isinstance(pres_cfg, dict) else None,
     )
+    
+    # If no specific patterns are found, expected_map_filenames defaults to [carte_..., carte_..._2]
+    # We can check if at least the first one exists.
+    actual_paths = resolve_profile_map_paths(map_id, profile=profile, presentation_cfg=pres_cfg if isinstance(pres_cfg, dict) else None)
+    if actual_paths:
+        # Les cartes sont déjà présentes !
+        print("\n--- Cartographie ---")
+        if len(actual_paths) == 1:
+            print(f"La carte attendue a été générée ou trouvée avec succès : {actual_paths[0].name}")
+        else:
+            print(f"Les {len(actual_paths)} cartes attendues ont été générées ou trouvées avec succès.")
+        return
+
     if not expected_names:
         expected_names = [f"carte_{map_id}.png", f"carte_{map_id}_2.png"]
 
@@ -842,16 +872,14 @@ def _filter_agrainage(point: pd.DataFrame) -> pd.DataFrame:
     """Filtre agrainage : nom_dossie « agrain » OU type_actio sanitaire (hors tuberculose/grippe/piégeage)."""
     mask_nom = pd.Series(False, index=point.index)
     if "nom_dossie" in point.columns:
-        mask_nom = point["nom_dossie"].fillna("").astype(str).str.contains(
-            "agrain", case=False, regex=False
-        )
+        mask_nom = series_str_contains(point["nom_dossie"], "agrain", regex=False)
 
     mask_type = pd.Series(False, index=point.index)
     type_col = "type_actio" if "type_actio" in point.columns else "type_action"
     if type_col in point.columns:
-        col_lower = point[type_col].fillna("").astype(str).str.lower()
-        mask_type = col_lower.str.contains("police sanitaire", regex=False)
-        mask_excl = col_lower.str.contains(r"tubercul|grippe|pi[eé]geage", regex=True)
+        col = point[type_col]
+        mask_type = series_str_contains(col, "police sanitaire", regex=False)
+        mask_excl = series_str_contains(col, r"tubercul|grippe|pi[eé]geage", regex=True)
         mask_type = mask_type & ~mask_excl
 
     return point[mask_nom | mask_type].copy()
@@ -871,7 +899,7 @@ def _filter_by_keywords(
         kw_esc = re.escape(kw)
         for col in columns:
             if col in pt.columns:
-                mask |= pt[col].astype(str).str.contains(kw_esc, case=False, na=False, regex=True)
+                mask |= series_str_contains(pt[col], kw_esc, regex=True)
 
     filtered = pt[mask].copy()
 
@@ -879,7 +907,7 @@ def _filter_by_keywords(
         for pattern in exclude_patterns:
             for col in columns:
                 if col in filtered.columns:
-                    excl = filtered[col].astype(str).str.contains(pattern, case=False, na=False, regex=True)
+                    excl = series_str_contains(filtered[col], pattern, regex=True)
                     filtered = filtered[~excl]
 
     return filtered
@@ -987,9 +1015,7 @@ def _filter_pej(
         pattern = "|".join(rf"(?:^|_){re.escape(c)}(?:_|$)" for c in natinf_pej)
         natinf_col = "NATINF_PEJ" if "NATINF_PEJ" in pej.columns else "NATINF"
         if natinf_col in pej.columns:
-            return pej[
-                pej[natinf_col].fillna("").astype(str).str.contains(pattern, regex=True)
-            ].copy()
+            return pej[series_str_contains(pej[natinf_col], pattern, regex=True)].copy()
 
     if ft == "procedures":
         return pej.copy()
@@ -1109,27 +1135,8 @@ def _get_insee_col(df: pd.DataFrame) -> str | None:
 
 
 def _coalesced_insee_for_pnf_mask(df: pd.DataFrame) -> pd.Series:
-    """
-    Code INSEE normalisé (5 chiffres) par ligne, en combinant les colonnes usuelles
-    (première valeur exploitable). Évite de n'utiliser qu'une colonne vide alors
-    qu'une autre source est renseignée.
-    """
-    if df.empty:
-        return pd.Series(pd.NA, index=df.index, dtype="string")
-    out = pd.Series(pd.NA, index=df.index, dtype="string")
-    for col in ("insee_comm", "insee_commun", "INSEE_COM", "INF-INSEE"):
-        if col not in df.columns:
-            continue
-        raw = df[col]
-        cand = (
-            raw.astype(str)
-            .str.extract(r"(\d{1,5})", expand=False)
-            .fillna("")
-            .str.zfill(5)
-        )
-        cand = cand.mask(~cand.str.fullmatch(r"\d{5}", na=False), pd.NA)
-        out = out.fillna(cand)
-    return out
+    """Code INSEE normalisé (5 chiffres) par ligne — délègue à ``coalesced_insee_series``."""
+    return coalesced_insee_series(df)
 
 
 def _mask_insee_in_pnf_codes(df: pd.DataFrame, pnf_codes: set) -> pd.Series:
@@ -1949,16 +1956,7 @@ def _run_aggregations(
                     for col in ("insee_comm", "INSEE_COM", "INF-INSEE"):
                         if col not in d.columns:
                             continue
-                        cand = (
-                            d[col]
-                            .astype(str)
-                            .str.strip()
-                            .str.extract(r"(\d{1,5})", expand=False)
-                            .fillna("")
-                            .str.zfill(5)
-                        )
-                        cand = cand.mask(~cand.str.fullmatch(r"\d{5}", na=False), pd.NA)
-                        insee_s = insee_s.fillna(cand)
+                        insee_s = insee_s.fillna(extract_insee_code_series(d[col]))
                     if insee_s.notna().any():
                         from_insee = (
                             insee_s.map(pnf_zone_by_insee).apply(_coeur_hors_coeur_from_zone)
@@ -1977,22 +1975,26 @@ def _run_aggregations(
                 for col in ("insee_comm", "INSEE_COM", "INF-INSEE"):
                     if col not in d.columns:
                         continue
-                    cand = (
-                        d[col]
-                        .astype(str)
-                        .str.strip()
-                        .str.extract(r"(\d{1,5})", expand=False)
-                        .fillna("")
-                        .str.zfill(5)
-                    )
-                    cand = cand.mask(~cand.str.fullmatch(r"\d{5}", na=False), pd.NA)
-                    insee_detail = insee_detail.fillna(cand)
+                    insee_detail = insee_detail.fillna(extract_insee_code_series(d[col]))
                 if mask_nd.any() and insee_detail.notna().any():
                     hors_pnf = insee_detail.notna() & ~insee_detail.astype(str).isin(
                         {str(x).zfill(5) for x in pnf_codes_s}
                     )
                     idx = mask_nd & hors_pnf
                     out.loc[idx, "coeur_hors_coeur"] = "Hors PNF"
+        commune_missing = out["commune"].isna() | out["commune"].astype(str).str.strip().isin(
+            ["", "nan", "None", "<na>"]
+        )
+        out.loc[commune_missing, "commune"] = "n.d."
+        if "coeur_hors_coeur" in out.columns:
+            insee_ok = _coalesced_insee_for_pnf_mask(d).notna()
+            has_sig_coeur_aire = pd.Series(False, index=d.index)
+            if "pnf_zone_sig" in d.columns:
+                has_sig_coeur_aire = d["pnf_zone_sig"].astype(str).str.strip().isin(
+                    ("Coeur_PNF", "Aire_adhesion_PNF")
+                )
+            no_geo = commune_missing & ~insee_ok & ~has_sig_coeur_aire
+            out.loc[no_geo, "coeur_hors_coeur"] = "n.d."
         out["type_procedure"] = proc_type
         return out.fillna("")
 
@@ -2021,19 +2023,28 @@ def _run_aggregations(
         ["theme", "THEME", "domaine", "DOMAINE"],
     )
 
-    # Bilan PNF : export / PDF « PEJ par zone » = Cœur vs aire d'adhésion / hors PNF, dérivé du détail.
-    if str(profil_id or "").strip().lower() in {"pnf", "pnf_foret"}:
-        pej_det = results.get("pej_detail")
+    # PEJ par zone : dérivé du détail (cohérent avec la colonne Zone du tableau détail).
+    pej_det = results.get("pej_detail")
+    if (
+        zone_lecteur_4_zones
+        and isinstance(pej_det, pd.DataFrame)
+        and not pej_det.empty
+        and "coeur_hors_coeur" in pej_det.columns
+    ):
+        results["zone_pej"] = build_zone_pej_from_proc_detail_lecteur(pej_det)
+    elif str(profil_id or "").strip().lower() in {"pnf", "pnf_foret"}:
         if isinstance(pej_det, pd.DataFrame) and not pej_det.empty and "coeur_hors_coeur" in pej_det.columns:
             ch = pej_det["coeur_hors_coeur"].astype(str).str.strip()
             nb_coeur = int((ch == "Cœur").sum())
             nb_hors = int((ch == "Aire d'adhésion").sum()) + int((ch == "Hors PNF").sum())
-            results["zone_pej"] = pd.DataFrame(
-                [
-                    {"zone": "Cœur", "nb": nb_coeur},
-                    {"zone": "Aire d'adhésion", "nb": nb_hors},
-                ]
-            )
+            nb_attente = int(ch.isin(["n.d.", "nan", "None", "", "<na>"]).sum())
+            rows_pnf = [
+                {"zone": "Cœur", "nb": nb_coeur},
+                {"zone": "Aire d'adhésion", "nb": nb_hors},
+            ]
+            if nb_attente > 0:
+                rows_pnf.append({"zone": ZONE_PEJ_LOCALISATION_ATTENTE, "nb": nb_attente})
+            results["zone_pej"] = pd.DataFrame(rows_pnf)
 
     # Agrégation annuelle, trimestrielle ou mensuelle (selon la durée de la période)
     if ventilation_mode == "annuelle":
@@ -2901,38 +2912,23 @@ def _generate_pdf(
     chart_preset = options.get("chart_preset")
     chart_ratios = compute_pdf_ratios(load_chart_display_config(PROJECT_ROOT, preset=chart_preset))
     chart_ratio_base = float(chart_ratios.get("thematique_uniform_chart", chart_ratios["chart_base"]))
-    pie_min_ratio = float(chart_ratios.get("thematique_uniform_pie_min_ratio", 0.70))
-    pie_max_ratio = float(chart_ratios.get("thematique_uniform_pie_max_ratio", 0.82))
-    if pie_min_ratio > pie_max_ratio:
-        pie_min_ratio, pie_max_ratio = pie_max_ratio, pie_min_ratio
-    pie_ratio_base = min(
-        pie_max_ratio,
-        max(
-            pie_min_ratio,
-            float(chart_ratios.get("thematique_uniform_pie", chart_ratios.get("pie_base", pie_min_ratio))),
-        ),
+    pie_ratio_base = clamp_uniform_pie_ratio(
+        chart_ratios,
+        uniform_key="thematique_uniform_pie",
+        min_key="thematique_uniform_pie_min_ratio",
+        max_key="thematique_uniform_pie_max_ratio",
     )
+    ref_pie = resolve_reference_pie_display(chart_ratios, pie_ratio_base)
+    ref_pie_w = ref_pie["width_ratio"]
+    ref_pie_fs = ref_pie["figure_scale"]
+    ref_pie_legend_fs = ref_pie["legend_fontsize"]
     legend_fontsize = float(chart_ratios.get("legend_fontsize", 8.0))
     legend_ncol_max = int(chart_ratios.get("legend_ncol_max", 4.0))
     figure_scale = float(chart_ratios.get("figure_scale", 1.0))
-    sec4_act_pie_width_mult = float(
-        chart_ratios.get("thematique_sec4_activite_pie_width_ratio_mult", 1.0)
-    )
-    sec4_act_pie_figure_mult = float(
-        chart_ratios.get("thematique_sec4_activite_pie_figure_scale_mult", 1.0)
-    )
     figure_scale_sec21 = figure_scale * float(
         chart_ratios.get("thematique_sec21_figure_scale_mult", 1.55)
     )
     legend_fontsize_sec21 = min(12.0, legend_fontsize + 1.25)
-    figure_scale_sec22_pie = figure_scale * float(
-        chart_ratios.get("thematique_sec22_resultats_pie_figure_scale_mult", 1.22)
-    )
-    sec22_pie_width_ratio = min(
-        0.95,
-        pie_ratio_base
-        * float(chart_ratios.get("thematique_sec22_resultats_pie_width_ratio_mult", 1.12)),
-    )
 
     # Correspondance code INSEE → nom de commune pour les tableaux PDF
     insee_to_nom = load_communes_noms(PROJECT_ROOT)
@@ -3340,12 +3336,12 @@ def _generate_pdf(
                         "pie_usagers.png",
                         **_chart_pie_compact_legend_kw(
                             len(pie_data),
-                            legend_fontsize=legend_fontsize,
+                            legend_fontsize=ref_pie_legend_fs,
                             legend_ncol_max=legend_ncol_max,
                         ),
-                        figure_scale=figure_scale,
+                        figure_scale=ref_pie_fs,
                     )
-                    builder.add_image(Path(pie_path), width_ratio=pie_ratio_base)
+                    builder.add_image(Path(pie_path), width_ratio=ref_pie_w)
 
         if not is_single_usager:
             ud = results.get("usager_par_domaine")
@@ -3434,10 +3430,10 @@ def _generate_pdf(
                         "pie_resultats_usager.png",
                         **_chart_pie_compact_legend_kw(
                             len(pie_data),
-                            legend_fontsize=legend_fontsize,
+                            legend_fontsize=ref_pie_legend_fs,
                             legend_ncol_max=legend_ncol_max,
                         ),
-                        figure_scale=figure_scale,
+                        figure_scale=ref_pie_fs,
                     )
                 )
             if pie_path is not None and pie_path.exists():
@@ -3447,7 +3443,7 @@ def _generate_pdf(
                     col_widths=cw_res,
                     col_aligns=ca_res,
                     image_path=pie_path,
-                    image_width_ratio=pie_ratio_base,
+                    image_width_ratio=ref_pie_w,
                 )
             else:
                 builder.add_table(
@@ -3547,10 +3543,10 @@ def _generate_pdf(
                         "pie_resultats.png",
                         **_chart_pie_compact_legend_kw(
                             len(pie_data),
-                            legend_fontsize=legend_fontsize,
+                            legend_fontsize=ref_pie_legend_fs,
                             legend_ncol_max=legend_ncol_max,
                         ),
-                        figure_scale=figure_scale_sec22_pie,
+                        figure_scale=ref_pie_fs,
                     )
                 )
             if pie_path is not None and pie_path.exists():
@@ -3560,7 +3556,7 @@ def _generate_pdf(
                     col_widths=cw,
                     col_aligns=ca,
                     image_path=pie_path,
-                    image_width_ratio=sec22_pie_width_ratio,
+                    image_width_ratio=ref_pie_w,
                 )
             else:
                 builder.add_table(
@@ -4276,21 +4272,14 @@ def _generate_pdf(
                 avail_w,
                 (profile.get("filter") or {}).get("type_usager_target") or [],
                 presentation_cfg=presentation_cfg,
-                pie_ratio=pie_ratio_base * 0.80,
-                legend_fontsize=max(6.5, legend_fontsize - 0.5),
+                pie_ratio=ref_pie_w,
+                legend_fontsize=ref_pie_legend_fs,
                 legend_ncol_max=legend_ncol_max,
-                figure_scale=max(0.88, float(figure_scale) * 0.88),
+                figure_scale=ref_pie_fs,
             )
             builder.add_spacer(4)
         elif results.get("_pdf_show_activite_usagers"):
             base_sec4_fs = max(0.88, float(figure_scale) * 0.88)
-            sec4_pie_fs = max(
-                0.7, min(1.6, base_sec4_fs * sec4_act_pie_figure_mult)
-            )
-            sec4_pie_ratio = min(
-                0.98,
-                max(0.1, pie_ratio_base * 0.80 * sec4_act_pie_width_mult),
-            )
             _pdf_section_activite_par_types_usagers(
                 builder,
                 results,
@@ -4298,12 +4287,12 @@ def _generate_pdf(
                 avail_w,
                 presentation_cfg=presentation_cfg,
                 section_title=section_title,
-                pie_ratio=sec4_pie_ratio,
+                pie_ratio=ref_pie_w,
                 bar_ratio=chart_ratio_base * 0.88,
-                legend_fontsize=max(6.5, legend_fontsize - 0.5),
+                legend_fontsize=ref_pie_legend_fs,
                 legend_ncol_max=legend_ncol_max,
                 figure_scale=base_sec4_fs,
-                pie_figure_scale=sec4_pie_fs,
+                pie_figure_scale=ref_pie_fs,
             )
             builder.add_spacer(4)
         elif show_placeholder:

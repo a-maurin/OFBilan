@@ -38,7 +38,7 @@ if not logger.handlers:
     _log_fmt = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
     logging.basicConfig(level=logging.INFO, format=_log_fmt, datefmt="%H:%M:%S")
 
-PROJECT_ROOT = SCRIPT_DIR.parents[3]
+PROJECT_ROOT = SCRIPT_DIR.parents[2]
 OUT_DIR_CARTES = PROJECT_ROOT / "data" / "out" / "generateur_de_cartes"
 sys.path.insert(0, str(SCRIPT_DIR))
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -92,6 +92,7 @@ try:
         QgsLayoutExporter,
         QgsLayoutItemLabel,
         QgsLayoutItemLegend,
+        QgsLayoutItemMap,
         QgsLayoutItemPicture,
         QgsLayoutPoint,
         QgsLayoutSize,
@@ -100,7 +101,7 @@ try:
         QgsCentroidFillSymbolLayer,
         QgsField,
     )
-    from qgis.core import QgsLayerTreeLayer
+    from qgis.core import QgsLayerTreeLayer, QgsLayerTreeGroup
     from qgis.PyQt.QtGui import QColor
     HAS_QGIS = True
 except ImportError:
@@ -121,10 +122,10 @@ def _check_qgis() -> None:
         sys.exit(1)
 
 
-def _load_profiles_from_param() -> Optional[Dict[str, "ProfileConfig"]]:
+def _load_profiles_from_param() -> Optional[tuple[Dict[str, "ProfileConfig"], str]]:
     """
     Charge les profils depuis param/profils_cartes.yaml (et param/symbologies.yaml si présent).
-    Retourne un dict id_profil -> ProfileConfig ou None si les fichiers de paramétrage sont absents.
+    Retourne (dict id_profil -> ProfileConfig, symbology_source_global) ou None.
     """
     if not PROFILS_CARTES_YAML.exists():
         return None
@@ -177,8 +178,12 @@ def _load_profiles_from_param() -> Optional[Dict[str, "ProfileConfig"]]:
         filter_type = base.get("filter_type", "")
         if filter_type not in valid_filter_types:
             filter_type = ""
+        sym_src = str(base.get("symbology_source", "")).strip().lower()
+        symbology_source: Optional[str] = sym_src if sym_src in ("qgis", "yaml") else None
         return LayerSymbologyConfig(
             layer_name=base["layer_name"],
+            layer_role=base.get("layer_role") or None,
+            symbology_source=symbology_source,
             legend_label=str(legend),
             filter_type=filter_type,
             geometry_mode=base.get("geometry_mode", "polygon_fill"),
@@ -195,6 +200,15 @@ def _load_profiles_from_param() -> Optional[Dict[str, "ProfileConfig"]]:
         )
 
     result: Dict[str, ProfileConfig] = {}
+    global_symbology_source = "qgis"
+    global_layers_from_layout = False
+    if isinstance(data, dict):
+        raw_default = str(data.get("symbology_source", "qgis")).strip().lower()
+        if raw_default in ("qgis", "yaml"):
+            global_symbology_source = raw_default
+        if "layers_from_layout" in data:
+            global_layers_from_layout = bool(data.get("layers_from_layout"))
+
     for pid, pdata in profiles_data.items():
         if not isinstance(pdata, dict):
             continue
@@ -206,6 +220,9 @@ def _load_profiles_from_param() -> Optional[Dict[str, "ProfileConfig"]]:
             else:
                 lcfg = LayerSymbologyConfig(layer_name=lname, legend_label=lname)
             layers[lname] = lcfg
+        prof_sym_src = str(pdata.get("symbology_source", global_symbology_source)).strip().lower()
+        if prof_sym_src not in ("qgis", "yaml"):
+            prof_sym_src = global_symbology_source
         result[pid] = ProfileConfig(
             id=str(pdata.get("id", pid)),
             title=str(pdata.get("title", pid)),
@@ -219,6 +236,10 @@ def _load_profiles_from_param() -> Optional[Dict[str, "ProfileConfig"]]:
             layout_title_item_id=str(pdata.get("layout_title_item_id", "titre_principal")),
             layout_subtitle_item_id=str(pdata.get("layout_subtitle_item_id", "sous_titre")),
             theme_id=pdata.get("theme_id") or None,
+            symbology_source=prof_sym_src,
+            layers_from_layout=bool(pdata.get("layers_from_layout", global_layers_from_layout)),
+            layout_layer_group=pdata.get("layout_layer_group") or None,
+            layout_defaults_ref=pdata.get("layout_defaults_ref") or None,
         )
 
     # Profils cartes par défaut : thèmes de ref_themes_ctrl sans entrée dans le YAML
@@ -232,8 +253,13 @@ def _load_profiles_from_param() -> Optional[Dict[str, "ProfileConfig"]]:
                 continue
             label = t.get("label", tid.replace("_", " "))
             points_cfg = _layer_config_from_dict(
-                point_ctrl_layer,
-                {"symbology_ref": "points_default", "layer_name": point_ctrl_layer, "filter_type": "point_ctrl_theme"},
+                "point_controles",
+                {
+                    "layer_role": "point_controles",
+                    "layer_name": point_ctrl_layer,
+                    "symbology_ref": "points_default",
+                    "filter_type": "point_ctrl_theme",
+                },
                 symbologies,
             )
             result[tid] = ProfileConfig(
@@ -246,10 +272,10 @@ def _load_profiles_from_param() -> Optional[Dict[str, "ProfileConfig"]]:
                 layers={
                     "pochoir_sd21": _layer_config_from_dict(
                         "pochoir_sd21",
-                        {"symbology_ref": "pochoir", "layer_name": "pochoir_sd21"},
+                        {"layer_role": "pochoir", "layer_name": "pochoir_sd21", "symbology_ref": "pochoir"},
                         symbologies,
                     ),
-                    point_ctrl_layer: points_cfg,
+                    "point_controles": points_cfg,
                 },
                 title_main=f"{label} — Côte-d'Or",
                 subtitle="",
@@ -263,7 +289,7 @@ def _load_profiles_from_param() -> Optional[Dict[str, "ProfileConfig"]]:
         logger.warning("Impossible d'ajouter les profils cartes par défaut : %s", e)
 
     logger.info("Profils chargés depuis param/profils_cartes.yaml : %s", list(result.keys()))
-    return result
+    return result, global_symbology_source
 
 
 def get_effective_config():
@@ -272,11 +298,15 @@ def get_effective_config():
     from config_cartes import CONFIG
     from config_cartes_model import GlobalConfig
 
-    param_profiles = _load_profiles_from_param()
-    if param_profiles is not None:
+    loaded = _load_profiles_from_param()
+    if loaded is not None:
+        param_profiles, yaml_symbology_source = loaded
         # Les profils édités dans la GUI (config_cartes) priment sur le YAML.
         for pid, prof in CONFIG.profiles.items():
             param_profiles[pid] = prof
+        sym_src = yaml_symbology_source
+        if getattr(CONFIG, "symbology_source", "qgis") == "yaml":
+            sym_src = "yaml"
         return GlobalConfig(
             project_qgis_path=CONFIG.project_qgis_path,
             kit_ofb_path=CONFIG.kit_ofb_path,
@@ -289,6 +319,7 @@ def get_effective_config():
             departement_code=CONFIG.departement_code,
             chasse_theme_value=CONFIG.chasse_theme_value,
             piegeage_keywords=CONFIG.piegeage_keywords,
+            symbology_source=sym_src,
         )
     return CONFIG
 
@@ -308,6 +339,7 @@ class _ConfigDeptOverride:
 def init_qgis_headless() -> None:
     """Initialise QGIS en mode headless (sans interface graphique)."""
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    os.environ.setdefault("QT_QPA_FONTDIR", r"C:\Windows\Fonts")
     app = QgsApplication([], False)
     app.initQgis()
     return app
@@ -315,6 +347,7 @@ def init_qgis_headless() -> None:
 
 def init_qgis_gui():
     """Initialise QGIS avec interface graphique (pour la GUI de configuration)."""
+    os.environ.setdefault("QT_QPA_FONTDIR", r"C:\Windows\Fonts")
     app = QgsApplication([], True)
     app.initQgis()
     return app
@@ -335,6 +368,164 @@ def get_layer_by_name(name: str):
     proj = QgsProject.instance()
     layers = proj.mapLayersByName(name)
     return layers[0] if layers else None
+
+
+def get_project_layer_names() -> List[str]:
+    """Noms des couches vectorielles/raster chargées dans le projet QGIS."""
+    proj = QgsProject.instance()
+    return [lyr.name() for lyr in proj.mapLayers().values()]
+
+
+def resolve_layers_for_config(
+    layer_key: str,
+    lcfg: "LayerSymbologyConfig",
+    available_names: Optional[List[str]] = None,
+    date_deb: Optional[str] = None,
+    date_fin: Optional[str] = None,
+) -> list[tuple[Optional[Any], str, str]]:
+    """
+    Résout une couche de configuration vers une ou plusieurs couches QGIS du projet.
+
+    Retourne une liste de (couche, nom_résolu, source_résolution).
+    """
+    from layer_resolver import resolve_layer_names
+
+    names = available_names if available_names is not None else get_project_layer_names()
+    resolved_infos = resolve_layer_names(
+        configured_name=lcfg.layer_name,
+        layer_role=getattr(lcfg, "layer_role", None),
+        layer_key=layer_key,
+        available_names=names,
+        date_deb=date_deb,
+        date_fin=date_fin,
+    )
+    
+    results = []
+    if not resolved_infos:
+        return [(None, "", "missing")]
+        
+    for resolved_name, source in resolved_infos:
+        layer = get_layer_by_name(resolved_name)
+        results.append((layer, resolved_name, source))
+        
+    return results
+
+
+def get_layout_by_name(layout_name: str):
+    """Retourne le layout QGIS ou None."""
+    if not HAS_QGIS:
+        return None
+    return QgsProject.instance().layoutManager().layoutByName(layout_name)
+
+
+def _collect_layer_names_from_tree_group(group_name: str) -> List[str]:
+    root = QgsProject.instance().layerTreeRoot()
+    group = None
+    for node in root.findGroups():
+        if isinstance(node, QgsLayerTreeGroup) and node.name().lower() == group_name.lower():
+            group = node
+            break
+    if group is None:
+        return []
+    names: List[str] = []
+    for node in group.findLayers():
+        if not node.isVisible():
+            continue
+        lyr = node.layer()
+        if lyr:
+            names.append(lyr.name())
+    return names
+
+
+def _collect_layer_names_from_legend(layout) -> List[str]:
+    names: List[str] = []
+
+    def _walk(node):
+        if isinstance(node, QgsLayerTreeLayer):
+            lyr = node.layer()
+            if lyr and node.isVisible():
+                names.append(lyr.name())
+        elif hasattr(node, "children"):
+            for child in node.children():
+                _walk(child)
+
+    for item in layout.items():
+        if not isinstance(item, QgsLayoutItemLegend):
+            continue
+        model = item.model()
+        if model is None:
+            continue
+        root_group = model.rootGroup()
+        if root_group is not None:
+            _walk(root_group)
+    return names
+
+
+def discover_layout_layer_names(prof: "ProfileConfig", layout=None) -> List[str]:
+    """
+    Découvre les noms de couches associés au layout du profil.
+
+    Ordre : LayerSet carte → légende layout → layout_layer_group → visibles métier.
+    """
+    from layout_layers import filter_operational_layer_names, is_operational_layer
+
+    if layout is None:
+        layout = get_layout_by_name(prof.layout_name)
+    if layout is None:
+        logger.warning("Layout '%s' introuvable pour la découverte des couches.", prof.layout_name)
+        return []
+
+    discovered: List[str] = []
+
+    for item in layout.items():
+        if isinstance(item, QgsLayoutItemMap):
+            try:
+                if item.keepLayerSet() and item.layers():
+                    discovered.extend(lyr.name() for lyr in item.layers() if lyr)
+            except Exception as exc:
+                logger.debug("Lecture LayerSet layout '%s': %s", prof.layout_name, exc)
+
+    if not discovered:
+        discovered.extend(_collect_layer_names_from_legend(layout))
+
+    group_name = getattr(prof, "layout_layer_group", None)
+    if not discovered and group_name:
+        discovered.extend(_collect_layer_names_from_tree_group(group_name))
+
+    if not discovered:
+        proj = QgsProject.instance()
+        root = proj.layerTreeRoot()
+        for node in root.findLayers():
+            if not node.isVisible():
+                continue
+            lyr = node.layer()
+            if lyr and is_operational_layer(lyr.name()):
+                discovered.append(lyr.name())
+
+    operational = filter_operational_layer_names(discovered)
+    logger.info(
+        "Layout '%s' : %d couche(s) métier découverte(s)%s",
+        prof.layout_name,
+        len(operational),
+        f" (groupe '{group_name}')" if group_name and operational else "",
+    )
+    return operational
+
+
+def resolve_profile_layers(prof: "ProfileConfig", layout=None) -> Dict[str, "LayerSymbologyConfig"]:
+    """Couches à traiter pour un profil (liste YAML ou découverte layout)."""
+    from layout_layers import build_layer_configs_from_names
+
+    if getattr(prof, "layers_from_layout", False):
+        names = discover_layout_layer_names(prof, layout=layout)
+        if not names:
+            logger.warning(
+                "Mode layout-driven : aucune couche découverte pour '%s', repli sur YAML.",
+                prof.id,
+            )
+            return dict(prof.layers)
+        return build_layer_configs_from_names(names, prof, prof.layers)
+    return dict(prof.layers)
 
 
 def get_layer_fields(layer) -> List[Dict[str, Any]]:
@@ -464,7 +655,7 @@ def apply_layer_symbology(layer, config: "LayerSymbologyConfig", geometry_mode_o
                 ctx = QgsExpressionContext()
                 ctx.appendScopes(QgsExpressionContextUtils.globalProjectLayerScopes(layer))
                 vals = set()
-                req = QgsFeatureRequest().setNoAttributes(False)
+                req = QgsFeatureRequest()
                 for i, f in enumerate(layer.getFeatures(req)):
                     ctx.setFeature(f)
                     v = expr.evaluate(ctx)
@@ -514,7 +705,21 @@ def apply_layer_symbology(layer, config: "LayerSymbologyConfig", geometry_mode_o
     layer.triggerRepaint()
 
 
-def _build_pve_expression(field_names: set, date_deb: str, date_fin: str, config) -> Optional[str]:
+def _build_date_condition(fields, field_name: str, date_deb: str, date_fin: str) -> str:
+    # 14 = QVariant.Date, 15 = QVariant.DateTime
+    idx = fields.indexFromName(field_name)
+    if idx >= 0 and fields.at(idx).type() in (14, 15):
+        return f'"{field_name}" >= \'{date_deb}\' AND "{field_name}" <= \'{date_fin}\''
+    # Fallback to string DD/MM/YYYY
+    deb_ymd = date_deb.replace("-", "")
+    fin_ymd = date_fin.replace("-", "")
+    return (
+        f'(substr("{field_name}", 7, 4) || substr("{field_name}", 4, 2) || substr("{field_name}", 1, 2)) >= \'{deb_ymd}\' AND '
+        f'(substr("{field_name}", 7, 4) || substr("{field_name}", 4, 2) || substr("{field_name}", 1, 2)) <= \'{fin_ymd}\''
+    )
+
+def _build_pve_expression(fields, date_deb: str, date_fin: str, config) -> Optional[str]:
+    field_names = {f.name() for f in fields}
     required = {"INF-NATINF", "INF-DEPART", "INF-DATE-I"}
     if not required.issubset(field_names):
         return None
@@ -522,16 +727,12 @@ def _build_pve_expression(field_names: set, date_deb: str, date_fin: str, config
     natinf_values = getattr(config, "natinf_pve", [27742])
     natinf_list = ", ".join(str(x) for x in natinf_values)
     depart = getattr(config, "departement_code", "21")
-    return (
-        f'"INF-NATINF" IN ({natinf_list}) AND "INF-DEPART" = {repr(depart)} '
-        f"AND to_date(substr(\"INF-DATE-I\", 7, 4) || '-' || substr(\"INF-DATE-I\", 4, 2) || '-' || substr(\"INF-DATE-I\", 1, 2)) "
-        f">= to_date('{date_deb}') AND "
-        f"to_date(substr(\"INF-DATE-I\", 7, 4) || '-' || substr(\"INF-DATE-I\", 4, 2) || '-' || substr(\"INF-DATE-I\", 1, 2)) "
-        f"<= to_date('{date_fin}')"
-    )
+    date_cond = _build_date_condition(fields, "INF-DATE-I", date_deb, date_fin)
+    return f'"INF-NATINF" IN ({natinf_list}) AND "INF-DEPART" = {repr(depart)} AND {date_cond}'
 
 
-def _build_pj_expression(field_names: set, date_deb: str, date_fin: str, config) -> Optional[str]:
+def _build_pj_expression(fields, date_deb: str, date_fin: str, config) -> Optional[str]:
+    field_names = {f.name() for f in fields}
     required = {"entite", "natinf", "date_saisine"}
     if not required.issubset(field_names):
         return None
@@ -539,13 +740,12 @@ def _build_pj_expression(field_names: set, date_deb: str, date_fin: str, config)
     natinf_values = getattr(config, "natinf_pj", [27742, 25001])
     natinf_list = ", ".join(str(x) for x in natinf_values)
     depart = getattr(config, "departement_code", "21")
-    return (
-        f"\"entite\" = 'SD{depart}' AND \"natinf\" IN ({natinf_list}) "
-        f"AND \"date_saisine\" >= '{date_deb}' AND \"date_saisine\" <= '{date_fin}'"
-    )
+    date_cond = _build_date_condition(fields, "date_saisine", date_deb, date_fin)
+    return f"\"entite\" = 'SD{depart}' AND \"natinf\" IN ({natinf_list}) AND {date_cond}"
 
 
-def _build_point_ctrl_agrainage_expression(field_names: set, date_deb: str, date_fin: str, config) -> Optional[str]:
+def _build_point_ctrl_agrainage_expression(fields, date_deb: str, date_fin: str, config) -> Optional[str]:
+    field_names = {f.name() for f in fields}
     nom_col = None
     if "nom_dossier" in field_names:
         nom_col = "nom_dossier"
@@ -556,29 +756,26 @@ def _build_point_ctrl_agrainage_expression(field_names: set, date_deb: str, date
     if not nom_col or not required.issubset(field_names):
         return None
 
-    deb_ymd = date_deb.replace("-", "")
-    fin_ymd = date_fin.replace("-", "")
     depart = getattr(config, "departement_code", "21")
+    date_cond = _build_date_condition(fields, "date_ctrl", date_deb, date_fin)
     return (
         f'"{nom_col}" LIKE \'%agrain%\' AND '
         f'"num_depart" = {repr(depart)} AND "resultat" = \'Conforme\' AND '
-        f'(substr("date_ctrl", 7, 4) || substr("date_ctrl", 4, 2) || substr("date_ctrl", 1, 2)) >= \'{deb_ymd}\' AND '
-        f'(substr("date_ctrl", 7, 4) || substr("date_ctrl", 4, 2) || substr("date_ctrl", 1, 2)) <= \'{fin_ymd}\''
+        f'{date_cond}'
     )
 
 
-def _build_point_ctrl_chasse_expression(field_names: set, date_deb: str, date_fin: str, config) -> Optional[str]:
+def _build_point_ctrl_chasse_expression(fields, date_deb: str, date_fin: str, config) -> Optional[str]:
+    field_names = {f.name() for f in fields}
     required = {"date_ctrl", "num_depart", "resultat"}
     if not required.issubset(field_names):
         return None
 
-    deb_ymd = date_deb.replace("-", "")
-    fin_ymd = date_fin.replace("-", "")
     depart = getattr(config, "departement_code", "21")
+    date_cond = _build_date_condition(fields, "date_ctrl", date_deb, date_fin)
     expr = (
         f'"num_depart" = {repr(depart)} AND "resultat" = \'Conforme\' AND '
-        f'(substr("date_ctrl", 7, 4) || substr("date_ctrl", 4, 2) || substr("date_ctrl", 1, 2)) >= \'{deb_ymd}\' AND '
-        f'(substr("date_ctrl", 7, 4) || substr("date_ctrl", 4, 2) || substr("date_ctrl", 1, 2)) <= \'{fin_ymd}\''
+        f'{date_cond}'
     )
     if "theme" in field_names:
         theme_val = getattr(config, "chasse_theme_value", "Chasse")
@@ -586,26 +783,23 @@ def _build_point_ctrl_chasse_expression(field_names: set, date_deb: str, date_fi
     return expr
 
 
-def _build_point_ctrl_global_expression(field_names: set, date_deb: str, date_fin: str, config) -> Optional[str]:
+def _build_point_ctrl_global_expression(fields, date_deb: str, date_fin: str, config) -> Optional[str]:
     """Filtre points de contrôle global : département + période (sans filtre thème, sans filtre résultat)."""
+    field_names = {f.name() for f in fields}
     required = {"date_ctrl", "num_depart"}
     if not required.issubset(field_names):
         return None
 
-    deb_ymd = date_deb.replace("-", "")
-    fin_ymd = date_fin.replace("-", "")
     depart = getattr(config, "departement_code", "21")
-    return (
-        f'"num_depart" = {repr(depart)} AND '
-        f'(substr("date_ctrl", 7, 4) || substr("date_ctrl", 4, 2) || substr("date_ctrl", 1, 2)) >= \'{deb_ymd}\' AND '
-        f'(substr("date_ctrl", 7, 4) || substr("date_ctrl", 4, 2) || substr("date_ctrl", 1, 2)) <= \'{fin_ymd}\''
-    )
+    date_cond = _build_date_condition(fields, "date_ctrl", date_deb, date_fin)
+    return f'"num_depart" = {repr(depart)} AND {date_cond}'
 
 
 def _build_point_ctrl_theme_expression(
-    field_names: set, date_deb: str, date_fin: str, config, theme_label: str
+    fields, date_deb: str, date_fin: str, config, theme_label: str
 ) -> Optional[str]:
     """Filtre points de contrôle par thème : theme/type_actio/nom_dossie contient le label du thème."""
+    field_names = {f.name() for f in fields}
     nom_col = None
     if "nom_dossier" in field_names:
         nom_col = "nom_dossier"
@@ -618,8 +812,6 @@ def _build_point_ctrl_theme_expression(
     if not required.issubset(field_names):
         return None
 
-    deb_ymd = date_deb.replace("-", "")
-    fin_ymd = date_fin.replace("-", "")
     depart = getattr(config, "departement_code", "21")
     label_esc = (theme_label or "").replace("'", "''")
 
@@ -633,15 +825,12 @@ def _build_point_ctrl_theme_expression(
     if not like_parts:
         return None
     text_cond = "(" + " OR ".join(like_parts) + ")"
-    return (
-        f'{text_cond} AND "num_depart" = {repr(depart)} AND '
-        f'(substr("date_ctrl", 7, 4) || substr("date_ctrl", 4, 2) || substr("date_ctrl", 1, 2)) >= \'{deb_ymd}\' AND '
-        f'(substr("date_ctrl", 7, 4) || substr("date_ctrl", 4, 2) || substr("date_ctrl", 1, 2)) <= \'{fin_ymd}\''
-    )
+    date_cond = _build_date_condition(fields, "date_ctrl", date_deb, date_fin)
+    return f'{text_cond} AND "num_depart" = {repr(depart)} AND {date_cond}'
 
 
 def _build_point_ctrl_keywords_expression(
-    field_names: set,
+    fields,
     date_deb: str,
     date_fin: str,
     config,
@@ -652,6 +841,7 @@ def _build_point_ctrl_keywords_expression(
     if not keywords:
         return None
 
+    field_names = {f.name() for f in fields}
     col_map = {
         "theme": "theme" if "theme" in field_names else None,
         "type_actio": "type_action" if "type_action" in field_names else "type_actio" if "type_actio" in field_names else None,
@@ -670,8 +860,6 @@ def _build_point_ctrl_keywords_expression(
     if not required.issubset(field_names) or not resolved_cols:
         return None
 
-    deb_ymd = date_deb.replace("-", "")
-    fin_ymd = date_fin.replace("-", "")
     depart = getattr(config, "departement_code", "21")
 
     like_parts: list[str] = []
@@ -682,15 +870,13 @@ def _build_point_ctrl_keywords_expression(
     if not like_parts:
         return None
     text_cond = "(" + " OR ".join(like_parts) + ")"
-    return (
-        f'{text_cond} AND "num_depart" = {repr(depart)} AND '
-        f'(substr("date_ctrl", 7, 4) || substr("date_ctrl", 4, 2) || substr("date_ctrl", 1, 2)) >= \'{deb_ymd}\' AND '
-        f'(substr("date_ctrl", 7, 4) || substr("date_ctrl", 4, 2) || substr("date_ctrl", 1, 2)) <= \'{fin_ymd}\''
-    )
+    date_cond = _build_date_condition(fields, "date_ctrl", date_deb, date_fin)
+    return f'{text_cond} AND "num_depart" = {repr(depart)} AND {date_cond}'
 
 
-def _build_point_ctrl_piegeage_expression(field_names: set, date_deb: str, date_fin: str, config) -> Optional[str]:
+def _build_point_ctrl_piegeage_expression(fields, date_deb: str, date_fin: str, config) -> Optional[str]:
     """Filtre points de contrôle piégeage : nom_dossie/theme/type_actio contient un mot-clé piégeage."""
+    field_names = {f.name() for f in fields}
     nom_col = None
     if "nom_dossier" in field_names:
         nom_col = "nom_dossier"
@@ -701,8 +887,6 @@ def _build_point_ctrl_piegeage_expression(field_names: set, date_deb: str, date_
     if not required.issubset(field_names):
         return None
 
-    deb_ymd = date_deb.replace("-", "")
-    fin_ymd = date_fin.replace("-", "")
     depart = getattr(config, "departement_code", "21")
     keywords = getattr(config, "piegeage_keywords", ["piégeage", "piège"])
     # Condition texte : (nom LIKE '%piégeage%' OR nom LIKE '%piège%' OR theme LIKE '%...' OR type_actio LIKE '%...')
@@ -721,50 +905,11 @@ def _build_point_ctrl_piegeage_expression(field_names: set, date_deb: str, date_
     if not like_parts:
         return None
     text_cond = "(" + " OR ".join(like_parts) + ")"
-    return (
-        f'{text_cond} AND "num_depart" = {repr(depart)} AND '
-        f'(substr("date_ctrl", 7, 4) || substr("date_ctrl", 4, 2) || substr("date_ctrl", 1, 2)) >= \'{deb_ymd}\' AND '
-        f'(substr("date_ctrl", 7, 4) || substr("date_ctrl", 4, 2) || substr("date_ctrl", 1, 2)) <= \'{fin_ymd}\''
-    )
+    date_cond = _build_date_condition(fields, "date_ctrl", date_deb, date_fin)
+    return f'{text_cond} AND "num_depart" = {repr(depart)} AND {date_cond}'
 
 
-def _build_point_ctrl_theme_expression(
-    field_names: set,
-    date_deb: str,
-    date_fin: str,
-    config,
-    theme_label: str,
-) -> Optional[str]:
-    """Filtre points de contrôle par thème : theme/type_actio/nom_dossie contient le label du thème."""
-    nom_col = "nom_dossier" if "nom_dossier" in field_names else ("nom_dossie" if "nom_dossie" in field_names else None)
-    type_col = "type_action" if "type_action" in field_names else ("type_actio" if "type_actio" in field_names else None)
-    theme_col = "theme" if "theme" in field_names else None
 
-    required = {"date_ctrl", "num_depart"}
-    if not required.issubset(field_names):
-        return None
-
-    deb_ymd = date_deb.replace("-", "")
-    fin_ymd = date_fin.replace("-", "")
-    depart = getattr(config, "departement_code", "21")
-    label_esc = theme_label.replace("'", "''")
-
-    like_parts = []
-    if nom_col:
-        like_parts.append(f'"{nom_col}" LIKE \'%{label_esc}%\'')
-    if theme_col:
-        like_parts.append(f'"{theme_col}" LIKE \'%{label_esc}%\'')
-    if type_col:
-        like_parts.append(f'"{type_col}" LIKE \'%{label_esc}%\'')
-    if not like_parts:
-        return None
-
-    text_cond = "(" + " OR ".join(like_parts) + ")"
-    return (
-        f'{text_cond} AND "num_depart" = {repr(depart)} AND '
-        f'(substr("date_ctrl", 7, 4) || substr("date_ctrl", 4, 2) || substr("date_ctrl", 1, 2)) >= \'{deb_ymd}\' AND '
-        f'(substr("date_ctrl", 7, 4) || substr("date_ctrl", 4, 2) || substr("date_ctrl", 1, 2)) <= \'{fin_ymd}\''
-    )
 
 
 def apply_date_filter(
@@ -781,35 +926,34 @@ def apply_date_filter(
     use_config = config if config is not None else CONFIG
     filter_type = getattr(lcfg, "filter_type", "") or ""
     fields = [f.name() for f in layer.fields()]
-    field_names = set(fields)
-
+    
     expr: Optional[str] = None
 
     if filter_type == "pve":
-        expr = _build_pve_expression(field_names, date_deb, date_fin, use_config)
+        expr = _build_pve_expression(layer.fields(), date_deb, date_fin, use_config)
     elif filter_type == "pj":
-        expr = _build_pj_expression(field_names, date_deb, date_fin, use_config)
+        expr = _build_pj_expression(layer.fields(), date_deb, date_fin, use_config)
     elif filter_type == "point_ctrl_agrainage":
-        expr = _build_point_ctrl_agrainage_expression(field_names, date_deb, date_fin, use_config)
+        expr = _build_point_ctrl_agrainage_expression(layer.fields(), date_deb, date_fin, use_config)
     elif filter_type == "point_ctrl_chasse":
-        expr = _build_point_ctrl_chasse_expression(field_names, date_deb, date_fin, use_config)
+        expr = _build_point_ctrl_chasse_expression(layer.fields(), date_deb, date_fin, use_config)
     elif filter_type == "point_ctrl_piegeage":
-        expr = _build_point_ctrl_piegeage_expression(field_names, date_deb, date_fin, use_config)
+        expr = _build_point_ctrl_piegeage_expression(layer.fields(), date_deb, date_fin, use_config)
     elif filter_type == "point_ctrl_global":
-        expr = _build_point_ctrl_global_expression(field_names, date_deb, date_fin, use_config)
+        expr = _build_point_ctrl_global_expression(layer.fields(), date_deb, date_fin, use_config)
     elif filter_type == "point_ctrl_theme" and profile and getattr(profile, "theme_id", None):
         try:
             themes = _load_ref_themes_ctrl_safe(PROJECT_ROOT)
             theme_entry = next((t for t in themes if t["id"] == profile.theme_id), None)
             theme_label = theme_entry["label"] if theme_entry else profile.theme_id.replace("_", " ")
             expr = _build_point_ctrl_theme_expression(
-                field_names, date_deb, date_fin, use_config, theme_label
+                layer.fields(), date_deb, date_fin, use_config, theme_label
             )
         except Exception as e:
             logger.warning("Filtre point_ctrl_theme : impossible de charger le label pour %s : %s", profile.theme_id, e)
     elif filter_type == "point_ctrl_keywords" and profile and getattr(profile, "keywords", None):
         expr = _build_point_ctrl_keywords_expression(
-            field_names,
+            layer.fields(),
             date_deb,
             date_fin,
             use_config,
@@ -841,20 +985,30 @@ def apply_date_filter(
 
 
 def set_basemap_visibility(enabled: bool) -> None:
-    """Active ou désactive les couches fond (XYZ, WMS)."""
+    """Active ou désactive les couches fond (XYZ, WMS). Force SCAN 25."""
     proj = QgsProject.instance()
     root = proj.layerTreeRoot()
     for layer in proj.mapLayers().values():
         lname = layer.name().lower()
-        if any(x in lname for x in ["esri", "osm", "xyz", "wms", "wmts", "cartes ign", "plan ign"]):
+        if any(x in lname for x in ["esri", "osm", "xyz", "wms", "wmts", "cartes ign", "plan ign", "scan 25", "national geographic", "community map"]):
             node = root.findLayer(layer.id())
             if node:
-                node.setItemVisibilityChecked(enabled)
+                if enabled and "scan 25" in lname:
+                    node.setItemVisibilityChecked(True)
+                else:
+                    node.setItemVisibilityChecked(False)
 
 
-def _apply_legend_labels(layout, prof: "ProfileConfig") -> None:
+def _apply_legend_labels(
+    layout,
+    prof: "ProfileConfig",
+    legend_labels_map: Optional[Dict[str, str]] = None,
+) -> None:
     """Met à jour les libellés de la légende du layout avec les legend_label du profil."""
-    legend_labels_map = {lc.layer_name: (lc.legend_label or lc.layer_name) for lc in prof.layers.values()}
+    if legend_labels_map is None:
+        legend_labels_map = {
+            lc.layer_name: (lc.legend_label or lc.layer_name) for lc in prof.layers.values()
+        }
     if not legend_labels_map:
         return
 
@@ -920,7 +1074,15 @@ def _get_logo_ofb_horizontal_path() -> Optional[Path]:
 
 
 def _ensure_logo_ofb_bas_droite(layout, prof: "ProfileConfig") -> None:
-    """Place le logo RF-OFB horizontal dans le coin inférieur droit de la carte (taille adaptée)."""
+    """Place le logo RF-OFB horizontal en bas à droite (YAML layout_defaults ou constantes legacy)."""
+    from layout_defaults import (
+        apply_existing_qgis_logo_position,
+        get_logo_bas_droite_rect,
+        load_layout_defaults,
+        should_skip_python_logo_bas_droite,
+    )
+    from config_cartes_model import LayoutItemRectConfig
+
     logo_path = _get_logo_ofb_horizontal_path()
     if not logo_path:
         logger.warning(
@@ -930,11 +1092,18 @@ def _ensure_logo_ofb_bas_droite(layout, prof: "ProfileConfig") -> None:
         )
         return
 
+    root = load_layout_defaults()
+    logo_cfg = get_logo_bas_droite_rect(prof, layout, root=root)
+    if logo_cfg is not None and should_skip_python_logo_bas_droite(layout, logo_cfg):
+        if apply_existing_qgis_logo_position(layout, logo_cfg):
+            return
+
+    picture_id = logo_cfg.picture_id if logo_cfg else LOGO_OFB_BAS_DROITE_ID
     picture_item = None
     for item in layout.items():
         if isinstance(item, QgsLayoutItemPicture):
             try:
-                if item.id() == LOGO_OFB_BAS_DROITE_ID:
+                if item.id() == picture_id:
                     picture_item = item
                     break
             except Exception as exc:
@@ -942,7 +1111,7 @@ def _ensure_logo_ofb_bas_droite(layout, prof: "ProfileConfig") -> None:
 
     if picture_item is None:
         picture_item = QgsLayoutItemPicture(layout)
-        picture_item.setId(LOGO_OFB_BAS_DROITE_ID)
+        picture_item.setId(picture_id)
         layout.addLayoutItem(picture_item)
 
     if hasattr(picture_item, "setPicturePath"):
@@ -951,10 +1120,23 @@ def _ensure_logo_ofb_bas_droite(layout, prof: "ProfileConfig") -> None:
         picture_item.setPath(str(logo_path))
     picture_item.setResizeMode(QgsLayoutItemPicture.Zoom)
 
+    if logo_cfg is not None and logo_cfg.width_mm > 0:
+        from layout_defaults import _layout_item_set_rect
+
+        _layout_item_set_rect(
+            picture_item,
+            LayoutItemRectConfig(
+                x_mm=logo_cfg.x_mm,
+                y_mm=logo_cfg.y_mm,
+                width_mm=logo_cfg.width_mm,
+                height_mm=logo_cfg.height_mm,
+            ),
+        )
+        return
+
     layout_size = layout.pageCollection().page(0).pageSize()
     w_mm = layout_size.width()
     h_mm = layout_size.height()
-
     logo_w = w_mm * LOGO_OFB_BAS_DROITE_LARGEUR_FRACTION
     logo_h = LOGO_OFB_BAS_DROITE_HAUTEUR_MM
     try:
@@ -963,8 +1145,6 @@ def _ensure_logo_ofb_bas_droite(layout, prof: "ProfileConfig") -> None:
             picture_item.attemptResize(size_mm)
     except Exception as e:
         logger.debug("Dimensionnement logo bas droite: %s", e)
-
-    # Ancrage au coin supérieur gauche : position fixe (celle du logo de référence), légèrement décalée vers la gauche
     x_pos = w_mm - (w_mm * LOGO_OFB_ANCRAGE_LARGEUR_FRACTION) - LOGO_OFB_MARGE_DROITE_MM - LOGO_OFB_DECALAGE_ANCRAGE_GAUCHE_MM
     y_pos = h_mm - LOGO_OFB_ANCRAGE_HAUTEUR_MM - LOGO_OFB_MARGE_BAS_MM
     try:
@@ -978,6 +1158,8 @@ def _ensure_logo_ofb_bas_droite(layout, prof: "ProfileConfig") -> None:
 
 def _ensure_logo_bandeau(layout, prof: "ProfileConfig") -> None:
     """Ajoute ou met à jour le bandeau logos (République française + OFB) en haut du layout."""
+    from layout_defaults import get_bandeau_config, load_layout_defaults
+
     logo_path = _get_logo_bandeau_path()
     if not logo_path:
         logger.warning(
@@ -986,8 +1168,8 @@ def _ensure_logo_bandeau(layout, prof: "ProfileConfig") -> None:
         )
         return
 
-    # Chercher un élément picture existant avec l'id dédié
-    bandeau_id = "bandeau_logos_ofb"
+    bandeau_cfg = get_bandeau_config(prof, layout, root=load_layout_defaults())
+    bandeau_id = bandeau_cfg.picture_id if bandeau_cfg else "bandeau_logos_ofb"
     picture_item = None
     for item in layout.items():
         if isinstance(item, QgsLayoutItemPicture):
@@ -1009,11 +1191,15 @@ def _ensure_logo_bandeau(layout, prof: "ProfileConfig") -> None:
     else:
         picture_item.setPath(str(logo_path))
     picture_item.setResizeMode(QgsLayoutItemPicture.Zoom)
-    # Positionner en haut au centre, hauteur ~15 % de la page
     layout_size = layout.pageCollection().page(0).pageSize()
     w_mm = layout_size.width()
     h_mm = layout_size.height()
-    bandeau_h = min(25.0, h_mm * 0.15)
+    if bandeau_cfg is not None:
+        bandeau_h = min(bandeau_cfg.height_mm, h_mm * bandeau_cfg.height_max_fraction)
+        y_pos = bandeau_cfg.y_mm
+    else:
+        bandeau_h = min(25.0, h_mm * 0.15)
+        y_pos = 0.0
     # Taille : attemptResize(QgsLayoutSize) selon l'API QgsLayoutItem (unité mm par défaut)
     try:
         size_mm = QgsLayoutSize(w_mm, bandeau_h)
@@ -1029,14 +1215,20 @@ def _ensure_logo_bandeau(layout, prof: "ProfileConfig") -> None:
     # Position
     try:
         if hasattr(picture_item, "attemptMove"):
-            picture_item.attemptMove(QgsLayoutPoint(0, 0))
+            picture_item.attemptMove(QgsLayoutPoint(0, y_pos))
         elif hasattr(picture_item, "setPosition"):
-            picture_item.setPosition(QgsLayoutPoint(0, 0))
+            picture_item.setPosition(QgsLayoutPoint(0, y_pos))
     except Exception as e:
         logger.exception("Erreur lors du positionnement du bandeau logo: %s", e)
 
 
-def export_layout(prof: "ProfileConfig", output_path: Path, dpi: int = 300, fmt: str = "png") -> bool:
+def export_layout(
+    prof: "ProfileConfig",
+    output_path: Path,
+    dpi: int = 300,
+    fmt: str = "png",
+    legend_labels_map: Optional[Dict[str, str]] = None,
+) -> bool:
     """Exporte le layout du profil vers un fichier image."""
     from config_cartes import ProfileConfig, CONFIG
 
@@ -1048,13 +1240,17 @@ def export_layout(prof: "ProfileConfig", output_path: Path, dpi: int = 300, fmt:
         logger.error("Layout '%s' introuvable dans le projet.", prof.layout_name)
         return False
 
-    # Mettre à jour les textes (titre / sous-titre) du layout à partir de la configuration du profil.
-    # On recherche des éléments de type QgsLayoutItemLabel dont l'identifiant correspond
-    # aux champs layout_title_item_id et layout_subtitle_item_id de ProfileConfig.
+    from layout_defaults import apply_layout_defaults, load_layout_defaults, resolve_title_ids
+
+    layout_defaults_root = load_layout_defaults()
+    try:
+        apply_layout_defaults(layout, prof, root=layout_defaults_root)
+    except Exception as e:
+        logger.exception("Mise en page layout_defaults (export continué): %s", e)
+
     title_text = getattr(prof, "title_main", "") or prof.title
     subtitle_text = getattr(prof, "subtitle", "") or f"Période du {prof.date_deb} au {prof.date_fin}"
-    title_id = getattr(prof, "layout_title_item_id", "titre_principal")
-    subtitle_id = getattr(prof, "layout_subtitle_item_id", "sous_titre")
+    title_id, subtitle_id = resolve_title_ids(prof, layout_defaults_root)
 
     for item in layout.items():
         if isinstance(item, QgsLayoutItemLabel):
@@ -1064,11 +1260,10 @@ def export_layout(prof: "ProfileConfig", output_path: Path, dpi: int = 300, fmt:
                 item_id = ""
             if item_id == title_id:
                 item.setText(title_text)
-            elif item_id == subtitle_id:
+            elif subtitle_id and item_id == subtitle_id:
                 item.setText(subtitle_text)
 
-    # Légende : appliquer les libellés définis dans la config (legend_label)
-    _apply_legend_labels(layout, prof)
+    _apply_legend_labels(layout, prof, legend_labels_map=legend_labels_map)
     # Bandeau logos République française + OFB en haut de la carte
     try:
         _ensure_logo_bandeau(layout, prof)
@@ -1350,23 +1545,80 @@ def run_export(
         logger.info("Profil: %s (période %s → %s)", pid, prof.date_deb, prof.date_fin)
 
         proj = QgsProject.instance()
-        for lname, lcfg in prof.layers.items():
-            layer = get_layer_by_name(lcfg.layer_name)
-            if not layer:
-                all_names = [lyr.name() for lyr in proj.mapLayers().values()]
+        available_names = [lyr.name() for lyr in proj.mapLayers().values()]
+        legend_labels_map: Dict[str, str] = {}
+        global_sym_src = getattr(CONFIG, "symbology_source", "qgis")
+        prof_sym_src = getattr(prof, "symbology_source", global_sym_src)
+
+        from layer_resolver import should_apply_yaml_symbology
+        from layout_layers import is_operational_layer
+
+        layout = get_layout_by_name(prof.layout_name) if getattr(prof, "layers_from_layout", False) else None
+        layers_to_process = resolve_profile_layers(prof, layout=layout)
+
+        # Cacher toutes les couches métiers avant d'appliquer celles du profil
+        root = proj.layerTreeRoot()
+        for layer in proj.mapLayers().values():
+            if is_operational_layer(layer.name()):
+                node = root.findLayer(layer.id())
+                if node:
+                    node.setItemVisibilityChecked(False)
+
+        for lname, lcfg in layers_to_process.items():
+            resolved_infos = resolve_layers_for_config(
+                lname, lcfg, available_names=available_names, date_deb=prof.date_deb, date_fin=prof.date_fin
+            )
+            
+            # Si aucune couche n'a été trouvée
+            if not resolved_infos or (len(resolved_infos) == 1 and not resolved_infos[0][1]):
                 logger.warning(
-                    "Couche '%s' introuvable pour le profil '%s' (ignorée). Couches du projet: %s",
+                    "Couche '%s' introuvable pour le profil '%s' (rôle=%s, ignorée). Couches du projet: %s",
                     lcfg.layer_name,
                     pid,
-                    all_names,
+                    getattr(lcfg, "layer_role", None),
+                    available_names,
                 )
                 continue
-            logger.info("  → Couche: %s (config: %s)", lname, lcfg.layer_name)
-            apply_layer_symbology(layer, lcfg)
-            apply_date_filter(layer, lcfg, prof.date_deb, prof.date_fin, config=carto_config, profile=prof)
+
+            for layer, resolved_name, resolve_source in resolved_infos:
+                if not layer or not resolved_name:
+                    continue
+
+                if resolve_source != "exact":
+                    logger.info(
+                        "  → Couche résolue '%s' → '%s' (%s)",
+                        lcfg.layer_name,
+                        resolved_name,
+                        resolve_source,
+                    )
+                else:
+                    logger.info("  → Couche: %s", resolved_name)
+
+                # Rendre la couche visible et s'assurer que ses groupes parents le sont aussi
+                node = root.findLayer(layer.id())
+                if node:
+                    node.setItemVisibilityChecked(True)
+                    parent = node.parent()
+                    while parent and parent != root:
+                        parent.setItemVisibilityChecked(True)
+                        parent = parent.parent()
+
+                if lcfg.legend_label:
+                    legend_labels_map[resolved_name] = lcfg.legend_label
+
+                if should_apply_yaml_symbology(
+                    getattr(lcfg, "symbology_source", None),
+                    prof_sym_src,
+                    global_sym_src,
+                ):
+                    apply_layer_symbology(layer, lcfg)
+                else:
+                    logger.debug("  Symbologie QGIS conservée pour '%s'", resolved_name)
+
+                apply_date_filter(layer, lcfg, prof.date_deb, prof.date_fin, config=carto_config, profile=prof)
 
         out_path = out_dir / prof.output_filename
-        export_layout(prof, out_path, dpi=dpi, fmt=fmt)
+        export_layout(prof, out_path, dpi=dpi, fmt=fmt, legend_labels_map=legend_labels_map or None)
 
 
 def run_from_qgis_console(profile_ids=None, gui=False):

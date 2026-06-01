@@ -60,7 +60,7 @@ python -m bilans --profil types_usager_cible --date-deb 2025-01-01 --date-fin 20
 
 Scripts de lancement :
 
-- Windows : `scripts/windows/lancer_bilans.bat`, `scripts/windows/generer_cartes.bat`, `scripts/windows/parametrer_cartes.bat`
+- Windows : `scripts/windows/lancer_bilans.bat`, `scripts/windows/lancer_bilans_qgis.bat` (bilans + cartes via Python QGIS), `scripts/windows/generer_cartes.bat`, `scripts/windows/parametrer_cartes.bat`
 - Linux : `scripts/linux/lancer_bilans.sh`, `scripts/linux/generer_cartes.sh`, `scripts/linux/parametrer_cartes.sh`
 
 ## Tests et CI

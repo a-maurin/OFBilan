@@ -231,3 +231,43 @@ def compute_pdf_ratios(cfg: dict[str, Any]) -> dict[str, float]:
         "legend_fontsize": max(6.0, min(12.0, float(pdf_cfg.get("legend_fontsize", 8.0)))),
         "legend_ncol_max": max(1.0, min(6.0, float(pdf_cfg.get("legend_ncol_max", 4.0)))),
     }
+
+
+def clamp_uniform_pie_ratio(
+    chart_ratios: dict[str, float],
+    *,
+    uniform_key: str,
+    min_key: str,
+    max_key: str,
+    fallback_key: str = "pie_base",
+) -> float:
+    """Ratio PDF de base des camemberts, borné par min/max (global ou thématique)."""
+    pie_min = float(chart_ratios.get(min_key, 0.70))
+    pie_max = float(chart_ratios.get(max_key, 0.82))
+    if pie_min > pie_max:
+        pie_min, pie_max = pie_max, pie_min
+    raw = float(chart_ratios.get(uniform_key, chart_ratios.get(fallback_key, pie_min)))
+    return min(pie_max, max(pie_min, raw))
+
+
+def resolve_reference_pie_display(
+    chart_ratios: dict[str, float],
+    pie_ratio_base: float,
+) -> dict[str, float]:
+    """
+    Dimensions du camembert de référence (§2.2 « Résultats des contrôles », profil agrainage).
+
+    Utilisé pour harmoniser tous les camemberts des bilans détaillés (hors brochure).
+    """
+    width_mult = float(
+        chart_ratios.get("thematique_sec22_resultats_pie_width_ratio_mult", 1.12)
+    )
+    figure_mult = float(
+        chart_ratios.get("thematique_sec22_resultats_pie_figure_scale_mult", 1.22)
+    )
+    base_fs = float(chart_ratios.get("figure_scale", 1.0))
+    return {
+        "width_ratio": min(0.95, float(pie_ratio_base) * width_mult),
+        "figure_scale": base_fs * figure_mult,
+        "legend_fontsize": float(chart_ratios.get("legend_fontsize", 8.0)),
+    }

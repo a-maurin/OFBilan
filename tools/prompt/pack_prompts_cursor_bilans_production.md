@@ -367,3 +367,161 @@ Attendu:
 - verification compatibilite batch/combine
 ```
 
+## 10) Cartes adaptees au profil de bilan
+
+Prefixer avec le **bloc commun** en tete de session si besoin.
+
+### Prompt 24 — Chaine complete profil → cartes → PDF
+
+```text
+Objectif:
+Mettre en place (ou completer) une chaine coherente « profil de bilan choisi → cartes pertinentes → integration PDF », sans regression sur les profils existants.
+
+Question obligatoire (repondre avant tout code):
+Cette evolution doit-elle s'appliquer :
+- uniquement au profil <profil_id> (ex. agrainage, chasse, global, synthese_activite_PA_PJ), ou
+- a tous les profils de bilan ?
+Si ambigu, demander aussi le profil pilote pour la premiere iteration.
+
+Contexte technique (source de verite):
+@config/profils_bilan/<profil_id>.yaml
+@config/profils_bilan/_defaults.yaml
+@config/profils_bilan/schema_ui.yaml
+@src/bilans/cartographie/param/profils_cartes.yaml
+@src/bilans/cartographie/production_cartographique.py
+@src/bilans/cartographie/config_cartes_model.py
+@src/bilans/common/carte_helper.py
+@src/bilans/engine/orchestrateur_profils.py
+@src/bilans/engine/execution_lots_profils.py
+@src/bilans/engine/generation_pdf_profil.py
+@src/bilans/engine/generation_pdf_synthese.py
+@docs/usage/cartes_et_bilans.md
+@docs/usage/filtrage_bilans_et_cartes.md
+@docs/usage/README_Production_cartes.md
+@tests/unit/test_carte_helper_maps.py
+@tests/unit/test_maps_pdf_layout.py
+
+Etat attendu aujourd'hui (a verifier, ne pas supposer):
+1) Profil bilan : bloc optionnel cartographie (fichiers, disposition) + capabilities.map_profiles + option CLI cartes.
+2) Resolution PNG : resolve_profile_map_id, resolve_profile_map_paths, expected_map_filenames dans carte_helper.
+3) Generation QGIS : profils dans profils_cartes.yaml → carte_<map_id>.png dans generateur_de_cartes.
+4) PDF : section 5 (global/thematique) ou brochure selon profil ; fallback si PNG absents.
+5) Risque connu : mapping partiel / durci (find_maps_for_bilan, profils carto sans entree YAML, filtres bilan vs expressions QGIS).
+
+Etape 1 — Audit (PAS DE CODE):
+Pour le profil <profil_id> (et perimetre valide) :
+A) Tracer le flux complet :
+   CLI/options → orchestrateur (ensure_maps, prompt_cartography_integration) → export QGIS → recherche PNG → rendu PDF.
+B) Produire un tableau :
+   | profil bilan | map_id | fichiers PNG attendus | profil carto QGIS | filtres bilan | filtres carte | ecart |
+C) Lister les ecarts bloquants vs cosmetiques (carte absente, mauvais map_id, filtres desalignes, layout brochure vs standard).
+D) Proposer 2 options d'architecture (minimal YAML-only / socle commun + declarations par profil), avec avantages/inconvenients.
+STOP — attendre ma validation du perimetre et de l'option choisie.
+
+Etape 2 — Design cible (toujours sans code tant que non valide):
+Definir pour chaque profil concerne :
+- cartographie.fichiers (motifs {map_id} si besoin),
+- capabilities.map_profiles (liste des profils QGIS a generer en batch),
+- entree(s) dans profils_cartes.yaml (couches, symbologies, periode, output_filename),
+- alignement des criteres de filtrage avec le profil bilan (cf. filtrage_bilans_et_cartes.md).
+Regles projet :
+- Pas de if profil_id == ... cote rendu : preferer YAML explicite.
+- Changement global → cle visible dans chaque profil YAML concerne, pas seulement _defaults.
+- Cartographie optionnelle : 0/1/N cartes, pas d'erreur bloquante si QGIS indisponible.
+
+Etape 3 — Implementation (lots courts, apres validation):
+Lot 1 — Declarations & resolution
+- Completer YAML profil(s) + profils_cartes.yaml.
+- Reduire/eviter mappings codes en dur dans carte_helper si une config YAML suffit.
+- Tests unitaires carte_helper (multi-fichiers, profil sans carte, map_id derive types_usager_cible).
+
+Lot 2 — Generation
+- Brancher ensure_maps / run_export sur capabilities.map_profiles et periode/departement du run.
+- Messages CLI actionnables (noms attendus, dossier, commande generer_cartes si pertinent).
+
+Lot 3 — PDF
+- Verifier section 5 / brochure : bons chemins, placeholder coherent, une carte par page (PDF standard).
+- Mettre a jour test_maps_pdf_layout si layout touche.
+
+Contraintes strictes:
+- Ne pas modifier les calculs d'agregation (pandas) sauf bug avere de coherence carte/bilan.
+- Ne pas versionner data/out/, PNG de debug a la racine, __pycache__.
+- Patch minimal, tracable.
+- QGIS optionnel : le bilan doit toujours se terminer sans carte.
+
+Verification (obligatoire avant « termine »):
+1) python -m pytest -q tests/unit/test_carte_helper_maps.py tests/unit/test_maps_pdf_layout.py
+2) Smoke cible :
+   python -m bilans --profil <profil_id> --date-deb YYYY-MM-DD --date-fin YYYY-MM-DD --dept-code XX
+   avec et sans --cartes si pertinent.
+3) Checklist manuelle :
+   - PNG au bon nom dans data/out/generateur_de_cartes/
+   - section carto du PDF remplie ou message fallback explicite
+   - pour perimetre « tous les profils » : au moins 2 profils distincts (ex. global + agrainage) sans regression.
+
+Livrables par lot:
+1) plan (5–8 points)
+2) patch
+3) tests ajoutes/renforces
+4) note d'impact (profils touches, commandes, risques regression)
+```
+
+### Prompt 24bis — Variante profil pilote unique
+
+```text
+Objectif: meme chaine que Prompt 24, scope reduit.
+
+Perimetre fige: uniquement le profil <profil_id> (ex. agrainage).
+Ne pas modifier les autres profils YAML sans mon accord explicite.
+
+Reprendre les etapes 1–3 du Prompt 24 en limitant l'audit, le design et l'implementation a ce profil.
+Verification: pytest cible + un smoke sur <profil_id> uniquement.
+```
+
+### Prompt 25 — Defaults mise en page cartes QGIS (réf. agrainage)
+
+Handoff détaillé : `@tools/prompt/handoff_cartographie_defaults_mise_en_page.md`
+
+```text
+Objectif:
+Parametrer par defaut les elements generaux des cartes QGIS (format, DPI, structure de mise en page)
+alignes sur le layout agrainage de reference, et harmoniser les autres layouts du projet bilans_carte.qgz.
+
+Contexte — deja livre (ne pas refaire):
+- symbology_source: qgis (symbologies du .qgz conservees)
+- layer_resolver + layers_from_layout: true (decouverte couches depuis layout)
+- chaine bilan → cartes → PDF (cartographie_config, carte_helper, global catalogue)
+- 253 tests verts (dernier run connu)
+
+Question obligatoire (avant code):
+Périmètre : pilote agrainage seul | tous les layouts .qgz | defaults YAML appliques a l'export ?
+
+Source de verite:
+@tools/prompt/handoff_cartographie_defaults_mise_en_page.md
+@ref/programme/sig/bilans_carte.qgz
+@src/bilans/cartographie/production_cartographique.py
+@src/bilans/cartographie/config_cartes_model.py
+@src/bilans/cartographie/param/profils_cartes.yaml
+@src/bilans/cartographie/layer_resolver.py
+@src/bilans/cartographie/layout_layers.py
+
+Reference layout:
+"Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or"
+
+Etapes (cf. handoff complet):
+1) Audit sans code : comparer layout agrainage vs chasse / Synthese_activite / carte_brochure
+2) Design : layout_defaults.yaml + LayoutDefaultsConfig + apply_layout_defaults() dans export_layout()
+3) Implementation par lots : config → export → harmonisation profils → non-regression
+
+Contraintes:
+- ne pas ecraser symbologies de couches (RuleRenderer QGIS)
+- ne pas casser layers_from_layout ni symbology_source: qgis
+- QGIS absent → pas d'erreur bloquante sur le pipeline bilan
+- migrer constantes logos hardcodees (LOGO_OFB_*, bandeau) vers YAML sans changer le rendu agrainage
+
+Verification:
+1) python -m pytest -q
+2) smoke : python -m bilans --profil agrainage --cartes --dept-code 21
+3) comparaison visuelle PNG vs export QGIS layout agrainage
+```
+

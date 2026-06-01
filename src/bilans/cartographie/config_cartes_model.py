@@ -23,6 +23,9 @@ ClassificationMode = Literal["equal_interval", "quantile", "jenks", "manual"]
 # Formats de sortie
 OutputFormat = Literal["png", "jpeg"]
 
+# Source de symbologie : projet QGIS (défaut) ou YAML (legacy / override)
+SymbologySource = Literal["qgis", "yaml"]
+
 
 # Type de filtre attributaire (pour subset string)
 FilterType = Literal[
@@ -43,6 +46,10 @@ class LayerSymbologyConfig:
     """Configuration de symbologie pour une couche."""
 
     layer_name: str
+    # Rôle métier pour résolution dynamique dans le projet QGIS (ex. point_controles, pej)
+    layer_role: Optional[str] = None
+    # qgis | yaml | None (hérite du profil / global)
+    symbology_source: Optional[SymbologySource] = None
     legend_label: str = ""
     # Type de filtre (pve, pj, point_ctrl_agrainage, point_ctrl_chasse) ou "" si pas de filtre dynamique
     filter_type: FilterType = ""
@@ -93,6 +100,83 @@ class ProfileConfig:
     # Mots-clés bilan (filtre point_ctrl_keywords), alignés sur filter.keywords du profil YAML
     keywords: Optional[List[str]] = None
     keyword_columns: Optional[List[str]] = None
+    # Source de symbologie par défaut pour les couches du profil (surchargeable par couche)
+    symbology_source: SymbologySource = "qgis"
+    # True = lister les couches depuis le layout QGIS (YAML layers = surcharges filtres/légende)
+    layers_from_layout: bool = False
+    # Groupe d'arborescence QGIS si le LayerSet de la carte est vide
+    layout_layer_group: Optional[str] = None
+    # Template layout_defaults.yaml (ex. carre_210, a4_paysage) ; None = auto depuis la page
+    layout_defaults_ref: Optional[str] = None
+
+
+@dataclass
+class LayoutItemRectConfig:
+    """Rectangle d'un composant layout (mm)."""
+
+    x_mm: float = 0.0
+    y_mm: float = 0.0
+    width_mm: float = 0.0
+    height_mm: float = 0.0
+
+
+@dataclass
+class LayoutLegendDefaultsConfig:
+    """Légende unique alignée à droite."""
+
+    single: bool = True
+    hide_extra: bool = True
+    x_mm: float = 0.0
+    y_mm: float = 0.0
+    width_mm: float = 0.0
+    height_mm: float = 0.0
+
+
+@dataclass
+class LayoutLogoDefaultsConfig:
+    x_mm: float = 0.0
+    y_mm: float = 0.0
+    width_mm: float = 0.0
+    height_mm: float = 0.0
+    picture_id: str = "logo_ofb_bas_droite"
+    skip_if_qgis_picture: bool = True
+
+
+@dataclass
+class LayoutBandeauDefaultsConfig:
+    y_mm: float = 0.0
+    height_mm: float = 25.0
+    height_max_fraction: float = 0.15
+    picture_id: str = "bandeau_logos_ofb"
+
+
+@dataclass
+class LayoutTemplateConfig:
+    """Gabarit de mise en page (page carrée agrainage ou A4 paysage SD21)."""
+
+    page: LayoutItemRectConfig = field(default_factory=LayoutItemRectConfig)
+    map: LayoutItemRectConfig = field(default_factory=LayoutItemRectConfig)
+    legend: LayoutLegendDefaultsConfig = field(default_factory=LayoutLegendDefaultsConfig)
+    scalebar: LayoutItemRectConfig = field(default_factory=LayoutItemRectConfig)
+    logo_bas_droite: LayoutLogoDefaultsConfig = field(default_factory=LayoutLogoDefaultsConfig)
+    bandeau_haut: LayoutBandeauDefaultsConfig = field(default_factory=LayoutBandeauDefaultsConfig)
+
+
+@dataclass
+class LayoutTitleIdsConfig:
+    title_item_id: str = "titre_principal"
+    subtitle_item_id: Optional[str] = "sous_titre"
+
+
+@dataclass
+class LayoutDefaultsRootConfig:
+    """Racine layout_defaults.yaml."""
+
+    enabled: bool = True
+    default_template: str = "carre_210"
+    auto_template_from_page: bool = True
+    layout_title_ids: Dict[str, LayoutTitleIdsConfig] = field(default_factory=dict)
+    templates: Dict[str, LayoutTemplateConfig] = field(default_factory=dict)
 
 
 @dataclass
@@ -125,6 +209,8 @@ class GlobalConfig:
     basemap: BasemapConfig = field(default_factory=BasemapConfig)
     output: OutputConfig = field(default_factory=OutputConfig)
     profiles: Dict[str, ProfileConfig] = field(default_factory=dict)
+    # qgis = symbologies du projet ; yaml = écraser via symbologies.yaml (mode legacy)
+    symbology_source: SymbologySource = "qgis"
     # Paramètres métier pour les filtres attributaires
     natinf_pve: List[int] = field(default_factory=lambda: [27742])
     natinf_pj: List[int] = field(default_factory=lambda: [27742, 25001])
