@@ -91,6 +91,6 @@ def test_overlay_pnf_zone_from_127_shp(tmp_path: Path) -> None:
         crs="EPSG:4326",
     ).to_file(shp_path)
 
-    df = pd.DataFrame({"insee_comm": ["21001"], "pnf_zone_sig": ["Aire_adhesion_PNF"]})
+    df = pd.DataFrame({"insee_comm": ["21001"], "pnf_zone_sig": ["Hors_perimetres_sig"]})
     out = loaders.overlay_pnf_zone_from_communes_pnf_csv(df, tmp_path)
     assert out.iloc[0]["pnf_zone_sig"] == "Coeur_PNF"

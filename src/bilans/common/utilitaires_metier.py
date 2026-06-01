@@ -509,7 +509,7 @@ def agg_controles_par_type_usager_domaine(
             cats_counts = {}
             for lab, n in toks:
                 cat = map_type_usager(source_table, source_champ, lab)
-                cats_counts[cat] = cats_counts.get(cat, 0) + n
+                cats_counts[cat] = 1
         for cat, n in cats_counts.items():
             key = (cat, dom)
             counts[key] = counts.get(key, 0) + n
@@ -550,7 +550,7 @@ def agg_controles_par_type_usager_theme(
             cats_counts = {}
             for lab, n in toks:
                 cat = map_type_usager(source_table, source_champ, lab)
-                cats_counts[cat] = cats_counts.get(cat, 0) + n
+                cats_counts[cat] = 1
         for cat, n in cats_counts.items():
             key = (cat, theme)
             counts[key] = counts.get(key, 0) + n
@@ -600,7 +600,7 @@ def _agg_resultats_par_type_usager_dimension(
             cats_counts = {}
             for lab, n in toks:
                 cat = map_type_usager(source_table, source_champ, lab)
-                cats_counts[cat] = cats_counts.get(cat, 0) + n
+                cats_counts[cat] = 1
 
         for cat, n in cats_counts.items():
             key = (cat, dim_val)
@@ -682,16 +682,63 @@ def agg_resultat_counts_par_type_usager(
     source_table: str = "point_ctrl",
     source_champ: str = "type_usager",
 ) -> pd.DataFrame:
-    """
-    Délègue à agg_resultat_effectifs_par_type_usager pour utiliser les effectifs.
-    (Nom conservé pour compatibilité).
-    """
-    return agg_resultat_effectifs_par_type_usager(
+    if source_champ not in df.columns or col_resultat not in df.columns:
+        return pd.DataFrame(
+            columns=[
+                "type_usager",
+                "Conforme",
+                "Infraction",
+                "Manquement",
+                "Autre_resultat",
+                "Total",
+            ]
+        )
+
+    buckets = ("Conforme", "Infraction", "Manquement", "Autre_resultat")
+    counts: dict[str, dict[str, int]] = {}
+
+    work_df = _consolide_lignes_effectifs_par_fc_id(
         df,
-        col_resultat=col_resultat,
+        [source_champ, col_resultat],
         source_table=source_table,
-        source_champ=source_champ,
     )
+
+    for _, row in work_df.iterrows():
+        res = str(row.get(col_resultat, "") or "").strip()
+        if res == "Infraction":
+            b = "Infraction"
+        elif res == "Manquement":
+            b = "Manquement"
+        elif res == "Conforme":
+            b = "Conforme"
+        else:
+            b = "Autre_resultat"
+
+        toks = _parse_type_usager_tokens(row.get(source_champ))
+        if not toks:
+            cat = "Autre"
+            d = counts.setdefault(cat, {k: 0 for k in buckets})
+            d[b] += 1
+            continue
+        
+        # Un compte par catégorie
+        cats = set()
+        for lab, n in toks:
+            cats.add(map_type_usager(source_table, source_champ, lab))
+        
+        for cat in cats:
+            d = counts.setdefault(cat, {k: 0 for k in buckets})
+            d[b] += 1
+
+    rows: list[dict[str, object]] = []
+    for cat in sorted(counts.keys(), key=lambda x: (-sum(counts[x].values()), x)):
+        d = counts[cat]
+        tot = sum(d.values())
+        row = {"type_usager": cat, "Total": tot}
+        for k in buckets:
+            row[k] = int(d[k])
+        rows.append(row)
+    return pd.DataFrame(rows)
 
 
 def count_multi_usager_controles(

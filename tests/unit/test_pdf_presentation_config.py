@@ -385,6 +385,7 @@ def test_agrainage_pdf_sections_order_and_titles() -> None:
         "sec2",
         "sec21",
         "sec22",
+        "sec23",
         "sec22theme",
         "sec22res",
         "sec4",
@@ -399,7 +400,7 @@ def test_agrainage_pdf_sections_order_and_titles() -> None:
         "sec5",
         "sec6",
     ]
-    assert titles.get("sec22") == "2.2. Résultats des contrôles"
+    assert titles.get("sec23") == "2.3. Résultats des contrôles"
     assert titles.get("sec4") == "3. Activité par type d’usager"
     assert titles.get("sec3") == "4. Procédures (PEJ, PA, PVe)"
 
@@ -408,9 +409,10 @@ def test_agrainage_pdf_sections_order_and_titles() -> None:
             ("sec1", "1. Chiffres clés"),
             ("sec2", "2. Activité de contrôle"),
             ("sec21", "2.1. Indicateurs mensuels"),
-            ("sec22", "2.2. Résultats des contrôles"),
-            ("sec22theme", "2.3. Analyse par zone"),
-            ("sec22res", "2.4. Synthèse croisée par zone"),
+            ("sec22", "2.2. Répartition de l'activité par domaines (contrôles + PEJ)"),
+            ("sec23", "2.3. Résultats des contrôles"),
+            ("sec22theme", "2.4. Analyse par zone"),
+            ("sec22res", "2.5. Synthèse croisée par zone"),
             ("sec4", "3. Activité par type d’usager"),
             ("sec3", "4. Procédures (PEJ, PA, PVe)"),
             ("sec31", "4.1 Procès-verbaux électroniques (PVe)"),
@@ -438,14 +440,14 @@ def test_feature_registry_disables_cross_scope_sections() -> None:
     root = Path(__file__).resolve().parents[2]
     them = resolve_pdf_presentation_config(root, scope="thematique", profile_id="chasse")
     eff_t = them["effective"]
-    assert is_section_enabled(eff_t, "sec22", True) is True
+    assert is_section_enabled(eff_t, "sec23", True) is True
     assert is_section_enabled(eff_t, "sec22dom", True) is False
     assert is_section_enabled(eff_t, "sec5", True) is True
     assert is_section_enabled(eff_t, "sec5map", True) is False
 
     glob = resolve_pdf_presentation_config(root, scope="global", profile_id=None)
     eff_g = glob["effective"]
-    assert is_section_enabled(eff_g, "sec22", True) is False
+    assert is_section_enabled(eff_g, "sec23", True) is False
     assert is_section_enabled(eff_g, "sec22dom", True) is True
     assert is_section_enabled(eff_g, "sec5map", True) is True
     assert is_section_enabled(eff_g, "sec5", True) is False
