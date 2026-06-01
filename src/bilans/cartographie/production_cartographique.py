@@ -1623,6 +1623,8 @@ def run_export(
                 if node:
                     node.setItemVisibilityChecked(False)
 
+        legend_data = []
+
         for lname, lcfg in layers_to_process.items():
             resolved_infos = resolve_layers_for_config(
                 lname, lcfg, available_names=available_names, date_deb=prof.date_deb, date_fin=prof.date_fin
@@ -1676,6 +1678,11 @@ def run_export(
 
                 apply_date_filter(layer, lcfg, prof.date_deb, prof.date_fin, config=carto_config, profile=prof)
 
+                # Extraction pour la légende PIL
+                legend_info = _extract_legend_info(layer, lcfg)
+                if legend_info:
+                    legend_data.append(legend_info)
+
         out_path = out_dir / prof.output_filename
         # Masquer les légendes existantes dans la mise en page (demande utilisateur)
         if layout is not None:
@@ -1684,6 +1691,13 @@ def run_export(
                     item.setVisibility(False)
 
         export_layout(prof, out_path, dpi=dpi, fmt=fmt, legend_labels_map=legend_labels_map or None)
+
+        # Dessiner la légende avec Pillow par-dessus l'export
+        try:
+            _draw_legend_on_image(out_path, legend_data)
+            logger.info("  Légende dessinée sur %s", out_path.name)
+        except Exception as e:
+            logger.error("  Erreur de dessin de légende sur %s : %s", out_path.name, e)
 
 
 def run_from_qgis_console(profile_ids=None, gui=False):
@@ -1829,9 +1843,153 @@ def main() -> None:
         app.exitQgis()
 
 
+def _extract_legend_info(layer, lcfg):
+    """Extrait les informations de légende (titre, items) depuis le QgsVectorLayer."""
+    if "pochoir" in lcfg.layer_name.lower() or "pochoir" in layer.name().lower():
+        return None
+        
+    title = lcfg.legend_label or lcfg.layer_name
+    items = []
+    
+    renderer = layer.renderer()
+    if not renderer:
+        return None
+        
+    rtype = renderer.type()
+    if rtype == "singleSymbol":
+        color = renderer.symbol().color().name() if renderer.symbol() else "#000000"
+        items.append({"label": title, "color": color})
+        title = None
+    elif rtype == "categorizedSymbol":
+        for cat in renderer.categories():
+            val = cat.value()
+            if val == "" or val is None: continue
+            color = cat.symbol().color().name() if cat.symbol() else "#000000"
+            label = cat.label() or str(val)
+            items.append({"label": label, "color": color})
+    elif rtype == "graduatedSymbol":
+        for range_ in renderer.ranges():
+            color = range_.symbol().color().name() if range_.symbol() else "#000000"
+            label = range_.label()
+            items.append({"label": label, "color": color})
+            
+    if not items:
+        return None
+        
+    return {"title": title, "items": items}
+
+
+def _draw_legend_on_image(image_path, legend_data):
+    """Dessine une légende via Pillow directement sur le PNG exporté."""
+    if not legend_data:
+        return
+        
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+    except ImportError:
+        logger.warning("Pillow n'est pas installé, la légende ne peut pas être dessinée sur %s", image_path.name)
+        return
+
+    try:
+        img = Image.open(image_path)
+        img = img.convert("RGBA")
+    except Exception as e:
+        logger.error("Erreur d'ouverture de l'image %s : %s", image_path.name, e)
+        return
+
+    padding = 20
+    rect_size = 20
+    line_spacing = 30
+    title_spacing = 35
+    section_spacing = 15
+
+    try:
+        font_title = ImageFont.truetype("arialbd.ttf", 22)
+        font_text = ImageFont.truetype("arial.ttf", 18)
+    except IOError:
+        font_title = ImageFont.load_default()
+        font_text = ImageFont.load_default()
+
+    max_w = 0
+    total_h = padding * 2
+    
+    for group in legend_data:
+        title = group.get("title")
+        if title:
+            if hasattr(font_title, "getbbox"):
+                w = font_title.getbbox(title)[2] - font_title.getbbox(title)[0]
+            else:
+                w = font_title.getsize(title)[0]
+            max_w = max(max_w, w)
+            total_h += title_spacing
+        
+        for item in group.get("items", []):
+            label = item["label"]
+            if hasattr(font_text, "getbbox"):
+                w = font_text.getbbox(label)[2] - font_text.getbbox(label)[0]
+            else:
+                w = font_text.getsize(label)[0]
+            max_w = max(max_w, rect_size + 15 + w)
+            total_h += line_spacing
+            
+        total_h += section_spacing
+        
+    total_h -= section_spacing
+    total_w = max_w + padding * 2
+
+    margin_left = 40
+    margin_bottom = 120
+    img_w, img_h = img.size
+    start_x = margin_left
+    start_y = img_h - margin_bottom - total_h
+    if start_y < 0:
+        start_y = 40
+
+    overlay = Image.new('RGBA', img.size, (255, 255, 255, 0))
+    overlay_draw = ImageDraw.Draw(overlay)
+    
+    rect_coords = [start_x, start_y, start_x + total_w, start_y + total_h]
+    overlay_draw.rectangle(rect_coords, fill=(255, 255, 255, 220), outline=(100, 100, 100, 255), width=2)
+    
+    cur_y = start_y + padding
+    
+    def hex_to_rgb(hex_str):
+        hex_str = hex_str.lstrip('#')
+        if len(hex_str) == 6:
+            return (int(hex_str[0:2], 16), int(hex_str[2:4], 16), int(hex_str[4:6], 16), 255)
+        elif len(hex_str) == 8:
+            return (int(hex_str[0:2], 16), int(hex_str[2:4], 16), int(hex_str[4:6], 16), int(hex_str[6:8], 16))
+        return (0, 0, 0, 255)
+
+    for group in legend_data:
+        title = group.get("title")
+        if title:
+            overlay_draw.text((start_x + padding, cur_y), title, font=font_title, fill=(0, 0, 0, 255))
+            cur_y += title_spacing
+            
+        for item in group.get("items", []):
+            rgb = hex_to_rgb(item["color"])
+            box_coords = [start_x + padding, cur_y, start_x + padding + rect_size, cur_y + rect_size]
+            overlay_draw.rectangle(box_coords, fill=rgb, outline=(0, 0, 0, 255), width=1)
+            overlay_draw.text((start_x + padding + rect_size + 15, cur_y - 2), item["label"], font=font_text, fill=(0, 0, 0, 255))
+            cur_y += line_spacing
+            
+        cur_y += section_spacing
+
+    img = Image.alpha_composite(img, overlay)
+    img = img.convert("RGB")
+    try:
+        img.save(image_path)
+    except Exception as e:
+        logger.error("Erreur de sauvegarde de la légende sur %s : %s", image_path.name, e)
+
+
 if __name__ == "__main__":
     try:
         main()
+    except Exception as e:
+        logger.exception("Erreur fatale: %s", e)
+        sys.exit(1)
     except Exception as e:
         logger.exception("Erreur fatale: %s", e)
         sys.exit(1)

@@ -47,6 +47,7 @@ points_global:
 
 # Carte "Résultats des contrôles" : une couleur par résultat
 points_global_resultats:
+  legend_label: "Résultats des contrôles"
   filter_type: point_ctrl_global
   renderer_type: categorized
   field: >
@@ -70,6 +71,7 @@ points_global_resultats:
 
 # Carte "Types usagers" : une couleur par type d'usager (jaune = agriculteurs)
 points_global_usagers:
+  legend_label: "Types d'usagers"
   filter_type: point_ctrl_global
   renderer_type: categorized
   field: >
@@ -95,6 +97,7 @@ points_global_usagers:
 
 # Carte "Domaines de contrôle" : une couleur par domaine
 points_global_domaines:
+  legend_label: "Domaines de contrôle"
   filter_type: point_ctrl_global
   renderer_type: categorized
   field: 'coalesce("domaine", ''Hors domaine'')'
@@ -108,6 +111,7 @@ points_global_domaines:
 
 # PEJ = Procédures Judiciaires → Bleu
 procedures_pj:
+  legend_label: "Procédures Judiciaires (PEJ)"
   renderer_type: single
   palette: "#3498DB"
   symbol_size_mm: 4.5
@@ -116,6 +120,7 @@ procedures_pj:
 
 # PVe = Procès-Verbaux électroniques → Orange
 procedures_pve:
+  legend_label: "Procès-Verbaux (PVe)"
   renderer_type: single
   palette: "#E67E22"
   symbol_size_mm: 4.5
@@ -124,6 +129,7 @@ procedures_pve:
 
 # PA = Procédures Administratives (proxy: contrôles avec manquement) → Violet
 procedures_pa:
+  legend_label: "Procédures Administratives (PA)"
   filter_type: point_ctrl_manquement
   renderer_type: single
   palette: "#9B59B6"
@@ -132,6 +138,7 @@ procedures_pa:
   visible: true
 
 points_usagers_agriculteurs:
+  legend_label: "Contrôles Agriculteurs"
   filter_type: point_ctrl_global
   renderer_type: categorized
   field: >
@@ -146,6 +153,7 @@ points_usagers_agriculteurs:
   visible: true
 
 points_usagers_cibles:
+  legend_label: "Types d'usagers (ciblés)"
   filter_type: point_ctrl_global
   renderer_type: categorized
   field: >
