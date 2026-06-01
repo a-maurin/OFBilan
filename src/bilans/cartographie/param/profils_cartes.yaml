@@ -123,11 +123,10 @@ profiles:
         layer_name: pochoir_sd21
       point_ctrl_20260205_wgs84:
         layer_role: point_controles
-        symbology_ref: points_global
+        symbology_ref: points_global_resultats
         layer_name: point_ctrl_20260205_wgs84
       localisation_infrac_FAITS_20260205:
         layer_role: pej
-        legend_label: Procédures judiciaires (FAITS)
         filter_type: pj
         layer_name: localisation_infrac_FAITS_20260205
 
@@ -238,14 +237,20 @@ profiles:
         layer_name: pochoir_sd21
       localisation_infrac_FAITS_20260205:
         layer_role: pej
-        legend_label: Procédures judiciaires (FAITS)
+        symbology_ref: procedures_pj
         filter_type: pj
         layer_name: localisation_infrac_FAITS_20260205
-      communes_france:
-        layer_role: communes_pve
-        legend_label: PVe
-        symbology_source: qgis
-        layer_name: communes_france
+      pve_infractions:
+        layer_role: pve
+        symbology_ref: procedures_pve
+        filter_type: pve
+        layer_name: pve_infractions
+      # PA = proxy sur points de contrôle filtrés sur résultat contenant 'manquement'
+      point_ctrl_20260205_wgs84:
+        layer_role: point_controles
+        symbology_ref: procedures_pa
+        filter_type: point_ctrl_manquement
+        layer_name: point_ctrl_20260205_wgs84
 
   toutes:
     id: toutes

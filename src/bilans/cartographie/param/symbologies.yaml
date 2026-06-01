@@ -14,125 +14,161 @@ default_polygon:
   visible: true
 
 points_agrainage:
-  legend_label: Contrôles agrainage
   filter_type: point_ctrl_agrainage
-  geometry_mode: polygon_fill
-  renderer_type: graduated
-  field: ""
-  classification_mode: quantile
-  num_classes: 5
-  palette: Blues
-  symbol_size_mm: 4.0
+  renderer_type: single
+  palette: "#C0392B"
+  symbol_size_mm: 3.8
   symbol_shape: circle
   visible: true
 
 points_chasse:
-  legend_label: Contrôles chasse
   filter_type: point_ctrl_chasse
-  geometry_mode: polygon_fill
-  renderer_type: graduated
-  field: ""
-  classification_mode: quantile
-  num_classes: 5
-  palette: Blues
-  symbol_size_mm: 4.0
+  renderer_type: single
+  palette: "#2C3E50"
+  symbol_size_mm: 3.8
   symbol_shape: circle
   visible: true
 
 points_piegeage:
-  legend_label: Contrôles piégeage
   filter_type: point_ctrl_piegeage
-  geometry_mode: polygon_fill
-  renderer_type: graduated
-  field: ""
-  classification_mode: quantile
-  num_classes: 5
-  palette: Oranges
-  symbol_size_mm: 4.0
+  renderer_type: single
+  palette: "#8E44AD"
+  symbol_size_mm: 3.8
   symbol_shape: circle
   visible: true
 
 points_global:
-  legend_label: Contrôles (localisations, département)
   filter_type: point_ctrl_global
-  geometry_mode: polygon_fill
-  renderer_type: graduated
-  field: ""
-  classification_mode: quantile
-  num_classes: 5
+  renderer_type: single
   palette: "#003A76"
   symbol_size_mm: 3.8
   symbol_shape: circle
   visible: true
 
-points_global_usagers:
-  legend_label: Contrôles (types d’usagers)
+# Carte "Résultats des contrôles" : une couleur par résultat
+points_global_resultats:
   filter_type: point_ctrl_global
   renderer_type: categorized
-  # Expression QGIS pour regrouper les valeurs du champ OSCEAN type_usager en 6 catégories
   field: >
     CASE
-      WHEN "type_usager" ILIKE '%Particulier%' THEN 'Particulier (usager de la nature + gestionnaire d''une propriété)'
-      WHEN "type_usager" ILIKE '%Agriculteur%' THEN 'Agriculteur et autres acteurs agricoles'
-      WHEN "type_usager" ILIKE '%Collectiv%' THEN 'Collectivité'
-      WHEN "type_usager" ILIKE '%Entreprise%' THEN 'Entreprise'
-      WHEN "type_usager" ILIKE '%sylvic%' THEN 'Acteurs sylvicoles'
-      WHEN "type_usager" ILIKE '%Autre%' THEN 'Autre'
+      WHEN lower("resultat") LIKE '%infraction%' AND lower("resultat") NOT LIKE '%manquement%' THEN 'Infraction'
+      WHEN lower("resultat") LIKE '%manquement%' AND lower("resultat") NOT LIKE '%infraction%' THEN 'Manquement'
+      WHEN lower("resultat") LIKE '%manquement%' AND lower("resultat") LIKE '%infraction%' THEN 'Infraction et manquement'
+      WHEN lower("resultat") LIKE '%conforme%' THEN 'Conforme'
       ELSE 'Autre'
     END
-  # Couleurs (hex) par catégorie — réutilisées cycliquement si besoin
-  palette: "#003A76,#53AB60,#F4A261,#E76F51,#90BF83,#4296CE"
+  # Vert=Conforme, Rouge=Infraction, Violet=Manquement, Orange=Infraction+Manquement, Gris=Autre
+  categories:
+    "Conforme": "#2ECC71"
+    "Infraction": "#E74C3C"
+    "Manquement": "#9B59B6"
+    "Infraction et manquement": "#E67E22"
+    "Autre": "#95A5A6"
   symbol_size_mm: 3.8
   symbol_shape: circle
   visible: true
 
+# Carte "Types usagers" : une couleur par type d'usager (jaune = agriculteurs)
+points_global_usagers:
+  filter_type: point_ctrl_global
+  renderer_type: categorized
+  field: >
+    CASE
+      WHEN "type_usager" ILIKE '%Particulier%' THEN 'Particulier'
+      WHEN "type_usager" ILIKE '%Agriculteur%' THEN 'Agriculteur'
+      WHEN "type_usager" ILIKE '%Collectiv%' THEN 'Collectivité'
+      WHEN "type_usager" ILIKE '%Entreprise%' THEN 'Entreprise'
+      WHEN "type_usager" ILIKE '%sylvic%' THEN 'Acteur sylvicole'
+      ELSE 'Autre'
+    END
+  # Jaune=Agriculteur (demande utilisateur), Bleu foncé=Particulier, etc.
+  categories:
+    "Agriculteur": "#F1C40F"
+    "Particulier": "#2980B9"
+    "Collectivité": "#27AE60"
+    "Entreprise": "#E74C3C"
+    "Acteur sylvicole": "#16A085"
+    "Autre": "#95A5A6"
+  symbol_size_mm: 3.8
+  symbol_shape: circle
+  visible: true
+
+# Carte "Domaines de contrôle" : une couleur par domaine
 points_global_domaines:
-  legend_label: Contrôles par domaine
   filter_type: point_ctrl_global
   renderer_type: categorized
   field: 'coalesce("domaine", ''Hors domaine'')'
-  palette: "#003A76,#53AB60,#F4A261,#E76F51,#90BF83,#4296CE,#264653,#2A9D8F"
+  # Palette multi-couleurs distinctives, assignées cycliquement par domaine rencontré
+  palette: "#003A76,#E74C3C,#F1C40F,#27AE60,#8E44AD,#E67E22,#16A085,#2C3E50,#C0392B,#1ABC9C"
   symbol_size_mm: 3.8
+  symbol_shape: circle
+  visible: true
+
+# --- Symbologies Procédures ---
+
+# PEJ = Procédures Judiciaires → Bleu
+procedures_pj:
+  renderer_type: single
+  palette: "#3498DB"
+  symbol_size_mm: 4.5
+  symbol_shape: circle
+  visible: true
+
+# PVe = Procès-Verbaux électroniques → Orange
+procedures_pve:
+  renderer_type: single
+  palette: "#E67E22"
+  symbol_size_mm: 4.5
+  symbol_shape: circle
+  visible: true
+
+# PA = Procédures Administratives (proxy: contrôles avec manquement) → Violet
+procedures_pa:
+  filter_type: point_ctrl_manquement
+  renderer_type: single
+  palette: "#9B59B6"
+  symbol_size_mm: 4.5
   symbol_shape: circle
   visible: true
 
 points_usagers_agriculteurs:
-  legend_label: "Contrôles agriculteurs"
   filter_type: point_ctrl_global
   renderer_type: categorized
-  # Expression QGIS restreinte aux agriculteurs et autres acteurs agricoles
   field: >
     CASE
-      WHEN "type_usager" ILIKE '%Agriculteur%' THEN 'Agriculteur et autres acteurs agricoles'
+      WHEN "type_usager" ILIKE '%Agriculteur%' THEN 'Agriculteur'
       ELSE NULL
     END
-  palette: "#53AB60"
+  categories:
+    "Agriculteur": "#F1C40F"
   symbol_size_mm: 3.8
   symbol_shape: circle
   visible: true
 
 points_usagers_cibles:
-  legend_label: "Contrôles (types d’usagers ciblés)"
   filter_type: point_ctrl_global
   renderer_type: categorized
-  # Expression QGIS identique à points_global_usagers (répartition en 6 catégories)
   field: >
     CASE
-      WHEN "type_usager" ILIKE '%Particulier%' THEN 'Particulier (usager de la nature + gestionnaire d''une propriété)'
-      WHEN "type_usager" ILIKE '%Agriculteur%' THEN 'Agriculteur et autres acteurs agricoles'
+      WHEN "type_usager" ILIKE '%Particulier%' THEN 'Particulier'
+      WHEN "type_usager" ILIKE '%Agriculteur%' THEN 'Agriculteur'
       WHEN "type_usager" ILIKE '%Collectiv%' THEN 'Collectivité'
       WHEN "type_usager" ILIKE '%Entreprise%' THEN 'Entreprise'
-      WHEN "type_usager" ILIKE '%sylvic%' THEN 'Acteurs sylvicoles'
-      WHEN "type_usager" ILIKE '%Autre%' THEN 'Autre'
+      WHEN "type_usager" ILIKE '%sylvic%' THEN 'Acteur sylvicole'
       ELSE 'Autre'
     END
-  palette: "#003A76,#53AB60,#F4A261,#E76F51,#90BF83,#4296CE"
+  categories:
+    "Agriculteur": "#F1C40F"
+    "Particulier": "#2980B9"
+    "Collectivité": "#27AE60"
+    "Entreprise": "#E74C3C"
+    "Acteur sylvicole": "#16A085"
+    "Autre": "#95A5A6"
   symbol_size_mm: 3.8
   symbol_shape: circle
   visible: true
 
 pochoir:
-  legend_label: Périmètre SD21
   filter_type: ""
   geometry_mode: polygon_fill
   renderer_type: graduated
@@ -145,11 +181,10 @@ pochoir:
   visible: true
 
 points_default:
-  legend_label: "Contrôles"
   filter_type: point_ctrl_theme
   geometry_mode: polygon_fill
   renderer_type: single
-  palette: Blues
+  palette: "#003A76"
   symbol_size_mm: 3.5
   symbol_shape: circle
   visible: true

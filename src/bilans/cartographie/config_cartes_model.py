@@ -35,6 +35,7 @@ FilterType = Literal[
     "point_ctrl_chasse",
     "point_ctrl_piegeage",
     "point_ctrl_global",
+    "point_ctrl_manquement",
     "point_ctrl_theme",
     "point_ctrl_keywords",
     "",
@@ -72,6 +73,9 @@ class LayerSymbologyConfig:
     symbol_size_mm: float = 4.0
     # Forme pour points : circle, square, diamond, etc.
     symbol_shape: str = "circle"
+    # Dict {valeur_categorie: couleur_hex} pour renderer_type=categorized — surcharge la palette cyclique
+    # Ex: {"Conforme": "#2ECC71", "Infraction": "#E74C3C"}
+    categories: Optional[Dict[str, str]] = None
     # Visible ou non
     visible: bool = True
 

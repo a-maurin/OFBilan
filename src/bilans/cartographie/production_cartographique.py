@@ -180,6 +180,10 @@ def _load_profiles_from_param() -> Optional[tuple[Dict[str, "ProfileConfig"], st
             filter_type = ""
         sym_src = str(base.get("symbology_source", "")).strip().lower()
         symbology_source: Optional[str] = sym_src if sym_src in ("qgis", "yaml") else None
+        raw_categories = base.get("categories")
+        categories_dict: Optional[Dict[str, str]] = None
+        if isinstance(raw_categories, dict):
+            categories_dict = {str(k): str(v) for k, v in raw_categories.items()}
         return LayerSymbologyConfig(
             layer_name=base["layer_name"],
             layer_role=base.get("layer_role") or None,
@@ -196,6 +200,7 @@ def _load_profiles_from_param() -> Optional[tuple[Dict[str, "ProfileConfig"], st
             color_rgb=tuple(base["color_rgb"]) if isinstance(base.get("color_rgb"), (list, tuple)) else None,
             symbol_size_mm=float(base.get("symbol_size_mm", 4.0)),
             symbol_shape=str(base.get("symbol_shape", "circle")),
+            categories=categories_dict,
             visible=bool(base.get("visible", True)),
         )
 
@@ -294,16 +299,17 @@ def _load_profiles_from_param() -> Optional[tuple[Dict[str, "ProfileConfig"], st
 
 def get_effective_config():
     """Retourne la config globale à utiliser : paramètres YAML si présents, sinon config_cartes.CONFIG.
-    Les profils définis dans config_cartes (édités via la GUI) priment sur ceux du YAML."""
+    Les profils définis dans le YAML (param/profils_cartes.yaml) priment sur config_cartes.py."""
     from config_cartes import CONFIG
     from config_cartes_model import GlobalConfig
 
     loaded = _load_profiles_from_param()
     if loaded is not None:
         param_profiles, yaml_symbology_source = loaded
-        # Les profils édités dans la GUI (config_cartes) priment sur le YAML.
+        # Le YAML est la source de vérité. config_cartes.py ne comble que les profils absents du YAML.
         for pid, prof in CONFIG.profiles.items():
-            param_profiles[pid] = prof
+            if pid not in param_profiles:
+                param_profiles[pid] = prof
         sym_src = yaml_symbology_source
         if getattr(CONFIG, "symbology_source", "qgis") == "yaml":
             sym_src = "yaml"
@@ -630,12 +636,15 @@ def apply_layer_symbology(layer, config: "LayerSymbologyConfig", geometry_mode_o
         layer.setRenderer(renderer)
 
     elif config.renderer_type == "categorized" and config.field:
-        # Palette : si palette contient des hex séparés par virgule, on les utilise ; sinon fallback.
+        # Palette cyclique (fallback) : hex séparés par virgule
         palette_colors: list[str] = []
         if isinstance(config.palette, str) and "#" in config.palette:
             palette_colors = [p.strip() for p in config.palette.split(",") if p.strip()]
         if not palette_colors:
             palette_colors = ["#003A76", "#53AB60", "#F4A261", "#E76F51", "#90BF83", "#4296CE"]
+
+        # Dictionnaire {valeur → couleur} explicite (priorité sur palette cyclique)
+        categories_map: dict[str, str] = getattr(config, "categories", None) or {}
 
         # Récupérer les valeurs distinctes : champ réel ou expression
         values = []
@@ -668,10 +677,24 @@ def apply_layer_symbology(layer, config: "LayerSymbologyConfig", geometry_mode_o
             except Exception:
                 values = []
 
+        # Si un dict categories est défini, utiliser son ordre pour prioriser l'affichage
+        if categories_map:
+            ordered_values = list(categories_map.keys())
+            extra = [str(v) for v in values if str(v) not in categories_map]
+            values = ordered_values + sorted(extra)
+        else:
+            values = [str(v) for v in values]
+
         # Construire les catégories
-        categories = []
-        for i, v in enumerate(values):
-            color = QColor(palette_colors[i % len(palette_colors)])
+        palette_idx = 0
+        qgs_categories = []
+        for v in values:
+            v_str = str(v)
+            if v_str in categories_map:
+                color = QColor(categories_map[v_str])
+            else:
+                color = QColor(palette_colors[palette_idx % len(palette_colors)])
+                palette_idx += 1
             if is_polygon and geom_mode == "polygon_fill":
                 sym = QgsFillSymbol.createSimple({"color": color.name(), "outline_color": "35,35,35"})
             elif is_polygon and geom_mode == "polygon_centroid":
@@ -697,9 +720,9 @@ def apply_layer_symbology(layer, config: "LayerSymbologyConfig", geometry_mode_o
                     "outline_color": "35,35,35",
                 })
                 sym.setOutputUnit(Qgis.RenderUnit.Millimeters)
-            categories.append(QgsRendererCategory(v, sym, str(v)))
+            qgs_categories.append(QgsRendererCategory(v_str, sym, v_str))
 
-        renderer = QgsCategorizedSymbolRenderer(config.field, categories)
+        renderer = QgsCategorizedSymbolRenderer(config.field, qgs_categories)
         layer.setRenderer(renderer)
 
     layer.triggerRepaint()
@@ -720,15 +743,33 @@ def _build_date_condition(fields, field_name: str, date_deb: str, date_fin: str)
 
 def _build_pve_expression(fields, date_deb: str, date_fin: str, config) -> Optional[str]:
     field_names = {f.name() for f in fields}
-    required = {"INF-NATINF", "INF-DEPART", "INF-DATE-I"}
-    if not required.issubset(field_names):
+
+    # Résolution des noms de champs (support préfixe PVe_ ou classique INF-)
+    natinf_col = next(
+        (c for c in ("PVe_INF-NATINF", "INF-NATINF") if c in field_names), None
+    )
+    date_col = next(
+        (c for c in ("PVe_INF-DATE-MIF", "INF-DATE-I") if c in field_names), None
+    )
+    depart_col = next(
+        (c for c in ("INSEE_DEP", "INF-DEPART") if c in field_names), None
+    )
+
+    if not natinf_col or not date_col or not depart_col:
         return None
 
     natinf_values = getattr(config, "natinf_pve", [27742])
     natinf_list = ", ".join(str(x) for x in natinf_values)
     depart = getattr(config, "departement_code", "21")
-    date_cond = _build_date_condition(fields, "INF-DATE-I", date_deb, date_fin)
-    return f'"INF-NATINF" IN ({natinf_list}) AND "INF-DEPART" = {repr(depart)} AND {date_cond}'
+
+    # INSEE_DEP est un entier (21) ou une chaîne ("21") — les deux cas
+    if depart_col == "INSEE_DEP":
+        depart_cond = f'"{depart_col}" IN ({depart!r}, {int(depart)})'
+    else:
+        depart_cond = f'"{depart_col}" = {depart!r}'
+
+    date_cond = _build_date_condition(fields, date_col, date_deb, date_fin)
+    return f'"{natinf_col}" IN ({natinf_list}) AND {depart_cond} AND {date_cond}'
 
 
 def _build_pj_expression(fields, date_deb: str, date_fin: str, config) -> Optional[str]:
@@ -793,6 +834,22 @@ def _build_point_ctrl_global_expression(fields, date_deb: str, date_fin: str, co
     depart = getattr(config, "departement_code", "21")
     date_cond = _build_date_condition(fields, "date_ctrl", date_deb, date_fin)
     return f'"num_depart" = {repr(depart)} AND {date_cond}'
+
+
+def _build_point_ctrl_manquement_expression(fields, date_deb: str, date_fin: str, config) -> Optional[str]:
+    """Filtre points de contrôle pour proxy PA : contrôles dont le résultat contient 'manquement' (insensible à la casse)."""
+    field_names = {f.name() for f in fields}
+    required = {"date_ctrl", "num_depart", "resultat"}
+    if not required.issubset(field_names):
+        return None
+
+    depart = getattr(config, "departement_code", "21")
+    date_cond = _build_date_condition(fields, "date_ctrl", date_deb, date_fin)
+    return (
+        f'"num_depart" = {repr(depart)} AND '
+        f'lower("resultat") LIKE \'%manquement%\' AND '
+        f'{date_cond}'
+    )
 
 
 def _build_point_ctrl_theme_expression(
@@ -941,6 +998,8 @@ def apply_date_filter(
         expr = _build_point_ctrl_piegeage_expression(layer.fields(), date_deb, date_fin, use_config)
     elif filter_type == "point_ctrl_global":
         expr = _build_point_ctrl_global_expression(layer.fields(), date_deb, date_fin, use_config)
+    elif filter_type == "point_ctrl_manquement":
+        expr = _build_point_ctrl_manquement_expression(layer.fields(), date_deb, date_fin, use_config)
     elif filter_type == "point_ctrl_theme" and profile and getattr(profile, "theme_id", None):
         try:
             themes = _load_ref_themes_ctrl_safe(PROJECT_ROOT)
@@ -1618,6 +1677,12 @@ def run_export(
                 apply_date_filter(layer, lcfg, prof.date_deb, prof.date_fin, config=carto_config, profile=prof)
 
         out_path = out_dir / prof.output_filename
+        # Masquer les légendes existantes dans la mise en page (demande utilisateur)
+        if layout is not None:
+            for item in layout.items():
+                if item.type() == 65642:  # QgsLayoutItemLegend
+                    item.setVisibility(False)
+
         export_layout(prof, out_path, dpi=dpi, fmt=fmt, legend_labels_map=legend_labels_map or None)
 
 
