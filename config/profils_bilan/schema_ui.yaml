@@ -75,6 +75,7 @@ sections:
         choices:
           "": "Aucune (département entier)"
           pnf: "Périmètre PNF uniquement"
+          tub: "Périmètre TUB uniquement"
         optional: true
 
   - id: sources

@@ -1032,10 +1032,18 @@ def overlay_pnf_zone_from_communes_pnf_csv(
     out = df.copy()
     if out_col not in out.columns:
         out[out_col] = pd.NA
-    out.loc[has, out_col] = mapped[has]
-    n = int(has.sum())
+        
+    # On applique le fallback INSEE uniquement aux entités sans localisation spatiale précise
+    needs_fallback = out[out_col].isna() | (out[out_col] == "Hors_perimetres_sig")
+    to_update = has & needs_fallback
+    
+    if not bool(to_update.any()):
+        return out
+        
+    out.loc[to_update, out_col] = mapped[to_update]
+    n = int(to_update.sum())
     lg.info(
-        "Réf. communes PNF (127 communes / CSV) : %s ligne(s) — zone INSEE appliquée pour %s ligne(s) (%s).",
+        "Réf. communes PNF (127 communes / CSV) : %s ligne(s) — zone INSEE (fallback) appliquée pour %s ligne(s) (%s).",
         len(df),
         n,
         out_col,

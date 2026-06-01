@@ -537,6 +537,7 @@ class PDFReportBuilder:
         title_secondary_style = ParagraphStyle(
             "TitlePageSecondary",
             parent=s["Title"],
+            fontName=FONT_FAMILY,
             alignment=alignment,
             spaceAfter=paragraph_space_after,
             rightIndent=right_indent_mm * mm,
@@ -701,7 +702,7 @@ class PDFReportBuilder:
             return False
         table_count = sum(1 for f in flowables if isinstance(f, Table))
         image_count = sum(1 for f in flowables if isinstance(f, RLImage))
-        if image_count > 0:
+        if image_count > 2:
             return False
         if table_count > 1:
             return False
@@ -789,7 +790,6 @@ class PDFReportBuilder:
             block.append(Spacer(1, SPACING_S))
         if table_caption:
             block.append(Paragraph(table_caption, self.styles["TableCaption"]))
-            block.append(Spacer(1, SPACING_XXS))
         split_by_row = bool(self._tables_layout.get("split_by_row"))
         block.append(
             ofb_table(
@@ -803,7 +803,7 @@ class PDFReportBuilder:
         block.append(Spacer(1, float(trailing_spacer_mm) * mm))
         self._append_with_pending(
             block,
-            keep_together=self._should_keep_block_together(block),
+            keep_together=not split_by_row,
         )
 
     # ------------------------------------------------------------------
@@ -990,7 +990,6 @@ class PDFReportBuilder:
         block: List = []
         if caption:
             block.append(Paragraph(caption, self.styles["TableCaption"]))
-            block.append(Spacer(1, SPACING_XXS))
         block.append(
             ofb_table(
                 data_rows,
@@ -1024,7 +1023,6 @@ class PDFReportBuilder:
         block: List = [kf_table, spacer]
         if caption:
             block.append(Paragraph(caption, self.styles["TableCaption"]))
-            block.append(Spacer(1, SPACING_S))
         tbl = ofb_table(table_rows, col_widths=col_widths, col_aligns=col_aligns)
         block.append(tbl)
         block.append(Spacer(1, SPACING_L))
@@ -1057,7 +1055,6 @@ class PDFReportBuilder:
         for i, t in enumerate(tables):
             if t.get("caption"):
                 block.append(Paragraph(t["caption"], self.styles["TableCaption"]))
-                block.append(Spacer(1, gap_cap))
             col_w = t.get("col_widths")
             col_a = t.get("col_aligns")
             tbl = ofb_table(
@@ -1130,7 +1127,6 @@ class PDFReportBuilder:
             intro_caption = intro_table.get("caption") or ""
             if intro_caption:
                 header.append(Paragraph(intro_caption, self.styles["TableCaption"]))
-                header.append(Spacer(1, gap_cap_mm * mm))
             header.append(
                 ofb_table(
                     intro_rows,
@@ -1213,7 +1209,6 @@ class PDFReportBuilder:
         block: List = []
         if caption:
             block.append(Paragraph(caption, self.styles["TableCaption"]))
-            block.append(Spacer(1, float(gap_cap_mm) * mm))
         block.append(
             ofb_table(
                 data_rows,
@@ -1252,7 +1247,6 @@ class PDFReportBuilder:
         block: List = []
         if caption:
             block.append(Paragraph(caption, self.styles["TableCaption"]))
-            block.append(Spacer(1, SPACING_XXS))
         split_by_row = bool(self._tables_layout.get("split_by_row"))
         if max_rows_keep_together is not None:
             max_rows_keep = int(max_rows_keep_together)
@@ -1364,7 +1358,6 @@ class PDFReportBuilder:
         block: List = []
         if table_caption:
             block.append(Paragraph(table_caption, self.styles["TableCaption"]))
-            block.append(Spacer(1, SPACING_XXS))
         split_by_row = bool(self._tables_layout.get("split_by_row"))
         block.append(
             ofb_table(
@@ -1387,7 +1380,7 @@ class PDFReportBuilder:
             img.hAlign = "CENTER"
             block.append(img)
         block.append(Spacer(1, 1 * mm))
-        keep_block = self._should_keep_block_together(block) and not split_by_row
+        keep_block = not split_by_row
         self._append_with_pending(block, keep_together=keep_block)
 
     def add_tables_keep_together(

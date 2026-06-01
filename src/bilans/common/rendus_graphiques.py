@@ -43,9 +43,9 @@ CHART_FIG_HEIGHT_PIE_COMPACT = 5.0
 # Références typographiques : "Résultats des contrôles par type d'usager".
 CHART_TITLE_FONT_SIZE_REF = 11
 CHART_LEGEND_FONT_SIZE_REF = 8
-# Ajustement demandé : réduire de moitié le disque des camemberts
+# Ajustement demandé : réduire la taille du disque des camemberts
 # sans modifier la taille des légendes.
-CHART_PIE_DISK_SCALE = 0.5
+CHART_PIE_DISK_SCALE = 0.38
 # Hauteur des barres / barres groupées-empilées : +50 % vs ancienne base pour lisibilité PDF.
 CHART_FIG_HEIGHT_BAR = 3.5 * 1.5
 CHART_FIG_HEIGHT_WITH_LEGEND = 4.15 * 1.5
@@ -443,7 +443,9 @@ def chart_bar_stacked(
     group_labels = _sanitize_chart_period_tick_labels(list(group_labels))
     n_groups = max(1, len(group_labels))
     fig_w = max(CHART_FIG_WIDTH, min(10.0, n_groups * 0.75)) * figure_scale
-    fig, ax = plt.subplots(figsize=(fig_w, CHART_FIG_HEIGHT_WITH_LEGEND * figure_scale))
+    # Ajustement demandé : réduire la hauteur des graphiques empilés
+    fig_h = (CHART_FIG_HEIGHT_WITH_LEGEND * 0.75) * figure_scale
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h))
     x = np.arange(len(group_labels))
     bottom = np.zeros(len(group_labels))
     keywords_inf = _KEYWORDS_INFRACTION
@@ -482,7 +484,7 @@ def chart_bar_stacked(
     )
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
-    _tight_with_legend_space(fig, bottom=0.22, top=0.90)
+    _tight_with_legend_space(fig, bottom=0.28, top=0.91)
     return save_chart(fig, tmp_dir, name)
 
 

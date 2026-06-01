@@ -504,15 +504,15 @@ def agg_controles_par_type_usager_domaine(
         dom = str(row.get(col_domaine, "Hors domaine") or "Hors domaine")
         toks = _parse_type_usager_tokens(row.get(source_champ))
         if not toks:
-            cats = ["Autre"]
+            cats_counts = {"Autre": 1}
         else:
-            cats = {
-                map_type_usager(source_table, source_champ, lab)
-                for lab, _ in toks
-            }
-        for cat in cats:
+            cats_counts = {}
+            for lab, n in toks:
+                cat = map_type_usager(source_table, source_champ, lab)
+                cats_counts[cat] = cats_counts.get(cat, 0) + n
+        for cat, n in cats_counts.items():
             key = (cat, dom)
-            counts[key] = counts.get(key, 0) + 1
+            counts[key] = counts.get(key, 0) + n
 
     rows: list[dict[str, object]] = []
     for (cat, dom), n in counts.items():
@@ -545,15 +545,15 @@ def agg_controles_par_type_usager_theme(
         theme = str(row.get(col_theme, "Hors thème") or "Hors thème")
         toks = _parse_type_usager_tokens(row.get(source_champ))
         if not toks:
-            cats = ["Autre"]
+            cats_counts = {"Autre": 1}
         else:
-            cats = {
-                map_type_usager(source_table, source_champ, lab)
-                for lab, _ in toks
-            }
-        for cat in cats:
+            cats_counts = {}
+            for lab, n in toks:
+                cat = map_type_usager(source_table, source_champ, lab)
+                cats_counts[cat] = cats_counts.get(cat, 0) + n
+        for cat, n in cats_counts.items():
             key = (cat, theme)
-            counts[key] = counts.get(key, 0) + 1
+            counts[key] = counts.get(key, 0) + n
 
     rows: list[dict[str, object]] = []
     for (cat, theme), n in counts.items():
@@ -595,14 +595,14 @@ def _agg_resultats_par_type_usager_dimension(
 
         toks = _parse_type_usager_tokens(row.get(source_champ))
         if not toks:
-            cats = ["Autre"]
+            cats_counts = {"Autre": 1}
         else:
-            cats = {
-                map_type_usager(source_table, source_champ, lab)
-                for lab, _ in toks
-            }
+            cats_counts = {}
+            for lab, n in toks:
+                cat = map_type_usager(source_table, source_champ, lab)
+                cats_counts[cat] = cats_counts.get(cat, 0) + n
 
-        for cat in cats:
+        for cat, n in cats_counts.items():
             key = (cat, dim_val)
             d = counts.setdefault(
                 key,
@@ -614,15 +614,15 @@ def _agg_resultats_par_type_usager_dimension(
                     "nb_controles": 0,
                 },
             )
-            d["nb_controles"] += 1
+            d["nb_controles"] += n
             if res_cls == "Conforme":
-                d["nb_conforme"] += 1
+                d["nb_conforme"] += n
             elif res_cls == "Manquement":
-                d["nb_manquement"] += 1
+                d["nb_manquement"] += n
             elif res_cls == "Infraction":
-                d["nb_infraction"] += 1
+                d["nb_infraction"] += n
             else:
-                d["nb_en_attente"] += 1
+                d["nb_en_attente"] += n
 
     rows: list[dict[str, object]] = []
     for (cat, dim_val), d in counts.items():
@@ -683,67 +683,15 @@ def agg_resultat_counts_par_type_usager(
     source_champ: str = "type_usager",
 ) -> pd.DataFrame:
     """
-    Compte les contrôles par type d'usager et par résultat explicite
-    (Conforme / Infraction / Manquement ; le reste → colonne ``Autre_resultat``,
-    distinct du libellé de type d'usager « Autre » lorsque le champ est vide).
-
-    Une fiche peut contribuer à plusieurs types d'usager si le champ source est
-    multi-catégories. Si ``fc_id`` est disponible sur ``point_ctrl``, chaque
-    fiche est comptée une seule fois.
+    Délègue à agg_resultat_effectifs_par_type_usager pour utiliser les effectifs.
+    (Nom conservé pour compatibilité).
     """
-    if source_champ not in df.columns or col_resultat not in df.columns:
-        return pd.DataFrame(
-            columns=[
-                "type_usager",
-                "Conforme",
-                "Infraction",
-                "Manquement",
-                "Autre_resultat",
-                "Total",
-            ]
-        )
-
-    buckets = ("Conforme", "Infraction", "Manquement", "Autre_resultat")
-    counts: dict[str, dict[str, int]] = {}
-
-    work_df = _consolide_lignes_effectifs_par_fc_id(
+    return agg_resultat_effectifs_par_type_usager(
         df,
-        [source_champ, col_resultat],
+        col_resultat=col_resultat,
         source_table=source_table,
+        source_champ=source_champ,
     )
-
-    for _, row in work_df.iterrows():
-        res = str(row.get(col_resultat, "") or "").strip()
-        if res == "Infraction":
-            b = "Infraction"
-        elif res == "Manquement":
-            b = "Manquement"
-        elif res == "Conforme":
-            b = "Conforme"
-        else:
-            b = "Autre_resultat"
-
-        toks = _parse_type_usager_tokens(row.get(source_champ))
-        if not toks:
-            cats = ["Autre"]
-        else:
-            cats = list(
-                {map_type_usager(source_table, source_champ, lab) for lab, _ in toks}
-            )
-
-        for cat in cats:
-            d = counts.setdefault(cat, {k: 0 for k in buckets})
-            d[b] += 1
-
-    rows: list[dict[str, object]] = []
-    for cat in sorted(counts.keys(), key=lambda x: (-sum(counts[x].values()), x)):
-        d = counts[cat]
-        tot = sum(d.values())
-        row = {"type_usager": cat, "Total": tot}
-        for k in buckets:
-            row[k] = int(d[k])
-        rows.append(row)
-    return pd.DataFrame(rows)
 
 
 def count_multi_usager_controles(
@@ -951,14 +899,14 @@ def agg_procedures_par_type_usager_domaine(
 
         toks = _parse_type_usager_tokens(row.get(source_champ))
         if not toks:
-            cats = ["Autre"]
+            cats_counts = {"Autre": 1}
         else:
-            cats = {
-                map_type_usager(source_table, source_champ, lab)
-                for lab, _ in toks
-            }
+            cats_counts = {}
+            for lab, n in toks:
+                cat = map_type_usager(source_table, source_champ, lab)
+                cats_counts[cat] = cats_counts.get(cat, 0) + n
 
-        for cat in cats:
+        for cat, n in cats_counts.items():
             key = (cat, dom)
             d = counts.setdefault(
                 key,
@@ -969,11 +917,11 @@ def agg_procedures_par_type_usager_domaine(
                 },
             )
             if has_pej:
-                d["nb_pej"] += 1
+                d["nb_pej"] += n
             if has_pa:
-                d["nb_pa"] += 1
+                d["nb_pa"] += n
             if has_pve:
-                d["nb_pve"] += 1
+                d["nb_pve"] += n
 
     rows: list[dict[str, object]] = []
     for (cat, dom), d in counts.items():
@@ -1018,14 +966,14 @@ def agg_procedures_par_type_usager_theme(
 
         toks = _parse_type_usager_tokens(row.get(source_champ))
         if not toks:
-            cats = ["Autre"]
+            cats_counts = {"Autre": 1}
         else:
-            cats = {
-                map_type_usager(source_table, source_champ, lab)
-                for lab, _ in toks
-            }
+            cats_counts = {}
+            for lab, n in toks:
+                cat = map_type_usager(source_table, source_champ, lab)
+                cats_counts[cat] = cats_counts.get(cat, 0) + n
 
-        for cat in cats:
+        for cat, n in cats_counts.items():
             key = (cat, theme)
             d = counts.setdefault(
                 key,
@@ -1036,11 +984,11 @@ def agg_procedures_par_type_usager_theme(
                 },
             )
             if has_pej:
-                d["nb_pej"] += 1
+                d["nb_pej"] += n
             if has_pa:
-                d["nb_pa"] += 1
+                d["nb_pa"] += n
             if has_pve:
-                d["nb_pve"] += 1
+                d["nb_pve"] += n
 
     rows: list[dict[str, object]] = []
     for (cat, theme), d in counts.items():

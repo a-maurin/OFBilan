@@ -750,14 +750,14 @@ def resolve_sec2_render_order(
     ``include_zone_subsections`` : True pour le profil agrainage (sec22theme / sec22res).
     """
     allowed = (
-        {"sec21", "sec22", "sec22theme", "sec22res"}
+        {"sec21", "sec22", "sec23", "sec22theme", "sec22res"}
         if include_zone_subsections
-        else {"sec21", "sec22"}
+        else {"sec21", "sec22", "sec23"}
     )
     order = [sid for sid, _ in sections_toc if sid in allowed]
     if order:
         return order
-    fallback = ["sec21", "sec22"]
+    fallback = ["sec21", "sec22", "sec23"]
     if include_zone_subsections:
         fallback.extend(["sec22theme", "sec22res"])
     return [sid for sid in fallback if sid in allowed]

@@ -1261,6 +1261,73 @@ def _apply_restrict_geo_pnf(
     return point_filtered, pej_filtered, pa_filtered, pve_filtered
 
 
+def _apply_restrict_geo_tub(
+    point_filtered: pd.DataFrame,
+    pej_filtered: pd.DataFrame,
+    pa_filtered: pd.DataFrame,
+    pve_filtered: pd.DataFrame,
+    root: Path,
+    log: logging.Logger,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Restreint les jeux de données au périmètre TUB via code INSEE."""
+    tub_codes, _ = load_tub_pnf_codes(root)
+
+    if not point_filtered.empty:
+        point_filtered = ensure_insee_from_communes_shp(
+            point_filtered, root, context="restriction TUB — contrôles", log=log
+        )
+        s = coalesced_insee_series(point_filtered)
+        mask = s.notna() & s.astype(str).isin(tub_codes)
+        point_filtered = point_filtered.loc[mask].copy()
+
+    dc_ids: set[str] = set()
+    if not point_filtered.empty and "dc_id" in point_filtered.columns:
+        dc_ids = set(point_filtered["dc_id"].dropna().astype(str).str.replace(r"\.0$", "", regex=True).unique())
+
+    if not pej_filtered.empty:
+        mask_pej = pd.Series(False, index=pej_filtered.index)
+        if "DC_ID" in pej_filtered.columns and dc_ids:
+            mask_pej = mask_pej | pej_filtered["DC_ID"].astype(str).str.replace(r"\.0$", "", regex=True).str.strip().isin(dc_ids)
+        
+        if "x_faits" in pej_filtered.columns and "y_faits" in pej_filtered.columns:
+            xy_ok = pej_filtered["x_faits"].notna() & pej_filtered["y_faits"].notna()
+            if bool(xy_ok.any()):
+                sub = pej_filtered.loc[xy_ok].copy()
+                sub["x"] = pd.to_numeric(sub["x_faits"], errors="coerce")
+                sub["y"] = pd.to_numeric(sub["y_faits"], errors="coerce")
+                sub_insee = ensure_insee_from_communes_shp(
+                    sub,
+                    root,
+                    context="restriction TUB — PEJ (coordonnées FAITS)",
+                    log=log,
+                )
+                m_insee = _mask_insee_in_pnf_codes(sub_insee, tub_codes)
+                mask_pej = mask_pej | m_insee.reindex(pej_filtered.index, fill_value=False)
+        
+        if not mask_pej.any():
+            log.warning(
+                "Restriction TUB : aucune PEJ ne correspond à un contrôle du périmètre "
+                "ni à une localisation FAITS dans la zone TUB."
+            )
+        pej_filtered = pej_filtered.loc[mask_pej].copy()
+
+    if not pa_filtered.empty and "DC_ID" in pa_filtered.columns:
+        if dc_ids:
+            pa_filtered = pa_filtered[pa_filtered["DC_ID"].astype(str).str.replace(r"\.0$", "", regex=True).str.strip().isin(dc_ids)].copy()
+        else:
+            pa_filtered = pa_filtered.iloc[0:0].copy()
+
+    if not pve_filtered.empty:
+        pve_filtered = ensure_insee_from_communes_shp(
+            pve_filtered, root, context="restriction TUB — PVe", log=log
+        )
+        s_pve = coalesced_insee_series(pve_filtered)
+        mask_pve = s_pve.notna() & s_pve.astype(str).isin(tub_codes)
+        pve_filtered = pve_filtered.loc[mask_pve].copy()
+
+    return point_filtered, pej_filtered, pa_filtered, pve_filtered
+
+
 def _run_spatial_analyses(
     point_filtered: pd.DataFrame,
     pej_filtered: pd.DataFrame,
@@ -1434,6 +1501,10 @@ def _run_aggregations(
     results["nb_pej"] = nb_pej
     results["nb_pa"] = nb_pa
     results["nb_pve"] = nb_pve
+    
+    # Store raw dataframes for custom PDF sections
+    results["_raw_point_filtered"] = point_filtered
+    results["_raw_pej_filtered"] = pej_filtered
 
     # Résultats des contrôles
     if not point_filtered.empty and "resultat" in point_filtered.columns:
@@ -1909,8 +1980,17 @@ def _run_aggregations(
         if zone_lecteur_4_zones:
             _apply_zone_lecteur_column(d, out, proc_type, com_col)
         elif distinction_coeur_hors_coeur:
-            if proc_type == "PVe" and com_col == "INF-INSEE" and pnf_zone_by_insee:
+            if "pnf_zone_sig" in d.columns:
+                out["coeur_hors_coeur"] = d["pnf_zone_sig"].apply(_coeur_hors_coeur_from_zone)
+            elif "DC_ID" in d.columns and pnf_by_dc:
                 out["coeur_hors_coeur"] = (
+                    d["DC_ID"].astype(str).str.strip().map(pnf_by_dc).apply(_coeur_hors_coeur_from_zone)
+                )
+            else:
+                out["coeur_hors_coeur"] = "n.d."
+
+            if proc_type == "PVe" and com_col == "INF-INSEE" and pnf_zone_by_insee:
+                from_insee = (
                     d[com_col]
                     .astype(str)
                     .str.strip()
@@ -1920,21 +2000,10 @@ def _run_aggregations(
                     .map(pnf_zone_by_insee)
                     .apply(_coeur_hors_coeur_from_zone)
                 )
-                # Si un code INSEE n'est pas présent dans le référentiel, on retombe
-                # sur la zone SIG lorsqu'elle existe.
-                if "pnf_zone_sig" in d.columns:
-                    fallback = d["pnf_zone_sig"].apply(_coeur_hors_coeur_from_zone)
-                    out["coeur_hors_coeur"] = out["coeur_hors_coeur"].where(
-                        out["coeur_hors_coeur"].ne("n.d."), fallback
-                    )
-            elif "pnf_zone_sig" in d.columns:
-                out["coeur_hors_coeur"] = d["pnf_zone_sig"].apply(_coeur_hors_coeur_from_zone)
-            elif "DC_ID" in d.columns and pnf_by_dc:
-                out["coeur_hors_coeur"] = (
-                    d["DC_ID"].astype(str).str.strip().map(pnf_by_dc).apply(_coeur_hors_coeur_from_zone)
+                out["coeur_hors_coeur"] = out["coeur_hors_coeur"].where(
+                    ~out["coeur_hors_coeur"].isin(["n.d.", "Hors PNF"]),
+                    from_insee
                 )
-            else:
-                out["coeur_hors_coeur"] = "n.d."
             # PEJ / PA : la commune affichée peut venir de NOM_COM_FAITS ou des points (DC_ID) alors que
             # NOM_COM reste vide — aligner la zone sur `out["commune"]`, pas sur la seule
             # colonne candidate d'origine.
@@ -1948,8 +2017,9 @@ def _run_aggregations(
                         .replace({"": pd.NA, "nan": pd.NA, "none": pd.NA, "<na>": pd.NA})
                     )
                     from_nom = zc.map(pnf_zone_by_commune_nom).apply(_coeur_hors_coeur_from_zone)
-                    out["coeur_hors_coeur"] = from_nom.where(
-                        from_nom.ne("n.d."), out["coeur_hors_coeur"]
+                    out["coeur_hors_coeur"] = out["coeur_hors_coeur"].where(
+                        ~out["coeur_hors_coeur"].isin(["n.d.", "Hors PNF"]),
+                        from_nom
                     )
                 if pnf_zone_by_insee:
                     insee_s = pd.Series(pd.NA, index=d.index, dtype="string")
@@ -1961,8 +2031,9 @@ def _run_aggregations(
                         from_insee = (
                             insee_s.map(pnf_zone_by_insee).apply(_coeur_hors_coeur_from_zone)
                         )
-                        out["coeur_hors_coeur"] = from_insee.where(
-                            from_insee.ne("n.d."), out["coeur_hors_coeur"]
+                        out["coeur_hors_coeur"] = out["coeur_hors_coeur"].where(
+                            ~out["coeur_hors_coeur"].isin(["n.d.", "Hors PNF"]),
+                            from_insee
                         )
             if proc_type in ("PEJ", "PA"):
                 pnf_codes_s = results.get("pnf_codes")
@@ -2089,15 +2160,16 @@ def _run_aggregations(
                 year_row["nb_controles"] = 0
                 year_row["nb_controles_non_conformes"] = 0
 
-            if not point_filtered.empty and "date_ctrl" in point_filtered.columns:
-                p_mask = point_filtered["date_ctrl"].dt.year == year
-                nb_pej, nb_pa = count_procedures_liees_controle_sur_points(
-                    point_filtered, mask=p_mask
-                )
-                year_row["nb_pej"] = nb_pej
-                year_row["nb_pa"] = nb_pa
+            if not pej_filtered.empty and "DATE_REF" in pej_filtered.columns:
+                dt = pej_filtered["DATE_REF"]
+                year_row["nb_pej"] = int((dt.dt.year == year).sum())
             else:
                 year_row["nb_pej"] = 0
+
+            if not pa_lignes.empty and "DATE_REF" in pa_lignes.columns:
+                dt = pa_lignes["DATE_REF"]
+                year_row["nb_pa"] = int((dt.dt.year == year).sum())
+            else:
                 year_row["nb_pa"] = 0
 
             if not pve_filtered.empty and "INF-DATE-INTG" in pve_filtered.columns:
@@ -2176,16 +2248,18 @@ def _run_aggregations(
                 row_t["nb_controles"] = 0
                 row_t["nb_controles_non_conformes"] = 0
 
-            if not point_filtered.empty and "date_ctrl" in point_filtered.columns:
-                dt = point_filtered["date_ctrl"]
+            if not pej_filtered.empty and "DATE_REF" in pej_filtered.columns:
+                dt = pej_filtered["DATE_REF"]
                 mask = (dt.dt.year == year) & (dt.dt.month >= m1) & (dt.dt.month <= m2)
-                nb_pej, nb_pa = count_procedures_liees_controle_sur_points(
-                    point_filtered, mask=mask
-                )
-                row_t["nb_pej"] = nb_pej
-                row_t["nb_pa"] = nb_pa
+                row_t["nb_pej"] = int(mask.sum())
             else:
                 row_t["nb_pej"] = 0
+
+            if not pa_lignes.empty and "DATE_REF" in pa_lignes.columns:
+                dt = pa_lignes["DATE_REF"]
+                mask = (dt.dt.year == year) & (dt.dt.month >= m1) & (dt.dt.month <= m2)
+                row_t["nb_pa"] = int(mask.sum())
+            else:
                 row_t["nb_pa"] = 0
 
             if not pve_filtered.empty and "INF-DATE-INTG" in pve_filtered.columns:
@@ -2246,17 +2320,20 @@ def _run_aggregations(
                 row_w["nb_controles"] = 0
                 row_w["nb_controles_non_conformes"] = 0
 
-            if not point_filtered.empty and "date_ctrl" in point_filtered.columns:
-                dt = point_filtered["date_ctrl"]
+            if not pej_filtered.empty and "DATE_REF" in pej_filtered.columns:
+                dt = pej_filtered["DATE_REF"]
                 iso = dt.dt.isocalendar()
                 mask = (iso["year"] == year) & (iso["week"] == week)
-                nb_pej, nb_pa = count_procedures_liees_controle_sur_points(
-                    point_filtered, mask=mask
-                )
-                row_w["nb_pej"] = nb_pej
-                row_w["nb_pa"] = nb_pa
+                row_w["nb_pej"] = int(mask.sum())
             else:
                 row_w["nb_pej"] = 0
+
+            if not pa_lignes.empty and "DATE_REF" in pa_lignes.columns:
+                dt = pa_lignes["DATE_REF"]
+                iso = dt.dt.isocalendar()
+                mask = (iso["year"] == year) & (iso["week"] == week)
+                row_w["nb_pa"] = int(mask.sum())
+            else:
                 row_w["nb_pa"] = 0
             if not pve_filtered.empty and "INF-DATE-INTG" in pve_filtered.columns:
                 dt = pve_filtered["INF-DATE-INTG"]
@@ -2320,16 +2397,18 @@ def _run_aggregations(
                 row_m["nb_controles"] = 0
                 row_m["nb_controles_non_conformes"] = 0
 
-            if not point_filtered.empty and "date_ctrl" in point_filtered.columns:
-                dt = point_filtered["date_ctrl"]
+            if not pej_filtered.empty and "DATE_REF" in pej_filtered.columns:
+                dt = pej_filtered["DATE_REF"]
                 mask = (dt.dt.year == year) & (dt.dt.month == month)
-                nb_pej, nb_pa = count_procedures_liees_controle_sur_points(
-                    point_filtered, mask=mask
-                )
-                row_m["nb_pej"] = nb_pej
-                row_m["nb_pa"] = nb_pa
+                row_m["nb_pej"] = int(mask.sum())
             else:
                 row_m["nb_pej"] = 0
+
+            if not pa_lignes.empty and "DATE_REF" in pa_lignes.columns:
+                dt = pa_lignes["DATE_REF"]
+                mask = (dt.dt.year == year) & (dt.dt.month == month)
+                row_m["nb_pa"] = int(mask.sum())
+            else:
                 row_m["nb_pa"] = 0
             if not pve_filtered.empty and "INF-DATE-INTG" in pve_filtered.columns:
                 dt = pve_filtered["INF-DATE-INTG"]
@@ -2964,9 +3043,10 @@ def _generate_pdf(
     )
     section_defs = [
         ("sec1", "1. Chiffres clés"),
-        ("sec2", "2. Activité de contrôle"),
+        ("sec2", "2. Contrôles et procédures"),
         ("sec21", _sec21_titre_defaut),
-        ("sec22", "2.2. Résultats des contrôles"),
+        ("sec22", "2.2. Répartition de l'activité par domaines (contrôles + PEJ)"),
+        ("sec23", "2.3. Résultats des contrôles au titre de la police administrative"),
         ("sec4", "3. Activité par type d’usager"),
         ("sec3", "4. Procédures (PEJ, PA, PVe)"),
         ("sec31", "4.1 Procès-verbaux électroniques (PVe)"),
@@ -2978,11 +3058,12 @@ def _generate_pdf(
     if profil_id == "agrainage":
         section_defs = [
             ("sec1", "1. Chiffres clés"),
-            ("sec2", "2. Activité de contrôle"),
+            ("sec2", "2. Contrôles et procédures"),
             ("sec21", _sec21_titre_defaut),
-            ("sec22", "2.2. Résultats des contrôles"),
-            ("sec22theme", "2.3. Analyse par zone"),
-            ("sec22res", "2.4. Synthèse croisée par zone"),
+            ("sec22", "2.2. Répartition de l'activité par domaines (contrôles + PEJ)"),
+            ("sec23", "2.3. Résultats des contrôles"),
+            ("sec22theme", "2.4. Analyse par zone"),
+            ("sec22res", "2.5. Synthèse croisée par zone"),
             ("sec4", "3. Activité par type d’usager"),
             ("sec3", "4. Procédures (PEJ, PA, PVe)"),
             ("sec31", "4.1 Procès-verbaux électroniques (PVe)"),
@@ -3089,9 +3170,9 @@ def _generate_pdf(
     builder.add_section("sec2", section_title["sec2"])
     if is_block_enabled(presentation_cfg, "sec2.show_intro_text", True):
         builder.add_paragraph(
-            "Les données de cette partie concernent uniquement l'activité de contrôle "
-            "au titre de la police administrative. Pour les données exhaustives relatives "
-            "à l'activité de police judiciaire, se référer à la partie 4. Procédures."
+            "Cette section présente l'évolution temporelle de l'activité de contrôle et des procédures "
+            "(judiciaires et administratives) sur la période du bilan, ainsi que les résultats "
+            "détaillés des contrôles réalisés au titre de la police administrative."
         )
 
     # ── ANALYSE DE L'ENSEMBLE DE LA PÉRIODE DU BILAN / RÉSULTATS ──
@@ -3160,9 +3241,7 @@ def _generate_pdf(
                     tbl,
                     caption=(
                         f"Indicateurs {cap_vent} "
-                        f"({PDF_LABEL_CTRL_LOCATIONS_SHORT} ; "
-                        f"PEJ et PA : procédures ouvertes suite à un contrôle ; "
-                        f"PVe : nombre de procédures)"
+                        f"({PDF_LABEL_CTRL_LOCATIONS_SHORT}, PVe, PEJ, et PA)"
                     ),
                     col_widths=[
                         avail_w * 0.12,
@@ -3313,8 +3392,8 @@ def _generate_pdf(
                 keep_together=True,
             )
 
-    def _render_type_usager_sec22_content() -> None:
-        """Section 2.2 : contrôles et résultats pour le(s) type(s) d'usager ciblé(s)."""
+    def _render_type_usager_sec23_content() -> None:
+        """Section 2.3 : contrôles et résultats pour le(s) type(s) d'usager ciblé(s)."""
         if not is_single_usager:
             ue = results.get("usager_effectifs")
             if ue is not None and not ue.empty:
@@ -3482,22 +3561,87 @@ def _generate_pdf(
                 )
 
     def _render_sec22() -> None:
+        if not is_section_enabled(presentation_cfg, "sec22", True):
+            return
         builder.add_section("sec22", section_title["sec22"], toc_level=1)
+        
+        point_filtered = results.get("_raw_point_filtered", pd.DataFrame())
+        pej_filtered = results.get("_raw_pej_filtered", pd.DataFrame())
+        
+        # Build domaine data from available point_filtered and pej_filtered
+        df_dom = pd.DataFrame()
+        if not point_filtered.empty and "domaine" in point_filtered.columns:
+            df_dom = point_filtered["domaine"].fillna("Non renseigné").astype(str).value_counts().rename_axis("domaine").to_frame("nb").reset_index()
+        
+        pej_dom = pd.DataFrame()
+        if not pej_filtered.empty and "DOMAINE" in pej_filtered.columns:
+            pej_dom = pej_filtered["DOMAINE"].fillna("Non renseigné").astype(str).value_counts().rename_axis("domaine").to_frame("nb_pej").reset_index()
+            
+        if not df_dom.empty and not pej_dom.empty:
+            df_dom = pd.merge(df_dom, pej_dom, on="domaine", how="outer").fillna(0)
+        elif df_dom.empty and not pej_dom.empty:
+            df_dom = pej_dom.copy()
+            df_dom["nb"] = 0
+        elif not df_dom.empty and pej_dom.empty:
+            df_dom["nb_pej"] = 0
+            
+        if not df_dom.empty:
+            df_dom["nb"] = df_dom.get("nb", 0).fillna(0)
+            df_dom["nb_pej"] = df_dom.get("nb_pej", 0).fillna(0)
+            df_dom["total_act"] = df_dom["nb"] + df_dom["nb_pej"]
+            df_dom = df_dom.sort_values(by="total_act", ascending=False)
+            
+            tbl = [["Domaine", "Contrôles", "PEJ"]]
+            for _, row in df_dom.head(25).iterrows():
+                tbl.append([str(row["domaine"]), str(int(row["nb"])), str(int(row["nb_pej"]))])
+            builder.add_table(
+                tbl,
+                caption="Répartition de l'activité par domaines (contrôles + PEJ)",
+                col_widths=[avail_w * 0.55, avail_w * 0.22, avail_w * 0.23],
+                col_aligns=["LEFT", "RIGHT", "RIGHT"],
+            )
+            if is_block_enabled(presentation_cfg, "sec22.show_overflow_note", True) and len(df_dom) > 25:
+                builder.add_paragraph(
+                    f"... et {len(df_dom) - 25} autres domaines.",
+                    style="BodySmall",
+                )
+            if not df_dom.empty:
+                pie_data = {str(row["domaine"])[:34]: int(row["total_act"]) for _, row in df_dom.iterrows() if int(row["total_act"]) > 0}
+                if is_block_enabled(presentation_cfg, "sec22.show_pie", True) and pie_data:
+                    pie_path = chart_pie(
+                        pie_data,
+                        "Répartition de l'activité par domaines (contrôles + PEJ)",
+                        tmp_dir,
+                        "pie_domaine.png",
+                        **_chart_pie_compact_legend_kw(
+                            len(pie_data),
+                            legend_fontsize=ref_pie_legend_fs,
+                            legend_ncol_max=legend_ncol_max,
+                        ),
+                        figure_scale=ref_pie_fs,
+                    )
+                    builder.add_image(Path(pie_path), width_ratio=ref_pie_w)
+        elif show_placeholder:
+            builder.add_paragraph("Aucune donnée domaine disponible.")
+        builder.add_spacer(4)
+
+    def _render_sec23() -> None:
+        builder.add_section("sec23", section_title["sec23"], toc_level=1)
         if is_type_usager and nb_ctrl > 0:
-            _render_type_usager_sec22_content()
+            _render_type_usager_sec23_content()
             return
         if not (nb_ctrl > 0 and not is_type_usager and not is_procedures):
             if show_placeholder:
                 builder.add_paragraph("Aucune donnée de résultat disponible sur la période.")
             return
         # Pour le profil agrainage, expliciter la source et le filtrage des contrôles.
-        if profil_id == "agrainage" and is_block_enabled(presentation_cfg, "sec22.show_intro_text", True):
+        if profil_id == "agrainage" and is_block_enabled(presentation_cfg, "sec23.show_intro_text", True):
             builder.append_pending_paragraph(
                 "Contrôles liés à l’agrainage identifiés dans les points de contrôle OSCEAN "
                 "(champ « nom_dossie » ou « nom_dossier » contenant « agrain »)."
             )
         tab_res_ctrl = results.get("tab_resultats_controles")
-        if tab_res_ctrl is not None and not tab_res_ctrl.empty and is_block_enabled(presentation_cfg, "sec22.show_table", True):
+        if tab_res_ctrl is not None and not tab_res_ctrl.empty and is_block_enabled(presentation_cfg, "sec23.show_table", True):
             tr = tab_res_ctrl
             show_coeur_col = bool(results.get("_pdf_show_coeur_hors_coeur", True)) and "coeur_hors_coeur" in tr.columns
             hdr = ["Résultat", "Nombre", "Taux"] + (["Zone"] if show_coeur_col else [])
@@ -3534,7 +3678,7 @@ def _generate_pdf(
                 if str(r["resultat"]) in ("Conforme", "Non-conforme", "En attente")
             }
             pie_path: Path | None = None
-            if pie_data and is_block_enabled(presentation_cfg, "sec22.show_pie", True):
+            if pie_data and is_block_enabled(presentation_cfg, "sec23.show_pie", True):
                 pie_path = Path(
                     chart_pie(
                         pie_data,
@@ -3546,7 +3690,7 @@ def _generate_pdf(
                             legend_fontsize=ref_pie_legend_fs,
                             legend_ncol_max=legend_ncol_max,
                         ),
-                        figure_scale=ref_pie_fs,
+                        figure_scale=ref_pie_fs * 0.85,
                     )
                 )
             if pie_path is not None and pie_path.exists():
@@ -3556,7 +3700,7 @@ def _generate_pdf(
                     col_widths=cw,
                     col_aligns=ca,
                     image_path=pie_path,
-                    image_width_ratio=ref_pie_w,
+                    image_width_ratio=ref_pie_w * 0.85,
                 )
             else:
                 builder.add_table(
@@ -3751,6 +3895,7 @@ def _generate_pdf(
     sec2_registry = SectionRegistry()
     sec2_registry.register("sec21", lambda _ctx: _render_sec21())
     sec2_registry.register("sec22", lambda _ctx: _render_sec22())
+    sec2_registry.register("sec23", lambda _ctx: _render_sec23())
     sec2_registry.register("sec22theme", lambda _ctx: _render_sec22theme())
     sec2_registry.register("sec22res", lambda _ctx: _render_sec22res())
 
@@ -4264,6 +4409,9 @@ def _generate_pdf(
             start_on_new_page=True,
             compact=True,
         )
+        builder.add_paragraph(
+            "<i>Note importante : Le décompte des effectifs selon le type d'usager suit des règles spécifiques qui sont détaillées dans la notice méthodologique.</i>",
+        )
         if results.get("_pdf_show_pression_controle_usagers"):
             _pdf_section_pression_controle_usagers(
                 builder,
@@ -4584,7 +4732,8 @@ def _run_engine_thematic_pipeline(
         pve_filtered = _filter_pve(pve, profile) if not pve.empty else pve
 
     spatial_log = logging.getLogger("bilans.spatial")
-    if str(profile.get("restrict_geo") or "").strip().lower() == "pnf":
+    restrict_geo_val = str(profile.get("restrict_geo") or "").strip().lower()
+    if restrict_geo_val == "pnf":
         print("  Restriction géographique PNF...")
         with Spinner():
             point_filtered, pej_filtered, pa_filtered, pve_filtered = _apply_restrict_geo_pnf(
@@ -4599,11 +4748,37 @@ def _run_engine_thematic_pipeline(
                     root,
                     spatial_log,
                 )
+    elif restrict_geo_val == "tub":
+        print("  Restriction géographique TUB...")
+        with Spinner():
+            point_filtered, pej_filtered, pa_filtered, pve_filtered = _apply_restrict_geo_tub(
+                point_filtered, pej_filtered, pa_filtered, pve_filtered, root, spatial_log
+            )
+            if point_ctrl_perimetre is not None and not point_ctrl_perimetre.empty:
+                point_ctrl_perimetre, _, _, _ = _apply_restrict_geo_tub(
+                    point_ctrl_perimetre,
+                    pd.DataFrame(),
+                    pd.DataFrame(),
+                    pd.DataFrame(),
+                    root,
+                    spatial_log,
+                )
 
     if not pej_filtered.empty and sources.get("pej", True):
         pej_filtered = enrich_pej_commune_from_faits_coordinates(
             pej_filtered, root, log=spatial_log
         )
+        if (
+            resolved_opts.get("pnf")
+            or resolved_opts.get("tub")
+            or str(profile.get("restrict_geo") or "").strip().lower() == "pnf"
+        ):
+            pej_filtered = enrich_with_pnforet_sig_zones(
+                pej_filtered, root, context="PEJ (coordonnées FAITS)", log=spatial_log
+            )
+            pej_filtered = overlay_pnf_zone_from_communes_pnf_csv(
+                pej_filtered, root, log=spatial_log
+            )
 
     # ── INSEE commune (jointure communes.shp si besoin) ──
     if resolved_opts.get("pnf") or resolved_opts.get("tub"):

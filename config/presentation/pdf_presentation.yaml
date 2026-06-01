@@ -171,6 +171,9 @@ defaults:
       show_chart_procedures: true
       show_chart_taux_line: true
     sec22:
+      show_table: true
+      show_pie: true
+    sec23:
       show_intro_text: true
       show_table: true
       show_pie: true
@@ -237,9 +240,10 @@ scopes:
     title_page:
       subtitle_mode: none
     sections:
-      order: ["sec1", "sec2_chap", "sec21", "sec22dom", "sec22theme", "sec22res", "sec4", "sec41", "sec42", "sec43", "sec44", "sec3", "sec31", "sec32", "sec33", "sec5map", "sec6"]
+      order: ["sec1", "sec2_chap", "sec21", "sec22", "sec22theme", "sec22res", "sec4", "sec41", "sec42", "sec43", "sec44", "sec3", "sec31", "sec32", "sec33", "sec5map", "sec6"]
       titles:
-        sec2_chap: "2. Activité de contrôle"
+        sec2_chap: "2. Contrôles et procédures"
+        sec22: "2.2. Répartition de l'activité par domaines (contrôles + PEJ)"
         sec4: "3. Activité par type d’usager"
         sec41: "3.1. Thème de contrôle par type d'usager"
         sec42: "3.2. Résultats des contrôles par type d'usager"
@@ -256,9 +260,11 @@ scopes:
     title_page:
       subtitle_mode: none
     sections:
-      order: ["sec1", "sec2", "sec21", "sec22", "sec4", "sec41", "sec42", "sec43", "sec44", "sec3", "sec31", "sec32", "sec33", "sec5", "sec6"]
+      order: ["sec1", "sec2", "sec21", "sec22", "sec23", "sec4", "sec41", "sec42", "sec43", "sec44", "sec3", "sec31", "sec32", "sec33", "sec5", "sec6"]
       titles:
-        sec2: "2. Activité de contrôle"
+        sec2: "2. Contrôles et procédures"
+        sec22: "2.2. Répartition de l'activité par domaines (contrôles + PEJ)"
+        sec23: "2.3. Résultats des contrôles au titre de la police administrative"
         sec4: "3. Activité par type d’usager"
         sec41: "3.1. Thème de contrôle par type d'usager"
         sec42: "3.2. Résultats des contrôles par type d'usager"
@@ -274,11 +280,12 @@ profiles:
   # Agrainage : sections zone (2.x) puis usagers (3) puis procédures (4).
   agrainage:
     sections:
-      order: ["sec1", "sec2", "sec21", "sec22", "sec22theme", "sec22res", "sec4", "sec41", "sec42", "sec43", "sec44", "sec3", "sec31", "sec32", "sec33", "sec5", "sec6"]
+      order: ["sec1", "sec2", "sec21", "sec22", "sec23", "sec22theme", "sec22res", "sec4", "sec41", "sec42", "sec43", "sec44", "sec3", "sec31", "sec32", "sec33", "sec5", "sec6"]
       titles:
-        sec22: "2.2. Résultats des contrôles"
-        sec22theme: "2.3. Analyse par zone"
-        sec22res: "2.4. Synthèse croisée par zone"
+        sec22: "2.2. Répartition de l'activité par domaines (contrôles + PEJ)"
+        sec23: "2.3. Résultats des contrôles"
+        sec22theme: "2.4. Analyse par zone"
+        sec22res: "2.5. Synthèse croisée par zone"
         sec4: "3. Activité par type d’usager"
         sec41: "3.1. Thème de contrôle par type d'usager"
         sec42: "3.2. Résultats des contrôles par type d'usager"
@@ -366,7 +373,7 @@ profiles:
   controles_secheresse:
     scope: thematique
     blocks:
-      sec22:
+      sec23:
         # Pas de camembert « Répartition des résultats » (Conforme / Non-conforme / En attente).
         show_pie: false
       sec31:
@@ -389,7 +396,8 @@ profiles:
 # Sections « propres » à un moteur (l'autre moteur les désactive par défaut).
 feature_registry:
   sec21: both
-  sec22: thematique
+  sec22: both
+  sec23: thematique
   sec22dom: global
   sec22theme: both
   sec22res: both

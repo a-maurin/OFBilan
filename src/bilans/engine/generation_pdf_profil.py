@@ -327,9 +327,9 @@ def _generate_pdf_content(
     )
     section_defs = [
         ("sec1", "1. Chiffres clés"),
-        ("sec2_chap", "2. Activité de contrôle"),
+        ("sec2_chap", "2. Contrôles et procédures"),
         ("sec21", sec21_titre),
-        ("sec22dom", "2.2. Nombre de localisations de contrôles par domaines"),
+        ("sec22", "2.2. Répartition de l'activité par domaines (contrôles + PEJ)"),
         ("sec22theme", "2.3. Nombre de contrôles par thèmes"),
         ("sec22res", "2.4. Résultats des contrôles"),
         ("sec4", "3. Activité par type d’usager"),
@@ -490,7 +490,7 @@ def _generate_pdf_content(
                     tbl,
                     caption=(
                         f"{cap} "
-                        f"({PDF_LABEL_CTRL_LOCATIONS_SHORT} ; PEJ, PA, PVe : nombre de procédures)"
+                        f"({PDF_LABEL_CTRL_LOCATIONS_SHORT}, PVe, PEJ, et PA)"
                     ),
                     col_widths=[
                         avail_w * 0.12,
@@ -612,36 +612,58 @@ def _generate_pdf_content(
     top_registry.register("sec21", lambda _ctx: _render_sec21())
     top_registry.render_many(["sec1", "sec2_chap", "sec21"], {})
 
-    def _render_sec22dom() -> None:
-        if not is_section_enabled(presentation_cfg, "sec22dom", True):
+    def _render_sec22() -> None:
+        if not is_section_enabled(presentation_cfg, "sec22", True):
             return
         builder.add_section(
-            "sec22dom",
-            section_title["sec22dom"],
+            "sec22",
+            section_title["sec22"],
             toc_level=1,
         )
+        pej_dom = _load_csv_opt(out_dir, "pej_global_par_domaine.csv")
+        df_dom = pd.DataFrame()
         if agg_domaine is not None and not agg_domaine.empty:
-            tbl = [["Domaine", "Nombre", "Taux"]]
-            for _, row in agg_domaine.head(25).iterrows():
-                taux_str = format_pct_int_from_rate(row.get("taux"))
-                tbl.append([str(row["domaine"]), str(int(row["nb"])), taux_str])
+            df_dom = agg_domaine.copy()
+            df_dom["domaine"] = df_dom["domaine"].astype(str)
+        if pej_dom is not None and not pej_dom.empty:
+            pej_dom_clean = pej_dom.copy()
+            if "DOMAINE" in pej_dom_clean.columns:
+                pej_dom_clean = pej_dom_clean.rename(columns={"DOMAINE": "domaine"})
+            pej_dom_clean["domaine"] = pej_dom_clean["domaine"].astype(str)
+            if df_dom.empty:
+                df_dom = pej_dom_clean
+                df_dom["nb"] = 0
+            else:
+                df_dom = pd.merge(df_dom, pej_dom_clean[["domaine", "nb_pej"]], on="domaine", how="outer")
+                df_dom["nb"] = df_dom["nb"].fillna(0)
+                
+        if not df_dom.empty:
+            if "nb_pej" not in df_dom.columns:
+                df_dom["nb_pej"] = 0
+            df_dom["nb_pej"] = df_dom["nb_pej"].fillna(0)
+            df_dom["total_act"] = df_dom["nb"] + df_dom["nb_pej"]
+            df_dom = df_dom.sort_values(by="total_act", ascending=False)
+            
+            tbl = [["Domaine", "Contrôles", "PEJ"]]
+            for _, row in df_dom.head(25).iterrows():
+                tbl.append([str(row["domaine"]), str(int(row["nb"])), str(int(row["nb_pej"]))])
             builder.add_table(
                 tbl,
-                caption="Nombre de localisations de contrôles par domaines",
+                caption="Répartition de l'activité par domaines (contrôles + PEJ)",
                 col_widths=[avail_w * 0.55, avail_w * 0.22, avail_w * 0.23],
                 col_aligns=["LEFT", "RIGHT", "RIGHT"],
             )
-            if is_block_enabled(presentation_cfg, "sec22dom.show_overflow_note", True) and len(agg_domaine) > 25:
+            if is_block_enabled(presentation_cfg, "sec22.show_overflow_note", True) and len(df_dom) > 25:
                 builder.add_paragraph(
-                    f"... et {len(agg_domaine) - 25} autres domaines.",
+                    f"... et {len(df_dom) - 25} autres domaines.",
                     style="BodySmall",
                 )
-            if not agg_domaine.empty:
-                pie_data = {str(row["domaine"])[:34]: int(row["nb"]) for _, row in agg_domaine.iterrows()}
-                if is_block_enabled(presentation_cfg, "sec22dom.show_pie", True) and pie_data:
+            if not df_dom.empty:
+                pie_data = {str(row["domaine"])[:34]: int(row["total_act"]) for _, row in df_dom.iterrows() if int(row["total_act"]) > 0}
+                if is_block_enabled(presentation_cfg, "sec22.show_pie", True) and pie_data:
                     pie_path = chart_pie(
                         pie_data,
-                        "Nombre de localisations de contrôles par domaines",
+                        "Répartition de l'activité par domaines (contrôles + PEJ)",
                         tmp_dir,
                         "pie_domaine.png",
                         **_chart_pie_compact_legend_kw(
@@ -828,14 +850,14 @@ def _generate_pdf_content(
         builder.add_spacer(4)
 
     sec2_registry = SectionRegistry()
-    sec2_registry.register("sec22dom", lambda _ctx: _render_sec22dom())
+    sec2_registry.register("sec22", lambda _ctx: _render_sec22())
     sec2_registry.register("sec22theme", lambda _ctx: _render_sec22theme())
     sec2_registry.register("sec22res", lambda _ctx: _render_sec22res())
 
     # Ordre canonique des sous-parties 2.x (indépendant du YAML) pour éviter tout décalage titre / contenu.
     sec2_order = [
         sid
-        for sid in ("sec22dom", "sec22theme", "sec22res")
+        for sid in ("sec22", "sec22theme", "sec22res")
         if is_section_enabled(presentation_cfg, sid, True)
     ]
     sec2_registry.render_many(sec2_order, {})
@@ -978,6 +1000,10 @@ def _generate_pdf_content(
                 start_on_new_page=True,
                 compact=True,
             )
+            builder.add_paragraph(
+                "⚠️ <i>Note importante : Le décompte des effectifs selon le type d'usager suit des règles spécifiques qui sont détaillées dans la notice méthodologique.</i>",
+            )
+            builder.add_spacer(2)
         if is_section_enabled(presentation_cfg, "sec4", True) and (agg_usager is None or agg_usager.empty):
             if show_placeholder:
                 builder.add_paragraph(

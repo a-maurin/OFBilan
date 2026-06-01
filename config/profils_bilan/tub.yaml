@@ -1,0 +1,14 @@
+schema_version: 2
+id: tub
+label: "Agrainage en Zone TUB"
+title_label: "Zone TUB"
+out_subdir: bilan_tub
+restrict_geo: tub
+
+filter:
+  type: agrainage
+
+analyse_PVe: true
+
+_map_id: tub
+

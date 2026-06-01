@@ -580,6 +580,10 @@ def _generate_synthese_pdf(
     # ── 3. Activité par type d'usager ──
     builder.add_section("sec3", "3. Activité de police par type d'usager", start_on_new_page=True)
     builder.append_pending_paragraph(
+        "⚠️ <i>Note importante : Le décompte des effectifs selon le type d'usager suit des règles spécifiques qui sont détaillées dans la notice méthodologique.</i>",
+    )
+    builder.add_spacer(2)
+    builder.append_pending_paragraph(
         "Pour la partie contrôles : cumul des <b>effectifs</b> par type d'usager (chaque usager "
         "renseigné sur une fiche est compté avec son effectif ; ces effectifs sont calculés au "
         "niveau des fiches de contrôle et ne se confondent donc pas avec le nombre de "
