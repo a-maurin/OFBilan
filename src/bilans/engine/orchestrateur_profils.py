@@ -2863,14 +2863,14 @@ def _pdf_section_activite_par_types_usagers(
                 other_label="Autres thèmes de contrôle",
                 value_col="nb_localisations",
                 min_pct=0.01,
-                sum_cols=["nb_localisations"],
+                sum_cols=["nb_localisations", "nb_operations"],
             )
             if sub is None or sub.empty:
                 continue
             st = float(sum_par_type.loc[tu]) if tu in sum_par_type.index else 1.0
             st = st or 1.0
             tbl_th = [
-                ["Thème", "Nombre", "% du total général", "% du sous-total (type)"],
+                ["Thème", "Opérations", "Localisations", "% du total général", "% du sous-total (type)"],
             ]
             nbs_th = sub["nb_localisations"].astype(int).tolist()
             pct_sous_th = (
@@ -2878,9 +2878,11 @@ def _pdf_section_activite_par_types_usagers(
             )
             for j, (_, r) in enumerate(sub.iterrows()):
                 nb = int(r["nb_localisations"])
+                nb_ops = int(r.get("nb_operations", 0))
                 tbl_th.append(
                     [
                         str(r["theme"]),
+                        str(nb_ops),
                         str(nb),
                         _pct_table_cell(nb, total_ctrl_lignes),
                         f"{pct_sous_th[j]} %",
@@ -2948,7 +2950,7 @@ def _pdf_section_activite_par_types_usagers(
                 "Manquement",
                 "% manquement",
                 *(
-                    ["Autre résultat", "% autre résultat"]
+                    ["En attente", "% en attente"]
                     if has_autre
                     else []
                 ),
@@ -3705,6 +3707,14 @@ def _generate_pdf(
         df_dom = pd.DataFrame()
         if not point_filtered.empty and group_col_point in point_filtered.columns:
             df_dom = point_filtered[group_col_point].fillna("Non renseigné").astype(str).value_counts().rename_axis("domaine").to_frame("nb").reset_index()
+            if "dc_id" in point_filtered.columns:
+                ops_df = point_filtered.copy()
+                ops_df[group_col_point] = ops_df[group_col_point].fillna("Non renseigné").astype(str)
+                ops_df = ops_df.groupby(group_col_point)["dc_id"].nunique().reset_index()
+                ops_df.columns = ["domaine", "nb_operations"]
+                df_dom = df_dom.merge(ops_df, on="domaine", how="left")
+            else:
+                df_dom["nb_operations"] = 0
         
         pej_dom = pd.DataFrame()
         if not pej_filtered.empty and group_col_pej in pej_filtered.columns:
@@ -3721,17 +3731,19 @@ def _generate_pdf(
         if not df_dom.empty:
             df_dom["nb"] = df_dom.get("nb", 0).fillna(0)
             df_dom["nb_pej"] = df_dom.get("nb_pej", 0).fillna(0)
+            df_dom["nb_operations"] = df_dom.get("nb_operations", 0).fillna(0)
             df_dom["total_act"] = df_dom["nb"] + df_dom["nb_pej"]
             df_dom = df_dom.sort_values(by="total_act", ascending=False)
             
-            tbl = [[col_header, "Contrôles", "PEJ"]]
+            tbl = [[col_header, "Opérations", "Localisations", "PEJ"]]
             for _, row in df_dom.head(25).iterrows():
-                tbl.append([str(row["domaine"]), str(int(row["nb"])), str(int(row["nb_pej"]))])
+                nb_ops = int(row.get("nb_operations", 0))
+                tbl.append([str(row["domaine"]), str(nb_ops), str(int(row["nb"])), str(int(row["nb_pej"]))])
             builder.add_table(
                 tbl,
                 caption=title_pie,
-                col_widths=[avail_w * 0.55, avail_w * 0.22, avail_w * 0.23],
-                col_aligns=["LEFT", "RIGHT", "RIGHT"],
+                col_widths=[avail_w * 0.44, avail_w * 0.18, avail_w * 0.19, avail_w * 0.19],
+                col_aligns=["LEFT", "RIGHT", "RIGHT", "RIGHT"],
             )
             if is_block_enabled(presentation_cfg, "sec22.show_overflow_note", True) and len(df_dom) > 25:
                 builder.add_paragraph(

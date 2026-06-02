@@ -27,7 +27,7 @@ def test_agg_effectifs_repartit_multi_usagers():
 
 def test_agg_effectifs_vide():
     out = agg_effectifs_usagers(pd.DataFrame())
-    assert list(out.columns) == ["type_usager", "nb"]
+    assert list(out.columns) == ["type_usager", "nb", "nb_operations"]
     assert out.empty
 
 

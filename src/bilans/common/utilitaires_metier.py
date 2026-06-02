@@ -368,27 +368,45 @@ def agg_effectifs_usagers(
     ``fc_id`` est disponible sur ``point_ctrl``, la somme est consolidée une
     seule fois par fiche de contrôle.
 
-    Retourne un DataFrame avec colonnes ``type_usager`` et ``nb``.
+    Retourne un DataFrame avec colonnes ``type_usager``, ``nb`` et ``nb_operations``.
     Le total de ``nb`` peut dépasser ``len(df)`` (un point peut contribuer
     à plusieurs catégories).
     """
     if source_champ not in df.columns:
-        return pd.DataFrame(columns=["type_usager", "nb"])
+        return pd.DataFrame(columns=["type_usager", "nb", "nb_operations"])
 
     work_df = _consolide_lignes_effectifs_par_fc_id(df, [source_champ], source_table=source_table)
+    has_dc_id = "dc_id" in work_df.columns
 
     agg: dict[str, int] = {}
-    for val in work_df[source_champ]:
+    dc_ids: dict[str, set[str]] = {}
+
+    for _, row in work_df.iterrows():
+        val = row.get(source_champ, "")
+        dc_id = str(row.get("dc_id", "")) if has_dc_id else ""
         toks = _parse_type_usager_tokens(val)
         if not toks:
-            agg["Autre"] = agg.get("Autre", 0) + 1
+            cat = "Autre"
+            agg[cat] = agg.get(cat, 0) + 1
+            if has_dc_id and dc_id:
+                dc_ids.setdefault(cat, set()).add(dc_id)
             continue
         for lab, n in toks:
             cat = map_type_usager(source_table, source_champ, lab)
             agg[cat] = agg.get(cat, 0) + n
+            if has_dc_id and dc_id:
+                dc_ids.setdefault(cat, set()).add(dc_id)
+
+    rows = []
+    for cat, nb in agg.items():
+        nb_ops = len(dc_ids.get(cat, set())) if has_dc_id else 0
+        rows.append({"type_usager": cat, "nb": nb, "nb_operations": nb_ops})
+
+    if not rows:
+        return pd.DataFrame(columns=["type_usager", "nb", "nb_operations"])
 
     result = (
-        pd.DataFrame(list(agg.items()), columns=["type_usager", "nb"])
+        pd.DataFrame(rows)
         .sort_values("nb", ascending=False)
         .reset_index(drop=True)
     )
@@ -508,11 +526,12 @@ def agg_controles_par_type_usager_domaine(
 
     work_df = _consolide_lignes_effectifs_par_fc_id(
         df,
-        [source_champ, col_domaine],
+        [source_champ, col_domaine, "dc_id"] if "dc_id" in df.columns else [source_champ, col_domaine],
         source_table=source_table,
     )
 
     counts: dict[tuple[str, str], int] = {}
+    ops_counts: dict[tuple[str, str], set[str]] = {}
     for _, row in work_df.iterrows():
         dom = str(row.get(col_domaine, "Hors domaine") or "Hors domaine")
         toks = _parse_type_usager_tokens(row.get(source_champ))
@@ -526,10 +545,19 @@ def agg_controles_par_type_usager_domaine(
         for cat, n in cats_counts.items():
             key = (cat, dom)
             counts[key] = counts.get(key, 0) + n
+            if "dc_id" in row and pd.notna(row["dc_id"]):
+                if key not in ops_counts:
+                    ops_counts[key] = set()
+                ops_counts[key].add(str(row["dc_id"]))
 
     rows: list[dict[str, object]] = []
     for (cat, dom), n in counts.items():
-        rows.append({"type_usager": cat, "domaine": dom, "nb_localisations": int(n)})
+        rows.append({
+            "type_usager": cat,
+            "domaine": dom,
+            "nb_localisations": int(n),
+            "nb_operations": len(ops_counts.get((cat, dom), set())),
+        })
     return pd.DataFrame(rows)
 
 
@@ -549,11 +577,12 @@ def agg_controles_par_type_usager_theme(
 
     work_df = _consolide_lignes_effectifs_par_fc_id(
         df,
-        [source_champ, col_theme],
+        [source_champ, col_theme, "dc_id"] if "dc_id" in df.columns else [source_champ, col_theme],
         source_table=source_table,
     )
 
     counts: dict[tuple[str, str], int] = {}
+    ops_counts: dict[tuple[str, str], set[str]] = {}
     for _, row in work_df.iterrows():
         theme = str(row.get(col_theme, "Hors thème") or "Hors thème")
         toks = _parse_type_usager_tokens(row.get(source_champ))
@@ -567,10 +596,19 @@ def agg_controles_par_type_usager_theme(
         for cat, n in cats_counts.items():
             key = (cat, theme)
             counts[key] = counts.get(key, 0) + n
+            if "dc_id" in row and pd.notna(row["dc_id"]):
+                if key not in ops_counts:
+                    ops_counts[key] = set()
+                ops_counts[key].add(str(row["dc_id"]))
 
     rows: list[dict[str, object]] = []
     for (cat, theme), n in counts.items():
-        rows.append({"type_usager": cat, "theme": theme, "nb_localisations": int(n)})
+        rows.append({
+            "type_usager": cat,
+            "theme": theme,
+            "nb_localisations": int(n),
+            "nb_operations": len(ops_counts.get((cat, theme), set())),
+        })
     return pd.DataFrame(rows)
 
 

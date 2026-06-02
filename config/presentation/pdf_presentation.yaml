@@ -112,6 +112,11 @@ defaults:
       Sauf mention contraire, l'unité de mesure du nombre de contrôles utilisée dans
       la suite du document est la localisation de contrôle : une unité correspond à
       une localisation renseignée.
+    control_operation_paragraph: >
+      Il convient de distinguer la localisation de contrôle de l'opération de contrôle.
+      L'opération de contrôle qualifie l'événement ou l'intervention dans son ensemble,
+      tel qu'il a été mené par les agents sur le terrain. Une seule opération de contrôle
+      peut générer plusieurs localisations géographiques ou concerner plusieurs usagers.
     pa_pj_distinction_paragraph: >
       Il convient de distinguer l'activité de police administrative et l'activité de
       police judiciaire. Dans ce document, le terme « contrôle » renvoie exclusivement

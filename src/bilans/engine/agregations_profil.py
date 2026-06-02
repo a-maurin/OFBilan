@@ -99,18 +99,25 @@ def analyse_controles_global(point: pd.DataFrame, out_dir: Path) -> Tuple[pd.Dat
 
     col_domaine = "domaine" if "domaine" in pt.columns else None
     if col_domaine:
+        pt_filled = pt.copy()
+        pt_filled[col_domaine] = pt_filled[col_domaine].fillna("Hors domaine")
         agg_domaine = (
-            pt[col_domaine]
-            .fillna("Hors domaine")
+            pt_filled[col_domaine]
             .value_counts()
             .rename_axis("domaine")
             .to_frame("nb")
             .reset_index()
         )
+        if "dc_id" in pt_filled.columns:
+            ops_par_domaine = pt_filled.groupby(col_domaine)["dc_id"].nunique().reset_index(name="nb_operations")
+            agg_domaine = pd.merge(agg_domaine, ops_par_domaine, on="domaine", how="left")
+        else:
+            agg_domaine["nb_operations"] = 0
+
         agg_domaine["taux"] = agg_domaine["nb"] / float(nb_total or 1)
         agg_domaine.to_csv(out_dir / "controles_global_par_domaine.csv", sep=";", index=False)
     else:
-        agg_domaine = pd.DataFrame(columns=["domaine", "nb", "taux"])
+        agg_domaine = pd.DataFrame(columns=["domaine", "nb", "nb_operations", "taux"])
         agg_domaine.to_csv(out_dir / "controles_global_par_domaine.csv", sep=";", index=False)
 
     col_theme = "theme" if "theme" in pt.columns else "type_actio"

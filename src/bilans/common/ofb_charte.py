@@ -46,7 +46,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 COLOR_PRIMARY = "#003A76"
 COLOR_SECONDARY = "#1E4E85"
 COLOR_GREY = "#333333"
-# Barres empilées horizontales : série « Autre résultat » (aligné sur le gris foncé charte).
+# Barres empilées horizontales : série « En attente » (aligné sur le gris foncé charte).
 COLOR_CHART_AUTRE_RESULTAT = COLOR_GREY
 COLOR_TABLE_HEADER_BG = rl_colors.HexColor("#003A76")
 COLOR_TABLE_HEADER_FG = rl_colors.white

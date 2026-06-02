@@ -267,6 +267,7 @@ def _generate_pdf_content(
     pej_resume = _load_csv_opt(out_dir, "pej_global_resume.csv")
     pa_resume = _load_csv_opt(out_dir, "pa_global_resume.csv")
     pve_resume = _load_csv_opt(out_dir, "pve_global_resume.csv")
+    ops_resume = _load_csv_opt(out_dir, "controles_global_operations_resume.csv")
 
     nb_localisations = 0
     if agg_domaine is not None and not agg_domaine.empty:
@@ -274,6 +275,7 @@ def _generate_pdf_content(
     nb_pej = int(pej_resume["nb_pej_global"].iloc[0]) if pej_resume is not None and not pej_resume.empty else 0
     nb_pa = int(pa_resume["nb_pa_global"].iloc[0]) if pa_resume is not None and not pa_resume.empty else 0
     nb_pve = int(pve_resume["nb_pve_global"].iloc[0]) if pve_resume is not None and not pve_resume.empty else 0
+    nb_ops = int(ops_resume["nb_operations_controle"].iloc[0]) if ops_resume is not None and not ops_resume.empty and "nb_operations_controle" in ops_resume.columns else 0
 
     dept_name_typo = normalize_dept_typography(get_dept_name(dept_code))
     map_captions: list[str] = []
@@ -390,6 +392,8 @@ def _generate_pdf_content(
         if is_section_enabled(presentation_cfg, "sec1", True):
             builder.add_section("sec1", section_title["sec1"])
         kf: list[tuple[str, str]] = []
+        if nb_ops > 0:
+            kf.append((str(nb_ops), "Opérations de contrôle"))
         if nb_localisations > 0:
             kf.append((str(nb_localisations), "Localisations de contrôle"))
         tab_nc = tab_resultats_controles
@@ -644,14 +648,19 @@ def _generate_pdf_content(
             df_dom["total_act"] = df_dom["nb"] + df_dom["nb_pej"]
             df_dom = df_dom.sort_values(by="total_act", ascending=False)
             
-            tbl = [["Domaine", "Contrôles", "PEJ"]]
+            tbl = [["Domaine", "Opérations", "Localisations", "PEJ"]]
             for _, row in df_dom.head(25).iterrows():
-                tbl.append([str(row["domaine"]), str(int(row["nb"])), str(int(row["nb_pej"]))])
+                nb_ops_val = row.get("nb_operations", 0)
+                try:
+                    nb_ops_str = str(int(nb_ops_val)) if pd.notna(nb_ops_val) else "0"
+                except (ValueError, TypeError):
+                    nb_ops_str = "0"
+                tbl.append([str(row["domaine"]), nb_ops_str, str(int(row["nb"])), str(int(row["nb_pej"]))])
             builder.add_table(
                 tbl,
                 caption="Répartition de l'activité par domaines (contrôles + PEJ)",
-                col_widths=[avail_w * 0.55, avail_w * 0.22, avail_w * 0.23],
-                col_aligns=["LEFT", "RIGHT", "RIGHT"],
+                col_widths=[avail_w * 0.45, avail_w * 0.17, avail_w * 0.19, avail_w * 0.19],
+                col_aligns=["LEFT", "RIGHT", "RIGHT", "RIGHT"],
             )
             if is_block_enabled(presentation_cfg, "sec22.show_overflow_note", True) and len(df_dom) > 25:
                 builder.add_paragraph(
@@ -692,19 +701,24 @@ def _generate_pdf_content(
             other_label="Autres thèmes de contrôle",
             value_col="nb",
             min_pct=0.01,
-            sum_cols=["nb", "taux"],
+            sum_cols=["nb", "nb_operations", "taux"],
             max_rows=20,
         )
         if agg_theme_display is not None and not agg_theme_display.empty:
-            tbl = [["Thème", "Nombre", "Taux"]]
+            tbl = [["Thème", "Opérations", "Localisations", "Taux loc."]]
             for _, row in agg_theme_display.iterrows():
                 taux_str = format_pct_int_from_rate(row.get("taux"))
-                tbl.append([str(row["theme"])[:45], str(int(row["nb"])), taux_str])
+                nb_ops_val = row.get("nb_operations", 0)
+                try:
+                    nb_ops_str = str(int(nb_ops_val)) if pd.notna(nb_ops_val) else "0"
+                except (ValueError, TypeError):
+                    nb_ops_str = "0"
+                tbl.append([str(row["theme"])[:45], nb_ops_str, str(int(row["nb"])), taux_str])
             builder.add_table(
                 tbl,
                 caption=pdf_metric_caption("Nombre de contrôles par thèmes", "ctrl"),
-                col_widths=[avail_w * 0.55, avail_w * 0.22, avail_w * 0.23],
-                col_aligns=["LEFT", "RIGHT", "RIGHT"],
+                col_widths=[avail_w * 0.44, avail_w * 0.18, avail_w * 0.19, avail_w * 0.19],
+                col_aligns=["LEFT", "RIGHT", "RIGHT", "RIGHT"],
             )
         elif show_placeholder:
             builder.add_paragraph("Aucune donnée thème disponible.")
@@ -1031,16 +1045,21 @@ def _generate_pdf_content(
                     spacer_after_mm=2.0,
                 )
             if is_block_enabled(presentation_cfg, "sec4.show_table_usagers", True):
-                tbl_u = [["Type d’usagers", "Nombre", "Taux"]]
+                tbl_u = [["Type d’usagers", "Opérations", "Localisations", "Taux loc."]]
                 nbs_ug = [int(row["nb"]) for _, row in agg_usager.iterrows()]
                 pct_ug = tab_counts_to_pct_strings(nbs_ug)
                 for i, (_, row) in enumerate(agg_usager.iterrows()):
-                    tbl_u.append([str(row["type_usager"]), str(int(row["nb"])), pct_ug[i]])
+                    nb_ops_val = row.get("nb_operations", 0)
+                    try:
+                        nb_ops_str = str(int(nb_ops_val)) if pd.notna(nb_ops_val) else "0"
+                    except (ValueError, TypeError):
+                        nb_ops_str = "0"
+                    tbl_u.append([str(row["type_usager"]), nb_ops_str, str(int(row["nb"])), pct_ug[i]])
                 builder.add_table(
                     tbl_u,
                     caption="Usagers contrôlés par type",
-                    col_widths=[avail_w * 0.58, avail_w * 0.21, avail_w * 0.21],
-                    col_aligns=["LEFT", "RIGHT", "RIGHT"],
+                    col_widths=[avail_w * 0.44, avail_w * 0.18, avail_w * 0.19, avail_w * 0.19],
+                    col_aligns=["LEFT", "RIGHT", "RIGHT", "RIGHT"],
                     spacer_after_mm=sec4_tbl_sp,
                 )
 
@@ -1148,7 +1167,7 @@ def _generate_pdf_content(
                     }
                     has_autre = "Autre_resultat" in df_ru.columns and int(df_ru["Autre_resultat"].sum()) > 0
                     if has_autre:
-                        series["Autre résultat"] = [int(x) for x in df_ru["Autre_resultat"].tolist()]
+                        series["En attente"] = [int(x) for x in df_ru["Autre_resultat"].tolist()]
 
                     if is_block_enabled(presentation_cfg, "sec4.show_resultats_par_type_usager_chart", True):
                         bar_path = chart_bar_horizontal_stacked(
@@ -1183,7 +1202,7 @@ def _generate_pdf_content(
                             "% infraction",
                             "Manquement",
                             "% manquement",
-                            *(["Autre résultat", "% autre résultat"] if has_autre else []),
+                            *(["En attente", "% en attente"] if has_autre else []),
                             "Total",
                             "% du total",
                         ]

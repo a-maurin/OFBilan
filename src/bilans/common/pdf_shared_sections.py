@@ -46,6 +46,7 @@ def add_standard_notice_methodology(
     title = str(notice_cfg.get("title", "Notice méthodologique")).strip() or "Notice méthodologique"
     data_source = str(notice_cfg.get("data_source_paragraph", "")).strip()
     unit_measure = str(notice_cfg.get("unit_measure_paragraph", "")).strip()
+    control_op = str(notice_cfg.get("control_operation_paragraph", "")).strip()
     pa_pj = str(notice_cfg.get("pa_pj_distinction_paragraph", "")).strip()
     multi_usager = str(notice_cfg.get("multi_usager_paragraph", "")).strip()
 
@@ -55,6 +56,8 @@ def add_standard_notice_methodology(
     builder.add_paragraph(period_sentence)
     if unit_measure:
         builder.add_paragraph(unit_measure)
+    if control_op:
+        builder.add_paragraph(control_op)
     if pa_pj:
         builder.add_callout_box(
             pa_pj,

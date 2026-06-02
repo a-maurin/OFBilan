@@ -48,10 +48,10 @@ def test_zone_pve_departement_nb_ensemble_hors_tub_et_pnf() -> None:
     assert len(df) - int(in_tub.sum()) - int(in_pnf.sum()) == 1
 
 
-def test_chart_bar_horizontal_stacked_autre_resultat_color(
+def test_chart_bar_horizontal_stacked_en_attente_color(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """La série « Autre résultat » doit utiliser le gris foncé charte (avant heuristique infraction)."""
+    """La série « En attente » doit utiliser le gris foncé charte (avant heuristique infraction)."""
     from bilans.common import rendus_graphiques as rg
 
     barh_colors: list = []
@@ -64,7 +64,7 @@ def test_chart_bar_horizontal_stacked_autre_resultat_color(
     monkeypatch.setattr(Axes, "barh", wrapped_barh)
     rg.chart_bar_horizontal_stacked(
         ["Usager A"],
-        {"Autre résultat": [4], "Conformes": [2]},
+        {"En attente": [4], "Conformes": [2]},
         "Titre",
         "Effectif",
         tmp_path,

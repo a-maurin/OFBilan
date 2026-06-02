@@ -454,7 +454,7 @@ def chart_bar_stacked(
     for i, (label, vals) in enumerate(series.items()):
         vals_arr = np.array(vals, dtype=float)
         lbl = str(label).lower()
-        if "autre résultat" in lbl or "autre resultat" in lbl:
+        if "en attente" in lbl:
             color = "#555555"
         elif any(k in lbl for k in keywords_inf):
             color = COLOR_CHART_4
@@ -625,7 +625,7 @@ def chart_bar_horizontal_stacked(
     for i, (label, vals) in enumerate(series_items):
         vals_arr = np.array(vals, dtype=float)
         lbl = str(label).lower()
-        if str(label).strip().lower() == "autre résultat":
+        if str(label).strip().lower() == "en attente":
             color = COLOR_CHART_AUTRE_RESULTAT
         elif any(k in lbl for k in keywords_inf):
             color = COLOR_CHART_4
