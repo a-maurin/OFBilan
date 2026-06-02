@@ -792,6 +792,8 @@ class PDFReportBuilder:
             block.append(Spacer(1, SPACING_S))
             block.append(Paragraph(f"Figure {self._figure_counter}", self.styles.get("FigureCaption", self.styles["BodySmall"])))
             block.append(Spacer(1, SPACING_S))
+        if table_caption:
+            block.append(Paragraph(table_caption, self.styles["TableCaption"]))
         split_by_row = bool(self._tables_layout.get("split_by_row"))
         block.append(
             ofb_table(
@@ -802,8 +804,6 @@ class PDFReportBuilder:
                 split_by_row=split_by_row,
             )
         )
-        if table_caption:
-            block.append(Paragraph(table_caption, self.styles["TableCaption"]))
         block.append(Spacer(1, float(trailing_spacer_mm) * mm))
         self._append_with_pending(
             block,
@@ -992,6 +992,8 @@ class PDFReportBuilder:
     ) -> None:
         """Tableau ajouté au bloc en attente (sans flush immédiat)."""
         block: List = []
+        if caption:
+            block.append(Paragraph(caption, self.styles["TableCaption"]))
         block.append(
             ofb_table(
                 data_rows,
@@ -1000,8 +1002,6 @@ class PDFReportBuilder:
                 split_by_row=True,
             )
         )
-        if caption:
-            block.append(Paragraph(caption, self.styles["TableCaption"]))
         block.append(Spacer(1, float(spacer_after_mm) * mm))
         if self._pending_section is not None:
             self._pending_section.extend(block)
@@ -1025,10 +1025,10 @@ class PDFReportBuilder:
             kf_table = key_figures_table(figures, self.styles)
             spacer = Spacer(1, SPACING_M)
             block.extend([kf_table, spacer])
-        tbl = ofb_table(table_rows, col_widths=col_widths, col_aligns=col_aligns)
-        block.append(tbl)
         if caption:
             block.append(Paragraph(caption, self.styles["TableCaption"]))
+        tbl = ofb_table(table_rows, col_widths=col_widths, col_aligns=col_aligns)
+        block.append(tbl)
         block.append(Spacer(1, SPACING_L))
         if self._pending_section is not None:
             if merge_with_next:
@@ -1057,6 +1057,8 @@ class PDFReportBuilder:
         gap_after_tbl = 2 * mm if compact else 4 * mm
         n_tables = len(tables)
         for i, t in enumerate(tables):
+            if t.get("caption"):
+                block.append(Paragraph(t["caption"], self.styles["TableCaption"]))
             col_w = t.get("col_widths")
             col_a = t.get("col_aligns")
             tbl = ofb_table(
@@ -1065,8 +1067,6 @@ class PDFReportBuilder:
                 col_aligns=col_a,
             )
             block.append(tbl)
-            if t.get("caption"):
-                block.append(Paragraph(t["caption"], self.styles["TableCaption"]))
             if i < n_tables - 1:
                 block.append(Spacer(1, gap_after_tbl))
         return block
@@ -1213,6 +1213,8 @@ class PDFReportBuilder:
             return
         split_by_row = self._table_uses_split_by_row(data_rows)
         block: List = []
+        if caption:
+            block.append(Paragraph(caption, self.styles["TableCaption"]))
         block.append(
             ofb_table(
                 data_rows,
@@ -1222,8 +1224,6 @@ class PDFReportBuilder:
                 split_by_row=split_by_row,
             )
         )
-        if caption:
-            block.append(Paragraph(caption, self.styles["TableCaption"]))
         block.append(Spacer(1, float(gap_after_mm) * mm))
         # Si le tableau doit être coupé entre les lignes, ne pas l'enfermer dans KeepTogether
         # (sinon LayoutError si le tableau dépasse la hauteur utile d'une page).
@@ -1251,6 +1251,8 @@ class PDFReportBuilder:
         keep_caption_with_table: bool = True,
     ) -> None:
         block: List = []
+        if caption:
+            block.append(Paragraph(caption, self.styles["TableCaption"]))
         split_by_row = bool(self._tables_layout.get("split_by_row"))
         if max_rows_keep_together is not None:
             max_rows_keep = int(max_rows_keep_together)
@@ -1335,8 +1337,6 @@ class PDFReportBuilder:
                 split_by_row=split_by_row,
             )
         block.append(tbl)
-        if caption:
-            block.append(Paragraph(caption, self.styles["TableCaption"]))
         block.append(Spacer(1, float(spacer_after_mm) * mm))
         use_keep = (bool(caption) and keep_caption_with_table) or keep_together
         if self._pending_section is not None:
@@ -1362,6 +1362,8 @@ class PDFReportBuilder:
         + graphique PNG dans un seul ``KeepTogether`` (ex. section VII PNF).
         """
         block: List = []
+        if table_caption:
+            block.append(Paragraph(table_caption, self.styles["TableCaption"]))
         split_by_row = bool(self._tables_layout.get("split_by_row"))
         block.append(
             ofb_table(
@@ -1371,8 +1373,6 @@ class PDFReportBuilder:
                 split_by_row=split_by_row,
             )
         )
-        if table_caption:
-            block.append(Paragraph(table_caption, self.styles["TableCaption"]))
         if image_path is not None and Path(image_path).exists():
             block.append(Spacer(1, SPACING_XXS))
             w = self.avail_w * image_width_ratio
@@ -1415,6 +1415,9 @@ class PDFReportBuilder:
             if rendered:
                 block.append(Spacer(1, float(gap_between_mm) * mm))
             caption = spec.get("caption") or ""
+            if caption:
+                block.append(Paragraph(caption, self.styles["TableCaption"]))
+                block.append(Spacer(1, 1 * mm))
             block.append(
                 ofb_table(
                     rows,
@@ -1424,9 +1427,6 @@ class PDFReportBuilder:
                     split_by_row=split_by_row,
                 )
             )
-            if caption:
-                block.append(Spacer(1, 1 * mm))
-                block.append(Paragraph(caption, self.styles["TableCaption"]))
             rendered += 1
         if not rendered:
             return
