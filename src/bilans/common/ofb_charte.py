@@ -409,11 +409,11 @@ def _get_styles():
             "OFBFigureCaption",
             parent=ss["BodyText"],
             fontName=f"{FONT_FAMILY}-Italic",
-            fontSize=10,
+            fontSize=9,
             leading=13,
             textColor=rl_colors.HexColor(COLOR_PRIMARY),
             alignment=TA_CENTER,
-            spaceBefore=2 * mm,
+            spaceBefore=0,
             spaceAfter=4 * mm,
         ),
         "KeyFigure": ParagraphStyle(

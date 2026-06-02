@@ -787,10 +787,9 @@ class PDFReportBuilder:
                 ratio = 0.65
             img = RLImage(str(chart_path), width=w, height=w * ratio)
             img.hAlign = "CENTER"
-            block.append(img)
             self._figure_counter += 1
-            block.append(Spacer(1, SPACING_S))
-            block.append(Paragraph(f"Figure {self._figure_counter}", self.styles.get("FigureCaption", self.styles["BodySmall"])))
+            fig_paragraph = Paragraph(f"Figure {self._figure_counter}", self.styles.get("FigureCaption", self.styles["BodySmall"]))
+            block.append(KeepTogether([img, fig_paragraph]))
             block.append(Spacer(1, SPACING_S))
         if table_caption:
             block.append(Paragraph(table_caption, self.styles["TableCaption"]))
@@ -977,11 +976,10 @@ class PDFReportBuilder:
         
         self._figure_counter += 1
         fig_text = f"Figure {self._figure_counter}"
+        fig_paragraph = Paragraph(fig_text, self.styles.get("FigureCaption", self.styles["BodySmall"]))
         
         block = [
-            img,
-            Spacer(1, SPACING_S),
-            Paragraph(fig_text, self.styles.get("FigureCaption", self.styles["BodySmall"])),
+            KeepTogether([img, fig_paragraph]),
             Spacer(1, float(spacer_after_mm) * mm)
         ]
         if self._pending_section is not None:
@@ -1393,10 +1391,9 @@ class PDFReportBuilder:
                 ratio = 0.45
             img = RLImage(str(image_path), width=w, height=w * ratio)
             img.hAlign = "CENTER"
-            block.append(img)
             self._figure_counter += 1
-            block.append(Spacer(1, SPACING_S))
-            block.append(Paragraph(f"Figure {self._figure_counter}", self.styles.get("FigureCaption", self.styles["BodySmall"])))
+            fig_paragraph = Paragraph(f"Figure {self._figure_counter}", self.styles.get("FigureCaption", self.styles["BodySmall"]))
+            block.append(KeepTogether([img, fig_paragraph]))
         block.append(Spacer(1, 1 * mm))
         keep_block = not split_by_row
         self._append_with_pending(block, keep_together=keep_block)
@@ -1475,15 +1472,14 @@ class PDFReportBuilder:
 
         img = RLImage(str(path), width=w, height=w * ratio)
         img.hAlign = "CENTER"
-        block = [img]
         
         self._figure_counter += 1
         fig_text = f"Figure {self._figure_counter}"
         if caption:
             fig_text += f" : {caption}"
             
-        block.append(Spacer(1, SPACING_S))
-        block.append(Paragraph(fig_text, self.styles.get("FigureCaption", self.styles["BodySmall"])))
+        fig_paragraph = Paragraph(fig_text, self.styles.get("FigureCaption", self.styles["BodySmall"]))
+        block = [KeepTogether([img, fig_paragraph])]
         block.append(Spacer(1, float(spacer_after_mm) * mm))
         self._append_with_pending(
             block,
