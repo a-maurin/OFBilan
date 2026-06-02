@@ -21,10 +21,10 @@ def test_agg_resultats_domaine_conforme_infraction_manquement() -> None:
     assert int(eau["nb_infraction"]) == 1
     assert int(eau["nb_manquement"]) == 0
     assert int(eau["nb_en_attente"]) == 0
-    assert int(eau["nb_controles"]) == 2
+    assert int(eau["nb_localisations"]) == 2
     faune = out[out["domaine"] == "Faune"].iloc[0]
     assert int(faune["nb_manquement"]) == 1
-    assert int(faune["nb_controles"]) == 1
+    assert int(faune["nb_localisations"]) == 1
 
 
 def test_agg_resultats_domaine_en_attente() -> None:
@@ -39,7 +39,7 @@ def test_agg_resultats_domaine_en_attente() -> None:
     row = out.iloc[0]
     assert int(row["nb_conforme"]) == 1
     assert int(row["nb_en_attente"]) == 1
-    assert int(row["nb_controles"]) == 2
+    assert int(row["nb_localisations"]) == 2
 
 
 def test_agg_resultats_domaine_consolide_par_fc_id() -> None:
@@ -56,7 +56,7 @@ def test_agg_resultats_domaine_consolide_par_fc_id() -> None:
     row = out.iloc[0]
 
     assert int(row["nb_infraction"]) == 1
-    assert int(row["nb_controles"]) == 1
+    assert int(row["nb_localisations"]) == 1
 
 
 def test_pdf_rows_mono_usager_aligne_colonnes_avec_en_attente() -> None:
@@ -69,7 +69,7 @@ def test_pdf_rows_mono_usager_aligne_colonnes_avec_en_attente() -> None:
             "nb_manquement": [10, 1],
             "nb_infraction": [3, 0],
             "nb_en_attente": [2, 0],
-            "nb_controles": [187, 11],
+            "nb_localisations": [187, 11],
         }
     )
     hdr, body, with_type = build_resultats_par_usager_domaine_pdf_rows(

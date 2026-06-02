@@ -16,7 +16,7 @@ def test_build_sec6_methodology_html_includes_zone_line() -> None:
             has_pnf=True,
             has_tub=False,
             is_pnf_profile=True,
-            nb_ctrl=10,
+            nb_localisations=10,
         ),
     )
     assert "Période" in html
@@ -33,7 +33,7 @@ def test_build_sec6_methodology_html_diffusion_externe() -> None:
             dept_name="Côte-d'Or",
             dept_code="21",
             diffusion="externe",
-            nb_ctrl=5,
+            nb_localisations=5,
         ),
     )
     assert "synthèse" in html.lower()
@@ -73,7 +73,7 @@ def test_build_filtered_glossary_rows_filters_expected_ids() -> None:
     }
     rows = build_filtered_glossary_rows(
         gloss_cfg=gloss_cfg,
-        nb_ctrl=10,
+        nb_localisations=10,
         nb_pej=0,
         nb_pa=1,
         nb_pve=0,

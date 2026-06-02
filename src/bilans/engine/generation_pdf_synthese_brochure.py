@@ -781,7 +781,8 @@ def _generate_synthese_brochure_pdf(
     pa_resume = _load_csv_opt(out_dir, "pa_global_resume.csv")
     pve_resume = _load_csv_opt(out_dir, "pve_global_resume.csv")
 
-    nb_ctrl = int(resume.iloc[0]["nb_ctrl"]) if resume is not None and not resume.empty else 0
+    nb_localisations = int(resume.iloc[0]["nb_localisations"]) if resume is not None and not resume.empty else 0
+    nb_operations_controle = int(resume.iloc[0]["nb_operations_controle"]) if resume is not None and not resume.empty and "nb_operations_controle" in resume.columns else 0
     nb_pej = int(pej_resume.iloc[0]["nb_pej_global"]) if pej_resume is not None and not pej_resume.empty else 0
     nb_pa = int(pa_resume.iloc[0]["nb_pa_global"]) if pa_resume is not None and not pa_resume.empty else 0
     nb_pve = int(pve_resume.iloc[0]["nb_pve_global"]) if pve_resume is not None and not pve_resume.empty else 0
@@ -791,7 +792,7 @@ def _generate_synthese_brochure_pdf(
         if res_usager_roll is not None and not res_usager_roll.empty and "Total" in res_usager_roll.columns
         else 0
     )
-    nb_nc = _nb_non_conformes_brut(tab_resultats) if nb_ctrl > 0 else 0
+    nb_nc = _nb_non_conformes_brut(tab_resultats) if nb_localisations > 0 else 0
 
     map_paths: list[Path] = []
     if cartes:
@@ -830,7 +831,8 @@ def _generate_synthese_brochure_pdf(
 
     kf_rows = _build_synthese_key_figure_rows(
         nb_effectifs=nb_effectifs,
-        nb_ctrl=nb_ctrl,
+        nb_operations_controle=nb_operations_controle,
+        nb_localisations=nb_localisations,
         nb_nc=nb_nc,
         nb_pej=nb_pej,
         nb_pa=nb_pa,
@@ -855,7 +857,7 @@ def _generate_synthese_brochure_pdf(
         other_label="Autres thèmes de contrôle",
         value_col="nb_total",
         min_pct=0.01,
-        sum_cols=["nb_ctrl", "nb_pej_hors_controle", "nb_total"],
+        sum_cols=["nb_localisations", "nb_pej_hors_controle", "nb_total"],
     )
     act_theme_total = int(act_theme["nb_total"].sum()) if act_theme is not None and not act_theme.empty else 0
     if act_theme_display is not None and not act_theme_display.empty:

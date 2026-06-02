@@ -66,7 +66,7 @@ Pour le profil `types_usager_cible`, `is_type_usager` est `True`. Cette conditio
 
 ### 1.2 Répartition par communes
 
-**Fichier CSV concerné :** `indicateurs_types_usager_cible_par_commune.csv` (colonnes `insee_comm`, `nb_controles`, `nb_infractions`, `taux_infraction`).
+**Fichier CSV concerné :** `indicateurs_types_usager_cible_par_commune.csv` (colonnes `insee_comm`, `nb_localisations`, `nb_infractions`, `taux_infraction`).
 
 **Cause :**  
 Le tableau **« Communes avec le plus de contrôles »** est généré **uniquement à l’intérieur** du bloc « Résultats des contrôles » (vers les lignes 1049–1058). Comme ce bloc n’est pas exécuté lorsque `is_type_usager` est vrai, le top communes n’apparaît jamais dans le PDF pour les bilans types_usager_cible.  
@@ -125,7 +125,7 @@ Sans casser le comportement actuel pour les autres profils (notamment sans type_
 - **Où :** Dans la même section « Contrôles par type d’usager », après le bloc « Résultats des contrôles » (ou à la suite des tableaux domaine).
 - **Quoi :**
   - Si `options.get("par_commune", True)` et `results.get("agg_commune")` est non vide :
-    - Construire le tableau « Communes avec le plus de contrôles » à partir de `results["agg_commune"]` (tri par `nb_controles` décroissant, head(10)).
+    - Construire le tableau « Communes avec le plus de contrôles » à partir de `results["agg_commune"]` (tri par `nb_localisations` décroissant, head(10)).
     - Colonnes : Code INSEE (ou nom), Nb contrôles, Nb infractions, Taux infraction.
     - Légende adaptée, ex. « Communes avec le plus de contrôles (usager ciblé) ».
 

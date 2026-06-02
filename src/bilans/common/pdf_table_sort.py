@@ -7,7 +7,7 @@ import pandas as pd
 from bilans.common.utilitaires_metier import ZONE_PEJ_LECTEUR_TABLE_ORDER
 
 _COUNT_COLUMNS_PRIORITY = (
-    "nb_controles",
+    "nb_localisations",
     "nb_total",
     "nb",
     "nb_pej",
@@ -31,7 +31,7 @@ _PDF_COLUMN_LABELS: dict[str, str] = {
     "nb_pej": PDF_LABEL_PEJ,
     "nb_pa": "PA",
     "nb_pve": "PVe",
-    "nb_controles": PDF_LABEL_CTRL_LOCATIONS_SHORT,
+    "nb_localisations": PDF_LABEL_CTRL_LOCATIONS_SHORT,
     "resultat": "Résultat",
     "coeur_hors_coeur": "Zone",
 }
@@ -174,10 +174,10 @@ def prepare_pdf_results_sec23_sorting(results: dict) -> None:
         ("pej_natinf_analysis", ["nb"]),
         ("pej_clotur", ["nb"]),
         ("pej_suite", ["nb"]),
-        ("res_par_usager_domaine", ["nb_controles", "nb_conforme", "nb_manquement", "nb_infraction"]),
+        ("res_par_usager_domaine", ["nb_localisations", "nb_conforme", "nb_manquement", "nb_infraction"]),
         ("zone_ctrl", ["nb_total"]),
         ("agg_theme", ["nb"]),
-        ("agg_commune", ["nb_controles", "nb"]),
+        ("agg_commune", ["nb_localisations", "nb"]),
         ("pa_par_theme", ["nb_pa", "nb"]),
     ]
     for key, cols in column_sorts:
@@ -223,7 +223,7 @@ def build_resultats_par_usager_domaine_pdf_rows(
     for col in ("nb_conforme", "nb_manquement", "nb_infraction", "nb_en_attente"):
         if col not in work.columns:
             work[col] = 0
-    work["_sort_res"] = work["nb_controles"].fillna(0).astype(int)
+    work["_sort_res"] = work["nb_localisations"].fillna(0).astype(int)
     work = work.sort_values("_sort_res", ascending=False, kind="stable").head(max_rows)
 
     res_field_cols: list[tuple[str, str]] = [

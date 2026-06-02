@@ -53,11 +53,11 @@ def test_resultats_controles_pie_data_uses_four_expected_categories() -> None:
 def test_rollup_small_categories_adds_last_other_row() -> None:
     df = pd.DataFrame(
         [
-            {"theme": "Milieux aquatiques", "nb_ctrl": 500, "nb_pej_hors_controle": 0, "nb_total": 500},
-            {"theme": "Chasse", "nb_ctrl": 250, "nb_pej_hors_controle": 5, "nb_total": 255},
-            {"theme": "Déchets", "nb_ctrl": 70, "nb_pej_hors_controle": 0, "nb_total": 70},
-            {"theme": "Bruit", "nb_ctrl": 6, "nb_pej_hors_controle": 0, "nb_total": 6},
-            {"theme": "Publicité", "nb_ctrl": 4, "nb_pej_hors_controle": 1, "nb_total": 5},
+            {"theme": "Milieux aquatiques", "nb_localisations": 500, "nb_pej_hors_controle": 0, "nb_total": 500},
+            {"theme": "Chasse", "nb_localisations": 250, "nb_pej_hors_controle": 5, "nb_total": 255},
+            {"theme": "Déchets", "nb_localisations": 70, "nb_pej_hors_controle": 0, "nb_total": 70},
+            {"theme": "Bruit", "nb_localisations": 6, "nb_pej_hors_controle": 0, "nb_total": 6},
+            {"theme": "Publicité", "nb_localisations": 4, "nb_pej_hors_controle": 1, "nb_total": 5},
         ]
     )
 
@@ -67,7 +67,7 @@ def test_rollup_small_categories_adds_last_other_row() -> None:
         other_label="Autres thèmes de contrôle",
         value_col="nb_total",
         min_pct=0.01,
-        sum_cols=["nb_ctrl", "nb_pej_hors_controle", "nb_total"],
+        sum_cols=["nb_localisations", "nb_pej_hors_controle", "nb_total"],
     )
 
     assert out is not None
@@ -77,7 +77,7 @@ def test_rollup_small_categories_adds_last_other_row() -> None:
         "Déchets",
         "Autres thèmes de contrôle",
     ]
-    assert int(out.iloc[-1]["nb_ctrl"]) == 10
+    assert int(out.iloc[-1]["nb_localisations"]) == 10
     assert int(out.iloc[-1]["nb_pej_hors_controle"]) == 1
     assert int(out.iloc[-1]["nb_total"]) == 11
 

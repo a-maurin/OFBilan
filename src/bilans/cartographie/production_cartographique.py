@@ -100,6 +100,10 @@ try:
         QgsWkbTypes,
         QgsCentroidFillSymbolLayer,
         QgsField,
+        QgsPointClusterRenderer,
+        QgsProperty,
+        QgsFontMarkerSymbolLayer,
+        QgsSymbolLayer,
     )
     from qgis.core import QgsLayerTreeLayer, QgsLayerTreeGroup
     from qgis.PyQt.QtGui import QColor
@@ -597,7 +601,32 @@ def apply_layer_symbology(layer, config: "LayerSymbologyConfig", geometry_mode_o
                 "outline_color": "128,17,25" if config.symbol_shape == "diamond" else "35,35,35",
             })
             marker.setOutputUnit(Qgis.RenderUnit.Millimeters)
-            layer.setRenderer(QgsSingleSymbolRenderer(marker))
+            
+            single_renderer = QgsSingleSymbolRenderer(marker)
+            
+            cluster_marker = QgsMarkerSymbol.createSimple({
+                "name": config.symbol_shape,
+                "color": color.name(),
+                "size": str(config.symbol_size_mm),
+                "outline_color": "128,17,25" if config.symbol_shape == "diamond" else "35,35,35",
+            })
+            cluster_marker.setOutputUnit(Qgis.RenderUnit.Millimeters)
+            cluster_marker.setDataDefinedSize(QgsProperty.fromExpression("scale_linear(@cluster_size, 1, 20, 4, 15)"))
+            
+            font_marker = QgsFontMarkerSymbolLayer()
+            font_marker.setFontFamily("sans-serif")
+            font_marker.setColor(QColor("black"))
+            font_marker.setSize(3)
+            font_marker.setSizeUnit(Qgis.RenderUnit.Millimeters)
+            font_marker.setDataDefinedProperty(QgsSymbolLayer.PropertyCharacter, QgsProperty.fromExpression("to_string(@cluster_size)"))
+            
+            cluster_marker.appendSymbolLayer(font_marker)
+            
+            cluster_renderer = QgsPointClusterRenderer()
+            cluster_renderer.setEmbeddedRenderer(single_renderer)
+            cluster_renderer.setClusterSymbol(cluster_marker)
+            
+            layer.setRenderer(cluster_renderer)
 
     elif config.renderer_type == "graduated" and config.field:
         if is_polygon and geom_mode == "polygon_centroid":

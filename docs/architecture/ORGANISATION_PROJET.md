@@ -6,7 +6,9 @@ sans refonte du moteur metier.
 
 ## Sources de verite
 
+- `bin/` : raccourcis d'exécution locaux pour le développement.
 - `scripts/` : wrappers d'execution (Windows/Linux) et verification (`verify.ps1` / `verify.sh` pour pytest, `verify_ref_layout.*` pour `ref/`).
+- `tools/` : scripts de maintenance internes, audits ponctuels et utilitaires de diagnostic.
 - `src/bilans/` : code applicatif principal (moteur profilé, cartographie, common).
 - `config/` : configuration de pilotage versionnee (profils, options metier, presentation).
 - `ref/programme/` : referentiels lus par l'application (tables, SIG, charte OFB) ;

@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 @pytest.fixture(scope="module")
 def audit_pve_mod():
-    path = ROOT / "tools" / "audit_pve_totaux.py"
+    path = ROOT / "tools" / "audit" / "audit_pve_totaux.py"
     spec = importlib.util.spec_from_file_location("audit_pve_totaux", path)
     mod = importlib.util.module_from_spec(spec)
     assert spec.loader is not None

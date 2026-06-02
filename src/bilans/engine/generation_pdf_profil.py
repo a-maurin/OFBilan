@@ -268,9 +268,9 @@ def _generate_pdf_content(
     pa_resume = _load_csv_opt(out_dir, "pa_global_resume.csv")
     pve_resume = _load_csv_opt(out_dir, "pve_global_resume.csv")
 
-    nb_ctrl = 0
+    nb_localisations = 0
     if agg_domaine is not None and not agg_domaine.empty:
-        nb_ctrl = int(agg_domaine["nb"].sum())
+        nb_localisations = int(agg_domaine["nb"].sum())
     nb_pej = int(pej_resume["nb_pej_global"].iloc[0]) if pej_resume is not None and not pej_resume.empty else 0
     nb_pa = int(pa_resume["nb_pa_global"].iloc[0]) if pa_resume is not None and not pa_resume.empty else 0
     nb_pve = int(pve_resume["nb_pve_global"].iloc[0]) if pve_resume is not None and not pve_resume.empty else 0
@@ -390,20 +390,20 @@ def _generate_pdf_content(
         if is_section_enabled(presentation_cfg, "sec1", True):
             builder.add_section("sec1", section_title["sec1"])
         kf: list[tuple[str, str]] = []
-        if nb_ctrl > 0:
-            kf.append((str(nb_ctrl), "Localisations de contrôle"))
+        if nb_localisations > 0:
+            kf.append((str(nb_localisations), "Localisations de contrôle"))
         tab_nc = tab_resultats_controles
         if tab_nc is not None and not tab_nc.empty and "resultat" in tab_nc.columns:
             nb_nc_row = tab_nc.loc[tab_nc["resultat"].astype(str).str.strip() == "Non-conforme", "nb"]
             nb_nc = int(nb_nc_row.sum()) if not nb_nc_row.empty else 0
             if nb_nc > 0:
-                taux_nc = nb_nc / nb_ctrl if nb_ctrl else 0
+                taux_nc = nb_nc / nb_localisations if nb_localisations else 0
                 kf.append((str(nb_nc), PDF_LABEL_NON_CONFORME_LOCATIONS))
                 kf.append((format_pct_int_from_rate(taux_nc), "Taux de non-conformité"))
         elif tab_resultats is not None:
             nb_nc = _nb_non_conformes_brut(tab_resultats)
             if nb_nc > 0:
-                taux_nc = nb_nc / nb_ctrl if nb_ctrl else 0
+                taux_nc = nb_nc / nb_localisations if nb_localisations else 0
                 kf.append((str(nb_nc), PDF_LABEL_NON_CONFORME_LOCATIONS))
                 kf.append((format_pct_int_from_rate(taux_nc), "Taux de non-conformité"))
         if nb_pej > 0:
@@ -468,8 +468,8 @@ def _generate_pdf_content(
                 tbl.append(
                     [
                         str(row["periode"]),
-                        str(int(row["nb_controles"])),
-                        str(int(row["nb_controles_non_conformes"])),
+                        str(int(row["nb_localisations"])),
+                        str(int(row["nb_localisations_non_conformes"])),
                         taux_str,
                         str(int(row["nb_pej"])),
                         str(int(row["nb_pa"])),
@@ -519,10 +519,10 @@ def _generate_pdf_content(
                 titre_proc = "Procédures et PVe par année"
 
             conformes = [
-                int(row["nb_controles"]) - int(row["nb_controles_non_conformes"])
+                int(row["nb_localisations"]) - int(row["nb_localisations_non_conformes"])
                 for _, row in agg_periode.iterrows()
             ]
-            non_conformes = [int(v) for v in agg_periode["nb_controles_non_conformes"].tolist()]
+            non_conformes = [int(v) for v in agg_periode["nb_localisations_non_conformes"].tolist()]
             stacked_ctrl_path = chart_bar_stacked(
                 period_labels,
                 {"Conformes": conformes, "Non-conformes": non_conformes},
@@ -1012,10 +1012,10 @@ def _generate_pdf_content(
         elif is_section_enabled(presentation_cfg, "sec4", True):
             total_usagers = sum(int(row["nb"]) for _, row in agg_usager.iterrows())
             nb_multi = (
-                int(usagers_resume["nb_controles_multi_usagers"].iloc[0])
+                int(usagers_resume["nb_localisations_multi_usagers"].iloc[0])
                 if usagers_resume is not None
                 and not usagers_resume.empty
-                and "nb_controles_multi_usagers" in usagers_resume.columns
+                and "nb_localisations_multi_usagers" in usagers_resume.columns
                 else 0
             )
             if is_block_enabled(presentation_cfg, "sec4.show_intro_text", True):
@@ -1322,7 +1322,7 @@ def _generate_pdf_content(
                 profile_label="Bilan global",
                 profile_id=profile_id,
                 diffusion=diffusion,
-                nb_ctrl=nb_ctrl,
+                nb_localisations=nb_localisations,
                 nb_pej=nb_pej,
                 nb_pa=nb_pa,
                 nb_pve=nb_pve,
@@ -1336,7 +1336,7 @@ def _generate_pdf_content(
         gloss_cfg = load_glossary_config(_ROOT)
         glossaire_rows = build_filtered_glossary_rows(
             gloss_cfg=gloss_cfg,
-            nb_ctrl=nb_ctrl,
+            nb_localisations=nb_localisations,
             nb_pej=nb_pej,
             nb_pa=nb_pa,
             nb_pve=nb_pve,

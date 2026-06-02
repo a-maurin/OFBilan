@@ -43,10 +43,10 @@ def test_pej_hors_controle_exclut_dc_id_lies_aux_controles() -> None:
     act = activite_police_par_theme(point, pej, "21")
     row_a = act.loc[act["theme"] == "Thème A"].iloc[0]
     row_c = act.loc[act["theme"] == "Thème C"].iloc[0]
-    assert int(row_a["nb_ctrl"]) == 1
+    assert int(row_a["nb_localisations"]) == 1
     assert int(row_a["nb_pej_hors_controle"]) == 0
     assert int(row_a["nb_total"]) == 1
-    assert int(row_c["nb_ctrl"]) == 0
+    assert int(row_c["nb_localisations"]) == 0
     assert int(row_c["nb_pej_hors_controle"]) == 1
     assert int(row_c["nb_total"]) == 1
 

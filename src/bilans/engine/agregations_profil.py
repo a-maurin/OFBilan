@@ -17,6 +17,7 @@ from bilans.common.utilitaires_metier import (
     count_multi_usager_controles,
     count_controles_non_conformes_oscean,
     count_pa_induites_par_controles,
+    count_operations_controle,
     filter_points_induisant_pa,
     points_as_pa_lignes,
 )
@@ -73,6 +74,10 @@ def analyse_controles_global(point: pd.DataFrame, out_dir: Path) -> Tuple[pd.Dat
     pt["insee_comm"] = pt["insee_comm"].astype(str).str.zfill(5)
 
     nb_total = len(pt)
+    
+    pd.DataFrame([{"nb_operations_controle": count_operations_controle(pt)}]).to_csv(
+        out_dir / "controles_global_operations_resume.csv", sep=";", index=False
+    )
 
     col_resultat = "resultat" if "resultat" in pt.columns else None
     if col_resultat:
@@ -145,7 +150,7 @@ def analyse_controles_global(point: pd.DataFrame, out_dir: Path) -> Tuple[pd.Dat
         cross.to_csv(out_dir / "controles_global_usager_par_domaine.csv", sep=";", index=False)
 
         nb_multi = count_multi_usager_controles(pt)
-        pd.DataFrame([{"nb_controles_multi_usagers": nb_multi}]).to_csv(
+        pd.DataFrame([{"nb_localisations_multi_usagers": nb_multi}]).to_csv(
             out_dir / "controles_global_usagers_resume.csv", sep=";", index=False
         )
     else:
@@ -169,7 +174,7 @@ def analyse_controles_global(point: pd.DataFrame, out_dir: Path) -> Tuple[pd.Dat
         pd.DataFrame(columns=["type_usager"]).to_csv(
             out_dir / "controles_global_usager_par_domaine.csv", sep=";", index=False
         )
-        pd.DataFrame([{"nb_controles_multi_usagers": 0}]).to_csv(
+        pd.DataFrame([{"nb_localisations_multi_usagers": 0}]).to_csv(
             out_dir / "controles_global_usagers_resume.csv", sep=";", index=False
         )
 
@@ -333,12 +338,16 @@ def analyse_annuelle_global(
 
     rows = []
     for year in sorted(years):
-        nb_ctrl = (
+        nb_localisations = (
             int((point["date_ctrl"].dt.year == year).sum())
             if not point.empty and "date_ctrl" in point.columns
             else 0
         )
-        nb_ctrl_inf = (
+        nb_ops = 0
+        if not point.empty and "date_ctrl" in point.columns:
+            mask = point["date_ctrl"].dt.year == year
+            nb_ops = count_operations_controle(point, mask=mask)
+        nb_localisations_inf = (
             count_controles_non_conformes_oscean(
                 point.loc[point["date_ctrl"].dt.year == year, "resultat"]
             )
@@ -363,9 +372,10 @@ def analyse_annuelle_global(
         rows.append(
             {
                 "periode": str(year),
-                "nb_controles": nb_ctrl,
-                "nb_controles_non_conformes": nb_ctrl_inf,
-                "taux_non_conformite_controles": (nb_ctrl_inf / nb_ctrl) if nb_ctrl > 0 else pd.NA,
+                "nb_localisations": nb_localisations,
+                "nb_operations_controle": nb_ops,
+                "nb_localisations_non_conformes": nb_localisations_inf,
+                "taux_non_conformite_localisations": (nb_localisations_inf / nb_localisations) if nb_localisations > 0 else pd.NA,
                 "nb_pej": nb_pej,
                 "nb_pa": nb_pa,
                 "nb_pve": nb_pve,
@@ -418,16 +428,18 @@ def analyse_trimestrielle_global(
         m1 = (quarter - 1) * 3 + 1
         m2 = quarter * 3
 
-        nb_ctrl = 0
+        nb_localisations = 0
+        nb_ops = 0
         if not point.empty and "date_ctrl" in point.columns:
             dt = point["date_ctrl"]
             mask = (dt.dt.year == year) & (dt.dt.month >= m1) & (dt.dt.month <= m2)
-            nb_ctrl = int(mask.sum())
-        nb_ctrl_inf = 0
+            nb_localisations = int(mask.sum())
+            nb_ops = count_operations_controle(point, mask=mask)
+        nb_localisations_inf = 0
         if not point.empty and "date_ctrl" in point.columns and "resultat" in point.columns:
             dt = point["date_ctrl"]
             mask = (dt.dt.year == year) & (dt.dt.month >= m1) & (dt.dt.month <= m2)
-            nb_ctrl_inf = count_controles_non_conformes_oscean(point.loc[mask, "resultat"])
+            nb_localisations_inf = count_controles_non_conformes_oscean(point.loc[mask, "resultat"])
         nb_pej = 0
         if not pej.empty and "DATE_REF" in pej.columns:
             dt = pej["DATE_REF"]
@@ -447,9 +459,10 @@ def analyse_trimestrielle_global(
         rows.append(
             {
                 "periode": f"{year}-T{quarter}",
-                "nb_controles": nb_ctrl,
-                "nb_controles_non_conformes": nb_ctrl_inf,
-                "taux_non_conformite_controles": (nb_ctrl_inf / nb_ctrl) if nb_ctrl > 0 else pd.NA,
+                "nb_localisations": nb_localisations,
+                "nb_operations_controle": nb_ops,
+                "nb_localisations_non_conformes": nb_localisations_inf,
+                "taux_non_conformite_localisations": (nb_localisations_inf / nb_localisations) if nb_localisations > 0 else pd.NA,
                 "nb_pej": nb_pej,
                 "nb_pa": nb_pa,
                 "nb_pve": nb_pve,
@@ -495,14 +508,16 @@ def analyse_mensuelle_global(
 
     rows = []
     for (year, month) in sorted(periods):
-        nb_ctrl = 0
-        nb_ctrl_nc = 0
+        nb_localisations = 0
+        nb_ops = 0
+        nb_localisations_nc = 0
         if not point.empty and "date_ctrl" in point.columns:
             dt = point["date_ctrl"]
             mask = (dt.dt.year == year) & (dt.dt.month == month)
-            nb_ctrl = int(mask.sum())
+            nb_localisations = int(mask.sum())
+            nb_ops = count_operations_controle(point, mask=mask)
             if "resultat" in point.columns:
-                nb_ctrl_nc = count_controles_non_conformes_oscean(
+                nb_localisations_nc = count_controles_non_conformes_oscean(
                     point.loc[mask, "resultat"]
                 )
         nb_pej = 0
@@ -524,10 +539,11 @@ def analyse_mensuelle_global(
         rows.append(
             {
                 "periode": f"{year}-{month:02d}",
-                "nb_controles": nb_ctrl,
-                "nb_controles_non_conformes": nb_ctrl_nc,
-                "taux_non_conformite_controles": (nb_ctrl_nc / nb_ctrl)
-                if nb_ctrl > 0
+                "nb_localisations": nb_localisations,
+                "nb_operations_controle": nb_ops,
+                "nb_localisations_non_conformes": nb_localisations_nc,
+                "taux_non_conformite_localisations": (nb_localisations_nc / nb_localisations)
+                if nb_localisations > 0
                 else pd.NA,
                 "nb_pej": nb_pej,
                 "nb_pa": nb_pa,
@@ -567,15 +583,17 @@ def analyse_hebdomadaire_global(
 
     rows = []
     for (year, week) in sorted(periods):
-        nb_ctrl = 0
-        nb_ctrl_nc = 0
+        nb_localisations = 0
+        nb_ops = 0
+        nb_localisations_nc = 0
         if not point.empty and "date_ctrl" in point.columns:
             dt = point["date_ctrl"]
             iso = dt.dt.isocalendar()
             mask = (iso["year"] == year) & (iso["week"] == week)
-            nb_ctrl = int(mask.sum())
+            nb_localisations = int(mask.sum())
+            nb_ops = count_operations_controle(point, mask=mask)
             if "resultat" in point.columns:
-                nb_ctrl_nc = count_controles_non_conformes_oscean(point.loc[mask, "resultat"])
+                nb_localisations_nc = count_controles_non_conformes_oscean(point.loc[mask, "resultat"])
         nb_pej = 0
         if not pej.empty and "DATE_REF" in pej.columns:
             dt = pej["DATE_REF"]
@@ -596,9 +614,10 @@ def analyse_hebdomadaire_global(
         rows.append(
             {
                 "periode": f"{year}-S{week:02d}",
-                "nb_controles": nb_ctrl,
-                "nb_controles_non_conformes": nb_ctrl_nc,
-                "taux_non_conformite_controles": (nb_ctrl_nc / nb_ctrl) if nb_ctrl > 0 else pd.NA,
+                "nb_localisations": nb_localisations,
+                "nb_operations_controle": nb_ops,
+                "nb_localisations_non_conformes": nb_localisations_nc,
+                "taux_non_conformite_localisations": (nb_localisations_nc / nb_localisations) if nb_localisations > 0 else pd.NA,
                 "nb_pej": nb_pej,
                 "nb_pa": nb_pa,
                 "nb_pve": nb_pve,
@@ -654,9 +673,10 @@ def run_profile_aggregations(
         pd.DataFrame(
             columns=[
                 "periode",
-                "nb_controles",
-                "nb_controles_non_conformes",
-                "taux_non_conformite_controles",
+                "nb_localisations",
+                "nb_operations_controle",
+                "nb_localisations_non_conformes",
+                "taux_non_conformite_localisations",
                 "nb_pej",
                 "nb_pa",
                 "nb_pve",

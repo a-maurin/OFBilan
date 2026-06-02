@@ -42,6 +42,19 @@ def series_str_contains(
     return s.map(lambda val: needle in val.lower())
 
 
+def count_operations_controle(df: pd.DataFrame, mask: pd.Series | None = None) -> int:
+    """
+    Nombre d'opérations de contrôle (fiches d'intervention uniques).
+    
+    Identifié par la colonne `dc_id`.
+    """
+    if "dc_id" not in df.columns or df.empty:
+        return 0
+    if mask is not None:
+        return int(len(df.loc[mask, "dc_id"].dropna().unique()))
+    return int(len(df["dc_id"].dropna().unique()))
+
+
 def extract_insee_code_series(series: pd.Series) -> pd.Series:
     """Code INSEE 5 chiffres par valeur, ou ``pd.NA`` (sans ``str.extract`` / PyArrow)."""
     return series_as_python_str(series).map(lambda val: _normalize_insee_code(val) or pd.NA)
@@ -314,7 +327,7 @@ def serie_type_usager(df: pd.DataFrame, source_table: str, source_champ: str) ->
     return df[source_champ].apply(_dominant)
 
 
-def agg_nb_controles_par_type_usager(
+def agg_nb_localisations_par_type_usager(
     df: pd.DataFrame,
     source_table: str = "point_ctrl",
     source_champ: str = "type_usager",
@@ -491,7 +504,7 @@ def agg_controles_par_type_usager_domaine(
     ``point_ctrl``, chaque fiche contribue une seule fois.
     """
     if source_champ not in df.columns:
-        return pd.DataFrame(columns=["type_usager", "domaine", "nb_controles"])
+        return pd.DataFrame(columns=["type_usager", "domaine", "nb_localisations"])
 
     work_df = _consolide_lignes_effectifs_par_fc_id(
         df,
@@ -516,7 +529,7 @@ def agg_controles_par_type_usager_domaine(
 
     rows: list[dict[str, object]] = []
     for (cat, dom), n in counts.items():
-        rows.append({"type_usager": cat, "domaine": dom, "nb_controles": int(n)})
+        rows.append({"type_usager": cat, "domaine": dom, "nb_localisations": int(n)})
     return pd.DataFrame(rows)
 
 
@@ -532,7 +545,7 @@ def agg_controles_par_type_usager_theme(
     Même logique que agg_controles_par_type_usager_domaine mais avec la colonne thème.
     """
     if source_champ not in df.columns:
-        return pd.DataFrame(columns=["type_usager", "theme", "nb_controles"])
+        return pd.DataFrame(columns=["type_usager", "theme", "nb_localisations"])
 
     work_df = _consolide_lignes_effectifs_par_fc_id(
         df,
@@ -557,7 +570,7 @@ def agg_controles_par_type_usager_theme(
 
     rows: list[dict[str, object]] = []
     for (cat, theme), n in counts.items():
-        rows.append({"type_usager": cat, "theme": theme, "nb_controles": int(n)})
+        rows.append({"type_usager": cat, "theme": theme, "nb_localisations": int(n)})
     return pd.DataFrame(rows)
 
 
@@ -577,7 +590,7 @@ def _agg_resultats_par_type_usager_dimension(
         "nb_manquement",
         "nb_infraction",
         "nb_en_attente",
-        "nb_controles",
+        "nb_localisations",
     ]
     if source_champ not in df.columns or col_resultat not in df.columns:
         return pd.DataFrame(columns=base_cols)
@@ -611,10 +624,10 @@ def _agg_resultats_par_type_usager_dimension(
                     "nb_manquement": 0,
                     "nb_infraction": 0,
                     "nb_en_attente": 0,
-                    "nb_controles": 0,
+                    "nb_localisations": 0,
                 },
             )
-            d["nb_controles"] += n
+            d["nb_localisations"] += n
             if res_cls == "Conforme":
                 d["nb_conforme"] += n
             elif res_cls == "Manquement":
@@ -634,7 +647,7 @@ def _agg_resultats_par_type_usager_dimension(
                 "nb_manquement": int(d["nb_manquement"]),
                 "nb_infraction": int(d["nb_infraction"]),
                 "nb_en_attente": int(d["nb_en_attente"]),
-                "nb_controles": int(d["nb_controles"]),
+                "nb_localisations": int(d["nb_localisations"]),
             }
         )
     return pd.DataFrame(rows)

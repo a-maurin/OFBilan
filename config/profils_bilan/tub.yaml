@@ -6,9 +6,19 @@ out_subdir: bilan_tub
 restrict_geo: tub
 
 filter:
-  type: agrainage
+  type: tub
+
+natinf_pej: ["27742", "25001"]
+natinf_pve: ["27742", "25001"]
 
 analyse_PVe: true
 
 _map_id: tub
 
+presentation:
+  sections:
+    titles:
+      sec22: "2.2. Répartition de l'activité par thèmes (contrôles + PEJ)"
+  blocks:
+    sec22:
+      group_by: theme

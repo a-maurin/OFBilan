@@ -61,3 +61,10 @@ __pycache__/
 ############################
 .DS_Store
 Thumbs.db
+
+############################
+# Secrets / Environnement
+############################
+.env
+.env.*
+secrets.*

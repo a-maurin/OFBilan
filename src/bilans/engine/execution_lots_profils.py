@@ -114,34 +114,6 @@ def run_profiles_batch(
 
     profiles_cfg = _load_profiles(profils)
 
-    try:
-        from bilans.common.carte_helper import ensure_maps_for_profiles
-        from bilans.common.cartographie_config import resolve_map_profiles_for_batch
-
-        map_profiles: list[str] = []
-        for pid in profils:
-            prof = profiles_cfg.get(pid, {})
-            for map_id in resolve_map_profiles_for_batch(prof, pid, cli_options):
-                if map_id not in map_profiles:
-                    map_profiles.append(map_id)
-
-        if map_profiles:
-            try:
-                ensure_maps_for_profiles(
-                    map_profiles,
-                    date_deb=date_deb,
-                    date_fin=date_fin,
-                    dept_code=dept_code,
-                    bilan_profiles=profiles_cfg,
-                )
-            except Exception as e:
-                logger.warning("Cartes profils : %s", e)
-                print(
-                    f"[WARN] Impossible de générer les cartes pour les profils [{', '.join(map_profiles)}] : {e}",
-                    file=sys.stderr,
-                )
-    except Exception as e:
-        logger.warning("carte_helper : %s", e)
 
     if combine:
         if len(profils) < 2:

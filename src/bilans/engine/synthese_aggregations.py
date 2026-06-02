@@ -130,16 +130,30 @@ def activite_police_par_theme(point: pd.DataFrame, pej: pd.DataFrame, dept_code:
             .astype(str)
             .value_counts()
             .rename_axis("theme")
-            .to_frame("nb_ctrl")
+            .to_frame("nb_localisations")
             .reset_index()
         )
+        if "dc_id" in point.columns:
+            pts = point.dropna(subset=["dc_id"]).copy()
+            ops = (
+                pts.groupby(pts[col].fillna("Hors thème").astype(str))["dc_id"]
+                .nunique()
+                .rename_axis("theme")
+                .to_frame("nb_operations_controle")
+                .reset_index()
+            )
+            ctrl = ctrl.merge(ops, on="theme", how="outer")
+            ctrl["nb_localisations"] = ctrl["nb_localisations"].fillna(0).astype(int)
+            ctrl["nb_operations_controle"] = ctrl["nb_operations_controle"].fillna(0).astype(int)
+        else:
+            ctrl["nb_operations_controle"] = 0
     else:
-        ctrl = pd.DataFrame(columns=["theme", "nb_ctrl"])
+        ctrl = pd.DataFrame(columns=["theme", "nb_localisations", "nb_operations_controle"])
     hors = pej_hors_fiche_controle(pej, point, dept_code)
     pej_h = _counts_par_theme(hors, "nb_pej_hors_controle")
-    out = _merge_theme_counts([(ctrl, "nb_ctrl"), (pej_h, "nb_pej_hors_controle")])
+    out = _merge_theme_counts([(ctrl, "nb_localisations"), (ctrl, "nb_operations_controle"), (pej_h, "nb_pej_hors_controle")])
     if not out.empty:
-        out["nb_total"] = out["nb_ctrl"] + out["nb_pej_hors_controle"]
+        out["nb_total"] = out["nb_localisations"] + out["nb_pej_hors_controle"]
         out = out.sort_values("nb_total", ascending=False, kind="stable")
     return out
 
@@ -434,7 +448,8 @@ def run_synthese_aggregations(
     resume = pd.DataFrame(
         [
             {
-                "nb_ctrl": int(len(point)),
+                "nb_localisations": int(len(point)),
+                "nb_operations_controle": int(len(point["dc_id"].dropna().unique())) if "dc_id" in point.columns else 0,
                 "nb_pej": int(len(_pej_departement(pej, dept_code))),
                 "nb_pej_hors_controle": int(len(pej_hors_fiche_controle(pej, point, dept_code))),
                 "nb_pa": int(count_pa_induites_par_controles(point)),

@@ -93,7 +93,7 @@ def test_analyse_controles_global_consolide_exports_usagers_par_fc_id(tmp_path: 
     assert int(agg_usager["nb"].sum()) == 4
     assert int(res_usager["Total"].sum()) == 3
     assert int(cross.drop(columns=["type_usager"]).sum().sum()) == 4
-    assert int(resume["nb_controles_multi_usagers"].iloc[0]) == 1
+    assert int(resume["nb_localisations_multi_usagers"].iloc[0]) == 1
 
 
 def test_run_global_smoke(monkeypatch, tmp_path: Path) -> None:

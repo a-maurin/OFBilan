@@ -35,7 +35,7 @@ def _load_agrainage_results() -> dict:
         {
             "type_usager": ["Agriculteur", "Agriculteur"],
             "theme": ["Thème A", "Thème B"],
-            "nb_controles": [2, 1],
+            "nb_localisations": [2, 1],
         }
     )
     res_usager = pd.DataFrame(
@@ -48,7 +48,7 @@ def _load_agrainage_results() -> dict:
         }
     )
     return {
-        "nb_ctrl": 5,
+        "nb_localisations": 5,
         "nb_pej": 0,
         "nb_pa": 0,
         "nb_pve": 0,
@@ -133,7 +133,7 @@ def test_agrainage_pdf_section_headings_order(tmp_path: Path, monkeypatch) -> No
 def _load_chasse_results() -> dict:
     tab_res = _read_fixture_csv(FIXTURES_CHASSE / "tab_resultats_controles.csv")
     return {
-        "nb_ctrl": 5,
+        "nb_localisations": 5,
         "nb_pej": 0,
         "nb_pa": 0,
         "nb_pve": 1,

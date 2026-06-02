@@ -7,7 +7,7 @@ from bilans.common.utilitaires_metier import (
     agg_controles_par_type_usager_domaine,
     agg_controles_par_type_usager_theme,
     agg_effectifs_usagers,
-    agg_nb_controles_par_type_usager,
+    agg_nb_localisations_par_type_usager,
     count_multi_usager_controles,
 )
 
@@ -45,7 +45,7 @@ def test_agg_effectifs_ne_compte_qu_une_fois_par_fc_id():
     assert int(out.loc[out["type_usager"] == "Collectivité", "nb"].sum()) == 12
 
 
-def test_agg_nb_controles_consolide_par_fc_id():
+def test_agg_nb_localisations_consolide_par_fc_id():
     df = pd.DataFrame(
         {
             "fc_id": ["FC-1", "FC-1"],
@@ -53,7 +53,7 @@ def test_agg_nb_controles_consolide_par_fc_id():
         }
     )
 
-    out = agg_nb_controles_par_type_usager(df)
+    out = agg_nb_localisations_par_type_usager(df)
 
     assert int(out["nb"].sum()) == 1
     assert int(out.loc[out["type_usager"] == "Collectivité", "nb"].sum()) == 1
@@ -72,18 +72,19 @@ def test_agg_controles_par_type_usager_dimension_consolide_par_fc_id():
     out_dom = agg_controles_par_type_usager_domaine(df)
     out_theme = agg_controles_par_type_usager_theme(df)
 
-    assert int(out_dom["nb_controles"].sum()) == 1
+    assert "nb_localisations" in out_dom.columns
+    assert int(out_dom["nb_localisations"].sum()) == 1
     assert int(
         out_dom.loc[
             (out_dom["type_usager"] == "Collectivité") & (out_dom["domaine"] == "Eau"),
-            "nb_controles",
+            "nb_localisations",
         ].sum()
     ) == 1
-    assert int(out_theme["nb_controles"].sum()) == 1
+    assert int(out_theme["nb_localisations"].sum()) == 1
     assert int(
         out_theme.loc[
             (out_theme["type_usager"] == "Collectivité") & (out_theme["theme"] == "Thème A"),
-            "nb_controles",
+            "nb_localisations",
         ].sum()
     ) == 1
 

@@ -57,6 +57,7 @@ from bilans.common.utilitaires_metier import (
     series_str_contains,
     contient_natinf,
     count_controles_non_conformes_oscean,
+    count_operations_controle,
     get_dept_name,
     _zone_summary,
     _zone_count,
@@ -388,21 +389,7 @@ def _run_global_profile_via_yaml(
     if options.get("chart_preset") and not chart_preset:
         chart_preset = options.get("chart_preset")
     resolved_opts = ask_interactive_options(profile, resolved_opts)
-    resolved_opts = _finalize_cartes_selection(
-        profile,
-        resolved_opts,
-        options,
-        date_deb=date_deb,
-        date_fin=date_fin,
-        dept_code=dept_code,
-    )
     root = PROJECT_ROOT
-    prompt_cartography_integration(
-        root=root,
-        profile=profile,
-        profil_id=str(profile.get("id", "global")),
-        resolved_opts=resolved_opts,
-    )
     out_subdir = str(profile.get("out_subdir", f"bilan_{profile.get('id', 'global')}")).strip()
     if not out_subdir:
         out_subdir = "bilan_global"
@@ -462,6 +449,44 @@ def _run_global_profile_via_yaml(
             date_deb=date_deb_ts,
             date_fin=date_fin_ts,
         )
+
+    # ── Cartographie ──
+    resolved_opts = _finalize_cartes_selection(
+        profile,
+        resolved_opts,
+        options,
+        date_deb=date_deb,
+        date_fin=date_fin,
+        dept_code=dept_code,
+    )
+
+    from bilans.common.carte_helper import ensure_maps_for_profiles
+    profil_id = str(profile.get("id", "global"))
+    capabilities = profile.get("capabilities", {})
+    if isinstance(capabilities, dict):
+        map_profiles = capabilities.get("map_profiles", [profil_id])
+    else:
+        map_profiles = [profil_id]
+
+    if resolved_opts.get("cartes", False):
+        try:
+            ensure_maps_for_profiles(
+                map_profiles,
+                date_deb=date_deb,
+                date_fin=date_fin,
+                dept_code=dept_code,
+                bilan_profiles={profil_id: profile},
+            )
+        except Exception as e:
+            logger = logging.getLogger("bilans.engine")
+            logger.warning("Cartes profils : %s", e)
+
+    prompt_cartography_integration(
+        root=root,
+        profile=profile,
+        profil_id=profil_id,
+        resolved_opts=resolved_opts,
+    )
 
     print("Étape 3/3 : génération du PDF (graphiques et mise en page)...")
     with Spinner():
@@ -849,6 +874,9 @@ def _filter_point_ctrl(point: pd.DataFrame, profile: dict) -> pd.DataFrame:
 
     if ft == "agrainage":
         return _filter_agrainage(point)
+        
+    if ft == "tub":
+        return _filter_tub(point)
 
     if ft == "type_usager":
         targets = filt.get("type_usager_target", [])
@@ -869,10 +897,10 @@ def _filter_point_ctrl(point: pd.DataFrame, profile: dict) -> pd.DataFrame:
 
 
 def _filter_agrainage(point: pd.DataFrame) -> pd.DataFrame:
-    """Filtre agrainage : nom_dossie « agrain » OU type_actio sanitaire (hors tuberculose/grippe/piégeage)."""
+    """Filtre agrainage : nom_dossie « agrain » ou « tub » OU type_actio sanitaire (hors tuberculose/grippe/piégeage)."""
     mask_nom = pd.Series(False, index=point.index)
     if "nom_dossie" in point.columns:
-        mask_nom = series_str_contains(point["nom_dossie"], "agrain", regex=False)
+        mask_nom = series_str_contains(point["nom_dossie"], r"agrain|tub", regex=True)
 
     mask_type = pd.Series(False, index=point.index)
     type_col = "type_actio" if "type_actio" in point.columns else "type_action"
@@ -883,6 +911,15 @@ def _filter_agrainage(point: pd.DataFrame) -> pd.DataFrame:
         mask_type = mask_type & ~mask_excl
 
     return point[mask_nom | mask_type].copy()
+
+
+def _filter_tub(point: pd.DataFrame) -> pd.DataFrame:
+    """Filtre spécifique TUB strict sur le nom du dossier (logique identique à la symbologie QGIS)."""
+    mask_nom = pd.Series(False, index=point.index)
+    if "nom_dossie" in point.columns:
+        # La symbologie QGIS utilise '%grainage%' ou '%tub%'
+        mask_nom = series_str_contains(point["nom_dossie"], r"grainage|tub", regex=True)
+    return point[mask_nom].copy()
 
 
 def _filter_by_keywords(
@@ -1368,7 +1405,7 @@ def _run_spatial_analyses(
         agg_pnf = (
             pt.groupby("PNF")
             .agg(
-                nb_controles=("dc_id", "count"),
+                nb_localisations=("dc_id", "count"),
                 nb_non_conforme=(
                     "resultat",
                     lambda s: count_controles_non_conformes_oscean(s),
@@ -1377,7 +1414,7 @@ def _run_spatial_analyses(
             .reset_index()
         )
         agg_pnf["taux_non_conformite"] = agg_pnf["nb_non_conforme"] / agg_pnf[
-            "nb_controles"
+            "nb_localisations"
         ].replace(0, pd.NA)
         results["agg_pnf"] = agg_pnf
         results["point_with_pnf"] = pt
@@ -1396,7 +1433,7 @@ def _run_spatial_analyses(
                 rows.append(
                     {
                         "PNF": "Cœur",
-                        "nb_controles": nb_c,
+                        "nb_localisations": nb_c,
                         "nb_non_conforme": nb_nc_c,
                         "taux_non_conformite": (nb_nc_c / nb_c) if nb_c > 0 else pd.NA,
                     }
@@ -1410,7 +1447,7 @@ def _run_spatial_analyses(
                 rows.append(
                     {
                         "PNF": "Aire d'adhésion",
-                        "nb_controles": nb_h,
+                        "nb_localisations": nb_h,
                         "nb_non_conforme": nb_nc_h,
                         "taux_non_conformite": (nb_nc_h / nb_h) if nb_h > 0 else pd.NA,
                     }
@@ -1493,11 +1530,13 @@ def _run_aggregations(
     results["_zone_lecteur_4_zones"] = zone_lecteur_4_zones
     tub_codes_lecteur = spatial.get("tub_codes") if isinstance(spatial.get("tub_codes"), set) else set()
 
-    nb_ctrl = len(point_filtered)
+    nb_localisations = len(point_filtered)
+    nb_operations_controle = count_operations_controle(point_filtered)
     nb_pej = len(pej_filtered)
     nb_pa = count_pa_induites_par_controles(point_filtered)
     nb_pve = len(pve_filtered)
-    results["nb_ctrl"] = nb_ctrl
+    results["nb_localisations"] = nb_localisations
+    results["nb_operations_controle"] = nb_operations_controle
     results["nb_pej"] = nb_pej
     results["nb_pa"] = nb_pa
     results["nb_pve"] = nb_pve
@@ -1513,7 +1552,7 @@ def _run_aggregations(
         # Référence de cohérence : maximum observé entre totaux de contrôles
         # calculés dans les sections structurantes des contrôles.
         total_from_resultats = int(tab["nb"].sum()) if "nb" in tab.columns else 0
-        total_controles_reference = max(int(nb_ctrl), total_from_resultats)
+        total_controles_reference = max(int(nb_localisations), total_from_resultats)
         results["total_controles_reference"] = total_controles_reference
 
         results["tab_resultats_controles"] = build_tab_resultats_controles(
@@ -1523,7 +1562,7 @@ def _run_aggregations(
             tub_codes=tub_codes_lecteur,
         )
     else:
-        results["total_controles_reference"] = int(nb_ctrl)
+        results["total_controles_reference"] = int(nb_localisations)
 
     # Par thème
     if not point_filtered.empty and "theme" in point_filtered.columns:
@@ -1536,7 +1575,7 @@ def _run_aggregations(
             .to_frame("nb")
             .reset_index()
         )
-        agg["taux"] = agg["nb"] / float(nb_ctrl or 1)
+        agg["taux"] = agg["nb"] / float(nb_localisations or 1)
         results["agg_theme"] = agg
 
     # Par commune
@@ -1545,7 +1584,7 @@ def _run_aggregations(
         agg_c = (
             point_filtered.groupby(insee_col)
             .agg(
-                nb_controles=("dc_id", "count"),
+                nb_localisations=("dc_id", "count"),
                 nb_non_conformes=(
                     "resultat",
                     lambda s: count_controles_non_conformes_oscean(s),
@@ -1554,7 +1593,7 @@ def _run_aggregations(
             .reset_index()
         )
         agg_c["taux_non_conformite"] = agg_c["nb_non_conformes"] / agg_c[
-            "nb_controles"
+            "nb_localisations"
         ].replace(0, pd.NA)
         results["agg_commune"] = agg_c
 
@@ -2073,7 +2112,7 @@ def _run_aggregations(
         pve_filtered,
         "PVe",
         ["INF-ID", "id", "numero"],
-        ["INF-DATE-INTG", "date", "DATE_REF"],
+        ["INF-DATE-MIF", "date", "DATE_REF"],
         ["INF-INSEE", "nom_commun", "nom_comm", "commune", "INSEE_NOM"],
         ["INF-TYP-INF-STAT-LIB", "theme", "THEME", "type_actio", "type_action"],
     )
@@ -2138,9 +2177,9 @@ def _run_aggregations(
                 years |= set(
                     pa_pts["date_ctrl"].dropna().dt.year.astype(int).tolist()
                 )
-        if not pve_filtered.empty and "INF-DATE-INTG" in pve_filtered.columns:
+        if not pve_filtered.empty and "INF-DATE-MIF" in pve_filtered.columns:
             years |= set(
-                pve_filtered["INF-DATE-INTG"].dropna().dt.year.astype(int).tolist()
+                pve_filtered["INF-DATE-MIF"].dropna().dt.year.astype(int).tolist()
             )
 
         rows: list[dict[str, Any]] = []
@@ -2149,16 +2188,18 @@ def _run_aggregations(
 
             if not point_filtered.empty and "date_ctrl" in point_filtered.columns:
                 p_year = point_filtered[point_filtered["date_ctrl"].dt.year == year]
-                year_row["nb_controles"] = int(len(p_year))
+                year_row["nb_localisations"] = int(len(p_year))
+                year_row["nb_operations_controle"] = count_operations_controle(p_year)
                 if "resultat" in p_year.columns:
-                    year_row["nb_controles_non_conformes"] = (
+                    year_row["nb_localisations_non_conformes"] = (
                         count_controles_non_conformes_oscean(p_year["resultat"])
                     )
                 else:
-                    year_row["nb_controles_non_conformes"] = 0
+                    year_row["nb_localisations_non_conformes"] = 0
             else:
-                year_row["nb_controles"] = 0
-                year_row["nb_controles_non_conformes"] = 0
+                year_row["nb_localisations"] = 0
+                year_row["nb_operations_controle"] = 0
+                year_row["nb_localisations_non_conformes"] = 0
 
             if not pej_filtered.empty and "DATE_REF" in pej_filtered.columns:
                 dt = pej_filtered["DATE_REF"]
@@ -2172,9 +2213,9 @@ def _run_aggregations(
             else:
                 year_row["nb_pa"] = 0
 
-            if not pve_filtered.empty and "INF-DATE-INTG" in pve_filtered.columns:
+            if not pve_filtered.empty and "INF-DATE-MIF" in pve_filtered.columns:
                 year_row["nb_pve"] = int(
-                    (pve_filtered["INF-DATE-INTG"].dt.year == year).sum()
+                    (pve_filtered["INF-DATE-MIF"].dt.year == year).sum()
                 )
             else:
                 year_row["nb_pve"] = 0
@@ -2185,8 +2226,8 @@ def _run_aggregations(
             yearly = pd.DataFrame(rows)
             yearly["taux_non_conformite_controles"] = yearly.apply(
                 lambda r: (
-                    (r["nb_controles_non_conformes"] / r["nb_controles"])
-                    if r["nb_controles"] > 0
+                    (r["nb_localisations_non_conformes"] / r["nb_localisations"])
+                    if r["nb_localisations"] > 0
                     else pd.NA
                 ),
                 axis=1,
@@ -2216,8 +2257,8 @@ def _run_aggregations(
                 if hasattr(t, "year") and hasattr(t, "month"):
                     q = (t.month - 1) // 3 + 1
                     periods.add((int(t.year), q))
-        if not pve_filtered.empty and "INF-DATE-INTG" in pve_filtered.columns:
-            for _, r in pve_filtered["INF-DATE-INTG"].dropna().items():
+        if not pve_filtered.empty and "INF-DATE-MIF" in pve_filtered.columns:
+            for _, r in pve_filtered["INF-DATE-MIF"].dropna().items():
                 t = r
                 if hasattr(t, "year") and hasattr(t, "month"):
                     q = (t.month - 1) // 3 + 1
@@ -2232,7 +2273,8 @@ def _run_aggregations(
             if not point_filtered.empty and "date_ctrl" in point_filtered.columns:
                 dt = point_filtered["date_ctrl"]
                 mask = (dt.dt.year == year) & (dt.dt.month >= m1) & (dt.dt.month <= m2)
-                row_t["nb_controles"] = int(mask.sum())
+                row_t["nb_localisations"] = int(mask.sum())
+                row_t["nb_operations_controle"] = count_operations_controle(point_filtered, mask=mask)
                 if "resultat" in point_filtered.columns:
                     rnc = (
                         point_filtered["resultat"]
@@ -2241,12 +2283,13 @@ def _run_aggregations(
                         .str.lower()
                         .isin(("infraction", "manquement"))
                     )
-                    row_t["nb_controles_non_conformes"] = int((mask & rnc).sum())
+                    row_t["nb_localisations_non_conformes"] = int((mask & rnc).sum())
                 else:
-                    row_t["nb_controles_non_conformes"] = 0
+                    row_t["nb_localisations_non_conformes"] = 0
             else:
-                row_t["nb_controles"] = 0
-                row_t["nb_controles_non_conformes"] = 0
+                row_t["nb_localisations"] = 0
+                row_t["nb_operations_controle"] = 0
+                row_t["nb_localisations_non_conformes"] = 0
 
             if not pej_filtered.empty and "DATE_REF" in pej_filtered.columns:
                 dt = pej_filtered["DATE_REF"]
@@ -2262,8 +2305,8 @@ def _run_aggregations(
             else:
                 row_t["nb_pa"] = 0
 
-            if not pve_filtered.empty and "INF-DATE-INTG" in pve_filtered.columns:
-                dt = pve_filtered["INF-DATE-INTG"]
+            if not pve_filtered.empty and "INF-DATE-MIF" in pve_filtered.columns:
+                dt = pve_filtered["INF-DATE-MIF"]
                 mask = (dt.dt.year == year) & (dt.dt.month >= m1) & (dt.dt.month <= m2)
                 row_t["nb_pve"] = int(mask.sum())
             else:
@@ -2275,8 +2318,8 @@ def _run_aggregations(
             trimestriel = pd.DataFrame(rows_trim)
             trimestriel["taux_non_conformite_controles"] = trimestriel.apply(
                 lambda r: (
-                    (r["nb_controles_non_conformes"] / r["nb_controles"])
-                    if r["nb_controles"] > 0
+                    (r["nb_localisations_non_conformes"] / r["nb_localisations"])
+                    if r["nb_localisations"] > 0
                     else pd.NA
                 ),
                 axis=1,
@@ -2300,7 +2343,7 @@ def _run_aggregations(
         _add_iso_weeks(point_filtered, "date_ctrl")
         _add_iso_weeks(pej_filtered, "DATE_REF")
         _add_iso_weeks(filter_points_induisant_pa(point_filtered), "date_ctrl")
-        _add_iso_weeks(pve_filtered, "INF-DATE-INTG")
+        _add_iso_weeks(pve_filtered, "INF-DATE-MIF")
 
         rows_week: list[dict[str, Any]] = []
         for (year, week) in sorted(periods_w):
@@ -2309,16 +2352,18 @@ def _run_aggregations(
                 dt = point_filtered["date_ctrl"]
                 iso = dt.dt.isocalendar()
                 mask = (iso["year"] == year) & (iso["week"] == week)
-                row_w["nb_controles"] = int(mask.sum())
+                row_w["nb_localisations"] = int(mask.sum())
+                row_w["nb_operations_controle"] = count_operations_controle(point_filtered, mask=mask)
                 if "resultat" in point_filtered.columns:
-                    row_w["nb_controles_non_conformes"] = count_controles_non_conformes_oscean(
+                    row_w["nb_localisations_non_conformes"] = count_controles_non_conformes_oscean(
                         point_filtered.loc[mask, "resultat"]
                     )
                 else:
-                    row_w["nb_controles_non_conformes"] = 0
+                    row_w["nb_localisations_non_conformes"] = 0
             else:
-                row_w["nb_controles"] = 0
-                row_w["nb_controles_non_conformes"] = 0
+                row_w["nb_localisations"] = 0
+                row_w["nb_operations_controle"] = 0
+                row_w["nb_localisations_non_conformes"] = 0
 
             if not pej_filtered.empty and "DATE_REF" in pej_filtered.columns:
                 dt = pej_filtered["DATE_REF"]
@@ -2335,8 +2380,8 @@ def _run_aggregations(
                 row_w["nb_pa"] = int(mask.sum())
             else:
                 row_w["nb_pa"] = 0
-            if not pve_filtered.empty and "INF-DATE-INTG" in pve_filtered.columns:
-                dt = pve_filtered["INF-DATE-INTG"]
+            if not pve_filtered.empty and "INF-DATE-MIF" in pve_filtered.columns:
+                dt = pve_filtered["INF-DATE-MIF"]
                 iso = dt.dt.isocalendar()
                 row_w["nb_pve"] = int(((iso["year"] == year) & (iso["week"] == week)).sum())
             else:
@@ -2347,8 +2392,8 @@ def _run_aggregations(
             hebdo = pd.DataFrame(rows_week)
             hebdo["taux_non_conformite_controles"] = hebdo.apply(
                 lambda r: (
-                    (r["nb_controles_non_conformes"] / r["nb_controles"])
-                    if r["nb_controles"] > 0
+                    (r["nb_localisations_non_conformes"] / r["nb_localisations"])
+                    if r["nb_localisations"] > 0
                     else pd.NA
                 ),
                 axis=1,
@@ -2374,8 +2419,8 @@ def _run_aggregations(
                 t = r
                 if hasattr(t, "year") and hasattr(t, "month"):
                     periods_m.add((int(t.year), int(t.month)))
-        if not pve_filtered.empty and "INF-DATE-INTG" in pve_filtered.columns:
-            for _, r in pve_filtered["INF-DATE-INTG"].dropna().items():
+        if not pve_filtered.empty and "INF-DATE-MIF" in pve_filtered.columns:
+            for _, r in pve_filtered["INF-DATE-MIF"].dropna().items():
                 t = r
                 if hasattr(t, "year") and hasattr(t, "month"):
                     periods_m.add((int(t.year), int(t.month)))
@@ -2386,16 +2431,18 @@ def _run_aggregations(
             if not point_filtered.empty and "date_ctrl" in point_filtered.columns:
                 dt = point_filtered["date_ctrl"]
                 mask = (dt.dt.year == year) & (dt.dt.month == month)
-                row_m["nb_controles"] = int(mask.sum())
+                row_m["nb_localisations"] = int(mask.sum())
+                row_m["nb_operations_controle"] = count_operations_controle(point_filtered, mask=mask)
                 if "resultat" in point_filtered.columns:
-                    row_m["nb_controles_non_conformes"] = count_controles_non_conformes_oscean(
+                    row_m["nb_localisations_non_conformes"] = count_controles_non_conformes_oscean(
                         point_filtered.loc[mask, "resultat"]
                     )
                 else:
-                    row_m["nb_controles_non_conformes"] = 0
+                    row_m["nb_localisations_non_conformes"] = 0
             else:
-                row_m["nb_controles"] = 0
-                row_m["nb_controles_non_conformes"] = 0
+                row_m["nb_localisations"] = 0
+                row_m["nb_operations_controle"] = 0
+                row_m["nb_localisations_non_conformes"] = 0
 
             if not pej_filtered.empty and "DATE_REF" in pej_filtered.columns:
                 dt = pej_filtered["DATE_REF"]
@@ -2410,8 +2457,8 @@ def _run_aggregations(
                 row_m["nb_pa"] = int(mask.sum())
             else:
                 row_m["nb_pa"] = 0
-            if not pve_filtered.empty and "INF-DATE-INTG" in pve_filtered.columns:
-                dt = pve_filtered["INF-DATE-INTG"]
+            if not pve_filtered.empty and "INF-DATE-MIF" in pve_filtered.columns:
+                dt = pve_filtered["INF-DATE-MIF"]
                 row_m["nb_pve"] = int(((dt.dt.year == year) & (dt.dt.month == month)).sum())
             else:
                 row_m["nb_pve"] = 0
@@ -2421,8 +2468,8 @@ def _run_aggregations(
             mensuel = pd.DataFrame(rows_month)
             mensuel["taux_non_conformite_controles"] = mensuel.apply(
                 lambda r: (
-                    (r["nb_controles_non_conformes"] / r["nb_controles"])
-                    if r["nb_controles"] > 0
+                    (r["nb_localisations_non_conformes"] / r["nb_localisations"])
+                    if r["nb_localisations"] > 0
                     else pd.NA
                 ),
                 axis=1,
@@ -2522,6 +2569,66 @@ def _export_csv(
     # PVe
     if not pve_filtered.empty:
         pve_filtered.to_csv(out_dir / f"pve_{prefix}.csv", sep=";", index=False)
+        try:
+            import geopandas as gpd
+            import logging
+            from pathlib import Path
+            logger = logging.getLogger(__name__)
+            
+            lon_col, lat_col = "inf_gps_long", "inf_gps_lat"
+            if lon_col in pve_filtered.columns and lat_col in pve_filtered.columns:
+                df_geo = pve_filtered.copy()
+                df_geo["_lon"] = pd.to_numeric(df_geo[lon_col], errors="coerce")
+                df_geo["_lat"] = pd.to_numeric(df_geo[lat_col], errors="coerce")
+                
+                # Gérer les PVe orphelins (sans coordonnées) en utilisant le centroïde de leur commune
+                missing = df_geo["_lon"].isna() | df_geo["_lat"].isna() | (df_geo["_lon"] == 0) | (df_geo["_lat"] == 0)
+                root = Path(__file__).resolve().parent.parent.parent.parent
+                
+                if missing.any():
+                    communes_shp = root / "ref" / "programme" / "sig" / "communes_21" / "communes.shp"
+                    if communes_shp.exists():
+                        try:
+                            # Lire les communes et calculer les centroïdes en WGS84
+                            coms = gpd.read_file(communes_shp)
+                            if coms.crs is None or coms.crs.to_epsg() != 4326:
+                                coms = coms.to_crs("EPSG:4326")
+                            
+                            # Use long_centr and lat_centro if they exist, else compute
+                            if "long_centr" in coms.columns and "lat_centro" in coms.columns:
+                                dict_x = coms.set_index("INSEE_COM")["long_centr"].astype(float).to_dict()
+                                dict_y = coms.set_index("INSEE_COM")["lat_centro"].astype(float).to_dict()
+                            else:
+                                dict_x = pd.Series(coms.geometry.centroid.x.values, index=coms.INSEE_COM).to_dict()
+                                dict_y = pd.Series(coms.geometry.centroid.y.values, index=coms.INSEE_COM).to_dict()
+                            
+                            df_geo["insee_str"] = df_geo.get("INF-INSEE", pd.Series(dtype=str)).astype(str).str.zfill(5)
+                            
+                            # Mettre à jour les valeurs manquantes via le dictionnaire
+                            df_geo.loc[missing, "_lon"] = df_geo.loc[missing, "insee_str"].map(dict_x)
+                            df_geo.loc[missing, "_lat"] = df_geo.loc[missing, "insee_str"].map(dict_y)
+                        except Exception as e_geom:
+                            logger.warning(f"Impossible de centrer les PVe orphelins : {e_geom}")
+                
+                # Exporter seulement ceux qui ont des coordonnées finales valides
+                mask_geo = df_geo["_lon"].notna() & df_geo["_lat"].notna() & (df_geo["_lon"] != 0) & (df_geo["_lat"] != 0)
+                if mask_geo.any():
+                    gdf = gpd.GeoDataFrame(
+                        pve_filtered[mask_geo],
+                        geometry=gpd.points_from_xy(df_geo.loc[mask_geo, "_lon"], df_geo.loc[mask_geo, "_lat"]),
+                        crs="EPSG:4326"
+                    ).to_crs("EPSG:2154")
+                    
+                    for col in gdf.select_dtypes(include=['datetime64[ns, UTC]', 'datetime64[ns]', 'datetime64']).columns:
+                        gdf[col] = gdf[col].astype(str)
+                    
+                    carto_dir = root / "data" / "sources" / "sig" / "CARTO"
+                    carto_dir.mkdir(parents=True, exist_ok=True)
+                    gpkg_path = carto_dir / f"pve_{prefix}_export_automatique.gpkg"
+                    gdf.to_file(gpkg_path, driver="GPKG")
+                    logger.info(f"Couche géographique PVe générée pour QGIS : {gpkg_path} ({mask_geo.sum()} points)")
+        except Exception as e:
+            logger.warning(f"Impossible d'exporter la couche QGIS des PVe : {e}")
 
     # Synthèse croisée
     if "synthese_zone" in results:
@@ -2708,22 +2815,13 @@ def _pdf_section_activite_par_types_usagers(
 
     pie_fs = float(pie_figure_scale) if pie_figure_scale is not None else float(figure_scale)
 
-    total_ctrl_lignes = float(ctrl_ut["nb_controles"].sum()) or 1.0
-    sum_par_type = ctrl_ut.groupby("type_usager")["nb_controles"].sum()
+    total_ctrl_lignes = float(ctrl_ut["nb_localisations"].sum()) or 1.0
+    sum_par_type = ctrl_ut.groupby("type_usager")["nb_localisations"].sum()
 
     pie_data = {str(k): int(v) for k, v in sum_par_type.items()}
     show_themes = is_block_enabled(
         presentation_cfg, "sec4.show_table_themes_par_type_usager", True
     )
-    if pie_data or show_themes:
-        if is_section_enabled(presentation_cfg, "sec41", True):
-            builder.add_section(
-                "sec41",
-                section_title.get("sec41", "3.1. Thème de contrôle par type d'usager"),
-                level=2,
-                toc_level=1,
-            )
-
     # 1) Camembert : même modèle que « Répartition des résultats » (chart_pie par défaut + ratio PDF identique).
     if pie_data:
         pie_path = chart_pie(
@@ -2740,6 +2838,15 @@ def _pdf_section_activite_par_types_usagers(
         )
         builder.add_image(Path(pie_path), width_ratio=pie_ratio, spacer_after_mm=0.8)
 
+    if pie_data or show_themes:
+        if is_section_enabled(presentation_cfg, "sec41", True):
+            builder.add_section(
+                "sec41",
+                section_title.get("sec41", "3.1. Thème de contrôle par type d'usager"),
+                level=2,
+                toc_level=1,
+            )
+
     # 2) Un tableau par type d'usager : thèmes (nb + % du total général + % du sous-total type)
     if show_themes:
         type_order = sum_par_type.sort_values(ascending=False).index
@@ -2749,14 +2856,14 @@ def _pdf_section_activite_par_types_usagers(
             sub = ctrl_ut[ctrl_ut["type_usager"].astype(str) == tu_s].copy()
             if sub.empty:
                 continue
-            sub = sub.sort_values("nb_controles", ascending=False, kind="stable")
+            sub = sub.sort_values("nb_localisations", ascending=False, kind="stable")
             sub = rollup_small_categories(
                 sub,
                 label_col="theme",
                 other_label="Autres thèmes de contrôle",
-                value_col="nb_controles",
+                value_col="nb_localisations",
                 min_pct=0.01,
-                sum_cols=["nb_controles"],
+                sum_cols=["nb_localisations"],
             )
             if sub is None or sub.empty:
                 continue
@@ -2765,12 +2872,12 @@ def _pdf_section_activite_par_types_usagers(
             tbl_th = [
                 ["Thème", "Nombre", "% du total général", "% du sous-total (type)"],
             ]
-            nbs_th = sub["nb_controles"].astype(int).tolist()
+            nbs_th = sub["nb_localisations"].astype(int).tolist()
             pct_sous_th = (
                 int_percents_largest_remainder(nbs_th) if st > 0 else [0] * len(nbs_th)
             )
             for j, (_, r) in enumerate(sub.iterrows()):
-                nb = int(r["nb_controles"])
+                nb = int(r["nb_localisations"])
                 tbl_th.append(
                     [
                         str(r["theme"]),
@@ -2955,6 +3062,8 @@ def _generate_pdf(
         if isinstance(resolved_presentation_cfg, dict)
         else {}
     )
+    if "presentation" in profile and isinstance(profile["presentation"], dict):
+        presentation_cfg = _deep_merge_dicts(presentation_cfg, profile["presentation"])
     behavior_cfg = (
         resolved_presentation_cfg.get("behavior", {})
         if isinstance(resolved_presentation_cfg, dict)
@@ -3016,7 +3125,7 @@ def _generate_pdf(
         return insee_to_nom.get(str(code).strip().zfill(5), str(code))
 
     # Compteurs
-    nb_ctrl = results.get("nb_ctrl", 0)
+    nb_localisations = results.get("nb_localisations", 0)
     nb_pej = results.get("nb_pej", 0)
     nb_pa = results.get("nb_pa", 0)
     nb_pve = results.get("nb_pve", 0)
@@ -3132,8 +3241,11 @@ def _generate_pdf(
     # ── CHIFFRES CLÉS ──
     builder.add_section("sec1", section_title["sec1"])
     kf = []
-    if nb_ctrl > 0:
-        kf.append((str(nb_ctrl), "Localisations de contrôle"))
+    nb_operations_controle = results.get("nb_operations_controle", 0)
+    if nb_operations_controle > 0:
+        kf.append((str(nb_operations_controle), "Opérations de contrôle"))
+    if nb_localisations > 0:
+        kf.append((str(nb_localisations), "Localisations de contrôle"))
     if tab_resultats is not None:
         nb_nc = 0
         for _lbl in ("Infraction", "Manquement"):
@@ -3141,7 +3253,7 @@ def _generate_pdf(
             if not sub.empty and "nb" in sub.columns:
                 nb_nc += int(sub["nb"].sum())
         if nb_nc > 0:
-            taux_nc = nb_nc / nb_ctrl if nb_ctrl else 0
+            taux_nc = nb_nc / nb_localisations if nb_localisations else 0
             kf.append((str(nb_nc), PDF_LABEL_NON_CONFORME_LOCATIONS))
             kf.append((format_pct_int_from_rate(taux_nc), "Taux de non-conformité"))
     if nb_pej > 0:
@@ -3150,7 +3262,7 @@ def _generate_pdf(
     if nb_pve > 0:
         kf.append((str(nb_pve), "Nombre d'infractions relevées par PVe"))
         # En mode \"types d'usagers\", ajouter un indicateur complémentaire :
-        # somme des effectifs d'usagers contrôlés (peut dépasser nb_ctrl).
+        # somme des effectifs d'usagers contrôlés (peut dépasser nb_localisations).
     if is_type_usager:
         ue = results.get("usager_effectifs")
         if ue is not None and not ue.empty and "nb" in ue.columns:
@@ -3205,6 +3317,7 @@ def _generate_pdf(
             )
             tbl = [[
                 label_col,
+                "Opérations de contrôle",
                 PDF_LABEL_CTRL_LOCATIONS_SHORT,
                 PDF_LABEL_NON_CONFORME_LOCATIONS,
                 "Taux de non-conformité",
@@ -3220,8 +3333,9 @@ def _generate_pdf(
                 )
                 tbl.append([
                     str(row["periode"]),
-                    str(int(row["nb_controles"])),
-                    str(int(row["nb_controles_non_conformes"])),
+                    str(int(row.get("nb_operations_controle", 0))),
+                    str(int(row["nb_localisations"])),
+                    str(int(row["nb_localisations_non_conformes"])),
                     taux,
                     str(int(row["nb_pej"])),
                     str(int(row["nb_pa"])),
@@ -3245,14 +3359,15 @@ def _generate_pdf(
                     ),
                     col_widths=[
                         avail_w * 0.12,
-                        avail_w * 0.14,
-                        avail_w * 0.18,
-                        avail_w * 0.14,
-                        avail_w * 0.14,
-                        avail_w * 0.14,
-                        avail_w * 0.14,
+                        avail_w * 0.13,
+                        avail_w * 0.13,
+                        avail_w * 0.16,
+                        avail_w * 0.16,
+                        avail_w * 0.10,
+                        avail_w * 0.10,
+                        avail_w * 0.10,
                     ],
-                    col_aligns=["RIGHT", "RIGHT", "RIGHT", "RIGHT", "RIGHT", "RIGHT", "RIGHT"],
+                    col_aligns=["RIGHT", "RIGHT", "RIGHT", "RIGHT", "RIGHT", "RIGHT", "RIGHT", "RIGHT"],
                 )
             period_labels = [str(v) for v in agg_annuelle["periode"].tolist()]
             if is_month:
@@ -3268,10 +3383,10 @@ def _generate_pdf(
                 titre_ctrl = "Localisations de contrôle par année (conformes / non-conformes)"
                 titre_proc = "Procédures et PVe par année"
             conformes = [
-                int(row["nb_controles"]) - int(row["nb_controles_non_conformes"])
+                int(row["nb_localisations"]) - int(row["nb_localisations_non_conformes"])
                 for _, row in agg_annuelle.iterrows()
             ]
-            non_conformes = [int(v) for v in agg_annuelle["nb_controles_non_conformes"].tolist()]
+            non_conformes = [int(v) for v in agg_annuelle["nb_localisations_non_conformes"].tolist()]
             stacked_ctrl = {"Conformes": conformes, "Non-conformes": non_conformes}
             stacked_path = chart_bar_stacked(
                 period_labels,
@@ -3568,14 +3683,32 @@ def _generate_pdf(
         point_filtered = results.get("_raw_point_filtered", pd.DataFrame())
         pej_filtered = results.get("_raw_pej_filtered", pd.DataFrame())
         
-        # Build domaine data from available point_filtered and pej_filtered
+        # Pilotage YAML pour le groupement (domaine ou thème)
+        group_by = presentation_cfg.get("blocks", {}).get("sec22", {}).get("group_by", "domaine")
+        if group_by == "theme":
+            group_col_point = "theme"
+            group_col_pej = "THEME"
+            title_pie = "Répartition de l'activité par thèmes (contrôles + PEJ)"
+            col_header = "Thème"
+        elif group_by == "type_action":
+            group_col_point = "type_action" if "type_action" in point_filtered.columns else "type_actio"
+            group_col_pej = "TYPE_ACTION"
+            title_pie = "Répartition de l'activité par types d'action (contrôles + PEJ)"
+            col_header = "Type d'action"
+        else:
+            group_col_point = "domaine"
+            group_col_pej = "DOMAINE"
+            title_pie = "Répartition de l'activité par domaines (contrôles + PEJ)"
+            col_header = "Domaine"
+            
+        # Build group data from available point_filtered and pej_filtered
         df_dom = pd.DataFrame()
-        if not point_filtered.empty and "domaine" in point_filtered.columns:
-            df_dom = point_filtered["domaine"].fillna("Non renseigné").astype(str).value_counts().rename_axis("domaine").to_frame("nb").reset_index()
+        if not point_filtered.empty and group_col_point in point_filtered.columns:
+            df_dom = point_filtered[group_col_point].fillna("Non renseigné").astype(str).value_counts().rename_axis("domaine").to_frame("nb").reset_index()
         
         pej_dom = pd.DataFrame()
-        if not pej_filtered.empty and "DOMAINE" in pej_filtered.columns:
-            pej_dom = pej_filtered["DOMAINE"].fillna("Non renseigné").astype(str).value_counts().rename_axis("domaine").to_frame("nb_pej").reset_index()
+        if not pej_filtered.empty and group_col_pej in pej_filtered.columns:
+            pej_dom = pej_filtered[group_col_pej].fillna("Non renseigné").astype(str).value_counts().rename_axis("domaine").to_frame("nb_pej").reset_index()
             
         if not df_dom.empty and not pej_dom.empty:
             df_dom = pd.merge(df_dom, pej_dom, on="domaine", how="outer").fillna(0)
@@ -3591,18 +3724,18 @@ def _generate_pdf(
             df_dom["total_act"] = df_dom["nb"] + df_dom["nb_pej"]
             df_dom = df_dom.sort_values(by="total_act", ascending=False)
             
-            tbl = [["Domaine", "Contrôles", "PEJ"]]
+            tbl = [[col_header, "Contrôles", "PEJ"]]
             for _, row in df_dom.head(25).iterrows():
                 tbl.append([str(row["domaine"]), str(int(row["nb"])), str(int(row["nb_pej"]))])
             builder.add_table(
                 tbl,
-                caption="Répartition de l'activité par domaines (contrôles + PEJ)",
+                caption=title_pie,
                 col_widths=[avail_w * 0.55, avail_w * 0.22, avail_w * 0.23],
                 col_aligns=["LEFT", "RIGHT", "RIGHT"],
             )
             if is_block_enabled(presentation_cfg, "sec22.show_overflow_note", True) and len(df_dom) > 25:
                 builder.add_paragraph(
-                    f"... et {len(df_dom) - 25} autres domaines.",
+                    f"... et {len(df_dom) - 25} autres {group_by}s.",
                     style="BodySmall",
                 )
             if not df_dom.empty:
@@ -3610,7 +3743,7 @@ def _generate_pdf(
                 if is_block_enabled(presentation_cfg, "sec22.show_pie", True) and pie_data:
                     pie_path = chart_pie(
                         pie_data,
-                        "Répartition de l'activité par domaines (contrôles + PEJ)",
+                        title_pie,
                         tmp_dir,
                         "pie_domaine.png",
                         **_chart_pie_compact_legend_kw(
@@ -3627,10 +3760,10 @@ def _generate_pdf(
 
     def _render_sec23() -> None:
         builder.add_section("sec23", section_title["sec23"], toc_level=1)
-        if is_type_usager and nb_ctrl > 0:
+        if is_type_usager and nb_localisations > 0:
             _render_type_usager_sec23_content()
             return
-        if not (nb_ctrl > 0 and not is_type_usager and not is_procedures):
+        if not (nb_localisations > 0 and not is_type_usager and not is_procedures):
             if show_placeholder:
                 builder.add_paragraph("Aucune donnée de résultat disponible sur la période.")
             return
@@ -3690,7 +3823,7 @@ def _generate_pdf(
                             legend_fontsize=ref_pie_legend_fs,
                             legend_ncol_max=legend_ncol_max,
                         ),
-                        figure_scale=ref_pie_fs * 0.85,
+                        figure_scale=ref_pie_fs,
                     )
                 )
             if pie_path is not None and pie_path.exists():
@@ -3700,7 +3833,7 @@ def _generate_pdf(
                     col_widths=cw,
                     col_aligns=ca,
                     image_path=pie_path,
-                    image_width_ratio=ref_pie_w * 0.85,
+                    image_width_ratio=ref_pie_w,
                 )
             else:
                 builder.add_table(
@@ -3745,20 +3878,20 @@ def _generate_pdf(
         data_tub = [
             {
                 "zone": "Zone TUB",
-                "nb_controles": total_tub,
+                "nb_localisations": total_tub,
                 "nb_non_conforme": nc_tub,
                 "taux_non_conformite": nc_tub / total_tub if total_tub > 0 else pd.NA,
             },
             {
                 "zone": "Hors zone TUB",
-                "nb_controles": total_hors_tub,
+                "nb_localisations": total_hors_tub,
                 "nb_non_conforme": nc_hors_tub,
                 "taux_non_conformite": (
                     nc_hors_tub / total_hors_tub if total_hors_tub > 0 else pd.NA
                 ),
             },
         ]
-        agg_tub = sort_dataframe_desc(pd.DataFrame(data_tub), ["nb_controles"])
+        agg_tub = sort_dataframe_desc(pd.DataFrame(data_tub), ["nb_localisations"])
         if profil_id != "agrainage":
             builder.add_section("sec_tub", "Zone TUB / Hors zone TUB")
         tbl = [["Zone", "Nb contrôles", "Contrôles non-conformes", "Taux de non-conformité"]]
@@ -3768,13 +3901,13 @@ def _generate_pdf(
             tbl.append(
                 [
                     str(row["zone"]),
-                    str(int(row["nb_controles"])),
+                    str(int(row["nb_localisations"])),
                     str(int(row["nb_non_conforme"])),
                     t,
                 ]
             )
             grp_labels.append(str(row["zone"]))
-            series_ctrl_tub["Contrôles"].append(int(row["nb_controles"]))
+            series_ctrl_tub["Contrôles"].append(int(row["nb_localisations"]))
             series_ctrl_tub["Non conformes"].append(int(row["nb_non_conforme"]))
         builder.add_table(
             tbl,
@@ -4493,7 +4626,7 @@ def _generate_pdf(
             profile_label=display_label,
             profile_id=profil_id,
             diffusion=diffusion,
-            nb_ctrl=nb_ctrl,
+            nb_localisations=nb_localisations,
             nb_pej=nb_pej,
             nb_pa=nb_pa,
             nb_pve=nb_pve,
@@ -4518,7 +4651,7 @@ def _generate_pdf(
     gloss_cfg = load_glossary_config(PROJECT_ROOT)
     rows = build_filtered_glossary_rows(
         gloss_cfg=gloss_cfg,
-        nb_ctrl=nb_ctrl,
+        nb_localisations=nb_localisations,
         nb_pej=nb_pej,
         nb_pa=nb_pa,
         nb_pve=nb_pve,
@@ -4651,14 +4784,6 @@ def _run_engine_thematic_pipeline(
     map_id = resolve_profile_map_id(profile, profil_id)
     profile["_map_id"] = map_id
 
-    # Après sélection des types d'usagers (types_usager_cible) : pause cartographie commune.
-    prompt_cartography_integration(
-        root=root,
-        profile=profile,
-        profil_id=profil_id,
-        resolved_opts=resolved_opts,
-        map_id=map_id,
-    )
 
     # Déterminer si l'on est dans un contexte \"mono-usager\" (un seul type ciblé).
     is_type_usager = profile.get("analyses", {}).get("type_usager", False)
@@ -4861,6 +4986,44 @@ def _run_engine_thematic_pipeline(
             results, point_filtered, pej_filtered, pa_filtered, pve_filtered,
             out_dir, profile,
         )
+
+    # ── Cartographie ──
+    resolved_opts = _finalize_cartes_selection(
+        profile,
+        resolved_opts,
+        options,
+        date_deb=date_deb,
+        date_fin=date_fin,
+        dept_code=dept_code,
+    )
+
+    from bilans.common.carte_helper import ensure_maps_for_profiles
+    capabilities = profile.get("capabilities", {})
+    if isinstance(capabilities, dict):
+        map_profiles = capabilities.get("map_profiles", [profil_id])
+    else:
+        map_profiles = [profil_id]
+
+    if resolved_opts.get("cartes", False):
+        try:
+            ensure_maps_for_profiles(
+                map_profiles,
+                date_deb=date_deb,
+                date_fin=date_fin,
+                dept_code=dept_code,
+                bilan_profiles={profil_id: profile},
+            )
+        except Exception as e:
+            logger = logging.getLogger("bilans.engine")
+            logger.warning("Cartes profils : %s", e)
+
+    prompt_cartography_integration(
+        root=root,
+        profile=profile,
+        profil_id=profil_id,
+        resolved_opts=resolved_opts,
+        map_id=map_id,
+    )
 
     # ── PDF ──
     print("  Génération du PDF...")

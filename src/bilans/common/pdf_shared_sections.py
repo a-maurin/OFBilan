@@ -147,7 +147,7 @@ def build_sec6_methodology_context(
     profile_label: str = "",
     profile_id: str = "",
     diffusion: str | None = "interne",
-    nb_ctrl: int = 0,
+    nb_localisations: int = 0,
     nb_pej: int = 0,
     nb_pa: int = 0,
     nb_pve: int = 0,
@@ -184,7 +184,7 @@ def build_sec6_methodology_context(
             source_pve=source_pve,
         ),
         "diffusion": diffusion_norm,
-        "nb_ctrl": int(nb_ctrl or 0),
+        "nb_localisations": int(nb_localisations or 0),
         "nb_pej": int(nb_pej or 0),
         "nb_pa": int(nb_pa or 0),
         "nb_pve": int(nb_pve or 0),
@@ -192,7 +192,7 @@ def build_sec6_methodology_context(
         "zone_mode": zone_mode,
         "show_usagers": bool(show_usagers),
         "has_profile": bool(str(profile_label or "").strip()),
-        "has_controls": int(nb_ctrl or 0) > 0,
+        "has_controls": int(nb_localisations or 0) > 0,
         "has_pej": int(nb_pej or 0) > 0,
         "has_pa": int(nb_pa or 0) > 0,
         "has_pve": int(nb_pve or 0) > 0,
@@ -275,7 +275,7 @@ def build_sec6_methodology_html(
     has_tub: bool = False,
     is_pnf_profile: bool = False,
     diffusion: str | None = "interne",
-    nb_ctrl: int = 0,
+    nb_localisations: int = 0,
     nb_pej: int = 0,
     nb_pa: int = 0,
     nb_pve: int = 0,
@@ -300,7 +300,7 @@ def build_sec6_methodology_html(
             profile_label=profile_label,
             profile_id=profile_id,
             diffusion=diffusion,
-            nb_ctrl=nb_ctrl,
+            nb_localisations=nb_localisations,
             nb_pej=nb_pej,
             nb_pa=nb_pa,
             nb_pve=nb_pve,
@@ -338,7 +338,7 @@ def build_sec6_methodology_html(
 def build_filtered_glossary_rows(
     *,
     gloss_cfg: dict,
-    nb_ctrl: int,
+    nb_localisations: int,
     nb_pej: int,
     nb_pa: int,
     nb_pve: int,
@@ -370,7 +370,7 @@ def build_filtered_glossary_rows(
             used_ids.append(abbr_id)
 
     _add_if_available("OSCEAN", True)
-    _add_if_available("DC", nb_ctrl > 0)
+    _add_if_available("DC", nb_localisations > 0)
     _add_if_available("NATINF", nb_pve > 0 or nb_pej > 0)
     _add_if_available("PA", nb_pa > 0)
     _add_if_available("PEJ", nb_pej > 0)

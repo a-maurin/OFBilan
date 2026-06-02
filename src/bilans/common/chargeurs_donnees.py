@@ -337,8 +337,8 @@ def load_pej(
     (suivi_procedure_enq_judiciaire_YYYYMMDD.ods dans sources/) et prépare
     ``DATE_REF`` (affichages / tris) ainsi que ``RECAP_DATE_INIT_PJ``.
 
-    Le **décompte et le filtre de période** s'appuient uniquement sur le classeur
-    ODS, sur ``RECAP_DATE_INIT_PJ`` (et non plus sur la coalescence DATE_REF).
+    Le **décompte et le filtre de période** s'appuient sur la coalescence ``DATE_REF``
+    (qui priorise la date des faits, puis l'ouverture de procédure, puis la date d'initialisation).
 
     Si *dept_code* est fourni, les lignes sont restreintes à
     ``ENTITE_ORIGINE_PROCEDURE == SD{dept_code}``, puis dédoublonnées par ``DC_ID``
@@ -386,7 +386,7 @@ def load_pej(
     if date_deb is not None and date_fin is not None:
         deb_ts = pd.to_datetime(date_deb)
         fin_ts = pd.to_datetime(date_fin)
-        df = filtre_periode(df, "RECAP_DATE_INIT_PJ", deb_ts, fin_ts)
+        df = filtre_periode(df, "DATE_REF", deb_ts, fin_ts)
 
     if dept_code is not None and str(dept_code).strip():
         entity_sd = f"SD{str(dept_code).strip()}"
@@ -1607,13 +1607,13 @@ def load_pve(
     Colonnes normalisées :
       * INF-INSEE : chaîne à 5 chiffres (zfill(5)) si présente
       * INF-DEPARTEMENT / INF-DEPART : alias réciproques
-      * INF-DATE-INTG : datetime (date d'intégration, jour/mois/année)
+      * INF-DATE-MIF : datetime (date de mise en force, jour/mois/année)
 
     Si dept_code et/ou date_deb/date_fin sont fournis, filtre les lignes en conséquence.
 
-    **Période :** le filtre sur ``INF-DATE-INTG`` réduit le nombre de PVe par rapport à une
+    **Période :** le filtre sur ``INF-DATE-MIF`` réduit le nombre de PVe par rapport à une
     simple jointure spatiale (ex. QGIS Excel × centroïdes PNF sans critère de date) : seules
-    les infractions dont la date d'intégration tombe dans l'intervalle du bilan sont comptées.
+    les infractions dont la date de mise en force tombe dans l'intervalle du bilan sont comptées.
     """
     sources = root / "data" / "sources"
     if not sources.exists():
@@ -1654,25 +1654,25 @@ def load_pve(
     elif "INF-DEPART" in df.columns and "INF-DEPARTEMENT" not in df.columns:
         df["INF-DEPARTEMENT"] = df["INF-DEPART"]
 
-    # Date d'intégration
-    if "INF-DATE-INTG" in df.columns:
-        df["INF-DATE-INTG"] = pd.to_datetime(
-            df["INF-DATE-INTG"], dayfirst=True, errors="coerce"
+    # Date de mise en force (MIF)
+    if "INF-DATE-MIF" in df.columns:
+        df["INF-DATE-MIF"] = pd.to_datetime(
+            df["INF-DATE-MIF"], dayfirst=True, errors="coerce"
         )
 
     if dept_code is not None:
         dept_col = "INF-DEPART" if "INF-DEPART" in df.columns else "INF-DEPARTEMENT"
         if dept_col in df.columns:
             df = df[df[dept_col].astype(str).str.strip() == str(dept_code).strip()].copy()
-    if date_deb is not None and date_fin is not None and "INF-DATE-INTG" in df.columns:
+    if date_deb is not None and date_fin is not None and "INF-DATE-MIF" in df.columns:
         n_before_period = len(df)
         deb_ts = pd.to_datetime(date_deb)
         fin_ts = pd.to_datetime(date_fin)
-        df = filtre_periode(df, "INF-DATE-INTG", deb_ts, fin_ts)
+        df = filtre_periode(df, "INF-DATE-MIF", deb_ts, fin_ts)
         n_after_period = len(df)
         if n_before_period > n_after_period:
             logger.info(
-                "PVe : %s ligne(s) retenues sur %s après filtre période INF-DATE-INTG "
+                "PVe : %s ligne(s) retenues sur %s après filtre période INF-DATE-MIF "
                 "(%s → %s) ; %s ligne(s) hors période exclues. "
                 "(Une jointure QGIS sans filtre date sur les mêmes communes PNF peut compter plus de lignes.)",
                 n_after_period,
