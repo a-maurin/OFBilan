@@ -248,6 +248,7 @@ class PDFReportBuilder:
         # pour éviter un titre seul en bas de page et le tableau en haut de la suivante.
         self._pending_section: Optional[List] = None
         self._toc_allowed_anchors: set[str] = set()
+        self._figure_counter: int = 0
 
     @property
     def tmp_dir(self) -> Path:
@@ -787,6 +788,9 @@ class PDFReportBuilder:
             img = RLImage(str(chart_path), width=w, height=w * ratio)
             img.hAlign = "CENTER"
             block.append(img)
+            self._figure_counter += 1
+            block.append(Spacer(1, SPACING_S))
+            block.append(Paragraph(f"Figure {self._figure_counter}", self.styles.get("FigureCaption", self.styles["BodySmall"])))
             block.append(Spacer(1, SPACING_S))
         split_by_row = bool(self._tables_layout.get("split_by_row"))
         block.append(
@@ -1381,6 +1385,9 @@ class PDFReportBuilder:
             img = RLImage(str(image_path), width=w, height=w * ratio)
             img.hAlign = "CENTER"
             block.append(img)
+            self._figure_counter += 1
+            block.append(Spacer(1, SPACING_S))
+            block.append(Paragraph(f"Figure {self._figure_counter}", self.styles.get("FigureCaption", self.styles["BodySmall"])))
         block.append(Spacer(1, 1 * mm))
         keep_block = not split_by_row
         self._append_with_pending(block, keep_together=keep_block)
@@ -1460,9 +1467,14 @@ class PDFReportBuilder:
         img = RLImage(str(path), width=w, height=w * ratio)
         img.hAlign = "CENTER"
         block = [img]
+        
+        self._figure_counter += 1
+        fig_text = f"Figure {self._figure_counter}"
         if caption:
-            block.append(Spacer(1, SPACING_S))
-            block.append(Paragraph(f"<i>{caption}</i>", self.styles["BodySmall"]))
+            fig_text += f" : {caption}"
+            
+        block.append(Spacer(1, SPACING_S))
+        block.append(Paragraph(fig_text, self.styles.get("FigureCaption", self.styles["BodySmall"])))
         block.append(Spacer(1, float(spacer_after_mm) * mm))
         self._append_with_pending(
             block,

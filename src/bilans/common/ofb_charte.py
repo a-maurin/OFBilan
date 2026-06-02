@@ -405,6 +405,17 @@ def _get_styles():
             spaceAfter=2 * mm,
             keepWithNext=1,
         ),
+        "FigureCaption": ParagraphStyle(
+            "OFBFigureCaption",
+            parent=ss["BodyText"],
+            fontName=f"{FONT_FAMILY}-Italic",
+            fontSize=10,
+            leading=13,
+            textColor=rl_colors.HexColor(COLOR_PRIMARY),
+            alignment=TA_CENTER,
+            spaceBefore=2 * mm,
+            spaceAfter=4 * mm,
+        ),
         "KeyFigure": ParagraphStyle(
             "OFBKeyFigure",
             parent=ss["BodyText"],
