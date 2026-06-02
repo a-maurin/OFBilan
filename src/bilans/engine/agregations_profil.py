@@ -108,8 +108,8 @@ def analyse_controles_global(point: pd.DataFrame, out_dir: Path) -> Tuple[pd.Dat
             .to_frame("nb")
             .reset_index()
         )
-        if "dc_id" in pt_filled.columns:
-            ops_par_domaine = pt_filled.groupby(col_domaine)["dc_id"].nunique().reset_index(name="nb_operations")
+        if "fc_id" in pt_filled.columns:
+            ops_par_domaine = pt_filled.groupby(col_domaine)["fc_id"].nunique().reset_index(name="nb_operations")
             agg_domaine = pd.merge(agg_domaine, ops_par_domaine, on="domaine", how="left")
         else:
             agg_domaine["nb_operations"] = 0

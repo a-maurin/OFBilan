@@ -1016,11 +1016,11 @@ class PDFReportBuilder:
         merge_with_next: bool = False,
     ) -> None:
         """Bandeau de chiffres clés + tableau dans un même KeepTogether pour éviter un débordement."""
-        if not figures:
-            return
-        kf_table = key_figures_table(figures, self.styles)
-        spacer = Spacer(1, SPACING_M)
-        block: List = [kf_table, spacer]
+        block: List = []
+        if figures:
+            kf_table = key_figures_table(figures, self.styles)
+            spacer = Spacer(1, SPACING_M)
+            block.extend([kf_table, spacer])
         if caption:
             block.append(Paragraph(caption, self.styles["TableCaption"]))
         tbl = ofb_table(table_rows, col_widths=col_widths, col_aligns=col_aligns)
@@ -1044,13 +1044,13 @@ class PDFReportBuilder:
         compact: bool = False,
     ) -> List:
         """Bandeau + tableaux (flowables) sans toucher au story ni au pending."""
-        if not figures:
-            return []
-        kf_table = key_figures_table(figures, self.styles)
-        gap_kf = 2 * mm if compact else 4 * mm
+        block: List = []
+        if figures:
+            kf_table = key_figures_table(figures, self.styles)
+            gap_kf = 2 * mm if compact else 4 * mm
+            block.extend([kf_table, Spacer(1, gap_kf)])
         gap_cap = 1 * mm if compact else 2 * mm
         gap_after_tbl = 2 * mm if compact else 4 * mm
-        block: List = [kf_table, Spacer(1, gap_kf)]
         n_tables = len(tables)
         for i, t in enumerate(tables):
             if t.get("caption"):
@@ -1110,7 +1110,7 @@ class PDFReportBuilder:
         chaque tableau avec légende dans son propre ``KeepTogether`` (légende + début
         du tableau sur la même page, coupure inter-lignes si le tableau est long).
         """
-        if not figures:
+        if not figures and not intro_table and not table_specs and not zone_table:
             return
         gap_kf = 2 * mm if compact else 4 * mm
         gap_cap_mm = 1.0 if compact else 2.0
@@ -1120,7 +1120,9 @@ class PDFReportBuilder:
         if self._pending_section is not None:
             header.extend(self._pending_section)
             self._pending_section = None
-        header.extend([key_figures_table(figures, self.styles), Spacer(1, gap_kf)])
+            
+        if figures:
+            header.extend([key_figures_table(figures, self.styles), Spacer(1, gap_kf)])
 
         if intro_table and intro_table.get("data_rows"):
             intro_rows = intro_table["data_rows"]

@@ -46,13 +46,13 @@ def count_operations_controle(df: pd.DataFrame, mask: pd.Series | None = None) -
     """
     Nombre d'opérations de contrôle (fiches d'intervention uniques).
     
-    Identifié par la colonne `dc_id`.
+    Identifié par la colonne `fc_id`.
     """
-    if "dc_id" not in df.columns or df.empty:
+    if "fc_id" not in df.columns or df.empty:
         return 0
     if mask is not None:
-        return int(len(df.loc[mask, "dc_id"].dropna().unique()))
-    return int(len(df["dc_id"].dropna().unique()))
+        return int(len(df.loc[mask, "fc_id"].dropna().unique()))
+    return int(len(df["fc_id"].dropna().unique()))
 
 
 def extract_insee_code_series(series: pd.Series) -> pd.Series:
@@ -376,30 +376,30 @@ def agg_effectifs_usagers(
         return pd.DataFrame(columns=["type_usager", "nb", "nb_operations"])
 
     work_df = _consolide_lignes_effectifs_par_fc_id(df, [source_champ], source_table=source_table)
-    has_dc_id = "dc_id" in work_df.columns
+    has_fc_id = "fc_id" in work_df.columns
 
     agg: dict[str, int] = {}
-    dc_ids: dict[str, set[str]] = {}
+    fc_ids: dict[str, set[str]] = {}
 
     for _, row in work_df.iterrows():
         val = row.get(source_champ, "")
-        dc_id = str(row.get("dc_id", "")) if has_dc_id else ""
+        fc_id = str(row.get("fc_id", "")) if has_fc_id else ""
         toks = _parse_type_usager_tokens(val)
         if not toks:
             cat = "Autre"
             agg[cat] = agg.get(cat, 0) + 1
-            if has_dc_id and dc_id:
-                dc_ids.setdefault(cat, set()).add(dc_id)
+            if has_fc_id and fc_id:
+                fc_ids.setdefault(cat, set()).add(fc_id)
             continue
         for lab, n in toks:
             cat = map_type_usager(source_table, source_champ, lab)
             agg[cat] = agg.get(cat, 0) + n
-            if has_dc_id and dc_id:
-                dc_ids.setdefault(cat, set()).add(dc_id)
+            if has_fc_id and fc_id:
+                fc_ids.setdefault(cat, set()).add(fc_id)
 
     rows = []
     for cat, nb in agg.items():
-        nb_ops = len(dc_ids.get(cat, set())) if has_dc_id else 0
+        nb_ops = len(fc_ids.get(cat, set())) if has_fc_id else 0
         rows.append({"type_usager": cat, "nb": nb, "nb_operations": nb_ops})
 
     if not rows:
@@ -526,7 +526,7 @@ def agg_controles_par_type_usager_domaine(
 
     work_df = _consolide_lignes_effectifs_par_fc_id(
         df,
-        [source_champ, col_domaine, "dc_id"] if "dc_id" in df.columns else [source_champ, col_domaine],
+        [source_champ, col_domaine, "fc_id"] if "fc_id" in df.columns else [source_champ, col_domaine],
         source_table=source_table,
     )
 
@@ -577,7 +577,7 @@ def agg_controles_par_type_usager_theme(
 
     work_df = _consolide_lignes_effectifs_par_fc_id(
         df,
-        [source_champ, col_theme, "dc_id"] if "dc_id" in df.columns else [source_champ, col_theme],
+        [source_champ, col_theme, "fc_id"] if "fc_id" in df.columns else [source_champ, col_theme],
         source_table=source_table,
     )
 

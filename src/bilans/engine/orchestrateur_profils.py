@@ -2870,7 +2870,7 @@ def _pdf_section_activite_par_types_usagers(
             st = float(sum_par_type.loc[tu]) if tu in sum_par_type.index else 1.0
             st = st or 1.0
             tbl_th = [
-                ["Thème", "Opérations", "Localisations", "% du total général", "% du sous-total (type)"],
+                ["Thème", "Opérations", "Localisations", "% du total\ngénéral", "% du sous-total\n(type)"],
             ]
             nbs_th = sub["nb_localisations"].astype(int).tolist()
             pct_sous_th = (
@@ -2895,12 +2895,13 @@ def _pdf_section_activite_par_types_usagers(
                 tbl_th,
                 caption=pdf_metric_caption(f"Thèmes de contrôle — {tu_s}", "ctrl"),
                 col_widths=[
-                    avail_w * 0.40,
-                    avail_w * 0.14,
-                    avail_w * 0.23,
-                    avail_w * 0.23,
+                    avail_w * 0.35,
+                    avail_w * 0.15,
+                    avail_w * 0.18,
+                    avail_w * 0.16,
+                    avail_w * 0.16,
                 ],
-                col_aligns=["LEFT", "RIGHT", "RIGHT", "RIGHT"],
+                col_aligns=["LEFT", "RIGHT", "RIGHT", "RIGHT", "RIGHT"],
                 keep_together=True,
                 spacer_after_mm=1.0,
             )
@@ -2915,10 +2916,10 @@ def _pdf_section_activite_par_types_usagers(
             "Infraction": [int(x) for x in rb["Infraction"].tolist()],
             "Manquement": [int(x) for x in rb["Manquement"].tolist()],
         }
-        # « Autre résultat » : résultat OSCEAN hors Conforme/Infraction/Manquement
+        # « En attente » : résultat OSCEAN hors Conforme/Infraction/Manquement
         # (à ne pas confondre avec le type d'usager « Autre » sur l'axe Y).
         if int(rb["Autre_resultat"].sum()) > 0:
-            series["Autre résultat"] = [int(x) for x in rb["Autre_resultat"].tolist()]
+            series["En attente"] = [int(x) for x in rb["Autre_resultat"].tolist()]
         bar_path = chart_bar_horizontal_stacked(
             labels,
             series,
@@ -3260,9 +3261,9 @@ def _generate_pdf(
             kf.append((format_pct_int_from_rate(taux_nc), "Taux de non-conformité"))
     if nb_pej > 0:
         kf.append((str(nb_pej), PDF_LABEL_PEJ_COUNT))
-    kf.append((str(nb_pa), "Procédures administratives (PA)"))
+    kf.append((str(nb_pa), "Nombre de PA"))
     if nb_pve > 0:
-        kf.append((str(nb_pve), "Nombre d'infractions relevées par PVe"))
+        kf.append((str(nb_pve), "Nombre de PVe"))
         # En mode \"types d'usagers\", ajouter un indicateur complémentaire :
         # somme des effectifs d'usagers contrôlés (peut dépasser nb_localisations).
     if is_type_usager:
@@ -3707,10 +3708,10 @@ def _generate_pdf(
         df_dom = pd.DataFrame()
         if not point_filtered.empty and group_col_point in point_filtered.columns:
             df_dom = point_filtered[group_col_point].fillna("Non renseigné").astype(str).value_counts().rename_axis("domaine").to_frame("nb").reset_index()
-            if "dc_id" in point_filtered.columns:
+            if "fc_id" in point_filtered.columns:
                 ops_df = point_filtered.copy()
                 ops_df[group_col_point] = ops_df[group_col_point].fillna("Non renseigné").astype(str)
-                ops_df = ops_df.groupby(group_col_point)["dc_id"].nunique().reset_index()
+                ops_df = ops_df.groupby(group_col_point)["fc_id"].nunique().reset_index()
                 ops_df.columns = ["domaine", "nb_operations"]
                 df_dom = df_dom.merge(ops_df, on="domaine", how="left")
             else:
@@ -4200,14 +4201,14 @@ def _generate_pdf(
                     "col_aligns": ["LEFT", "RIGHT"],
                 }
             builder.add_key_figures_section_keep_together(
-                [(str(nb_pve), "PVe")],
+                [],
                 intro_table=intro_table,
                 table_specs=pve_table_specs,
                 zone_table=zone_table,
                 compact=True,
             )
         elif show_placeholder:
-            builder.add_key_figures([(str(nb_pve), "PVe")])
+            builder.add_key_figures([])
             builder.add_paragraph("Aucun procès-verbal électronique sur la période.")
 
     def _render_sec32() -> None:
@@ -4260,7 +4261,7 @@ def _generate_pdf(
                 else "Infractions les plus relevées"
             )
             builder.add_key_figures_and_table(
-                [(str(nb_pej), "PEJ")],
+                [],
                 tbl_infractions,
                 caption=caption_infra_pej,
                 col_widths=[avail_w * 0.75, avail_w * 0.25],
@@ -4269,7 +4270,7 @@ def _generate_pdf(
             )
         else:
             builder.add_key_figures(
-                [(str(nb_pej), "PEJ")],
+                [],
                 merge_with_next=merge_pej_detail_next,
             )
         if (
@@ -4412,14 +4413,14 @@ def _generate_pdf(
         show_kf = is_block_enabled(presentation_cfg, "sec33.show_key_figures", True)
         if show_kf and proc_tables:
             builder.add_key_figures_and_tables(
-                [(str(nb_pa), "PA")],
+                [],
                 proc_tables,
                 compact=True,
                 merge_with_next=merge_pa_detail_next,
             )
         elif show_kf:
             builder.add_key_figures(
-                [(str(nb_pa), "PA")],
+                [],
                 merge_with_next=merge_pa_detail_next,
             )
         elif proc_tables:

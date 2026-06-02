@@ -412,9 +412,9 @@ def _generate_pdf_content(
                 kf.append((format_pct_int_from_rate(taux_nc), "Taux de non-conformité"))
         if nb_pej > 0:
             kf.append((str(nb_pej), PDF_LABEL_PEJ_COUNT))
-        kf.append((str(nb_pa), "Procédure administrative"))
+        kf.append((str(nb_pa), "Nombre de PA"))
         if nb_pve > 0:
-            kf.append((str(nb_pve), "Nombre d'infractions relevées par PVe"))
+            kf.append((str(nb_pve), "Nombre de PVe"))
         builder.add_key_figures(kf)
         builder.add_spacer(2)
 

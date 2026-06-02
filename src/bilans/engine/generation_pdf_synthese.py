@@ -268,9 +268,9 @@ def _build_synthese_key_figure_rows(
     row2: list[tuple[str, str]] = []
     if nb_pej > 0:
         row2.append((str(nb_pej), "Procédures judiciaires"))
-    row2.append((str(nb_pa), "Procédures administratives"))
+    row2.append((str(nb_pa), "Nombre de PA"))
     if nb_pve > 0:
-        row2.append((str(nb_pve), "Procès-verbaux électroniques"))
+        row2.append((str(nb_pve), "Nombre de PVe"))
     rows = [row1]
     if row2:
         rows.append(row2)
