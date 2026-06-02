@@ -418,7 +418,7 @@ def test_agrainage_pdf_sections_order_and_titles() -> None:
             ("sec31", "4.1 Procès-verbaux électroniques (PVe)"),
             ("sec32", "4.2 Procédures d’enquête judiciaire (PEJ)"),
             ("sec33", "4.3 Procédures administratives (PA)"),
-            ("sec5", "5. Localisation cartographique des contrôles"),
+            ("sec5", "5. Localisation cartographique"),
             ("sec6", "6. Annexes"),
         ]
     )

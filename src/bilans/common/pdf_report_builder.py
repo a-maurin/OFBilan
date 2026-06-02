@@ -974,7 +974,16 @@ class PDFReportBuilder:
             ratio = 0.65
         img = RLImage(str(path), width=w, height=w * ratio)
         img.hAlign = "CENTER"
-        block = [img, Spacer(1, float(spacer_after_mm) * mm)]
+        
+        self._figure_counter += 1
+        fig_text = f"Figure {self._figure_counter}"
+        
+        block = [
+            img,
+            Spacer(1, SPACING_S),
+            Paragraph(fig_text, self.styles.get("FigureCaption", self.styles["BodySmall"])),
+            Spacer(1, float(spacer_after_mm) * mm)
+        ]
         if self._pending_section is not None:
             self._pending_section.extend(block)
         else:

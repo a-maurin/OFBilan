@@ -61,7 +61,7 @@ titles:
   sec4: "3. Activité par type d’usager"
   sec3: "4. Procédures (PEJ, PA, PVe)"
   sec31–sec33: "4.1 …", "4.2 …", "4.3 …"
-  sec5: "5. Localisation cartographique des contrôles"
+  sec5: "5. Localisation cartographique"
 ```
 
 ### Scope `global`

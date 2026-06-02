@@ -279,7 +279,7 @@ scopes:
         sec31: "4.1 Procès-verbaux électroniques (PVe)"
         sec32: "4.2 Procédures d’enquête judiciaire (PEJ)"
         sec33: "4.3 Procédures administratives (PA)"
-        sec5: "5. Localisation cartographique des contrôles"
+        sec5: "5. Localisation cartographique"
 
 profiles:
   # Agrainage : sections zone (2.x) puis usagers (3) puis procédures (4).

@@ -339,7 +339,7 @@ def _generate_pdf_content(
         ("sec31", "4.1 Procès-verbaux électroniques (PVe)"),
         ("sec32", "4.2 Procédures d’enquête judiciaire (PEJ)"),
         ("sec33", "4.3 Procédures administratives (PA)"),
-        ("sec5map", "5. Localisation cartographique des contrôles"),
+        ("sec5map", "5. Localisation cartographique"),
         ("sec6", "6. Annexes"),
     ]
     section_defs = inject_sec4_subsections(section_defs)
