@@ -45,7 +45,9 @@ def test_load_point_ctrl_missing_required_columns(monkeypatch, tmp_path: Path) -
 
     # Appel : on s'attend à une KeyError pour date_ctrl manquant.
     with pytest.raises(KeyError):
-        loaders.load_point_ctrl(root, dept_code="21", date_deb="2025-01-01", date_fin="2025-12-31")
+        loaders.load_point_ctrl(
+            root, echelle="departement", code="21", date_deb="2025-01-01", date_fin="2025-12-31"
+        )
 
 
 def test_load_communes_centroides_missing_insee_column(monkeypatch, tmp_path: Path) -> None:
@@ -243,7 +245,9 @@ def test_merge_pej_faits_locations_joins_dossier_to_dc_id(tmp_path: Path) -> Non
     gdf.to_file(out_path, driver="GPKG")
 
     pej = pd.DataFrame({"DC_ID": ["OF001", "OF999"], "foo": [1, 2]})
-    out = loaders.merge_pej_faits_locations(pej, root, "21", log=None)
+    out = loaders.merge_pej_faits_locations(
+        pej, root, "departement", "21", log=None
+    )
     assert float(out.loc[0, "x_faits"]) == 5.0
     assert float(out.loc[0, "y_faits"]) == 47.0
     assert pd.isna(out.loc[1, "x_faits"])

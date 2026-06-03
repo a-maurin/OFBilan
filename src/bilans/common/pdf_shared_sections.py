@@ -145,8 +145,8 @@ def _resolve_zone_mode(
 def build_sec6_methodology_context(
     *,
     period_str: str,
-    dept_name: str,
-    dept_code: str,
+    perimetre_name: str,
+    perimetre_code: str,
     profile_label: str = "",
     profile_id: str = "",
     diffusion: str | None = "interne",
@@ -176,8 +176,8 @@ def build_sec6_methodology_context(
 
     return {
         "period_str": period_str,
-        "dept_name": dept_name,
-        "dept_code": str(dept_code),
+        "dept_name": perimetre_name,
+        "dept_code": str(perimetre_code),
         "profile_label": str(profile_label or "").strip(),
         "profile_id": str(profile_id or "").strip(),
         "sources_phrase": _sources_phrase_for_methodology(
@@ -266,8 +266,8 @@ def build_sec6_methodology_html(
     effective_cfg: dict | None = None,
     context: dict[str, Any] | None = None,
     period_str: str = "",
-    dept_name: str = "",
-    dept_code: str = "",
+    perimetre_name: str = "",
+    perimetre_code: str = "",
     profile_label: str = "",
     sources_text: str = "",
     ventilation_mode: str | None = None,
@@ -298,8 +298,8 @@ def build_sec6_methodology_html(
     if context is None:
         ctx = build_sec6_methodology_context(
             period_str=period_str,
-            dept_name=dept_name,
-            dept_code=dept_code,
+            perimetre_name=perimetre_name,
+            perimetre_code=perimetre_code,
             profile_label=profile_label,
             profile_id=profile_id,
             diffusion=diffusion,

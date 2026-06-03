@@ -36,11 +36,11 @@ def test_pej_hors_controle_exclut_dc_id_lies_aux_controles() -> None:
             "THEME": ["Thème A", "Thème C"],
         }
     )
-    hors = pej_hors_fiche_controle(pej, point, "21")
+    hors = pej_hors_fiche_controle(pej, point, "departement", "21")
     assert len(hors) == 1
     assert hors.iloc[0]["DC_ID"] == "PEJ-99"
 
-    act = activite_police_par_theme(point, pej, "21")
+    act = activite_police_par_theme(point, pej, "departement", "21")
     row_a = act.loc[act["theme"] == "Thème A"].iloc[0]
     row_c = act.loc[act["theme"] == "Thème C"].iloc[0]
     assert int(row_a["nb_localisations"]) == 1
@@ -71,7 +71,7 @@ def test_procedures_usager_par_theme_sans_type_usager_dans_pa_ods() -> None:
     pa = pd.DataFrame({"DC_ID": ["PA-1"], "ENTITE_ORIGINE_PROCEDURE": ["SD21"], "THEME": ["Thème A"]})
     from bilans.engine.synthese_aggregations import procedures_usager_par_theme
 
-    out = procedures_usager_par_theme(pej, pa, point, "21")
+    out = procedures_usager_par_theme(pej, pa, point, "departement", "21")
     assert not out.empty
     assert "type_usager" in out.columns
     assert int(out["nb_pa"].sum()) >= 1
@@ -88,7 +88,7 @@ def test_activite_usager_par_theme_compte_les_effectifs() -> None:
         }
     )
     pej = pd.DataFrame(columns=["DC_ID", "ENTITE_ORIGINE_PROCEDURE", "THEME"])
-    out = activite_usager_par_theme(point, pej, "21")
+    out = activite_usager_par_theme(point, pej, "departement", "21")
     assert int(out["nb_effectifs"].sum()) == 5
     assert int(out.loc[out["theme"] == "Thème A", "nb_effectifs"].sum()) == 5
 
@@ -192,7 +192,7 @@ def test_activite_par_type_usager_compte_ctrl_et_pej_hors() -> None:
             "type_usager": ["Pêcheur"],
         }
     )
-    out = activite_par_type_usager(point, pej, "21")
+    out = activite_par_type_usager(point, pej, "departement", "21")
     assert int(out["nb_effectifs"].sum()) == 2
     assert int(out["nb_pej_hors_controle"].sum()) == 1
     assert int(out["nb_total"].sum()) == 3
@@ -219,6 +219,7 @@ def test_procedures_par_theme_pa_uniquement_depuis_controles() -> None:
         pd.DataFrame(columns=["DC_ID", "ENTITE_ORIGINE_PROCEDURE", "THEME"]),
         pa_ods,
         point,
+        "departement",
         "21",
     )
     assert "nb_pve" not in proc.columns
@@ -293,7 +294,7 @@ def test_activite_usager_par_theme_pej_suite_controle() -> None:
             "type_usager": ["Autre"],
         }
     )
-    out = activite_usager_par_theme(point, pej, "21")
+    out = activite_usager_par_theme(point, pej, "departement", "21")
     autre = out[(out["type_usager"] == "Autre") & (out["theme"] == "Thème A")].iloc[0]
     coll = out[(out["type_usager"] == "Collectivité") & (out["theme"] == "Thème A")].iloc[0]
     assert int(autre["nb_pej_suite_controle"]) == 1
@@ -316,7 +317,7 @@ def test_activite_usager_par_theme_dedupplique_effectifs_par_fc_id() -> None:
     )
     pej = pd.DataFrame(columns=["DC_ID", "ENTITE_ORIGINE_PROCEDURE", "THEME"])
 
-    out = activite_usager_par_theme(point, pej, "21")
+    out = activite_usager_par_theme(point, pej, "departement", "21")
     coll = out[(out["type_usager"] == "Collectivité") & (out["theme"] == "Thème A")].iloc[0]
 
     assert int(coll["nb_effectifs"]) == 2
@@ -339,7 +340,7 @@ def test_activite_usager_par_theme_prefere_theme_et_type_plus_recents() -> None:
     )
     pej = pd.DataFrame(columns=["DC_ID", "ENTITE_ORIGINE_PROCEDURE", "THEME"])
 
-    out = activite_usager_par_theme(point, pej, "21")
+    out = activite_usager_par_theme(point, pej, "departement", "21")
     part = out[
         (out["type_usager"] == "Particulier (usager de la nature + gestionnaire d'une propriété)")
         & (out["theme"] == "Travaux en cours d'eau [2023]")
@@ -367,7 +368,7 @@ def test_activite_par_type_usager_pej_hors_ventile_par_categorie() -> None:
             ],
         }
     )
-    out = activite_par_type_usager(point, pej, "21")
+    out = activite_par_type_usager(point, pej, "departement", "21")
     agr = out.loc[
         out["type_usager"].astype(str).str.startswith("Agriculteur"), "nb_pej_hors_controle"
     ]

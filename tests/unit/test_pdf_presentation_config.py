@@ -250,7 +250,8 @@ def test_build_title_lines_from_cfg_supports_line_break_in_same_cover_paragraph(
             }
         },
         profile_label="",
-        dept_name_typo="Côte-d'Or",
+        perimetre_name_typo="Côte-d'Or",
+        echelle="departement",
     )
 
     assert cover_lines[:3] == [

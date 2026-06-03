@@ -48,21 +48,24 @@ def test_run_engine_accepts_global_profile_via_yaml(monkeypatch) -> None:
     called: dict[str, object] = {}
 
     def _fake_run_global_profile_via_yaml(
-        profile: dict, date_deb: str, date_fin: str, dept_code: str, options: dict
+        profile: dict, date_deb: str, date_fin: str, echelle: str, code: str, options: dict
     ) -> int:
         called["args"] = (
             profile.get("id"),
             date_deb,
             date_fin,
-            dept_code,
+            echelle,
+            code,
             options.get("chart_preset"),
         )
         return 0
 
     monkeypatch.setattr(engine, "_run_global_profile_via_yaml", _fake_run_global_profile_via_yaml)
-    ret = engine.run_engine("global", "2025-01-01", "2025-12-31", "21", options={"chart_preset": "compact"})
+    ret = engine.run_engine(
+        "global", "2025-01-01", "2025-12-31", "departement", "21", options={"chart_preset": "compact"}
+    )
     assert ret == 0
-    assert called.get("args") == ("global", "2025-01-01", "2025-12-31", "21", "compact")
+    assert called.get("args") == ("global", "2025-01-01", "2025-12-31", "departement", "21", "compact")
 
 
 def test_load_profile_config_does_not_fallback_to_ref(tmp_path: Path) -> None:
@@ -83,7 +86,7 @@ def test_run_profiles_batch_combine_uses_data_out_dir(tmp_path: Path, monkeypatc
     calls: list[str] = []
 
     def _fake_run_profile(
-        profil_id: str, date_deb: str, date_fin: str, dept_code: str, options: dict | None = None
+        profil_id: str, date_deb: str, date_fin: str, echelle: str, code: str, options: dict | None = None
     ) -> int:
         calls.append(profil_id)
         out_dir = tmp_path / "data" / "out" / f"bilan_{profil_id}"
@@ -106,7 +109,8 @@ def test_run_profiles_batch_combine_uses_data_out_dir(tmp_path: Path, monkeypatc
         profils=["chasse", "agrainage"],
         date_deb="2025-01-01",
         date_fin="2025-12-31",
-        dept_code="21",
+        echelle="departement",
+        code="21",
         combine=True,
         cli_options={},
     )
@@ -125,7 +129,7 @@ def test_run_profiles_batch_sequential_reveals_last_output(tmp_path: Path, monke
     import bilans.engine.execution_lots_profils as runner
 
     def _fake_run_profile(
-        profil_id: str, date_deb: str, date_fin: str, dept_code: str, options: dict | None = None
+        profil_id: str, date_deb: str, date_fin: str, echelle: str, code: str, options: dict | None = None
     ) -> int:
         out_dir = tmp_path / "data" / "out" / f"bilan_{profil_id}"
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -147,7 +151,8 @@ def test_run_profiles_batch_sequential_reveals_last_output(tmp_path: Path, monke
         profils=["chasse", "agrainage"],
         date_deb="2025-01-01",
         date_fin="2025-12-31",
-        dept_code="21",
+        echelle="departement",
+        code="21",
         combine=False,
         cli_options={},
     )
@@ -163,7 +168,8 @@ def test_run_profiles_batch_rejects_global_mixed_with_other_profile() -> None:
         profils=["global", "chasse"],
         date_deb="2025-01-01",
         date_fin="2025-12-31",
-        dept_code="21",
+        echelle="departement",
+        code="21",
         combine=False,
         cli_options={},
     )
@@ -177,7 +183,7 @@ def test_run_profiles_batch_opens_all_generated_pdfs_for_last_profile(
     import bilans.engine.execution_lots_profils as runner
 
     def _fake_run_profile(
-        profil_id: str, date_deb: str, date_fin: str, dept_code: str, options: dict | None = None
+        profil_id: str, date_deb: str, date_fin: str, echelle: str, code: str, options: dict | None = None
     ) -> int:
         out_dir = tmp_path / "data" / "out" / f"bilan_{profil_id}"
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -201,7 +207,8 @@ def test_run_profiles_batch_opens_all_generated_pdfs_for_last_profile(
         profils=["synthese_activite_PA_PJ"],
         date_deb="2025-01-01",
         date_fin="2025-12-31",
-        dept_code="21",
+        echelle="departement",
+        code="21",
         combine=False,
         cli_options={},
     )

@@ -50,7 +50,7 @@ def test_run_engine_smoke(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(
         engine,
         "load_point_ctrl",
-        lambda root, dept_code, date_deb, date_fin: minimal_point,
+        lambda root, echelle=None, code=None, date_deb=None, date_fin=None, **kwargs: minimal_point,
     )
     monkeypatch.setattr(engine, "load_pej", lambda *args, **kwargs: _minimal_empty_df())
     monkeypatch.setattr(engine, "load_pa", lambda *args, **kwargs: _minimal_empty_df())
@@ -84,8 +84,11 @@ def test_run_engine_smoke(monkeypatch, tmp_path: Path) -> None:
             self.out_root = tmp_path
             self.date_deb = pd.Timestamp("2025-01-01")
             self.date_fin = pd.Timestamp("2025-12-31")
+            self.echelle = "departement"
+            self.code = "21"
             self.dept_code = "21"
-            self.dept_name = "Côte-d'Or"
+            self.perimetre_name = "Côte-d'Or"
+
 
         @classmethod
         def from_strings(cls, *args, **kwargs) -> "DummyBilanConfig":
@@ -97,7 +100,7 @@ def test_run_engine_smoke(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(engine, "BilanConfig", DummyBilanConfig)
 
     # Exécution : ne doit pas lever d'exception et retourne un int.
-    ret = engine.run_engine("chasse", "2025-01-01", "2025-12-31", "21", options={})
+    ret = engine.run_engine("chasse", "2025-01-01", "2025-12-31", "departement", "21", options={})
     assert isinstance(ret, int)
 
 
@@ -134,7 +137,7 @@ def test_run_engine_global_pipeline_smoke(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(pdf_mod, "generate_" + "profile" + "_pdf_report", lambda *args, **kwargs: None)
     monkeypatch.setattr(engine, "get_out_dir", lambda subdir: tmp_path / subdir)
 
-    ret = engine.run_engine("global", "2025-01-01", "2025-12-31", "21", options={})
+    ret = engine.run_engine("global", "2025-01-01", "2025-12-31", "departement", "21", options={})
     assert isinstance(ret, int)
 
 

@@ -316,9 +316,13 @@ class ConfigCartesDialog(QDialog):
         self.profile_date_fin_edit.setPlaceholderText("YYYY-MM-DD")
         meta_layout.addRow("Date de fin du profil :", self.profile_date_fin_edit)
 
-        self.dept_edit = QLineEdit()
-        self.dept_edit.setPlaceholderText("Code département (ex : 21)")
-        meta_layout.addRow("Code département (global) :", self.dept_edit)
+        self.echelle_combo = QComboBox()
+        self.echelle_combo.addItems(["departement", "region", "national"])
+        meta_layout.addRow("Échelle :", self.echelle_combo)
+
+        self.code_edit = QLineEdit()
+        self.code_edit.setPlaceholderText("Code géographique (ex : 21, 27)")
+        meta_layout.addRow("Code géographique :", self.code_edit)
 
         layout.addWidget(meta_widget)
 
@@ -409,8 +413,14 @@ class ConfigCartesDialog(QDialog):
             self.profile_date_deb_edit.clear()
             self.profile_date_fin_edit.clear()
 
-        dept = getattr(CONFIG, "departement_code", "21")
-        self.dept_edit.setText(dept)
+        perimetre = getattr(CONFIG, "perimetre", None)
+        if perimetre:
+            idx = self.echelle_combo.findText(perimetre.echelle)
+            if idx >= 0:
+                self.echelle_combo.setCurrentIndex(idx)
+            self.code_edit.setText(perimetre.code)
+        else:
+            self.code_edit.setText("21")
 
     def _load_layers(self):
         """Charge la liste des couches du projet QGIS et pré-sélectionne celles en config."""
@@ -549,10 +559,14 @@ class ConfigCartesDialog(QDialog):
                     legend_label=layer_name,
                 )
 
-        # Mettre à jour le code département global si renseigné
-        dept_txt = self.dept_edit.text().strip()
-        if dept_txt:
-            CONFIG.departement_code = dept_txt
+        # Mettre à jour le périmètre global
+        from config_cartes_model import PerimetreConfig
+        code_txt = self.code_edit.text().strip()
+        if code_txt:
+            CONFIG.perimetre = PerimetreConfig(
+                echelle=self.echelle_combo.currentText(),
+                code=code_txt,
+            )
 
         cfg_path = SCRIPT_DIR / "config_cartes.py"
         write_config_file(CONFIG, cfg_path)

@@ -10,8 +10,8 @@ def test_build_sec6_methodology_html_includes_zone_line() -> None:
         effective_cfg={},
         context=build_sec6_methodology_context(
             period_str="du 01/01/2025 au 31/12/2025",
-            dept_name="Côte-d'Or",
-            dept_code="21",
+            perimetre_name="Côte-d'Or",
+            perimetre_code="21",
             profile_label="PNF",
             has_pnf=True,
             has_tub=False,
@@ -30,8 +30,8 @@ def test_build_sec6_methodology_html_diffusion_externe() -> None:
         effective_cfg={},
         context=build_sec6_methodology_context(
             period_str="du 01/01/2025 au 31/12/2025",
-            dept_name="Côte-d'Or",
-            dept_code="21",
+            perimetre_name="Côte-d'Or",
+            perimetre_code="21",
             diffusion="externe",
             nb_localisations=5,
         ),
@@ -51,8 +51,8 @@ def test_build_sec6_methodology_html_skips_empty_when() -> None:
         },
         context=build_sec6_methodology_context(
             period_str="période",
-            dept_name="Test",
-            dept_code="00",
+            perimetre_name="Test",
+            perimetre_code="00",
             nb_pej=0,
         ),
     )

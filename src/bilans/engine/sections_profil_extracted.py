@@ -462,23 +462,10 @@ def render_sec32(ctx: PdfContext) -> None:
         # --- Note d'information sur les non-localisés structurels ---
         nb_nd = sum(1 for c in pej_det_show["commune"] if str(c).strip() in ("n.d.", "", "nan", "None", "<NA>"))
         if nb_nd > 0:
-            from bilans.common.chargeurs_donnees import load_pej_non_localises
-            df_nl = load_pej_non_localises(_ROOT)
-            nb_non_loc_nd = 0
-            if not df_nl.empty and "dossier" in df_nl.columns:
-                mask_nd = pej_det_show["commune"].astype(str).str.strip().isin(["n.d.", "", "nan", "None", "<NA>"])
-                dossiers_nd = pej_det_show.loc[mask_nd, "numero"].astype(str).str.strip().tolist() if "numero" in pej_det_show.columns else []
-                dossiers_nl = df_nl["dossier"].astype(str).str.strip().tolist()
-                nb_non_loc_nd = len(set(dossiers_nd).intersection(set(dossiers_nl)))
-            
-            phrase_structurel = (
-                f" Parmi elles, {nb_non_loc_nd} sont structurellement non localisables (informations géographiques absentes dans la base de données)."
-                if nb_non_loc_nd > 0 else ""
-            )
-            
             ctx.builder.add_paragraph(
                 f"<i>À noter : {nb_nd} procédures ci-dessous n'ont pas pu être géolocalisées et apparaissent avec la mention « n.d. » "
-                f"dans la colonne Commune.{phrase_structurel}</i>"
+                "dans la colonne Commune. Cette absence s'explique majoritairement par un manque d'informations "
+                "géographiques renseignées dans la base de données source (OSCEAN).</i>"
             )
         # -------------------------------------------------------------
 

@@ -49,8 +49,8 @@ from bilans.common.rendus_graphiques import apply_mpl_style, chart_bar_horizonta
 from bilans.common.utilitaires_metier import (
     _load_csv_opt,
     format_type_usager_display,
-    get_dept_name,
 )
+from bilans.common.bilan_config import BilanConfig, resolve_perimetre_kwargs
 
 _KEY_FIGURES_GRAIN_NOTE = (
     "Les localisations comptent les points de contrôle, tandis que les effectifs "
@@ -274,6 +274,8 @@ def generate_synthese_pdf_report(
     profile: dict | None = None,
     date_deb: str | pd.Timestamp | None = None,
     date_fin: str | pd.Timestamp | None = None,
+    echelle: str | None = None,
+    code: str | None = None,
     dept_code: str | None = None,
     ventilation_mode: str = "globale",
     chart_preset: str | None = None,
@@ -287,13 +289,16 @@ def generate_synthese_pdf_report(
     profile = profile or {"id": PROFILE_ID}
     date_deb_ts = pd.to_datetime(date_deb) if date_deb is not None else pd.Timestamp("2025-01-01")
     date_fin_ts = pd.to_datetime(date_fin) if date_fin is not None else pd.Timestamp("2026-02-05")
-    dept_code_str = str(dept_code) if dept_code is not None else "21"
+    echelle_res, code_res = resolve_perimetre_kwargs(
+        echelle=echelle, code=code, dept_code=dept_code
+    )
     _generate_synthese_pdf(
         out_dir,
         profile=profile,
         date_deb=date_deb_ts,
         date_fin=date_fin_ts,
-        dept_code=dept_code_str,
+        echelle=echelle_res,
+        code=code_res,
         output_filename=output_filename,
         diffusion=diffusion,
         cartes=cartes,
@@ -307,7 +312,8 @@ def generate_synthese_pdf_report(
         profile=profile,
         date_deb=date_deb_ts,
         date_fin=date_fin_ts,
-        dept_code=dept_code_str,
+        echelle=echelle_res,
+        code=code_res,
         ventilation_mode=ventilation_mode,
         output_filename=output_filename,
         diffusion=diffusion,
@@ -321,7 +327,8 @@ def _generate_synthese_pdf(
     profile: dict,
     date_deb: pd.Timestamp,
     date_fin: pd.Timestamp,
-    dept_code: str,
+    echelle: str,
+    code: str,
     output_filename: str | None,
     diffusion: str,
     cartes: bool,
@@ -347,8 +354,19 @@ def _generate_synthese_pdf(
     ref_pie_fs = ref_pie["figure_scale"]
     ref_pie_legend_fs = ref_pie["legend_fontsize"]
 
-    dept_name = get_dept_name(dept_code)
-    dept_name_typo = normalize_dept_typography(dept_name)
+    cfg = BilanConfig.from_strings(
+        str(date_deb.date()),
+        str(date_fin.date()),
+        echelle=echelle,
+        code=code,
+        root=_ROOT,
+    )
+    dept_name = cfg.perimetre_name
+    dept_name_typo = (
+        normalize_dept_typography(dept_name)
+        if cfg.echelle == "departement"
+        else dept_name
+    )
     profile_label = str(profile.get("label", profil_id))
 
     act_theme = _sort_desc(_load_csv_opt(out_dir, "synthese_activite_par_theme.csv"), ["nb_total"])
@@ -397,7 +415,10 @@ def _generate_synthese_pdf(
     from bilans.common.pdf_presentation_config import resolve_sections_for_toc
     sections_toc = resolve_sections_for_toc(presentation_cfg, section_defs)
     cover_title_lines, header_title_lines = build_title_lines_from_cfg(
-        presentation_cfg, profile_label="", dept_name_typo=dept_name_typo
+        presentation_cfg,
+        profile_label="",
+        perimetre_name_typo=dept_name_typo,
+        echelle=cfg.echelle,
     )
     report_header = " — ".join(line.strip() for line in header_title_lines if line.strip())
 
@@ -453,7 +474,7 @@ def _generate_synthese_pdf(
         show_placeholder=show_placeholder,
         date_deb=date_deb,
         date_fin=date_fin,
-        dept_code=dept_code,
+        dept_code=cfg.code,
         dept_name_typo=dept_name_typo,
         diffusion=diffusion,
         ventilation_mode="",

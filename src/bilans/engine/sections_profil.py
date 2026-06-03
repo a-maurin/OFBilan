@@ -4,6 +4,7 @@ from pathlib import Path
 import pandas as pd
 
 from bilans.engine.pdf_context import PdfContext
+from bilans.common.cartographie_config import has_cartography_catalog, expected_map_filenames_for_selection
 from bilans.common.pdf_presentation_config import is_section_enabled, is_block_enabled, get_block_int, format_proc_detail_caption, slice_proc_detail_for_pdf
 from bilans.common.pdf_table_sort import (
     PDF_LABEL_CTRL_LOCATIONS,
@@ -667,24 +668,12 @@ def render_sec32(ctx: PdfContext) -> None:
         # --- Note d'information sur les non-localisés structurels ---
         nb_nd = sum(1 for c in pej_det_show["commune"] if str(c).strip() in ("n.d.", "", "nan", "None", "<NA>"))
         if nb_nd > 0:
-            from bilans.common.chargeurs_donnees import load_pej_non_localises
-            df_nl = load_pej_non_localises(_ROOT)
-            nb_non_loc_nd = 0
-            if not df_nl.empty and "dossier" in df_nl.columns:
-                mask_nd = pej_det_show["commune"].astype(str).str.strip().isin(["n.d.", "", "nan", "None", "<NA>"])
-                dossiers_nd = pej_det_show.loc[mask_nd, "numero"].astype(str).str.strip().tolist() if "numero" in pej_det_show.columns else []
-                dossiers_nl = df_nl["dossier"].astype(str).str.strip().tolist()
-                nb_non_loc_nd = len(set(dossiers_nd).intersection(set(dossiers_nl)))
-            
-            phrase_structurel = (
-                f" Parmi elles, {nb_non_loc_nd} sont structurellement non localisables (informations géographiques absentes dans la base de données)."
-                if nb_non_loc_nd > 0 else ""
-            )
-            
             ctx.builder.add_paragraph(
                 f"<i>À noter : {nb_nd} procédures ci-dessous n'ont pas pu être géolocalisées et apparaissent avec la mention « n.d. » "
-                f"dans la colonne Commune.{phrase_structurel}</i>"
+                "dans la colonne Commune. Cette absence s'explique majoritairement par un manque d'informations "
+                "géographiques renseignées dans la base de données source (OSCEAN).</i>"
             )
+        # -------------------------------------------------------------
         # -------------------------------------------------------------
 
         cap_pej = format_proc_detail_caption(
@@ -1002,8 +991,8 @@ def render_sec6(ctx: PdfContext) -> None:
         effective_cfg=ctx.presentation_cfg,
         context=build_sec6_methodology_context(
             period_str=f"du {ctx.date_deb.date():%d/%m/%Y} au {ctx.date_fin.date():%d/%m/%Y}",
-            dept_name=f"de la {ctx.dept_name_typo}",
-            dept_code=str(ctx.dept_code),
+            perimetre_name=f"de la {ctx.dept_name_typo}",
+            perimetre_code=str(ctx.dept_code),
             profile_label="Bilan global",
             profile_id=ctx.profile_id,
             diffusion=ctx.diffusion,

@@ -190,8 +190,10 @@ def generate_maps(
     profile_ids: List[str],
     date_deb: Optional[str] = None,
     date_fin: Optional[str] = None,
-    dept_code: Optional[str] = None,
+    echelle: Optional[str] = None,
+    code: Optional[str] = None,
     *,
+    dept_code: Optional[str] = None,
     bilan_profiles: dict[str, dict] | None = None,
 ) -> List[Path]:
     """
@@ -202,6 +204,13 @@ def generate_maps(
         logger.info("QGIS non disponible — utilisation des cartes pré-générées.")
         return []
 
+    if dept_code and not echelle:
+        echelle, code = "departement", dept_code
+    echelle = echelle or "departement"
+    code = code or "21"
+    from bilans.common.utilitaires_metier import resolve_carto_dept_code
+
+    carto_dept = resolve_carto_dept_code(echelle, code)
     try:
         from bilans.cartographie.production_cartographique import run_export
         from bilans.common.cartographie_config import build_qgis_overrides_from_bilan_profiles
@@ -214,7 +223,7 @@ def generate_maps(
             profile_ids,
             date_deb=date_deb,
             date_fin=date_fin,
-            dept_code=dept_code,
+            dept_code=carto_dept,
             qgis_overrides=qgis_overrides,
         )
     except Exception as e:
@@ -233,8 +242,10 @@ def ensure_maps_for_profiles(
     profile_ids: List[str],
     date_deb: Optional[str] = None,
     date_fin: Optional[str] = None,
-    dept_code: Optional[str] = None,
+    echelle: Optional[str] = None,
+    code: Optional[str] = None,
     *,
+    dept_code: Optional[str] = None,
     bilan_profiles: dict[str, dict] | None = None,
 ) -> List[Path]:
     """
@@ -272,6 +283,8 @@ def ensure_maps_for_profiles(
             missing,
             date_deb=date_deb,
             date_fin=date_fin,
+            echelle=echelle,
+            code=code,
             dept_code=dept_code,
             bilan_profiles=bilan_profiles,
         )

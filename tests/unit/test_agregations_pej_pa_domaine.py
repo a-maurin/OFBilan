@@ -33,7 +33,8 @@ def test_pa_par_domaine_depuis_controles_manquement(tmp_path: Path) -> None:
         pa_ods,
         pej,
         tmp_path,
-        dept_code="21",
+        echelle="departement",
+        code="21",
     )
     pa_dom = pd.read_csv(tmp_path / "pa_global_par_domaine.csv", sep=";")
     assert len(pa_dom) == 2

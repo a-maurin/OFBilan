@@ -367,7 +367,8 @@ def _run_global_profile_via_yaml(
     profile: dict,
     date_deb: str,
     date_fin: str,
-    dept_code: str,
+    echelle: str,
+    code: str,
     options: dict,
 ) -> int:
     """Exécute le profil global via le moteur unifié orienté profils (sans délégation backend)."""
@@ -396,10 +397,11 @@ def _run_global_profile_via_yaml(
     out_dir = get_out_dir(out_subdir)
     date_deb_ts = pd.to_datetime(date_deb)
     date_fin_ts = pd.to_datetime(date_fin)
-    dept_code_norm = str(dept_code).strip()
+    echelle_norm = str(echelle).strip()
+    code_norm = str(code).strip()
 
     print(
-        f"Période : {date_deb_ts.date():%d/%m/%Y} au {date_fin_ts.date():%d/%m/%Y} – Département {dept_code_norm}."
+        f"Période : {date_deb_ts.date():%d/%m/%Y} au {date_fin_ts.date():%d/%m/%Y} – {echelle_norm} {code_norm}."
     )
     ventilation_mode, vent_type, seuil_jours, duree_jours = _resolve_ventilation_mode_from_profile(
         profile,
@@ -409,15 +411,15 @@ def _run_global_profile_via_yaml(
 
     print("Étape 1/3 : chargement des données...")
     with Spinner():
-        point = load_point_ctrl(root, dept_code=dept_code_norm, date_deb=date_deb_ts, date_fin=date_fin_ts)
+        point = load_point_ctrl(root, echelle=echelle_norm, code=code_norm, date_deb=date_deb_ts, date_fin=date_fin_ts)
         pa = load_pa(root, date_deb=date_deb_ts, date_fin=date_fin_ts)
         pej = load_pej(
             root,
-            dept_code=dept_code_norm,
+            echelle=echelle_norm, code=code_norm,
             date_deb=date_deb_ts,
             date_fin=date_fin_ts,
         )
-        pve = load_pve(root, dept_code=dept_code_norm, date_deb=date_deb_ts, date_fin=date_fin_ts)
+        pve = load_pve(root, echelle=echelle_norm, code=code_norm, date_deb=date_deb_ts, date_fin=date_fin_ts)
 
     spatial_log = logging.getLogger("bilans.spatial")
     if not point.empty:
@@ -444,7 +446,7 @@ def _run_global_profile_via_yaml(
             pej=pej,
             pve=pve,
             out_dir=out_dir,
-            dept_code=dept_code_norm,
+            echelle=echelle_norm, code=code_norm,
             ventilation_mode=ventilation_mode,
             date_deb=date_deb_ts,
             date_fin=date_fin_ts,
@@ -457,7 +459,7 @@ def _run_global_profile_via_yaml(
         options,
         date_deb=date_deb,
         date_fin=date_fin,
-        dept_code=dept_code,
+        echelle=echelle, code=code,
     )
 
     from bilans.common.carte_helper import ensure_maps_for_profiles
@@ -474,7 +476,7 @@ def _run_global_profile_via_yaml(
                 map_profiles,
                 date_deb=date_deb,
                 date_fin=date_fin,
-                dept_code=dept_code,
+                echelle=echelle, code=code,
                 bilan_profiles={profil_id: profile},
             )
         except Exception as e:
@@ -495,7 +497,8 @@ def _run_global_profile_via_yaml(
             "profile": profile,
             "date_deb": date_deb_ts,
             "date_fin": date_fin_ts,
-            "dept_code": dept_code_norm,
+            "echelle": echelle_norm,
+            "code": code_norm,
             "ventilation_mode": ventilation_mode,
             "chart_preset": chart_preset,
             "output_filename": output_filename,
@@ -541,7 +544,8 @@ def _finalize_cartes_selection(
     *,
     date_deb: str | None = None,
     date_fin: str | None = None,
-    dept_code: str | None = None,
+    echelle: str | None = None,
+    code: str | None = None,
 ) -> dict:
     """Résout la sélection de cartes (catalogue) et tente de générer les PNG manquants."""
     if not resolved_opts.get("cartes", False) or not has_cartography_catalog(profile):
@@ -569,7 +573,7 @@ def _finalize_cartes_selection(
             selection,
             date_deb=date_deb,
             date_fin=date_fin,
-            dept_code=dept_code,
+            echelle=echelle, code=code,
             bilan_profiles={bilan_key: profile},
         )
     return resolved_opts
@@ -1035,9 +1039,9 @@ def _filter_pej(
     ft = profile["filter"]["type"]
 
     # Restriction au département par entité
-    entity_sd = cfg.entity_sd
+    entity_sds = cfg.entity_sds
     if "ENTITE_ORIGINE_PROCEDURE" in pej.columns:
-        pej = pej[pej["ENTITE_ORIGINE_PROCEDURE"] == entity_sd].copy()
+        pej = pej[pej["ENTITE_ORIGINE_PROCEDURE"].isin(entity_sds)].copy()
 
     # Déduplication par DC_ID
     if "DC_ID" in pej.columns:
@@ -1079,11 +1083,11 @@ def _filter_pa(
 ) -> pd.DataFrame:
     """Filtre les PA selon le profil."""
     ft = profile["filter"]["type"]
-    entity_sd = cfg.entity_sd
+    entity_sds = cfg.entity_sds
 
     # Restreindre systématiquement aux procédures de l'entité SD concernée
     if "ENTITE_ORIGINE_PROCEDURE" in pa.columns:
-        pa = pa[pa["ENTITE_ORIGINE_PROCEDURE"] == entity_sd].copy()
+        pa = pa[pa["ENTITE_ORIGINE_PROCEDURE"].isin(entity_sds)].copy()
 
     dc_ids_dept: Set[str] = set()
     if (
@@ -3043,8 +3047,12 @@ def _generate_pdf(
     profil_id = profile["id"]
     label = profile["label"]
     sources = profile.get("sources", {}) or {}
-    dept_name = cfg.dept_name
-    dept_name_typo = normalize_dept_typography(dept_name)
+    dept_name = cfg.perimetre_name
+    dept_name_typo = (
+        normalize_dept_typography(dept_name)
+        if cfg.echelle == "departement"
+        else dept_name
+    )
     period_str = f"du {cfg.date_deb.date():%d/%m/%Y} au {cfg.date_fin.date():%d/%m/%Y}"
 
     # Pour le bilan usager ciblé (mono-usager), nommage Bilan_{type_usager} et titres avec le libellé
@@ -3216,7 +3224,7 @@ def _generate_pdf(
     cover_title_lines, header_title_lines = build_title_lines_from_cfg(
         presentation_cfg,
         profile_label=cover_profile_label,
-        dept_name_typo=dept_name_typo,
+        perimetre_name_typo=dept_name_typo, echelle=cfg.echelle,
     )
     report_header = " — ".join(line.strip() for line in header_title_lines if line.strip())
     builder.header_title = report_header
@@ -4634,8 +4642,8 @@ def _generate_pdf(
         effective_cfg=presentation_cfg,
         context=build_sec6_methodology_context(
             period_str=period_str,
-            dept_name=dept_name,
-            dept_code=str(cfg.dept_code),
+            perimetre_name=dept_name,
+            perimetre_code=str(cfg.code),
             profile_label=display_label,
             profile_id=profil_id,
             diffusion=diffusion,
@@ -4696,7 +4704,8 @@ def run_engine(
     profil_id: str,
     date_deb: str,
     date_fin: str,
-    dept_code: str,
+    echelle: str,
+    code: str,
     options: dict | None = None,
 ) -> int:
     """Point d'entrée unique du moteur thématique unifié."""
@@ -4706,27 +4715,28 @@ def run_engine(
     pipeline = str(profile.get("pipeline", "thematic")).strip().lower()
     pipeline_handlers = {
         "global": _run_global_profile_via_yaml,
-        "thematic": lambda p, d0, d1, dc, opts: _run_engine_thematic_pipeline(
-            str(p.get("id", profil_id)), d0, d1, dc, opts
+        "thematic": lambda p, d0, d1, ec, co, opts: _run_engine_thematic_pipeline(
+            str(p.get("id", profil_id)), d0, d1, ec, co, opts
         ),
     }
     if pipeline not in pipeline_handlers:
         raise ValueError(f"Pipeline inconnu dans le profil '{profil_id}': {pipeline}")
-    return pipeline_handlers[pipeline](profile, date_deb, date_fin, dept_code, options)
+    return pipeline_handlers[pipeline](profile, date_deb, date_fin, echelle, code, options)
 
 
 def _run_engine_thematic_pipeline(
     profil_id: str,
     date_deb: str,
     date_fin: str,
-    dept_code: str,
+    echelle: str,
+    code: str,
     options: dict | None = None,
 ) -> int:
     options = options or {}
     root = PROJECT_ROOT
     profile = load_profile_config(root, profil_id)
     chart_preset = options.pop("chart_preset", None)
-    cfg = BilanConfig.from_strings(date_deb, date_fin, dept_code, root=root)
+    cfg = BilanConfig.from_strings(date_deb, date_fin, echelle=echelle, code=code, root=root)
     out_dir = cfg.get_out(profile["out_subdir"])
     label = profile["label"]
     sources = profile["sources"]
@@ -4737,7 +4747,7 @@ def _run_engine_thematic_pipeline(
     if not analyse_pve:
         sources["pve"] = False
 
-    print(f"Bilan « {label} » — {cfg.dept_name}")
+    print(f"Bilan « {label} » — {cfg.perimetre_name}")
     print(f"Période : du {cfg.date_deb.date():%d/%m/%Y} au {cfg.date_fin.date():%d/%m/%Y}")
 
     # Déterminer le mode de ventilation temporelle depuis le profil YAML
@@ -4826,14 +4836,14 @@ def _run_engine_thematic_pipeline(
     print("  Chargement des données...")
     with Spinner():
         point = (
-            load_point_ctrl(root, dept_code=dept_code, date_deb=date_deb, date_fin=date_fin)
+            load_point_ctrl(root, echelle=echelle, code=code, date_deb=date_deb, date_fin=date_fin)
             if sources.get("point_ctrl", True)
             else pd.DataFrame()
         )
         pej = (
             load_pej(
                 root,
-                dept_code=dept_code,
+                echelle=echelle, code=code,
                 date_deb=date_deb,
                 date_fin=date_fin,
             )
@@ -4846,7 +4856,7 @@ def _run_engine_thematic_pipeline(
             else pd.DataFrame()
         )
         pve = (
-            load_pve(root, dept_code=dept_code, date_deb=date_deb, date_fin=date_fin)
+            load_pve(root, echelle=echelle, code=code, date_deb=date_deb, date_fin=date_fin)
             if sources.get("pve", True)
             else pd.DataFrame()
         )
@@ -4864,7 +4874,7 @@ def _run_engine_thematic_pipeline(
         pej_filtered = _filter_pej(pej, profile, cfg, point_filtered) if not pej.empty else pej
         if not pej_filtered.empty and sources.get("pej", True):
             pej_filtered = merge_pej_faits_locations(
-                pej_filtered, root, dept_code, log=logging.getLogger("bilans.spatial")
+                pej_filtered, root, echelle, code, log=logging.getLogger("bilans.spatial")
             )
         pa_filtered = _filter_pa(pa, profile, cfg, point_filtered) if not pa.empty else pa
         pve_filtered = _filter_pve(pve, profile) if not pve.empty else pve
@@ -5007,7 +5017,7 @@ def _run_engine_thematic_pipeline(
         options,
         date_deb=date_deb,
         date_fin=date_fin,
-        dept_code=dept_code,
+        echelle=echelle, code=code,
     )
 
     from bilans.common.carte_helper import ensure_maps_for_profiles
@@ -5023,7 +5033,7 @@ def _run_engine_thematic_pipeline(
                 map_profiles,
                 date_deb=date_deb,
                 date_fin=date_fin,
-                dept_code=dept_code,
+                echelle=echelle, code=code,
                 bilan_profiles={profil_id: profile},
             )
         except Exception as e:

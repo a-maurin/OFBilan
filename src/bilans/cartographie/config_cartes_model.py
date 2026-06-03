@@ -201,6 +201,12 @@ class BasemapConfig:
 
 
 @dataclass
+class PerimetreConfig:
+    echelle: Literal["departement", "region", "national"] = "departement"
+    code: str = "21"
+
+
+@dataclass
 class GlobalConfig:
     """Configuration globale du script de production cartographique."""
 
@@ -218,7 +224,7 @@ class GlobalConfig:
     # Paramètres métier pour les filtres attributaires
     natinf_pve: List[int] = field(default_factory=lambda: [27742])
     natinf_pj: List[int] = field(default_factory=lambda: [27742, 25001])
-    departement_code: str = "21"
+    perimetre: PerimetreConfig = field(default_factory=PerimetreConfig)
     chasse_theme_value: str = "Chasse"
     # Mots-clés pour le filtre contrôles piégeage (nom_dossie / theme / type_actio)
     piegeage_keywords: List[str] = field(default_factory=lambda: ["piégeage", "piège"])

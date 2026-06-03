@@ -261,15 +261,20 @@ def analyse_pej_pa_global(
     pa: pd.DataFrame,
     pej: pd.DataFrame,
     out_dir: Path,
-    dept_code: str = "21",
+    echelle: str = "departement",
+    code: str = "21",
 ) -> None:
     """PEJ et PA du departement (ENTITE_ORIGINE_PROCEDURE == SD{code} pour les PEJ), tous domaines/themes."""
     natinf_ref = load_natinf_ref(root)
     dc_ids = set(point["dc_id"].dropna().unique()) if not point.empty and "dc_id" in point.columns else set()
 
-    dept_code = str(dept_code).strip() or "21"
+    echelle = str(echelle).strip() or "departement"
+    code = str(code).strip() or "21"
+    from bilans.common.utilitaires_metier import get_departements_pour_perimetre
+    dept_codes = get_departements_pour_perimetre(echelle, code)
+    sd_list = [f"SD{c}" for c in dept_codes] if dept_codes and "FR" not in dept_codes else []
     if "ENTITE_ORIGINE_PROCEDURE" in pej.columns:
-        pej_dept = pej[pej["ENTITE_ORIGINE_PROCEDURE"].astype(str).str.strip() == f"SD{dept_code}"].copy()
+        pej_dept = pej[pej["ENTITE_ORIGINE_PROCEDURE"].astype(str).str.strip().isin(sd_list)].copy() if sd_list else pej.copy()
     else:
         pej_dept = pej.copy()
     if "DATE_REF" in pej_dept.columns:
@@ -278,7 +283,7 @@ def analyse_pej_pa_global(
         pej_dept = pej_dept.drop_duplicates(subset="DC_ID", keep="first").copy()
 
     from bilans.common.chargeurs_donnees import merge_pej_faits_locations
-    pej_dept = merge_pej_faits_locations(pej_dept, root, dept_code)
+    pej_dept = merge_pej_faits_locations(pej_dept, root, echelle, code)
 
     def _col_or_fallback(df: pd.DataFrame, name: str, fallback: str) -> pd.Series:
         if name in df.columns:
@@ -809,14 +814,15 @@ def run_profile_aggregations(
     pej: pd.DataFrame,
     pve: pd.DataFrame,
     out_dir: Path,
-    dept_code: str,
+    echelle: str,
+    code: str,
     ventilation_mode: str,
     date_deb: pd.Timestamp,
     date_fin: pd.Timestamp,
 ) -> None:
     """Adapter d'agrégations piloté par profil YAML."""
     analyse_controles_global(point, out_dir)
-    analyse_pej_pa_global(root, point, pa, pej, out_dir, dept_code=dept_code)
+    analyse_pej_pa_global(root, point, pa, pej, out_dir, echelle=echelle, code=code)
     analyse_pve_global(pve, out_dir)
     if ventilation_mode == "annuelle":
         analyse_annuelle_global(point, pa, pej, pve, out_dir)

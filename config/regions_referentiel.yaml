@@ -1,0 +1,13 @@
+REGION_NAMES:
+  "27": "Bourgogne-Franche-Comté"
+
+REGION_DEPARTEMENTS:
+  "27":
+    - "21"
+    - "25"
+    - "39"
+    - "58"
+    - "70"
+    - "71"
+    - "89"
+    - "90"

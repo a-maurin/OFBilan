@@ -10,7 +10,7 @@ import sys
 
 from bilans.configuration_journalisation import configure_logging
 from bilans.chemins_projet import PROJECT_ROOT
-from bilans.common.prompt_periode import ask_periode_dept
+from bilans.common.prompt_periode import ask_periode_perimetre
 
 _DEPS_CHECKED = False
 
@@ -119,7 +119,14 @@ def main() -> int:
     )
     parser.add_argument("--date-deb", type=str, default=None, help="Date début (YYYY-MM-DD).")
     parser.add_argument("--date-fin", type=str, default=None, help="Date fin (YYYY-MM-DD).")
-    parser.add_argument("--dept-code", type=str, default=None, help="Code département (ex. 21).")
+    parser.add_argument("--echelle", choices=["departement", "region", "national"], default=None, help="Échelle spatiale (departement, region, national).")
+    parser.add_argument("--code", type=str, default=None, help="Code géographique (ex. 21, 27).")
+    parser.add_argument(
+        "--dept-code",
+        type=str,
+        default=None,
+        help="(Déprécié) Alias de --code avec --echelle departement.",
+    )
     parser.add_argument(
         "--preset",
         choices=("compact", "standard", "large"),
@@ -215,17 +222,27 @@ def main() -> int:
 
     date_deb = args.date_deb
     date_fin = args.date_fin
-    dept_code = args.dept_code or "21"
-    if not date_deb or not date_fin:
+    if args.dept_code and not args.code:
+        echelle = args.echelle or "departement"
+        code = args.dept_code
+        if args.echelle and args.echelle != "departement":
+            logger.warning(
+                "--dept-code ignoré : utiliser --echelle departement --code %s", args.dept_code
+            )
+    else:
+        echelle = args.echelle or "departement"
+        code = args.code or "21"
+    if not date_deb or not date_fin or not args.echelle or (not args.code and not args.dept_code):
         try:
-            date_deb_str, date_fin_str, dept_str = ask_periode_dept(
+            date_deb_str, date_fin_str, echelle_str, code_str = ask_periode_perimetre(
                 date_deb_default=date_deb,
                 date_fin_default=date_fin,
-                dept_default=dept_code,
+                echelle_default=echelle,
+                code_default=code,
             )
-            date_deb, date_fin, dept_code = date_deb_str, date_fin_str, dept_str
+            date_deb, date_fin, echelle, code = date_deb_str, date_fin_str, echelle_str, code_str
         except ValueError as e:
-            logger.error("Erreur de saisie période/département : %s", e)
+            logger.error("Erreur de saisie période/périmètre : %s", e)
             print(e, file=sys.stderr)
             return 1
 
@@ -260,7 +277,8 @@ def main() -> int:
         profils_resolus,
         date_deb,
         date_fin,
-        dept_code,
+        echelle,
+        code,
         combine=args.combine,
         cli_options=cli_options or None,
     )

@@ -2,7 +2,7 @@
 Saisie commune département et période pour les scripts de bilan.
 
 Utilisé par les programmes d'analyse (agrainage, chasse, cartes) lorsque
-les paramètres --date-deb, --date-fin, --dept-code ne sont pas fournis en CLI.
+les paramètres --date-deb, --date-fin, --echelle, --code ne sont pas fournis en CLI.
 """
 from __future__ import annotations
 
@@ -37,33 +37,30 @@ def _default_date_fin() -> str:
     return dt.datetime.now().strftime("%Y-%m-%d")
 
 
-def ask_periode_dept(
+def ask_periode_perimetre(
     date_deb_default: str | None = None,
     date_fin_default: str | None = None,
-    dept_default: str = "21",
-) -> Tuple[str, str, str]:
+    echelle_default: str = "departement",
+    code_default: str = "21",
+) -> Tuple[str, str, str, str]:
     """
-    Demande à l'utilisateur la date de début, la date de fin et le code département.
-
-    - En mode interactif (stdin = tty) : affiche des invites et lit les réponses.
-      Une entrée vide pour un champ utilise la valeur par défaut.
-    - En mode non interactif : utilise les valeurs par défaut et les retourne
-      (évite de bloquer en batch). Si une valeur obligatoire manque, lève ValueError.
+    Demande à l'utilisateur la date de début, la date de fin et le périmètre (échelle + code).
 
     Returns:
-        (date_deb_str, date_fin_str, dept_code_str) au format attendu (YYYY-MM-DD, YYYY-MM-DD, code).
+        (date_deb_str, date_fin_str, echelle_str, code_str)
     """
     if not _is_interactive():
         deb = date_deb_default or ""
         fin = date_fin_default or ""
-        dept = (dept_default or "21").strip()
+        echelle = (echelle_default or "departement").strip()
+        code = (code_default or "21").strip()
         if not deb or not fin:
             raise ValueError(
                 "En mode non interactif, --date-deb et --date-fin doivent être fournis en ligne de commande."
             )
         if not _validate_date(deb) or not _validate_date(fin):
             raise ValueError("Format de date invalide (attendu YYYY-MM-DD).")
-        return (deb, fin, dept)
+        return (deb, fin, echelle, code)
 
     if not date_deb_default:
         date_deb_default = _default_date_deb()
@@ -85,12 +82,16 @@ def ask_periode_dept(
                 continue
             return val
 
-    print("Période et département d'analyse (Entrée = valeur par défaut)")
+    def _validate_echelle(s: str) -> bool:
+        return s in ["departement", "region", "national"]
+
+    print("Période et périmètre géographique d'analyse (Entrée = valeur par défaut)")
     print("-" * 50)
     date_deb = _prompt("Date de début (YYYY-MM-DD)", date_deb_default, _validate_date)
     date_fin = _prompt("Date de fin (YYYY-MM-DD)", date_fin_default, _validate_date)
-    dept = _prompt("Code département", dept_default or "21")
-    if not dept:
-        dept = "21"
+    echelle = _prompt("Échelle (departement, region, national)", echelle_default, _validate_echelle)
+    code = "FR"
+    if echelle != "national":
+        code = _prompt("Code (ex: 21 pour département, 27 pour région BFC)", code_default)
     print()
-    return (date_deb, date_fin, dept)
+    return (date_deb, date_fin, echelle, code)

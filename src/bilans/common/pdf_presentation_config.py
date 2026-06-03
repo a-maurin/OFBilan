@@ -113,7 +113,7 @@ DEFAULT_PDF_PRESENTATION_CONFIG: dict[str, Any] = {
                 },
                 {
                     "when": "always",
-                    "text": "<b>Périmètre :</b> {dept_name} ({dept_code}).",
+                    "text": "<b>Périmètre :</b> {perimetre_name} ({perimetre_code}).",
                 },
                 {
                     "when": "has_profile",
@@ -905,7 +905,8 @@ def build_title_lines_from_cfg(
     effective_cfg: dict[str, Any],
     *,
     profile_label: str,
-    dept_name_typo: str,
+    perimetre_name_typo: str,
+    echelle: str = "departement",
 ) -> tuple[list[str], list[str]]:
     """Construit les lignes de titre de garde + en-tête depuis la config effective.
 
@@ -933,7 +934,12 @@ def build_title_lines_from_cfg(
     if line3_mode == "fixed":
         line3 = str(title_cfg.get("line3_fixed", "")).strip()
     else:
-        line3 = f"Département de la {dept_name_typo}"
+        if echelle == "departement":
+            line3 = f"Département de la {perimetre_name_typo}"
+        elif echelle == "region":
+            line3 = f"Région {perimetre_name_typo}"
+        else:
+            line3 = f"Périmètre {perimetre_name_typo}"
 
     def _flatten(text: str) -> str:
         # En-tête courant: une seule ligne. Les "\n" deviennent des espaces.

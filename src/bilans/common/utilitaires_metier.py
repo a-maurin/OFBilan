@@ -2,6 +2,7 @@
 import functools
 import logging
 import re
+import yaml
 from pathlib import Path
 from typing import Any, List
 
@@ -10,7 +11,66 @@ import pandas as pd
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _TYPES_USAGERS_PATH = _PROJECT_ROOT / "ref" / "programme" / "tables_reference" / "types_usagers.csv"
+_REGIONS_YAML_PATH = _PROJECT_ROOT / "config" / "regions_referentiel.yaml"
 logger = logging.getLogger(__name__)
+
+
+@functools.lru_cache(maxsize=1)
+def _load_regions_config() -> dict:
+    if not _REGIONS_YAML_PATH.exists():
+        return {}
+    with open(_REGIONS_YAML_PATH, "r", encoding="utf-8") as f:
+        return yaml.safe_load(f) or {}
+
+
+def get_departements_pour_perimetre(echelle: str, code: str) -> list[str]:
+    """
+    Renvoie la liste des codes départements correspondant au périmètre.
+    echelle: "departement", "region", ou "national"
+    code: ex: "21", "27", "FR"
+    """
+    echelle_norm = str(echelle).strip().lower()
+    code_norm = str(code).strip()
+    if echelle_norm == "departement":
+        return [code_norm] if code_norm else []
+    if echelle_norm == "region":
+        cfg = _load_regions_config()
+        region_deps = cfg.get("REGION_DEPARTEMENTS", {})
+        return list(region_deps.get(code_norm, []))
+    if echelle_norm == "national":
+        return ["FR"]
+    return []
+
+
+def get_region_name(code: str) -> str:
+    cfg = _load_regions_config()
+    names = cfg.get("REGION_NAMES", {})
+    code_norm = str(code).strip()
+    return str(names.get(code_norm, f"Région {code_norm}"))
+
+
+def get_perimetre_name(echelle: str, code: str) -> str:
+    echelle_norm = str(echelle).strip().lower()
+    code_norm = str(code).strip()
+    if echelle_norm == "departement":
+        return get_dept_name(code_norm)
+    if echelle_norm == "region":
+        return get_region_name(code_norm)
+    if echelle_norm == "national":
+        return "France"
+    return f"{echelle_norm} {code_norm}"
+
+
+def resolve_carto_dept_code(echelle: str, code: str, *, default: str = "21") -> str:
+    """Département de référence pour l'étendue cartographique QGIS."""
+    echelle_norm = str(echelle).strip().lower()
+    code_norm = str(code).strip()
+    if echelle_norm == "departement":
+        return code_norm or default
+    dept_codes = get_departements_pour_perimetre(echelle_norm, code_norm)
+    if dept_codes and dept_codes[0] != "FR":
+        return dept_codes[0]
+    return default
 
 
 def _norm_key(s: str) -> str:

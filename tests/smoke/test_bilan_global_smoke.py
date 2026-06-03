@@ -133,6 +133,6 @@ def test_run_global_smoke(monkeypatch, tmp_path: Path) -> None:
     )
 
     # Appel : ne doit pas lever d'exception et doit retourner un int.
-    ret = engine.run_engine("global", "2025-01-01", "2025-12-31", "21", options={})
+    ret = engine.run_engine("global", "2025-01-01", "2025-12-31", "departement", "21", options={})
     assert isinstance(ret, int)
 

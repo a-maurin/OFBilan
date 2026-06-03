@@ -98,7 +98,8 @@ def _read_spreadsheet(path: Path, *, dtype=str) -> pd.DataFrame:
 
 def load_point_ctrl(
     root: Path,
-    dept_code: Optional[str] = None,
+    echelle: Optional[str] = None,
+    code: Optional[str] = None,
     date_deb: Optional[Union[str, pd.Timestamp]] = None,
     date_fin: Optional[Union[str, pd.Timestamp]] = None,
 ) -> pd.DataFrame:
@@ -208,12 +209,15 @@ def load_point_ctrl(
         engine = _GPKG_ENGINE
         
         # Filtre à la lecture par département si possible (réduit le volume chargé)
-        if dept_code is not None:
+        from bilans.common.utilitaires_metier import get_departements_pour_perimetre
+        target_depts = get_departements_pour_perimetre(echelle, code)
+        if target_depts is not None and "FR" not in target_depts:
             try:
+                where_clause = "num_depart IN ('" + "', '".join(target_depts) + "')"
                 gdf = gpd.read_file(
                     path,
                     engine=engine,
-                    where=f"num_depart = '{str(dept_code).strip()}'",
+                    where=where_clause,
                 )
             except Exception as e:
                 raise RuntimeError(f"Erreur de lecture du fichier GPKG avec filtre : {e}")
@@ -312,9 +316,12 @@ def load_point_ctrl(
     if "date_ctrl" not in df_all.columns:
         raise KeyError("La colonne 'date_ctrl' est absente des données point_ctrl_*")
 
-    # Filtrage optionnel par département et période
-    if dept_code is not None and "num_depart" in df_all.columns:
-        df_all = df_all[df_all["num_depart"].astype(str).str.strip() == str(dept_code).strip()].copy()
+    # Filtrage optionnel par périmètre et période
+    if echelle is not None and code is not None and "num_depart" in df_all.columns:
+        from bilans.common.utilitaires_metier import get_departements_pour_perimetre
+        dept_codes = get_departements_pour_perimetre(echelle, code)
+        if dept_codes and "FR" not in dept_codes:
+            df_all = df_all[df_all["num_depart"].astype(str).str.strip().isin(dept_codes)].copy()
     if date_deb is not None and date_fin is not None:
         try:
             deb_ts = pd.to_datetime(date_deb)
@@ -328,7 +335,8 @@ def load_point_ctrl(
 
 def load_pej(
     root: Path,
-    dept_code: Optional[str] = None,
+    echelle: Optional[str] = None,
+    code: Optional[str] = None,
     date_deb: Optional[Union[str, pd.Timestamp]] = None,
     date_fin: Optional[Union[str, pd.Timestamp]] = None,
 ) -> pd.DataFrame:
@@ -388,10 +396,13 @@ def load_pej(
         fin_ts = pd.to_datetime(date_fin)
         df = filtre_periode(df, "DATE_REF", deb_ts, fin_ts)
 
-    if dept_code is not None and str(dept_code).strip():
-        entity_sd = f"SD{str(dept_code).strip()}"
-        if "ENTITE_ORIGINE_PROCEDURE" in df.columns:
-            df = df[df["ENTITE_ORIGINE_PROCEDURE"].astype(str).str.strip() == entity_sd].copy()
+    if echelle is not None and code is not None:
+        from bilans.common.utilitaires_metier import get_departements_pour_perimetre
+        dept_codes = get_departements_pour_perimetre(echelle, code)
+        if dept_codes and "FR" not in dept_codes:
+            entity_sds = [f"SD{d}" for d in dept_codes]
+            if "ENTITE_ORIGINE_PROCEDURE" in df.columns:
+                df = df[df["ENTITE_ORIGINE_PROCEDURE"].astype(str).str.strip().isin(entity_sds)].copy()
 
     if not df.empty and "DC_ID" in df.columns:
         if "DATE_REF" in df.columns:
@@ -406,7 +417,8 @@ def load_pej(
 
 def load_pa(
     root: Path,
-    dept_code: Optional[str] = None,
+    echelle: Optional[str] = None,
+    code: Optional[str] = None,
     date_deb: Optional[Union[str, pd.Timestamp]] = None,
     date_fin: Optional[Union[str, pd.Timestamp]] = None,
 ) -> pd.DataFrame:
@@ -1591,7 +1603,8 @@ def enrich_pve_positions_from_pnf_commune_centroids(
 
 def load_pve(
     root: Path,
-    dept_code: Optional[str] = None,
+    echelle: Optional[str] = None,
+    code: Optional[str] = None,
     date_deb: Optional[Union[str, pd.Timestamp]] = None,
     date_fin: Optional[Union[str, pd.Timestamp]] = None,
 ) -> pd.DataFrame:
@@ -1660,10 +1673,12 @@ def load_pve(
             df["INF-DATE-MIF"], dayfirst=True, errors="coerce"
         )
 
-    if dept_code is not None:
+    if echelle is not None and code is not None:
+        from bilans.common.utilitaires_metier import get_departements_pour_perimetre
+        dept_codes = get_departements_pour_perimetre(echelle, code)
         dept_col = "INF-DEPART" if "INF-DEPART" in df.columns else "INF-DEPARTEMENT"
-        if dept_col in df.columns:
-            df = df[df[dept_col].astype(str).str.strip() == str(dept_code).strip()].copy()
+        if dept_col in df.columns and dept_codes and "FR" not in dept_codes:
+            df = df[df[dept_col].astype(str).str.strip().isin(dept_codes)].copy()
     if date_deb is not None and date_fin is not None and "INF-DATE-MIF" in df.columns:
         n_before_period = len(df)
         deb_ts = pd.to_datetime(date_deb)
@@ -1741,7 +1756,8 @@ def load_pej_non_localises(root: Path) -> pd.DataFrame:
 def merge_pej_faits_locations(
     pej: pd.DataFrame,
     root: Path,
-    dept_code: str,
+    echelle: str,
+    code: str,
     *,
     log: Optional[logging.Logger] = None,
 ) -> pd.DataFrame:
@@ -1774,11 +1790,14 @@ def merge_pej_faits_locations(
     if ent_col is None:
         lg.warning("Couche FAITS : pas de colonne entite — jointure PEJ ignorée.")
         return pej.copy()
-    sd = f"SD{str(dept_code).strip()}"
-    gdf = gdf[gdf[ent_col].astype(str).str.strip().eq(sd)].copy()
-    if gdf.empty:
-        lg.info("Couche FAITS : aucune entité %s — pas de localisations jointes.", sd)
-        return pej.copy()
+    from bilans.common.utilitaires_metier import get_departements_pour_perimetre
+    dept_codes = get_departements_pour_perimetre(echelle, code)
+    if dept_codes and "FR" not in dept_codes:
+        sd_list = [f"SD{d}" for d in dept_codes]
+        gdf = gdf[gdf[ent_col].astype(str).str.strip().isin(sd_list)].copy()
+        if gdf.empty:
+            lg.info("Couche FAITS : aucune entité pour ce périmètre — pas de localisations jointes.")
+            return pej.copy()
 
     doss_col = next((c for c in ("dossier", "DOSSIER") if c in gdf.columns), None)
     if doss_col is None:
@@ -1823,7 +1842,7 @@ def merge_pej_faits_locations(
     missing = out["NOM_COM"].isna() if "NOM_COM" in out.columns else pd.Series(True, index=out.index)
     if missing.any():
         try:
-            oscean_gdf = load_point_ctrl(root, dept_code)  # toutes les années
+            oscean_gdf = load_point_ctrl(root, echelle=echelle, code=code)  # toutes les années
             
             if not oscean_gdf.empty and "dc_id" in oscean_gdf.columns and "nom_commun" in oscean_gdf.columns:
                 oscean_dc = oscean_gdf[["dc_id", "nom_commun"]].dropna(subset=["nom_commun"]).copy()
@@ -1919,7 +1938,7 @@ def enrich_pej_commune_from_faits_coordinates(
 
 
 def load_points_infrac_pj(
-    root: Path, natinf_list: List[str], dept_code: str
+    root: Path, natinf_list: List[str], echelle: str, code: str
 ) -> gpd.GeoDataFrame:
     """Charge le shapefile/gpkg des points d'infractions PJ, filtre SD + NATINF."""
     path = get_points_infrac_pj_path(root)
@@ -1928,12 +1947,22 @@ def load_points_infrac_pj(
     natinf_vals = [int(n) for n in natinf_list]
     # Filtre à la lecture si possible (pyogrio) pour éviter de charger tout le GPKG
     try:
-        where_clause = f"entite = 'SD{dept_code}' AND natinf IN ({','.join(map(str, natinf_vals))})"
+        from bilans.common.utilitaires_metier import get_departements_pour_perimetre
+        target_depts = get_departements_pour_perimetre(echelle, code)
+        if target_depts and "FR" not in target_depts:
+            entite_list = [f"SD{d}" for d in target_depts]
+            entite_clause = "entite IN ('" + "', '".join(entite_list) + "')"
+        else:
+            entite_clause = "1=1"
+        where_clause = f"{entite_clause} AND natinf IN ({','.join(map(str, natinf_vals))})"
         gdf = gpd.read_file(path, engine=_GPKG_ENGINE, where=where_clause)
     except Exception:
         gdf = gpd.read_file(path)
         gdf["natinf"] = pd.to_numeric(gdf["natinf"], errors="coerce")
-        mask = (gdf["entite"] == f"SD{dept_code}") & (gdf["natinf"].isin(natinf_vals))
+        if target_depts and "FR" not in target_depts:
+            mask = (gdf["entite"].isin(entite_list)) & (gdf["natinf"].isin(natinf_vals))
+        else:
+            mask = gdf["natinf"].isin(natinf_vals)
         gdf = gdf.loc[mask].copy()
 
     # Harmonisation du CRS : si absent, on considère que les coordonnées sont en WGS84.
@@ -1960,7 +1989,8 @@ def load_points_infrac_pj(
 def load_pj_with_geometry(
     root: Path,
     natinf_list: List[str],
-    dept_code: str,
+    echelle: str,
+    code: str,
     date_deb: Optional[Union[str, pd.Timestamp]] = None,
     date_fin: Optional[Union[str, pd.Timestamp]] = None,
     pej_df: Optional[pd.DataFrame] = None,
@@ -1977,7 +2007,7 @@ def load_pj_with_geometry(
         pej = pej_df
     else:
         pej = load_pej(root, date_deb=date_deb, date_fin=date_fin)
-    pts_pj = load_points_infrac_pj(root, natinf_list, dept_code)
+    pts_pj = load_points_infrac_pj(root, natinf_list, echelle, code)
     dossiers_geom = set(pts_pj["dossier"].unique())
     pej_with_geom = pej[pej["DC_ID"].isin(dossiers_geom)].copy()
     if pej_with_geom.empty:

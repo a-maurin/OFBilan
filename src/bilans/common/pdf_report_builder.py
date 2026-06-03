@@ -745,6 +745,13 @@ class PDFReportBuilder:
                 total += 20  # fallback pour flowable inconnu
         return total
 
+    @staticmethod
+    def _block_has_local_heading_with_chart(block: List) -> bool:
+        """Bloc titre local + graphique (KeepTogether image) : pas de fusion monolithique."""
+        if not block or not isinstance(block[0], Paragraph):
+            return False
+        return any(isinstance(f, KeepTogether) for f in block)
+
     def _append_with_pending(self, block: List, *, keep_together: bool) -> None:
         """Ajoute un bloc en gérant le titre pending avec KeepTogether optionnel."""
         has_pending = self._pending_section is not None
@@ -756,7 +763,11 @@ class PDFReportBuilder:
         if not merged:
             return
             
-        if keep_together and self._should_keep_block_together(merged):
+        if (
+            keep_together
+            and self._should_keep_block_together(merged)
+            and not self._block_has_local_heading_with_chart(block)
+        ):
             self.story.append(KeepTogether(merged))
             return
 
@@ -1403,9 +1414,11 @@ class PDFReportBuilder:
         use_keep = (bool(caption) and keep_caption_with_table) or keep_together
         if self._pending_section is not None:
             self._append_with_pending(block, keep_together=use_keep)
-        elif use_keep:
+        elif use_keep and self._should_keep_block_together(block):
             self.story.append(KeepTogether(block))
         else:
+            if use_keep and caption and len(block) > 0 and hasattr(block[0], "keepWithNext"):
+                block[0].keepWithNext = 1
             for el in block:
                 self.story.append(el)
 

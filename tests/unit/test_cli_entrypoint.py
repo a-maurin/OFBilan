@@ -31,12 +31,13 @@ def test_bilans_cli_interactive_profile_prompt(monkeypatch) -> None:
         profils: list[str],
         date_deb: str,
         date_fin: str,
-        dept_code: str,
+        echelle: str,
+        code: str,
         *,
         combine: bool = False,
         cli_options: dict | None = None,
     ) -> int:
-        captured["args"] = (profils, date_deb, date_fin, dept_code, combine, cli_options)
+        captured["args"] = (profils, date_deb, date_fin, echelle, code, combine, cli_options)
         return 0
 
     monkeypatch.setattr("bilans.engine.catalogue_profils.resolve_profile_ids", _fake_resolve)
@@ -46,6 +47,7 @@ def test_bilans_cli_interactive_profile_prompt(monkeypatch) -> None:
         ["chasse"],
         "2025-01-01",
         "2025-12-31",
+        "departement",
         "21",
         False,
         None,
@@ -110,12 +112,15 @@ def test_bilans_cli_type_usager_and_cartes_options(monkeypatch) -> None:
         profils: list[str],
         date_deb: str,
         date_fin: str,
-        dept_code: str,
+        echelle: str,
+        code: str,
         *,
         combine: bool = False,
         cli_options: dict | None = None,
     ) -> int:
         captured["cli_options"] = cli_options
+        captured["echelle"] = echelle
+        captured["code"] = code
         return 0
 
     monkeypatch.setattr(
@@ -125,6 +130,8 @@ def test_bilans_cli_type_usager_and_cartes_options(monkeypatch) -> None:
 
     assert cli.main() == 0
     opts = captured["cli_options"]
+    assert captured["echelle"] == "departement"
+    assert captured["code"] == "21"
     assert opts["type_usager_target"] == ["Agriculteur et autres acteurs agricoles"]
     assert opts["cartes"] is False
     assert opts["pnf"] is False
@@ -158,7 +165,8 @@ def test_bilans_cli_brochure_option(monkeypatch) -> None:
         _profils: list[str],
         _date_deb: str,
         _date_fin: str,
-        _dept_code: str,
+        _echelle: str,
+        _code: str,
         *,
         combine: bool = False,
         cli_options: dict | None = None,

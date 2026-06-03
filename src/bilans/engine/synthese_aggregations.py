@@ -14,6 +14,7 @@ from bilans.common.utilitaires_metier import (
     agg_resultat_effectifs_par_type_usager,
     count_pa_induites_par_controles,
     points_as_pa_lignes,
+    get_departements_pour_perimetre,
 )
 from bilans.engine.agregations_profil import (
     analyse_controles_global,
@@ -37,19 +38,21 @@ def _dc_ids_controles(point: pd.DataFrame) -> set[str]:
     return set(point["dc_id"].dropna().astype(str).str.strip())
 
 
-def _pej_departement(pej: pd.DataFrame, dept_code: str) -> pd.DataFrame:
+def _pej_perimetre(pej: pd.DataFrame, echelle: str, code: str) -> pd.DataFrame:
     """
-    PEJ du département (SD{code}), un enregistrement par DC_ID.
+    PEJ du périmètre (ex: SD21, ou liste de SD), un enregistrement par DC_ID.
 
-    Si *pej* provient de ``load_pej(..., dept_code=...)``, filtre et dédoublonnage
+    Si *pej* provient de ``load_pej``, filtre et dédoublonnage
     sont déjà appliqués au chargement ; ce passage reste idempotent.
     """
     if pej is None or pej.empty:
         return pd.DataFrame()
-    dept_code = str(dept_code).strip() or "21"
     out = pej.copy()
     if "ENTITE_ORIGINE_PROCEDURE" in out.columns:
-        out = out[out["ENTITE_ORIGINE_PROCEDURE"].astype(str).str.strip() == f"SD{dept_code}"].copy()
+        dept_codes = get_departements_pour_perimetre(echelle, code)
+        if dept_codes and "FR" not in dept_codes:
+            sd_list = [f"SD{d}" for d in dept_codes]
+            out = out[out["ENTITE_ORIGINE_PROCEDURE"].astype(str).str.strip().isin(sd_list)].copy()
     if out.empty or "DC_ID" not in out.columns:
         return out
     if "DATE_REF" in out.columns:
@@ -61,9 +64,9 @@ def _pej_departement(pej: pd.DataFrame, dept_code: str) -> pd.DataFrame:
     return out
 
 
-def pej_hors_fiche_controle(pej: pd.DataFrame, point: pd.DataFrame, dept_code: str) -> pd.DataFrame:
+def pej_hors_fiche_controle(pej: pd.DataFrame, point: pd.DataFrame, echelle: str, code: str) -> pd.DataFrame:
     """PEJ dont le DC_ID n'apparaît pas parmi les dc_id des points de contrôle."""
-    pej_d = _pej_departement(pej, dept_code)
+    pej_d = _pej_perimetre(pej, echelle, code)
     if pej_d.empty:
         return pej_d
     dc_ctrl = _dc_ids_controles(point)
@@ -73,9 +76,9 @@ def pej_hors_fiche_controle(pej: pd.DataFrame, point: pd.DataFrame, dept_code: s
     return pej_d.loc[~ids.isin(dc_ctrl)].copy()
 
 
-def pej_sur_fiche_controle(pej: pd.DataFrame, point: pd.DataFrame, dept_code: str) -> pd.DataFrame:
+def pej_sur_fiche_controle(pej: pd.DataFrame, point: pd.DataFrame, echelle: str, code: str) -> pd.DataFrame:
     """PEJ dont le DC_ID figure parmi les dc_id des points de contrôle (suite à contrôle)."""
-    pej_d = _pej_departement(pej, dept_code)
+    pej_d = _pej_perimetre(pej, echelle, code)
     if pej_d.empty:
         return pej_d
     dc_ctrl = _dc_ids_controles(point)
@@ -120,7 +123,7 @@ def _merge_theme_counts(parts: list[tuple[pd.DataFrame, str]]) -> pd.DataFrame:
     return merged.reset_index(drop=True)
 
 
-def activite_police_par_theme(point: pd.DataFrame, pej: pd.DataFrame, dept_code: str) -> pd.DataFrame:
+def activite_police_par_theme(point: pd.DataFrame, pej: pd.DataFrame, echelle: str, code: str) -> pd.DataFrame:
     """§ 2.1 : localisations de contrôle + PEJ hors fiche contrôle, par thème."""
     col = "theme" if "theme" in point.columns else ("type_actio" if "type_actio" in point.columns else None)
     if col and not point.empty:
@@ -149,7 +152,7 @@ def activite_police_par_theme(point: pd.DataFrame, pej: pd.DataFrame, dept_code:
             ctrl["nb_operations_controle"] = 0
     else:
         ctrl = pd.DataFrame(columns=["theme", "nb_localisations", "nb_operations_controle"])
-    hors = pej_hors_fiche_controle(pej, point, dept_code)
+    hors = pej_hors_fiche_controle(pej, point, echelle, code)
     pej_h = _counts_par_theme(hors, "nb_pej_hors_controle")
     out = _merge_theme_counts([(ctrl, "nb_localisations"), (ctrl, "nb_operations_controle"), (pej_h, "nb_pej_hors_controle")])
     if not out.empty:
@@ -175,11 +178,12 @@ def procedures_par_theme(
     pej: pd.DataFrame,
     pa: pd.DataFrame,
     point: pd.DataFrame,
-    dept_code: str,
+    echelle: str,
+    code: str,
 ) -> pd.DataFrame:
     """§ 2.3 : PEJ et PA par thème OSCEAN (les PVe sont traités au § 4)."""
     del pa  # PA : dérivées des fiches contrôle uniquement (voir _pa_par_theme_depuis_controles)
-    pej_d = _pej_departement(pej, dept_code)
+    pej_d = _pej_perimetre(pej, echelle, code)
     pej_t = _counts_par_theme(pej_d, "nb_pej")
     pa_t = _pa_par_theme_depuis_controles(point)
     out = _merge_theme_counts([(pej_t, "nb_pej"), (pa_t, "nb_pa")])
@@ -266,13 +270,14 @@ def _pej_suite_par_type_usager_theme(pej_lies: pd.DataFrame) -> pd.DataFrame:
 def activite_par_type_usager(
     point: pd.DataFrame,
     pej: pd.DataFrame,
-    dept_code: str,
+    echelle: str,
+    code: str,
 ) -> pd.DataFrame:
     """
     Effectifs d'usagers contrôlés + saisines PEJ hors fiche, par type d'usager (camembert § 3).
     """
     eff = agg_effectifs_usagers(point).rename(columns={"nb": "nb_effectifs"})
-    hors = pej_hors_fiche_controle(pej, point, dept_code)
+    hors = pej_hors_fiche_controle(pej, point, echelle, code)
     pej_ut = _pej_hors_par_type_usager_theme(hors)
     if pej_ut.empty:
         pej_by = pd.DataFrame(columns=["type_usager", "nb_pej_hors_controle"])
@@ -303,15 +308,16 @@ def activite_par_type_usager(
 def activite_usager_par_theme(
     point: pd.DataFrame,
     pej: pd.DataFrame,
-    dept_code: str,
+    echelle: str,
+    code: str,
 ) -> pd.DataFrame:
     """§ 3.1 : effectifs contrôles + PEJ suite contrôle + PEJ hors fiche, par type × thème."""
     metric_cols = ("nb_effectifs", "nb_pej_suite_controle", "nb_pej_hors_controle")
     empty_cols = ["type_usager", "theme", *metric_cols, "nb_total"]
 
     eff = agg_effectifs_usagers_par_theme(point).rename(columns={"nb": "nb_effectifs"})
-    lies = pej_sur_fiche_controle(pej, point, dept_code)
-    hors = pej_hors_fiche_controle(pej, point, dept_code)
+    lies = pej_sur_fiche_controle(pej, point, echelle, code)
+    hors = pej_hors_fiche_controle(pej, point, echelle, code)
     pej_suite = _pej_suite_par_type_usager_theme(lies)
     pej_hors_ut = _pej_hors_par_type_usager_theme(hors)
 
@@ -366,11 +372,12 @@ def procedures_usager_par_theme(
     pej: pd.DataFrame,
     pa: pd.DataFrame,
     point: pd.DataFrame,
-    dept_code: str,
+    echelle: str,
+    code: str,
 ) -> pd.DataFrame:
     """§ 3.3 : procédures PEJ et PA (depuis contrôles) par type d'usager × thème."""
     del pa
-    pej_d = _pej_departement(pej, dept_code)
+    pej_d = _pej_perimetre(pej, echelle, code)
     pa_lignes = points_as_pa_lignes(point)
 
     empty_pej = pej_d.iloc[0:0].copy() if not pej_d.empty else pd.DataFrame()
@@ -418,7 +425,8 @@ def run_synthese_aggregations(
     pej: pd.DataFrame,
     pve: pd.DataFrame,
     out_dir: Path,
-    dept_code: str,
+    echelle: str,
+    code: str,
     ventilation_mode: str,
     date_deb: pd.Timestamp,
     date_fin: pd.Timestamp,
@@ -426,17 +434,17 @@ def run_synthese_aggregations(
     """Adapter d'agrégations pour le profil synthese_activite_PA_PJ."""
     del profile, ventilation_mode, date_deb, date_fin
     analyse_controles_global(point, out_dir)
-    analyse_pej_pa_global(root, point, pa, pej, out_dir, dept_code=dept_code)
+    analyse_pej_pa_global(root, point, pa, pej, out_dir, echelle=echelle, code=code)
     analyse_pve_global(pve, out_dir)
     analyse_pve_synthese(pve, out_dir)
 
     res_usager = agg_resultat_effectifs_par_type_usager(point)
 
-    act_theme = activite_police_par_theme(point, pej, dept_code)
-    proc_theme = procedures_par_theme(pej, pa, point, dept_code)
-    act_ut = activite_usager_par_theme(point, pej, dept_code)
-    act_u = activite_par_type_usager(point, pej, dept_code)
-    proc_ut = procedures_usager_par_theme(pej, pa, point, dept_code)
+    act_theme = activite_police_par_theme(point, pej, echelle, code)
+    proc_theme = procedures_par_theme(pej, pa, point, echelle, code)
+    act_ut = activite_usager_par_theme(point, pej, echelle, code)
+    act_u = activite_par_type_usager(point, pej, echelle, code)
+    proc_ut = procedures_usager_par_theme(pej, pa, point, echelle, code)
 
     _export_synthese_csv(out_dir, "activite_par_theme", act_theme)
     _export_synthese_csv(out_dir, "activite_par_type_usager", act_u)
@@ -450,8 +458,8 @@ def run_synthese_aggregations(
             {
                 "nb_localisations": int(len(point)),
                 "nb_operations_controle": int(len(point["dc_id"].dropna().unique())) if "dc_id" in point.columns else 0,
-                "nb_pej": int(len(_pej_departement(pej, dept_code))),
-                "nb_pej_hors_controle": int(len(pej_hors_fiche_controle(pej, point, dept_code))),
+                "nb_pej": int(len(_pej_perimetre(pej, echelle, code))),
+                "nb_pej_hors_controle": int(len(pej_hors_fiche_controle(pej, point, echelle, code))),
                 "nb_pa": int(count_pa_induites_par_controles(point)),
                 "nb_pve": int(len(pve)) if pve is not None else 0,
             }

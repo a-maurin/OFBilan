@@ -81,7 +81,8 @@ def run_profile(
     profil_id: str,
     date_deb: str,
     date_fin: str,
-    dept_code: str,
+    echelle: str,
+    code: str,
     options: dict | None = None,
 ) -> int:
     """
@@ -90,14 +91,15 @@ def run_profile(
     options = options or {}
     from bilans.engine.orchestrateur_profils import run_engine
 
-    return run_engine(profil_id, date_deb, date_fin, dept_code, options=dict(options))
+    return run_engine(profil_id, date_deb, date_fin, echelle, code, options=dict(options))
 
 
 def run_profiles_batch(
     profils: list[str],
     date_deb: str,
     date_fin: str,
-    dept_code: str,
+    echelle: str,
+    code: str,
     *,
     combine: bool = False,
     cli_options: dict | None = None,
@@ -141,13 +143,13 @@ def run_profiles_batch(
         for pid in profils:
             print(f"  Exécution profil {pid}...")
             started_at = time()
-            ret = run_profile(pid, date_deb, date_fin, dept_code, options=cli_options)
+            ret = run_profile(pid, date_deb, date_fin, echelle, code, options=cli_options)
             if ret != 0:
                 return ret
             generated_pdfs_last_profile = _list_generated_pdf_files(pid, started_at)
         (out_combine / "README.txt").write_text(
             f"Bilan combiné : {', '.join(profils)}\n"
-            f"Période : {date_deb} au {date_fin}, département {dept_code}.\n"
+            f"Période : {date_deb} au {date_fin}, périmètre : {echelle} {code}.\n"
             "Les rapports individuels sont dans data/out/bilan_<profil>/.\n",
             encoding="utf-8",
         )
@@ -175,7 +177,7 @@ def run_profiles_batch(
     for pid in profils:
         print(f"Exécution bilan {pid}...")
         started_at = time()
-        ret = run_profile(pid, date_deb, date_fin, dept_code, options=cli_options)
+        ret = run_profile(pid, date_deb, date_fin, echelle, code, options=cli_options)
         if ret != 0:
             return ret
         generated_pdfs_last_profile = _list_generated_pdf_files(pid, started_at)

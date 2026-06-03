@@ -74,7 +74,8 @@ from bilans.common.percent_format import (
     int_percents_largest_remainder,
     tab_counts_to_pct_strings,
 )
-from bilans.common.utilitaires_metier import _load_csv_opt, get_dept_name
+from bilans.common.utilitaires_metier import _load_csv_opt
+from bilans.common.bilan_config import BilanConfig, resolve_perimetre_kwargs
 from bilans.engine.registre_sections_pdf import SectionRegistry
 from bilans.common.carte_helper import (
     expected_map_filenames,
@@ -108,6 +109,8 @@ def generate_profile_pdf_report(
     profile: dict | None = None,
     date_deb: str | pd.Timestamp | None = None,
     date_fin: str | pd.Timestamp | None = None,
+    echelle: str | None = None,
+    code: str | None = None,
     dept_code: str | None = None,
     ventilation_mode: str = "globale",
     chart_preset: str | None = None,
@@ -118,14 +121,17 @@ def generate_profile_pdf_report(
     """Point d’entrée moteur unique pour générer le PDF d'un profil."""
     date_deb_ts = pd.to_datetime(date_deb) if date_deb is not None else pd.Timestamp("2025-01-01")
     date_fin_ts = pd.to_datetime(date_fin) if date_fin is not None else pd.Timestamp("2026-02-05")
-    dept_code_str = str(dept_code) if dept_code is not None else "21"
+    echelle_res, code_res = resolve_perimetre_kwargs(
+        echelle=echelle, code=code, dept_code=dept_code
+    )
 
     generate_pdf_report(
         out_dir,
         profile=profile or {},
         date_deb=date_deb_ts,
         date_fin=date_fin_ts,
-        dept_code=dept_code_str,
+        echelle=echelle_res,
+        code=code_res,
         ventilation_mode=ventilation_mode,
         chart_preset=chart_preset,
         output_filename=output_filename,
@@ -187,7 +193,8 @@ def generate_pdf_report(
     profile: dict,
     date_deb: pd.Timestamp,
     date_fin: pd.Timestamp,
-    dept_code: str,
+    echelle: str,
+    code: str,
     ventilation_mode: str = "globale",
     chart_preset: str | None = None,
     output_filename: str | None = None,
@@ -202,7 +209,8 @@ def generate_pdf_report(
         profile=profile,
         date_deb=date_deb,
         date_fin=date_fin,
-        dept_code=dept_code,
+        echelle=echelle,
+        code=code,
         ventilation_mode=ventilation_mode,
         chart_preset=chart_preset,
         output_filename=output_filename,
@@ -217,7 +225,8 @@ def _generate_pdf_content(
     profile: dict,
     date_deb: pd.Timestamp,
     date_fin: pd.Timestamp,
-    dept_code: str,
+    echelle: str,
+    code: str,
     ventilation_mode: str = "globale",
     chart_preset: str | None = None,
     output_filename: str | None = None,
@@ -267,7 +276,26 @@ def _generate_pdf_content(
     nb_pve = int(pve_resume["nb_pve_global"].iloc[0]) if pve_resume is not None and not pve_resume.empty else 0
     nb_ops = int(ops_resume["nb_operations_controle"].iloc[0]) if ops_resume is not None and not ops_resume.empty and "nb_operations_controle" in ops_resume.columns else 0
 
-    dept_name_typo = normalize_dept_typography(get_dept_name(dept_code))
+    cfg = BilanConfig.from_strings(
+        str(date_deb.date()),
+        str(date_fin.date()),
+        echelle=echelle,
+        code=code,
+        root=_ROOT,
+    )
+    perimetre_typo = (
+        normalize_dept_typography(cfg.perimetre_name)
+        if cfg.echelle == "departement"
+        else cfg.perimetre_name
+    )
+
+    cover_title_lines, header_title_lines = build_title_lines_from_cfg(
+        presentation_cfg,
+        profile_label="",
+        perimetre_name_typo=perimetre_typo,
+        echelle=cfg.echelle,
+    )
+    report_header = " — ".join(line.strip() for line in header_title_lines if line.strip())
     map_captions: list[str] = []
     if cartes and has_cartography_catalog(profile):
         selected = list(profile.get("_cartes_selection") or [])
@@ -337,11 +365,6 @@ def _generate_pdf_content(
     sections = resolve_sections_for_toc(presentation_cfg, resolved_section_defs)
     section_title = {sid: title for sid, title in resolved_section_defs}
 
-    cover_title_lines, header_title_lines = build_title_lines_from_cfg(
-        presentation_cfg, profile_label="", dept_name_typo=dept_name_typo
-    )
-    report_header = " — ".join(line.strip() for line in header_title_lines if line.strip())
-
     tables_layout = resolve_tables_layout(presentation_cfg)
     charte_cfg = resolve_charte_config(presentation_cfg)
     title_page_cfg = resolve_title_page_config(_ROOT, scope=scope, profile_id=profile_id)
@@ -395,8 +418,8 @@ def _generate_pdf_content(
         show_placeholder=show_placeholder,
         date_deb=date_deb,
         date_fin=date_fin,
-        dept_code=dept_code,
-        dept_name_typo=dept_name_typo,
+        dept_code=cfg.code,
+        dept_name_typo=perimetre_typo,
         diffusion=diffusion,
         ventilation_mode=ventilation_mode,
         out_dir=out_dir,
