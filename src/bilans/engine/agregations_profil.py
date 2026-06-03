@@ -5,7 +5,10 @@ from typing import Any, Tuple
 
 import pandas as pd
 
-from bilans.common.chargeurs_donnees import load_natinf_ref
+from bilans.common.chargeurs_donnees import (
+    load_natinf_ref,
+    load_communes_noms,
+)
 from bilans.common.utilitaires_metier import (
     agg_effectifs_usagers,
     agg_effectifs_usagers_par_domaine,
@@ -23,6 +26,63 @@ from bilans.common.utilitaires_metier import (
 )
 
 _ROOT = Path(__file__).resolve().parents[3]
+
+def _build_global_proc_detail(
+    df: pd.DataFrame,
+    proc_type: str,
+    num_candidates: list[str],
+    date_candidates: list[str],
+    commune_candidates: list[str],
+    theme_candidates: list[str],
+    domaine_candidates: list[str] = None
+) -> pd.DataFrame:
+    if df is None or df.empty:
+        cols = ["numero", "date", "commune", "thematique", "domaine", "type_procedure"]
+        return pd.DataFrame(columns=cols)
+    d = df.copy()
+    
+    def _coalesce(cols: list[str]) -> pd.Series:
+        res = pd.Series([pd.NA] * len(d), index=d.index)
+        if not cols:
+            return res
+        for c in cols:
+            if c in d.columns:
+                temp = d[c].replace({"": pd.NA, "nan": pd.NA, "None": pd.NA, "INC": pd.NA, "ND": pd.NA, "n.d.": pd.NA})
+                res = res.fillna(temp)
+        return res
+        
+    out = pd.DataFrame({
+        "numero": _coalesce(num_candidates),
+        "date": _coalesce(date_candidates),
+        "commune": _coalesce(commune_candidates),
+        "thematique": _coalesce(theme_candidates),
+        "domaine": _coalesce(domaine_candidates) if domaine_candidates else "Hors domaine",
+        "type_procedure": proc_type
+    }, index=d.index)
+    
+    for col in ["numero", "date", "commune", "thematique", "domaine"]:
+        out[col] = out[col].fillna("").astype(str).str.strip().replace({"<NA>": "", "nan": "", "None": "", "n.d.": ""})
+    
+    out["commune"] = out["commune"].replace({"": pd.NA}).fillna("n.d.")
+    
+    # Mapping points -> communes (fallback) using DC_ID if present in df
+    if "DC_ID" in d.columns and "dc_id" in d.columns:
+        pass # To be mapped externally or handled below
+        
+    out["commune"] = out["commune"].fillna("n.d.")
+    
+    if "date" in out.columns:
+        try:
+            dt_s = pd.to_datetime(out["date"], errors="coerce")
+            out["date"] = dt_s.dt.strftime("%d/%m/%Y").fillna("n.d.")
+        except Exception:
+            pass
+            
+    # Pyarrow safe replace for thematic labels
+    if not out.empty and "thematique" in out.columns:
+        out["thematique"] = out["thematique"].astype(object).str.replace(r"^.*_.*?_", "", regex=True)
+    
+    return out
 
 
 def _tab_resultats_controles_detail(point: pd.DataFrame) -> pd.DataFrame:
@@ -100,7 +160,7 @@ def analyse_controles_global(point: pd.DataFrame, out_dir: Path) -> Tuple[pd.Dat
     col_domaine = "domaine" if "domaine" in pt.columns else None
     if col_domaine:
         pt_filled = pt.copy()
-        pt_filled[col_domaine] = pt_filled[col_domaine].fillna("Hors domaine")
+        pt_filled[col_domaine] = pt_filled[col_domaine].fillna("Hors domaine").astype(str).str.strip()
         agg_domaine = (
             pt_filled[col_domaine]
             .value_counts()
@@ -122,14 +182,21 @@ def analyse_controles_global(point: pd.DataFrame, out_dir: Path) -> Tuple[pd.Dat
 
     col_theme = "theme" if "theme" in pt.columns else "type_actio"
     if col_theme in pt.columns:
+        pt_theme_filled = pt.copy()
+        pt_theme_filled[col_theme] = pt_theme_filled[col_theme].fillna("Hors theme").astype(str).str.strip()
         agg_theme = (
-            pt[col_theme]
-            .fillna("Hors theme")
+            pt_theme_filled[col_theme]
             .value_counts()
             .rename_axis("theme")
             .to_frame("nb")
             .reset_index()
         )
+        if "fc_id" in pt_theme_filled.columns:
+            ops_par_theme = pt_theme_filled.groupby(col_theme)["fc_id"].nunique().reset_index(name="nb_operations")
+            agg_theme = pd.merge(agg_theme, ops_par_theme, on="theme", how="left")
+        else:
+            agg_theme["nb_operations"] = 0
+
         agg_theme["taux"] = agg_theme["nb"] / float(nb_total or 1)
         agg_theme.to_csv(out_dir / "controles_global_par_theme.csv", sep=";", index=False)
     else:
@@ -210,10 +277,20 @@ def analyse_pej_pa_global(
     else:
         pej_dept = pej_dept.drop_duplicates(subset="DC_ID", keep="first").copy()
 
+    from bilans.common.chargeurs_donnees import merge_pej_faits_locations
+    pej_dept = merge_pej_faits_locations(pej_dept, root, dept_code)
+
     def _col_or_fallback(df: pd.DataFrame, name: str, fallback: str) -> pd.Series:
         if name in df.columns:
             return df[name].fillna(fallback)
         return pd.Series([fallback] * len(df), index=df.index, dtype=object)
+
+    col_commune = "nom_commune" if "nom_commune" in point.columns else ("nom_commun" if "nom_commun" in point.columns else None)
+    nom_commune_by_dc = {}
+    if not point.empty and "dc_id" in point.columns and col_commune:
+        tmp_p = point.dropna(subset=["dc_id"]).copy()
+        tmp_p["dc_id_str"] = tmp_p["dc_id"].astype(str).astype(object).str.strip().str.replace(r"\.0$", "", regex=True)
+        nom_commune_by_dc = tmp_p.drop_duplicates("dc_id_str").set_index("dc_id_str")[col_commune].astype(str).to_dict()
 
     pej_par_domaine = (
         pej_dept.groupby(_col_or_fallback(pej_dept, "DOMAINE", "Hors domaine"))
@@ -245,12 +322,25 @@ def analyse_pej_pa_global(
             .astype(str)
             .str.strip()
         )
-        vc = codes.value_counts().rename_axis("numero_natinf").reset_index(name="nb_pej")
+        vc = codes.value_counts().rename_axis("natinf").reset_index(name="nb")
         if not natinf_ref.empty:
+            vc["numero_natinf"] = vc["natinf"].astype(str).str.extract(r"(\d+)", expand=False)
             vc = vc.merge(natinf_ref, on="numero_natinf", how="left")
         vc.to_csv(out_dir / "pej_global_par_natinf.csv", sep=";", index=False)
 
     pd.DataFrame([{"nb_pej_global": len(pej_dept)}]).to_csv(out_dir / "pej_global_resume.csv", sep=";", index=False)
+
+    pej_detail = _build_global_proc_detail(
+        pej_dept, "PEJ", ["NUM_DOSSIER", "DC_ID"], ["DATE_FAITS", "DATE_REF"], ["NOM_COM", "COMMUNE_LIB", "LIBELLE_COMMUNE_FAITS", "NOM_COM_FAITS", "nom_commune", "COMMUNE"], ["THEME", "NATINF_PEJ"], ["DOMAINE"]
+    )
+    if not pej_detail.empty and "DC_ID" in pej_dept.columns:
+        pej_detail["commune"] = pej_detail["commune"].astype(object)
+        pej_dc_str = pej_dept["DC_ID"].astype(str).astype(object).str.strip().str.replace(r"\.0$", "", regex=True)
+        mapped_communes = pej_dc_str.map(nom_commune_by_dc)
+        mask = pej_detail["commune"].isna() | pej_detail["commune"].isin(["n.d.", "nan", "", "INC", "ND"])
+        pej_detail.loc[mask, "commune"] = mapped_communes[mask]
+        pej_detail["commune"] = pej_detail["commune"].fillna("n.d.")
+    pej_detail.to_csv(out_dir / "pej_detail.csv", sep=";", index=False)
 
     pa_lignes = points_as_pa_lignes(point)
 
@@ -274,6 +364,12 @@ def analyse_pej_pa_global(
 
     nb_pa = count_pa_induites_par_controles(point)
     pd.DataFrame([{"nb_pa_global": nb_pa}]).to_csv(out_dir / "pa_global_resume.csv", sep=";", index=False)
+
+    point_pa = filter_points_induisant_pa(point)
+    pa_detail = _build_global_proc_detail(
+        point_pa, "PA", ["dc_id", "numero"], ["date_ctrl", "date"], ["nom_commune", "commune", "COMMUNE_LIB", "LIBELLE_COMMUNE_FAITS"], ["theme", "thematique"], ["DOMAINE", "domaine"]
+    )
+    pa_detail.to_csv(out_dir / "pa_detail.csv", sep=";", index=False)
 
     if "type_usager" in point.columns:
         proc_ud = agg_procedures_dossiers_par_domaine(
@@ -323,6 +419,22 @@ def analyse_pve_global(pve: pd.DataFrame, out_dir: Path) -> None:
             pve_par_natinf = pve_par_natinf.merge(natinf_ref, on="numero_natinf", how="left")
         pve_par_natinf.to_csv(out_dir / "pve_global_par_natinf.csv", sep=";", index=False)
 
+    pve_detail = _build_global_proc_detail(
+        pve, "PVe", ["INF-ID"], ["INF-DATE-MIF", "INF-DATE-INTG", "INF-DATE", "INF-DATE-I", "INF_DATE", "DATE_FAITS"], ["COMMUNE_LIB", "INF-LIEU", "COMMUNE", "NOM_COM", "INF-INSEE", "INSEE_DEP"], ["INF-NATINF"], ["DOMAINE"]
+    )
+    if not pve_detail.empty and "numero" in pve_detail.columns:
+        communes_ref = load_communes_noms(_ROOT)
+        if communes_ref:
+            mapped_com = pve_detail["commune"].astype(str).str.zfill(5).map(communes_ref)
+            pve_detail["commune"] = mapped_com.fillna(pve_detail["commune"])
+
+        natinf_ref = load_natinf_ref(_ROOT)
+        if not natinf_ref.empty:
+            codes = pve_detail["thematique"].astype(str).str.extract(r"(\d+)", expand=False)
+            mapped_th = codes.map(natinf_ref.set_index("numero_natinf")["libelle_natinf"])
+            pve_detail["thematique"] = mapped_th.fillna(pve_detail["thematique"])
+    pve_detail.to_csv(out_dir / "pve_detail.csv", sep=";", index=False)
+
 
 def analyse_annuelle_global(
     point: pd.DataFrame,
@@ -332,6 +444,16 @@ def analyse_annuelle_global(
     out_dir: Path,
 ) -> None:
     """Construit les indicateurs annuels globaux pour les periodes multi-annuelles."""
+    if not point.empty and "date_ctrl" in point.columns:
+        point = point.copy()
+        point["date_ctrl"] = pd.to_datetime(point["date_ctrl"], errors="coerce")
+    if not pej.empty and "DATE_REF" in pej.columns:
+        pej = pej.copy()
+        pej["DATE_REF"] = pd.to_datetime(pej["DATE_REF"], errors="coerce")
+    if not pve.empty and "INF-DATE-INTG" in pve.columns:
+        pve = pve.copy()
+        pve["INF-DATE-INTG"] = pd.to_datetime(pve["INF-DATE-INTG"], errors="coerce")
+
     years: set[int] = set()
     if not point.empty and "date_ctrl" in point.columns:
         years |= set(point["date_ctrl"].dropna().dt.year.astype(int).tolist())
@@ -402,6 +524,16 @@ def analyse_trimestrielle_global(
     out_dir: Path,
 ) -> None:
     """Construit les indicateurs trimestriels globaux (T1=janv-mars, T2=avr-juin, T3=juil-sept, T4=oct-dec)."""
+    if not point.empty and "date_ctrl" in point.columns:
+        point = point.copy()
+        point["date_ctrl"] = pd.to_datetime(point["date_ctrl"], errors="coerce")
+    if not pej.empty and "DATE_REF" in pej.columns:
+        pej = pej.copy()
+        pej["DATE_REF"] = pd.to_datetime(pej["DATE_REF"], errors="coerce")
+    if not pve.empty and "INF-DATE-INTG" in pve.columns:
+        pve = pve.copy()
+        pve["INF-DATE-INTG"] = pd.to_datetime(pve["INF-DATE-INTG"], errors="coerce")
+
     periods: set[tuple[int, int]] = set()
 
     if not point.empty and "date_ctrl" in point.columns:
@@ -489,6 +621,16 @@ def analyse_mensuelle_global(
     out_dir: Path,
 ) -> None:
     """Construit les indicateurs mensuels globaux (YYYY-MM)."""
+    if not point.empty and "date_ctrl" in point.columns:
+        point = point.copy()
+        point["date_ctrl"] = pd.to_datetime(point["date_ctrl"], errors="coerce")
+    if not pej.empty and "DATE_REF" in pej.columns:
+        pej = pej.copy()
+        pej["DATE_REF"] = pd.to_datetime(pej["DATE_REF"], errors="coerce")
+    if not pve.empty and "INF-DATE-INTG" in pve.columns:
+        pve = pve.copy()
+        pve["INF-DATE-INTG"] = pd.to_datetime(pve["INF-DATE-INTG"], errors="coerce")
+
     periods: set[tuple[int, int]] = set()
 
     if not point.empty and "date_ctrl" in point.columns:
@@ -571,6 +713,16 @@ def analyse_hebdomadaire_global(
     out_dir: Path,
 ) -> None:
     """Indicateurs par semaine (libellé YYYY-Sww), aligné sur le moteur thématique."""
+    if not point.empty and "date_ctrl" in point.columns:
+        point = point.copy()
+        point["date_ctrl"] = pd.to_datetime(point["date_ctrl"], errors="coerce")
+    if not pej.empty and "DATE_REF" in pej.columns:
+        pej = pej.copy()
+        pej["DATE_REF"] = pd.to_datetime(pej["DATE_REF"], errors="coerce")
+    if not pve.empty and "INF-DATE-INTG" in pve.columns:
+        pve = pve.copy()
+        pve["INF-DATE-INTG"] = pd.to_datetime(pve["INF-DATE-INTG"], errors="coerce")
+
     periods: set[tuple[int, int]] = set()
 
     def _collect(df: pd.DataFrame, col: str) -> None:

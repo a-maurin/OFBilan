@@ -436,6 +436,15 @@ def test_thematique_default_sections_usagers_before_procedures() -> None:
     assert "3." in str(titles.get("sec4", ""))
 
 
+def test_resolve_sec34_render_order_defaults_usagers_before_procedures() -> None:
+    from bilans.common.pdf_presentation_config import resolve_sec34_render_order
+
+    assert resolve_sec34_render_order({}) == ["sec4", "sec3"]
+    assert resolve_sec34_render_order(
+        {"sections": {"order": ["sec1", "sec3", "sec4"], "enabled": {"sec3": False}}}
+    ) == ["sec4"]
+
+
 def test_feature_registry_disables_cross_scope_sections() -> None:
     root = Path(__file__).resolve().parents[2]
     them = resolve_pdf_presentation_config(root, scope="thematique", profile_id="chasse")

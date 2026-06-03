@@ -59,20 +59,11 @@ _KEY_FIGURES_GRAIN_NOTE = (
 )
 
 
-def _truncate_with_dash(value: str, max_len: int) -> str:
-    txt = str(value or "")
-    if len(txt) <= max_len:
-        return txt
-    if max_len <= 1:
-        return "-"
-    return txt[: max_len - 1].rstrip() + "-"
-
-
-def _nb_non_conformes_brut(tab_resultats: pd.DataFrame | None) -> int:
-    if tab_resultats is None or tab_resultats.empty:
-        return 0
-    m = tab_resultats["resultat"].astype(str).str.strip()
-    return int(tab_resultats.loc[m.isin(["Infraction", "Manquement"]), "nb"].sum())
+from bilans.engine.pdf_utils import (
+    truncate_with_dash as _truncate_with_dash,
+    nb_non_conformes_brut as _nb_non_conformes_brut,
+    pct_table_cell as _pct_table_cell,
+)
 
 
 def _build_rows_resultats_controles_pdf(tr: pd.DataFrame) -> list[list[str]]:
@@ -100,10 +91,7 @@ def _build_rows_resultats_controles_pdf(tr: pd.DataFrame) -> list[list[str]]:
     return tbl
 
 
-def _pct_table_cell(n: int | float, denom: float) -> str:
-    if denom is None or denom <= 0:
-        return "n.d."
-    return format_pct_int_from_rate(float(n) / float(denom))
+
 
 
 def _filter_dataframe_min_pct(
@@ -406,8 +394,8 @@ def _generate_synthese_pdf(
         ("sec5", "5. Cartographie"),
         ("sec6", "6. Annexes"),
     ]
-    sections_toc = section_defs
-
+    from bilans.common.pdf_presentation_config import resolve_sections_for_toc
+    sections_toc = resolve_sections_for_toc(presentation_cfg, section_defs)
     cover_title_lines, header_title_lines = build_title_lines_from_cfg(
         presentation_cfg, profile_label="", dept_name_typo=dept_name_typo
     )
@@ -449,420 +437,78 @@ def _generate_synthese_pdf(
         diffusion=diffusion,
     )
 
-    # ── 1. Chiffres clés + § 2 + § 2.1 (même page) ──
-    builder.add_section("sec1", "1. Chiffres clés")
-    nb_nc = _nb_non_conformes_brut(tab_resultats) if nb_localisations > 0 else 0
-    kf_rows = _build_synthese_key_figure_rows(
+
+    from bilans.engine.pdf_context import PdfContext
+    from bilans.engine.sections_synthese import (
+        render_sec1, render_sec22, render_sec23, render_sec3, render_sec31,
+        render_sec32, render_sec33, render_sec4, render_sec5, render_sec6
+    )
+    from bilans.engine.registre_sections_pdf import SectionRegistry
+    
+    ctx = PdfContext(
+        builder=builder,
+        profile={},
+        presentation_cfg={},
+        behavior_cfg={},
+        show_placeholder=show_placeholder,
+        date_deb=date_deb,
+        date_fin=date_fin,
+        dept_code=dept_code,
+        dept_name_typo=dept_name_typo,
+        diffusion=diffusion,
+        ventilation_mode="",
+        out_dir=out_dir,
+        avail_w=avail_w,
+        tmp_dir=tmp_dir,
+        chart_bar_w=chart_bar_w,
+        legend_fontsize=legend_fontsize,
+        legend_ncol_max=legend_ncol_max,
+        figure_scale=figure_scale,
+        ref_pie_w=ref_pie_w,
+        ref_pie_fs=ref_pie_fs,
+        ref_pie_legend_fs=ref_pie_legend_fs,
+        split_by_row=bool(tables_layout.get("split_by_row")),
+        tables_layout=tables_layout,
+        section_title={},
+        nb_localisations=nb_localisations,
+        nb_ops=nb_ops,
         nb_effectifs=nb_effectifs,
         nb_operations_controle=nb_operations_controle,
-        nb_localisations=nb_localisations,
-        nb_nc=nb_nc,
         nb_pej=nb_pej,
         nb_pa=nb_pa,
         nb_pve=nb_pve,
-    )
-    builder.add_key_figures_rows(kf_rows)
-
-    builder.add_section(
-        "sec2",
-        "2. Activité de police administrative et judiciaire",
-        append_to_pending=True,
-    )
-    builder.append_pending_paragraph(_KEY_FIGURES_GRAIN_NOTE)
-    builder.append_pending_callout_box(
-        "Comme indiqué dans la notice méthodologique, le terme contrôle désigne ici "
-        "exclusivement une mesure de police administrative.",
-        title="Rappel",
-        spacer_after_mm=1.5,
-    )
-    builder.append_pending_paragraph(
-        "Sauf mention contraire, les tableaux de cette partie cumulent les localisations de "
-        "contrôle (points de contrôle OSCEAN) et les procédures d'enquêtes judiciaires (PEJ) "
-        "non rattachées à une fiche contrôle (i.e. saisines judiciaires hors opérations de "
-        "contrôle)."
+        tab_resultats=tab_resultats,
+        tab_resultats_controles=tab_resultats_controles,
+        agg_domaine=agg_domaine,
+        act_theme=act_theme,
+        act_proc=act_proc,
+        pve_natinf=pve_natinf,
+        pej_top=None,
+        agg_usager=None,
+        res_usager=res_usager,
+        cross_usager_dom=cross_usager_dom,
+        usagers_resume=usagers_resume,
+        cartes=cartes,
+        global_map_paths=global_map_paths,
+        global_map_layout=global_map_layout,
+        map_captions=map_captions,
+        map_id="global",
     )
 
-    builder.add_section(
-        "sec2_1",
-        "2.1. Activité de police par thème du plan de contrôle",
-        level=2,
-        toc_level=1,
-        append_to_pending=True,
-    )
-    act_theme_display = _rollup_small_categories(
-        act_theme,
-        label_col="theme",
-        other_label="Autres thèmes de contrôle",
-        value_col="nb_total",
-        min_pct=0.01,
-        sum_cols=["nb_localisations", "nb_pej_hors_controle", "nb_total"],
-    )
-    act_theme_total = (
-        int(act_theme["nb_total"].astype(float).sum())
-        if act_theme is not None and not act_theme.empty
-        else 0
-    )
-    if act_theme_display is not None and not act_theme_display.empty:
-        tbl = [["Thème", "Contrôles PA", "PEJ hors contrôle PA", "Total"]]
-        for _, row in act_theme_display.iterrows():
-            nb_row = int(row["nb_total"])
-            pct = format_pct_int_from_rate(nb_row / act_theme_total) if act_theme_total > 0 else "n.d."
-            tbl.append(
-                [
-                    _wrap_table_label(row["theme"]),
-                    str(int(row.get("nb_localisations", 0))),
-                    str(int(row.get("nb_pej_hors_controle", 0))),
-                    f"{nb_row} ({pct})",
-                ]
-            )
-        builder.add_table(
-            tbl,
-            caption="Activité de police par thème (contrôles + PEJ hors fiche contrôle)",
-            col_widths=[avail_w * 0.44, avail_w * 0.18, avail_w * 0.18, avail_w * 0.20],
-            col_aligns=["LEFT", "RIGHT", "RIGHT", "RIGHT"],
-            keep_together=True,
-        )
-    elif show_placeholder:
-        builder.append_pending_paragraph("Aucune donnée disponible pour l'activité par thème.")
-        builder.add_keep_together_block([])
-
-    builder.add_section(
-        "sec2_2",
-        "2.2. Résultat des contrôles au titre de la police administrative",
-        level=2,
-        toc_level=1,
-    )
-    if tab_res_ctrl is not None and not tab_res_ctrl.empty:
-        tbl_pdf = _build_rows_resultats_controles_pdf(tab_res_ctrl)
-        pie_data = _resultats_controles_pie_data(tab_resultats)
-        pie_path = None
-        if pie_data:
-            pie_path = chart_pie(
-                pie_data,
-                "",
-                tmp_dir,
-                "pie_synthese_resultats_controles.png",
-                figure_scale=ref_pie_fs,
-                legend_fontsize=ref_pie_legend_fs,
-            )
-        builder.add_table_and_image_keep_together(
-            tbl_pdf,
-            table_caption="Résultats des contrôles",
-            col_widths=[avail_w * 0.44, avail_w * 0.28, avail_w * 0.28],
-            col_aligns=["LEFT", "RIGHT", "RIGHT"],
-            image_path=Path(pie_path) if pie_path else None,
-            image_width_ratio=ref_pie_w,
-        )
-    elif show_placeholder:
-        builder.add_paragraph("Aucune donnée de résultat de contrôle sur la période.")
-
-    builder.add_section("sec2_3", "2.3. Activité procédurale", level=2, toc_level=1)
-    builder.append_pending_paragraph(
-        "Les effectifs PEJ du tableau ci-dessous regroupent les saisines engagées à l’issue "
-        "des contrôles réalisés sur la période et les saisines PEJ ouvertes hors activité de "
-        "contrôle."
-    )
-    if proc_theme is not None and not proc_theme.empty:
-        tbl = [["Thème", "PEJ", "PA"]]
-        for _, row in proc_theme.head(25).iterrows():
-            tbl.append(
-                [
-                    _wrap_table_label(row["theme"]),
-                    str(int(row.get("nb_pej", 0))),
-                    str(int(row.get("nb_pa", 0))),
-                ]
-            )
-        builder.add_table(
-            tbl,
-            caption=pdf_metric_caption("Procédures par thème", "proc"),
-            col_widths=[avail_w * 0.52, avail_w * 0.24, avail_w * 0.24],
-            col_aligns=["LEFT", "RIGHT", "RIGHT"],
-        )
-    elif show_placeholder:
-        builder.append_pending_paragraph("Aucune procédure sur la période.")
-        builder.add_keep_together_block([])
-
-    # ── 3. Activité par type d'usager ──
-    builder.add_section("sec3", "3. Activité de police par type d'usager", start_on_new_page=True)
-    builder.append_pending_paragraph(
-        "⚠️ <i>Note importante : Le décompte des effectifs selon le type d'usager suit des règles spécifiques qui sont détaillées dans la notice méthodologique.</i>",
-    )
-    builder.add_spacer(2)
-    builder.append_pending_paragraph(
-        "Pour la partie contrôles : cumul des <b>effectifs</b> par type d'usager (chaque usager "
-        "renseigné sur une fiche est compté avec son effectif ; ces effectifs sont calculés au "
-        "niveau des fiches de contrôle et ne se confondent donc pas avec le nombre de "
-        "localisations de contrôle), des PEJ ouvertes à l'issue d'un contrôle et des PEJ hors "
-        "fiche contrôle, "
-        "ventilés par thème du plan de contrôle (détail en § 3.1). "
-        "Pour la partie procédurale (§ 3.3) : une procédure ne comporte qu'un seul type d'usager."
-    )
-
-    pie_data = _pie_data_controles_par_type_usager(act_par_type)
-    if pie_data:
-        pie_path = chart_pie(
-            pie_data,
-            "Répartition des effectifs contrôlés et saisines PEJ hors contrôle par type d'usager",
-            tmp_dir,
-            "pie_synthese_controles_par_type_usager.png",
-            legend_percent_only=True,
-            figure_scale=ref_pie_fs,
-            **_chart_pie_compact_legend_kw(
-                len(pie_data),
-                legend_fontsize=ref_pie_legend_fs,
-            ),
-        )
-        builder.append_pending_image(
-            Path(pie_path),
-            width_ratio=ref_pie_w,
-            spacer_after_mm=0.4,
-        )
-
-    builder.add_section(
-        "sec3_1",
-        "3.1. Thème de contrôle par type d'usager",
-        level=2,
-        toc_level=1,
-        start_on_new_page=True,
-    )
-    col_w_ut = [
-        avail_w * 0.36,
-        avail_w * 0.14,
-        avail_w * 0.14,
-        avail_w * 0.14,
-        avail_w * 0.22,
-    ]
-    col_a_ut = ["LEFT", "RIGHT", "RIGHT", "RIGHT", "RIGHT"]
-    if act_ut is not None and not act_ut.empty:
-        type_order = (
-            act_ut.groupby("type_usager")["nb_total"]
-            .sum()
-            .sort_values(ascending=False)
-            .index
-        )
-
-        def _subtable_for_type(tu) -> list[list[str]] | None:
-            sub = act_ut[act_ut["type_usager"].astype(str) == str(tu)].copy()
-            sub = sub.sort_values("nb_total", ascending=False, kind="stable")
-            if sub.empty:
-                return None
-            return _build_usager_theme_table_rows(sub)
-
-        for tu in type_order:
-            tbl = _subtable_for_type(tu)
-            if not tbl:
-                continue
-            builder.add_table(
-                tbl,
-                caption=pdf_metric_caption(
-                    f"Thèmes de contrôle — {_display_type_usager(tu)}", "effectifs"
-                ),
-                col_widths=col_w_ut,
-                col_aligns=col_a_ut,
-                keep_together=False,
-                keep_caption_with_table=True,
-                spacer_after_mm=1.0,
-            )
-        builder.add_paragraph(_SEC3_1_TABLE_NOTE)
-    elif show_placeholder:
-        builder.append_pending_paragraph("Aucune donnée type d'usager disponible.")
-        builder.add_keep_together_block([])
-
-    builder.add_section(
-        "sec3_2",
-        "3.2. Résultat des contrôles par type d'usager",
-        level=2,
-        toc_level=1,
-    )
-    if res_usager is not None and not res_usager.empty:
-        labels = [_display_type_usager(x) for x in res_usager["type_usager"].tolist()]
-        series: dict[str, list[int]] = {
-            "Conforme": [int(x) for x in res_usager["Conforme"].tolist()],
-            "Infraction": [int(x) for x in res_usager["Infraction"].tolist()],
-            "Manquement": [int(x) for x in res_usager["Manquement"].tolist()],
-        }
-        if "Autre_resultat" in res_usager.columns and int(res_usager["Autre_resultat"].sum()) > 0:
-            series["En attente"] = [int(x) for x in res_usager["Autre_resultat"].tolist()]
-        bar_path = chart_bar_horizontal_stacked(
-            labels,
-            series,
-            pdf_metric_caption("Résultats des contrôles par type d'usager", "effectifs"),
-            "Effectifs",
-            tmp_dir,
-            "bar_synthese_resultats_usager.png",
-            figure_scale=0.88,
-        )
-        builder.add_image(Path(bar_path), width_ratio=0.88, spacer_after_mm=1.0)
-
-        has_autre = "Autre_resultat" in res_usager.columns and int(res_usager["Autre_resultat"].sum()) > 0
-        total_global = float(
-            res_usager["Conforme"].sum()
-            + res_usager["Infraction"].sum()
-            + res_usager["Manquement"].sum()
-            + (res_usager["Autre_resultat"].sum() if has_autre else 0)
-        ) or 1.0
-        tbl_res = [
-            [
-                "Type d'usager",
-                "Conforme",
-                "Infraction",
-                "Manquement",
-                *(["En attente"] if has_autre else []),
-                "Total",
-                "% du total",
-            ]
-        ]
-        for _, row in res_usager.iterrows():
-            c = int(row.get("Conforme", 0))
-            i = int(row.get("Infraction", 0))
-            m = int(row.get("Manquement", 0))
-            a = int(row.get("Autre_resultat", 0)) if has_autre else 0
-            t = c + i + m + a
-            tbl_res.append(
-                [
-                    _truncate_with_dash(_display_type_usager(row.get("type_usager", "")), 34),
-                    str(c),
-                    str(i),
-                    str(m),
-                    *( [str(a)] if has_autre else [] ),
-                    str(t),
-                    _pct_table_cell(t, total_global),
-                ]
-            )
-        builder.add_table(
-            tbl_res,
-            caption=pdf_metric_caption("Résultats des contrôles par type d'usager", "effectifs"),
-            keep_together=True,
-        )
-    elif show_placeholder:
-        builder.add_paragraph("Aucun résultat par type d'usager.")
-
-    builder.add_section("sec3_3", "3.3. Activité procédurale par type d'usager", level=2, toc_level=1)
-    if proc_ut is not None and not proc_ut.empty:
-        types = proc_ut["type_usager"].dropna().astype(str).unique().tolist()
-        first = True
-        for tu in types:
-            sub = proc_ut[proc_ut["type_usager"].astype(str) == tu].copy()
-            sub = sub.sort_values(["nb_pej", "nb_pa"], ascending=False, kind="stable")
-            if sub.empty:
-                continue
-            if not first:
-                builder.add_spacer(1.5)
-            first = False
-            tbl = [["Thème", "PEJ", "PA"]]
-            for _, row in sub.head(15).iterrows():
-                tbl.append(
-                    [
-                        str(row["theme"])[:40],
-                        str(int(row.get("nb_pej", 0))),
-                        str(int(row.get("nb_pa", 0))),
-                    ]
-                )
-            builder.add_table(
-                tbl,
-                caption=pdf_metric_caption(
-                    f"Procédures par thème — {_display_type_usager(tu)}", "proc"
-                ),
-                col_widths=[avail_w * 0.52, avail_w * 0.24, avail_w * 0.24],
-                col_aligns=["LEFT", "RIGHT", "RIGHT"],
-                keep_together=True,
-            )
-    elif show_placeholder:
-        builder.add_paragraph("Aucune procédure ventilée par type d'usager.")
-
-    # ── 4. PVe (source OFB, hors périmètre type d'usager OSCEAN) ──
-    builder.add_section("sec4", "4. Procès-verbaux électroniques (PVe)", start_on_new_page=True)
-    builder.add_paragraph(
-        "Les procès-verbaux électroniques (PVe) proviennent du fichier national OFB "
-        "(<i>Stats_PVe_OFB</i>). Ils recensent des infractions constatées et intégrées sur la "
-        f"période du {date_deb.date():%d/%m/%Y} au {date_fin.date():%d/%m/%Y} "
-        "(date d'intégration <i>INF-DATE-INTG</i>). Ils ne sont pas rattachés aux fiches de "
-        "contrôle OSCEAN ni ventilés par type d'usager : cette section les présente "
-        "selon leur propre nomenclature (NATINF et classe d'infraction)."
-    )
-    pve_natinf = _sort_desc(_load_csv_opt(out_dir, "pve_global_par_natinf.csv"), ["nb"])
-    pve_classe = _sort_desc(_load_csv_opt(out_dir, "synthese_pve_par_classe.csv"), ["nb"])
-
-    if nb_pve > 0:
-        if pve_natinf is not None and not pve_natinf.empty:
-            natinf_label_w = avail_w * 0.72
-            builder.add_table(
-                _build_pve_natinf_table_rows(
-                    pve_natinf,
-                    label_col_width_pt=natinf_label_w,
-                ),
-                caption=pdf_metric_caption("Principales natures d'infraction (NATINF)", "proc"),
-                col_widths=[natinf_label_w, avail_w * 0.28],
-                col_aligns=["LEFT", "RIGHT"],
-                keep_together=True,
-            )
-        if pve_classe is not None and not pve_classe.empty:
-            tbl_cl = [["Classe d'infraction", "Nombre de PVe"]]
-            total_cl = float(pve_classe["nb"].sum()) or 1.0
-            for _, row in pve_classe.iterrows():
-                lib = str(row.get("libelle_classe") or row.get("classe") or "-")
-                nbv = int(row["nb"])
-                tbl_cl.append([lib, f"{nbv} ({_pct_table_cell(nbv, total_cl)})"])
-            builder.add_table(
-                tbl_cl,
-                caption=pdf_metric_caption("PVe par classe d'infraction", "proc"),
-                col_widths=[avail_w * 0.60, avail_w * 0.40],
-                col_aligns=["LEFT", "RIGHT"],
-                keep_together=True,
-            )
-    elif show_placeholder:
-        builder.add_paragraph("Aucun procès-verbal électronique sur la période.")
-
-    # ── 5. Cartographie ──
-    builder.add_section("sec5", "5. Cartographie", start_on_new_page=True)
-    if cartes:
-        map_id = str(profile.get("_map_id") or profil_id)
-        map_paths = resolve_profile_map_paths(map_id, profile=profile, presentation_cfg=presentation_cfg)
-        map_layout = resolve_map_layout(profile=profile, presentation_cfg=presentation_cfg)
-        if map_paths:
-            builder.add_maps(map_paths, layout=map_layout)
-        elif show_placeholder:
-            expected = expected_map_filenames(map_id, profile=profile, presentation_cfg=presentation_cfg)
-            files_hint = ", ".join(f"<b>{n}</b>" for n in expected) or f"<b>carte_{map_id}.png</b>"
-            builder.add_paragraph(
-                f"<i>Carte(s) non disponible(s). Déposez {files_hint} dans le dossier des cartes.</i>"
-            )
-    elif show_placeholder:
-        builder.add_paragraph("<i>Cartographie désactivée pour ce bilan.</i>")
-
-    # ── 6. Annexes ──
-    builder.add_section("sec6", "6. Annexes", start_on_new_page=True)
-    methodo = build_sec6_methodology_html(
-        effective_cfg=presentation_cfg,
-        context=build_sec6_methodology_context(
-            period_str=f"du {date_deb.date():%d/%m/%Y} au {date_fin.date():%d/%m/%Y}",
-            dept_name=f"de la {dept_name_typo}",
-            dept_code=str(dept_code),
-            profile_label=profile_label or "Synthèse PA / PJ",
-            profile_id=profil_id,
-            diffusion=diffusion,
-            nb_localisations=nb_localisations,
-            nb_pej=nb_pej,
-            nb_pa=nb_pa,
-            nb_pve=nb_pve,
-            ventilation_mode="globale",
-            show_usagers=is_section_enabled(presentation_cfg, "sec3", True),
-        ),
-    )
-    builder.add_methodology(methodo)
-    gloss_cfg = load_glossary_config(_ROOT)
-    glossaire_rows = build_filtered_glossary_rows(
-        gloss_cfg=gloss_cfg,
-        nb_localisations=nb_localisations,
-        nb_pej=nb_pej,
-        nb_pa=nb_pa,
-        nb_pve=nb_pve,
-    )
-    if glossaire_rows:
-        builder.add_glossary(
-            glossaire_rows,
-            col_widths=[avail_w * 0.25, avail_w * 0.75],
-            col_aligns=["LEFT", "LEFT"],
-        )
-
+    registry = SectionRegistry()
+    registry.register("sec1", render_sec1)
+    registry.register("sec2_2", render_sec22)
+    registry.register("sec2_3", render_sec23)
+    registry.register("sec3", render_sec3)
+    registry.register("sec3_1", render_sec31)
+    registry.register("sec3_2", render_sec32)
+    registry.register("sec3_3", render_sec33)
+    registry.register("sec4", render_sec4)
+    registry.register("sec5", render_sec5)
+    registry.register("sec6", render_sec6)
+    
+    # Pilotage dynamique : on itère sur les sections résolues depuis le YAML
+    for sec_id, _ in sections_toc:
+        if registry.get(sec_id):
+            registry.render(sec_id, ctx)
     builder.build()

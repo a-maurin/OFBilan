@@ -24,6 +24,7 @@ from bilans.common.rendus_graphiques import (
 from bilans.common.pdf_presentation_config import (
     apply_diffusion_pdf_suffix,
     build_title_lines_from_cfg,
+    get_block_int,
     is_block_enabled,
     is_section_enabled,
     normalize_dept_typography,
@@ -31,14 +32,16 @@ from bilans.common.pdf_presentation_config import (
     resolve_pdf_presentation_config,
     inject_sec4_subsections,
     resolve_section_titles,
+    resolve_sec34_render_order,
     resolve_sections_for_toc,
     resolve_tables_layout,
     resolve_title_page_config,
     should_show_placeholder,
+    format_proc_detail_caption,
+    slice_proc_detail_for_pdf,
 )
 from bilans.common.pdf_report_builder import PDFReportBuilder
-from bilans.common.pdf_utils import truncate_text_to_width
-from bilans.common.pdf_utils import ofb_table
+from bilans.common.pdf_utils import ofb_table, truncate_text_to_width, wrap_plain_text_for_pdf_paragraph
 from bilans.common.pdf_table_sort import (
     PDF_LABEL_CTRL_LOCATIONS,
     PDF_LABEL_CTRL_LOCATIONS_SHORT,
@@ -131,21 +134,11 @@ def generate_profile_pdf_report(
     )
 
 
-def _truncate_with_dash(value: str, max_len: int) -> str:
-    txt = str(value or "")
-    if len(txt) <= max_len:
-        return txt
-    if max_len <= 1:
-        return "-"
-    return txt[: max_len - 1].rstrip() + "-"
-
-
-def _nb_non_conformes_brut(tab_resultats: pd.DataFrame | None) -> int:
-    """Somme Infraction + Manquement (aligné OSCEAN / bilan thématique)."""
-    if tab_resultats is None or tab_resultats.empty:
-        return 0
-    m = tab_resultats["resultat"].astype(str).str.strip()
-    return int(tab_resultats.loc[m.isin(["Infraction", "Manquement"]), "nb"].sum())
+from bilans.engine.pdf_utils import (
+    truncate_with_dash as _truncate_with_dash,
+    nb_non_conformes_brut as _nb_non_conformes_brut,
+    pct_table_cell as _pct_table_cell,
+)
 
 
 def _build_rows_resultats_controles_pdf(tr: pd.DataFrame) -> list[list[str]]:
@@ -171,10 +164,7 @@ def _build_rows_resultats_controles_pdf(tr: pd.DataFrame) -> list[list[str]]:
     return tbl
 
 
-def _pct_table_cell(n: int | float, denom: float) -> str:
-    if denom is None or denom <= 0:
-        return "n.d."
-    return format_pct_int_from_rate(float(n) / float(denom))
+
 
 
 def _chart_pie_compact_legend_kw(
@@ -388,989 +378,82 @@ def _generate_pdf_content(
         diffusion=diffusion,
     )
 
-    def _render_sec1() -> None:
-        if is_section_enabled(presentation_cfg, "sec1", True):
-            builder.add_section("sec1", section_title["sec1"])
-        kf: list[tuple[str, str]] = []
-        if nb_ops > 0:
-            kf.append((str(nb_ops), "Opérations de contrôle"))
-        if nb_localisations > 0:
-            kf.append((str(nb_localisations), "Localisations de contrôle"))
-        tab_nc = tab_resultats_controles
-        if tab_nc is not None and not tab_nc.empty and "resultat" in tab_nc.columns:
-            nb_nc_row = tab_nc.loc[tab_nc["resultat"].astype(str).str.strip() == "Non-conforme", "nb"]
-            nb_nc = int(nb_nc_row.sum()) if not nb_nc_row.empty else 0
-            if nb_nc > 0:
-                taux_nc = nb_nc / nb_localisations if nb_localisations else 0
-                kf.append((str(nb_nc), PDF_LABEL_NON_CONFORME_LOCATIONS))
-                kf.append((format_pct_int_from_rate(taux_nc), "Taux de non-conformité"))
-        elif tab_resultats is not None:
-            nb_nc = _nb_non_conformes_brut(tab_resultats)
-            if nb_nc > 0:
-                taux_nc = nb_nc / nb_localisations if nb_localisations else 0
-                kf.append((str(nb_nc), PDF_LABEL_NON_CONFORME_LOCATIONS))
-                kf.append((format_pct_int_from_rate(taux_nc), "Taux de non-conformité"))
-        if nb_pej > 0:
-            kf.append((str(nb_pej), PDF_LABEL_PEJ_COUNT))
-        kf.append((str(nb_pa), "Nombre de PA"))
-        if nb_pve > 0:
-            kf.append((str(nb_pve), "Nombre de PVe"))
-        builder.add_key_figures(kf)
-        builder.add_spacer(2)
 
-    def _render_sec21() -> None:
-        # 2.1 — Analyse de l’ensemble de la période du bilan
-        if (
-            is_section_enabled(presentation_cfg, "sec21", True)
-            and agg_periode is not None
-            and not agg_periode.empty
-        ):
-            is_mensuel = ventilation_mode == "mensuelle"
-            is_trimestriel = ventilation_mode == "trimestrielle"
-            is_hebdo = ventilation_mode == "hebdomadaire"
-            label_periode = (
-                "Mois"
-                if is_mensuel
-                else ("Trimestre" if is_trimestriel else ("Semaine" if is_hebdo else "Année"))
-            )
-            texte_ventilation = (
-                "par mois "
-                if is_mensuel
-                else (
-                    "par trimestre "
-                    if is_trimestriel
-                    else ("par semaine " if is_hebdo else "par année ")
-                )
-            )
-            builder.add_section(
-                "sec21",
-                section_title["sec21"],
-                toc_level=1,
-            )
-            builder.add_paragraph(
-                "Ventilation des principaux indicateurs globaux "
-                + texte_ventilation
-                + "sur l'ensemble de la période du bilan.",
-            )
-            tbl = [
-                [
-                    label_periode,
-                    PDF_LABEL_CTRL_LOCATIONS_SHORT,
-                    PDF_LABEL_NON_CONFORME_LOCATIONS,
-                    "Taux de non-conformité",
-                    "PEJ",
-                    "PA",
-                    "PVe",
-                ]
-            ]
-            for _, row in agg_periode.iterrows():
-                taux_str = (
-                    format_pct_int_from_rate(row.get("taux_non_conformite_controles"))
-                    if pd.notna(row.get("taux_non_conformite_controles"))
-                    else "n.d."
-                )
-                tbl.append(
-                    [
-                        str(row["periode"]),
-                        str(int(row["nb_localisations"])),
-                        str(int(row["nb_localisations_non_conformes"])),
-                        taux_str,
-                        str(int(row["nb_pej"])),
-                        str(int(row["nb_pa"])),
-                        str(int(row["nb_pve"])),
-                    ]
-                )
-            cap = (
-                "Indicateurs mensuels"
-                if is_mensuel
-                else (
-                    "Indicateurs trimestriels"
-                    if is_trimestriel
-                    else ("Indicateurs hebdomadaires" if is_hebdo else "Indicateurs annuels")
-                )
-            )
-            if is_block_enabled(presentation_cfg, "sec21.show_table", True):
-                builder.add_table(
-                    tbl,
-                    caption=(
-                        f"{cap} "
-                        f"({PDF_LABEL_CTRL_LOCATIONS_SHORT}, PVe, PEJ, et PA)"
-                    ),
-                    col_widths=[
-                        avail_w * 0.12,
-                        avail_w * 0.14,
-                        avail_w * 0.18,
-                        avail_w * 0.14,
-                        avail_w * 0.14,
-                        avail_w * 0.14,
-                        avail_w * 0.14,
-                    ],
-                    col_aligns=["RIGHT", "RIGHT", "RIGHT", "RIGHT", "RIGHT", "RIGHT", "RIGHT"],
-                )
 
-            period_labels = [str(v) for v in agg_periode["periode"].tolist()]
-            if ventilation_mode == "mensuelle":
-                titre_ctrl = "Contrôles par mois (conformes / non-conformes)"
-                titre_proc = "Procédures et PVe par mois"
-            elif ventilation_mode == "trimestrielle":
-                titre_ctrl = "Contrôles par trimestre (conformes / non-conformes)"
-                titre_proc = "Procédures et PVe par trimestre"
-            elif ventilation_mode == "hebdomadaire":
-                titre_ctrl = "Contrôles par semaine (conformes / non-conformes)"
-                titre_proc = "Procédures et PVe par semaine"
-            else:
-                titre_ctrl = "Contrôles par année (conformes / non-conformes)"
-                titre_proc = "Procédures et PVe par année"
-
-            conformes = [
-                int(row["nb_localisations"]) - int(row["nb_localisations_non_conformes"])
-                for _, row in agg_periode.iterrows()
-            ]
-            non_conformes = [int(v) for v in agg_periode["nb_localisations_non_conformes"].tolist()]
-            stacked_ctrl_path = chart_bar_stacked(
-                period_labels,
-                {"Conformes": conformes, "Non-conformes": non_conformes},
-                titre_ctrl,
-                PDF_LABEL_CTRL_LOCATIONS,
-                tmp_dir,
-                "bar_global_ctrl_stacked.png",
-                legend_fontsize=legend_fontsize,
-                legend_ncol_max=legend_ncol_max,
-                figure_scale=figure_scale,
-            )
-            if is_block_enabled(presentation_cfg, "sec21.show_chart_controles", True):
-                builder.add_image(Path(stacked_ctrl_path), width_ratio=chart_bar_w)
-
-            series_proc = {
-                "PEJ": [int(v) for v in agg_periode["nb_pej"].tolist()],
-                "PA": [int(v) for v in agg_periode["nb_pa"].tolist()],
-                "PVe": [int(v) for v in agg_periode["nb_pve"].tolist()],
-            }
-            if any(sum(vals) > 0 for vals in series_proc.values()) and is_block_enabled(
-                presentation_cfg, "sec21.show_chart_procedures", True
-            ):
-                stacked_proc_path = chart_bar_stacked(
-                    period_labels,
-                    series_proc,
-                    titre_proc,
-                    "Nombre",
-                    tmp_dir,
-                    "bar_global_proc_stacked.png",
-                    legend_fontsize=legend_fontsize,
-                    legend_ncol_max=legend_ncol_max,
-                    figure_scale=figure_scale,
-                )
-                builder.add_image(Path(stacked_proc_path), width_ratio=chart_bar_w)
-
-            period_days = int((date_fin - date_deb).days)
-            line_source = agg_periode
-            line_labels = period_labels
-            if period_days < 730 and ventilation_mode != "hebdomadaire":
-                agg_line_month = _load_csv_opt(out_dir, "indicateurs_global_par_mois.csv")
-                if agg_line_month is not None and not agg_line_month.empty:
-                    line_source = agg_line_month
-                    line_labels = [str(v) for v in agg_line_month["periode"].tolist()]
-            if (
-                line_source is not None
-                and not line_source.empty
-                and is_block_enabled(presentation_cfg, "sec21.show_chart_taux_line", True)
-            ):
-                taux_values = []
-                for _, row in line_source.iterrows():
-                    val = row.get("taux_non_conformite_controles")
-                    taux_values.append(int(round(float(val) * 100)) if pd.notna(val) else 0)
-                if any(v > 0 for v in taux_values):
-                    line_path = chart_line_evolution(
-                        line_labels,
-                        {"Taux de non-conformité (%)": taux_values},
-                        "Évolution du taux de non-conformité",
-                        "Taux (%)",
-                        tmp_dir,
-                        "line_global_taux_inf.png",
-                        legend_fontsize=legend_fontsize,
-                        legend_ncol_max=legend_ncol_max,
-                        figure_scale=figure_scale,
-                    )
-                    builder.add_image(Path(line_path), width_ratio=chart_bar_w)
-
-            builder.add_spacer(4)
-
-        elif is_section_enabled(presentation_cfg, "sec21", True) and show_placeholder:
-            builder.add_section(
-                "sec21",
-                section_title["sec21"],
-                toc_level=1,
-            )
-            builder.add_paragraph("Aucun indicateur disponible sur la période.")
-
-    top_registry = SectionRegistry()
-    top_registry.register("sec1", lambda _ctx: _render_sec1())
-    top_registry.register(
-        "sec2_chap",
-        lambda _ctx: (
-            builder.add_section("sec2_chap", section_title["sec2_chap"])
-            if is_section_enabled(presentation_cfg, "sec2_chap", True)
-            else None
-        ),
+    from bilans.engine.pdf_context import PdfContext
+    from bilans.engine.sections_profil import (
+        render_sec1, render_sec2_chap, render_sec21, render_sec22, render_sec22theme,
+        render_sec22res, render_sec3, render_sec31, render_sec32, render_sec33,
+        render_sec4, render_sec42, render_sec43, render_sec44, render_sec5map, render_sec6
     )
-    top_registry.register("sec21", lambda _ctx: _render_sec21())
-    top_registry.render_many(["sec1", "sec2_chap", "sec21"], {})
-
-    def _render_sec22() -> None:
-        if not is_section_enabled(presentation_cfg, "sec22", True):
-            return
-        builder.add_section(
-            "sec22",
-            section_title["sec22"],
-            toc_level=1,
-        )
-        pej_dom = _load_csv_opt(out_dir, "pej_global_par_domaine.csv")
-        df_dom = pd.DataFrame()
-        if agg_domaine is not None and not agg_domaine.empty:
-            df_dom = agg_domaine.copy()
-            df_dom["domaine"] = df_dom["domaine"].astype(str)
-        if pej_dom is not None and not pej_dom.empty:
-            pej_dom_clean = pej_dom.copy()
-            if "DOMAINE" in pej_dom_clean.columns:
-                pej_dom_clean = pej_dom_clean.rename(columns={"DOMAINE": "domaine"})
-            pej_dom_clean["domaine"] = pej_dom_clean["domaine"].astype(str)
-            if df_dom.empty:
-                df_dom = pej_dom_clean
-                df_dom["nb"] = 0
-            else:
-                df_dom = pd.merge(df_dom, pej_dom_clean[["domaine", "nb_pej"]], on="domaine", how="outer")
-                df_dom["nb"] = df_dom["nb"].fillna(0)
-                
-        if not df_dom.empty:
-            if "nb_pej" not in df_dom.columns:
-                df_dom["nb_pej"] = 0
-            df_dom["nb_pej"] = df_dom["nb_pej"].fillna(0)
-            df_dom["total_act"] = df_dom["nb"] + df_dom["nb_pej"]
-            df_dom = df_dom.sort_values(by="total_act", ascending=False)
-            
-            tbl = [["Domaine", "Opérations", "Localisations", "PEJ"]]
-            for _, row in df_dom.head(25).iterrows():
-                nb_ops_val = row.get("nb_operations", 0)
-                try:
-                    nb_ops_str = str(int(nb_ops_val)) if pd.notna(nb_ops_val) else "0"
-                except (ValueError, TypeError):
-                    nb_ops_str = "0"
-                tbl.append([str(row["domaine"]), nb_ops_str, str(int(row["nb"])), str(int(row["nb_pej"]))])
-            builder.add_table(
-                tbl,
-                caption="Répartition de l'activité par domaines (contrôles + PEJ)",
-                col_widths=[avail_w * 0.45, avail_w * 0.17, avail_w * 0.19, avail_w * 0.19],
-                col_aligns=["LEFT", "RIGHT", "RIGHT", "RIGHT"],
-            )
-            if is_block_enabled(presentation_cfg, "sec22.show_overflow_note", True) and len(df_dom) > 25:
-                builder.add_paragraph(
-                    f"... et {len(df_dom) - 25} autres domaines.",
-                    style="BodySmall",
-                )
-            if not df_dom.empty:
-                pie_data = {str(row["domaine"])[:34]: int(row["total_act"]) for _, row in df_dom.iterrows() if int(row["total_act"]) > 0}
-                if is_block_enabled(presentation_cfg, "sec22.show_pie", True) and pie_data:
-                    pie_path = chart_pie(
-                        pie_data,
-                        "Répartition de l'activité par domaines (contrôles + PEJ)",
-                        tmp_dir,
-                        "pie_domaine.png",
-                        **_chart_pie_compact_legend_kw(
-                            len(pie_data),
-                            legend_fontsize=ref_pie_legend_fs,
-                            legend_ncol_max=legend_ncol_max,
-                        ),
-                        figure_scale=ref_pie_fs,
-                    )
-                    builder.add_image(Path(pie_path), width_ratio=ref_pie_w)
-        elif show_placeholder:
-            builder.add_paragraph("Aucune donnée domaine disponible.")
-        builder.add_spacer(4)
-
-    def _render_sec22theme() -> None:
-        if not is_section_enabled(presentation_cfg, "sec22theme", True):
-            return
-        builder.add_section(
-            "sec22theme",
-            section_title["sec22theme"],
-            toc_level=1,
-        )
-        agg_theme_display = rollup_small_categories(
-            agg_theme,
-            label_col="theme",
-            other_label="Autres thèmes de contrôle",
-            value_col="nb",
-            min_pct=0.01,
-            sum_cols=["nb", "nb_operations", "taux"],
-            max_rows=20,
-        )
-        if agg_theme_display is not None and not agg_theme_display.empty:
-            tbl = [["Thème", "Opérations", "Localisations", "Taux loc."]]
-            for _, row in agg_theme_display.iterrows():
-                taux_str = format_pct_int_from_rate(row.get("taux"))
-                nb_ops_val = row.get("nb_operations", 0)
-                try:
-                    nb_ops_str = str(int(nb_ops_val)) if pd.notna(nb_ops_val) else "0"
-                except (ValueError, TypeError):
-                    nb_ops_str = "0"
-                tbl.append([str(row["theme"])[:45], nb_ops_str, str(int(row["nb"])), taux_str])
-            builder.add_table(
-                tbl,
-                caption=pdf_metric_caption("Nombre de contrôles par thèmes", "ctrl"),
-                col_widths=[avail_w * 0.44, avail_w * 0.18, avail_w * 0.19, avail_w * 0.19],
-                col_aligns=["LEFT", "RIGHT", "RIGHT", "RIGHT"],
-            )
-        elif show_placeholder:
-            builder.add_paragraph("Aucune donnée thème disponible.")
-        builder.add_spacer(4)
-
-    def _render_sec22res() -> None:
-        if not is_section_enabled(presentation_cfg, "sec22res", True):
-            return
-        builder.add_section(
-            "sec22res",
-            section_title["sec22res"],
-            toc_level=1,
-        )
-        use_detail = tab_resultats_controles is not None and not tab_resultats_controles.empty
-        show_res_table = is_block_enabled(presentation_cfg, "sec22res.show_table", True)
-        show_res_pie = is_block_enabled(presentation_cfg, "sec22res.show_pie", True)
-        show_chart_domaine = is_block_enabled(
-            presentation_cfg, "sec22res.show_chart_resultats_domaine", True
-        )
-        res_par_dom = _load_csv_opt(out_dir, "controles_global_resultats_par_domaine.csv")
-        split_by_row = bool(tables_layout.get("split_by_row"))
-
-        def _mk_centered_image(chart_path: Path, width_ratio: float) -> RLImage:
-            w = avail_w * width_ratio
-            try:
-                with PILImage.open(str(chart_path)) as im:
-                    width_px, height_px = im.size
-                ratio = (height_px / float(width_px)) if width_px > 0 else 0.45
-            except OSError:
-                ratio = 0.45
-            img = RLImage(str(chart_path), width=w, height=w * ratio)
-            img.hAlign = "CENTER"
-            return img
-
-        block: list = []
-        pie_res: dict[str, int] | None = None
-
-        if use_detail and show_res_table:
-            tbl_pdf = _build_rows_resultats_controles_pdf(tab_resultats_controles)
-            block.append(
-                Paragraph(
-                    pdf_metric_caption("Résultats des contrôles", "ctrl"),
-                    builder.styles["TableCaption"],
-                )
-            )
-            block.append(Spacer(1, 1 * mm))
-            block.append(
-                ofb_table(
-                    tbl_pdf,
-                    col_widths=[avail_w * 0.44, avail_w * 0.18, avail_w * 0.38],
-                    col_aligns=["LEFT", "RIGHT", "RIGHT"],
-                    split_by_row=split_by_row,
-                )
-            )
-            block.append(Spacer(1, 2 * mm))
-            strip_res = tab_resultats_controles["resultat"].astype(str).str.strip()
-            pie_mask = strip_res.isin(["Conforme", "Non-conforme", "En attente"])
-            pie_res = {}
-            for _, row in tab_resultats_controles.loc[pie_mask].iterrows():
-                pie_res[str(row["resultat"]).strip()] = int(row["nb"])
-        elif tab_resultats is not None and not tab_resultats.empty and show_res_table:
-            tbl = [["Résultat", "Nombre", "Taux"]]
-            tr_pct = tab_counts_to_pct_strings(tab_resultats["nb"].astype(int).tolist())
-            for i, (_, row) in enumerate(tab_resultats.iterrows()):
-                tbl.append([str(row["resultat"]), str(int(row["nb"])), tr_pct[i]])
-            block.append(
-                Paragraph(
-                    pdf_metric_caption(
-                        "Résultats des contrôles (libellés OSCEAN)", "ctrl"
-                    ),
-                    builder.styles["TableCaption"],
-                )
-            )
-            block.append(Spacer(1, 1 * mm))
-            block.append(
-                ofb_table(
-                    tbl,
-                    col_widths=[avail_w * 0.50, avail_w * 0.25, avail_w * 0.25],
-                    col_aligns=["LEFT", "RIGHT", "RIGHT"],
-                    split_by_row=split_by_row,
-                )
-            )
-            block.append(Spacer(1, 2 * mm))
-            pie_res = {str(r["resultat"]): int(r["nb"]) for _, r in tab_resultats.iterrows()}
-
-        if show_res_pie and pie_res:
-            pie_path = chart_pie(
-                pie_res,
-                "Répartition des résultats",
-                tmp_dir,
-                "pie_global_resultats.png",
-                **_chart_pie_compact_legend_kw(
-                    len(pie_res),
-                    legend_fontsize=ref_pie_legend_fs,
-                    legend_ncol_max=legend_ncol_max,
-                ),
-                figure_scale=ref_pie_fs,
-            )
-            block.append(Spacer(1, 1 * mm))
-            block.append(_mk_centered_image(Path(pie_path), ref_pie_w))
-            block.append(Spacer(1, 1.5 * mm))
-
-        if (
-            show_chart_domaine
-            and res_par_dom is not None
-            and not res_par_dom.empty
-            and {"Conforme", "Non-conforme", "En attente"}.issubset(res_par_dom.columns)
-        ):
-            df_dom = res_par_dom.head(10).copy()
-            dom_lbl = [str(v)[:34] for v in df_dom["domaine"].tolist()]
-            y1 = [float(v) for v in df_dom["Conforme"].tolist()]
-            y2 = [float(v) for v in df_dom["Non-conforme"].tolist()]
-            y3 = [float(v) for v in df_dom["En attente"].tolist()]
-            if sum(y1) + sum(y2) + sum(y3) > 0:
-                stack_path = chart_stackplot_resultats_domaine(
-                    dom_lbl,
-                    y1,
-                    y2,
-                    y3,
-                    "Résultats des contrôles par domaine",
-                    "Nombre de localisations",
-                    tmp_dir,
-                    "stack_global_resultats_domaine.png",
-                    legend_fontsize=max(6.5, legend_fontsize - 1.0),
-                    figure_scale=figure_scale * 0.72,
-                )
-                block.append(Spacer(1, 1 * mm))
-                block.append(_mk_centered_image(Path(stack_path), chart_bar_w * 0.94))
-
-        if block:
-            builder.add_keep_together_block(block)
-        elif show_placeholder:
-            builder.add_keep_together_block(
-                [
-                    Paragraph(
-                        "Aucune donnée de résultat disponible.",
-                        builder.styles["BodyText"],
-                    )
-                ]
-            )
-        else:
-            builder.add_keep_together_block([])
-        builder.add_spacer(4)
-
-    sec2_registry = SectionRegistry()
-    sec2_registry.register("sec22", lambda _ctx: _render_sec22())
-    sec2_registry.register("sec22theme", lambda _ctx: _render_sec22theme())
-    sec2_registry.register("sec22res", lambda _ctx: _render_sec22res())
-
-    # Ordre canonique des sous-parties 2.x (indépendant du YAML) pour éviter tout décalage titre / contenu.
-    sec2_order = [
-        sid
-        for sid in ("sec22", "sec22theme", "sec22res")
-        if is_section_enabled(presentation_cfg, sid, True)
-    ]
-    sec2_registry.render_many(sec2_order, {})
-
-    def _render_sec3() -> None:
-        if is_section_enabled(presentation_cfg, "sec3", True):
-            builder.add_section("sec3", section_title["sec3"], start_on_new_page=True)
-            builder.add_paragraph(
-                f"Sur la période : {nb_pej} procédure(s) d'enquête judiciaire (PEJ), "
-                f"{nb_pa} procédure(s) administrative(s) (PA), {nb_pve} procès-verbal(aux) électronique(s) (PVe).",
-            )
-
-    # 3.1 PVe
-    def _render_sec31() -> None:
-        if not is_section_enabled(presentation_cfg, "sec31", True):
-            return
-        builder.add_section(
-            "sec31",
-            section_title["sec31"],
-            level=2,
-            toc_level=1,
-        )
-        pve_natinf = _load_csv_opt(out_dir, "pve_global_par_natinf.csv")
-        pve_natinf = _sort_desc(pve_natinf, ["nb"])
-        if (
-            pve_natinf is not None
-            and not pve_natinf.empty
-            and is_block_enabled(presentation_cfg, "sec31.show_table", True)
-        ):
-            natinf_label_w = avail_w * 0.60
-            tbl = [["Nature d'infraction (NATINF)", "Nombre PVe"]]
-            for _, row in pve_natinf.head(15).iterrows():
-                libelle = row.get("libelle_natinf") or row.get("LIBELLE_NATINF") or ""
-                code = str(row.get("numero_natinf") or row.get("natinf") or "").strip()
-                if libelle:
-                    nature = f"{code} – {libelle}" if code else libelle
-                else:
-                    nature = code or "-"
-                tbl.append(
-                    [
-                        truncate_text_to_width(str(nature), natinf_label_w),
-                        str(int(row["nb"])),
-                    ]
-                )
-            builder.add_table(
-                tbl,
-                caption="Analyse des NATINF relevées (PVe)",
-                col_widths=[natinf_label_w, avail_w * 0.40],
-                col_aligns=["LEFT", "RIGHT"],
-            )
-        elif show_placeholder:
-            builder.add_paragraph("Aucune infraction PVe sur la période.")
-
-    def _render_sec32() -> None:
-        if not is_section_enabled(presentation_cfg, "sec32", True):
-            return
-        builder.add_section(
-            "sec32",
-            section_title["sec32"],
-            level=2,
-            toc_level=1,
-        )
-        pej_dom = _load_csv_opt(out_dir, "pej_global_par_domaine.csv")
-        pej_dom = _sort_desc(pej_dom, ["nb_pej"])
-        if (
-            pej_dom is not None
-            and not pej_dom.empty
-            and is_block_enabled(presentation_cfg, "sec32.show_table", True)
-        ):
-            tbl = [["Domaine", "Nombre PEJ"]]
-            for _, row in pej_dom.head(15).iterrows():
-                tbl.append([str(row["domaine"]), str(int(row["nb_pej"]))])
-            builder.add_table(
-                tbl,
-                caption="PEJ par domaine",
-                col_widths=[avail_w * 0.60, avail_w * 0.40],
-                col_aligns=["LEFT", "RIGHT"],
-            )
-        elif show_placeholder:
-            builder.add_paragraph("Aucune procédure d'enquête judiciaire sur la période.")
-
-    def _render_sec33() -> None:
-        if not is_section_enabled(presentation_cfg, "sec33", True):
-            return
-        builder.add_section(
-            "sec33",
-            section_title["sec33"],
-            level=2,
-            toc_level=1,
-        )
-        pa_dom = _load_csv_opt(out_dir, "pa_global_par_domaine.csv")
-        pa_dom = _sort_desc(pa_dom, ["nb_pa"])
-        if (
-            pa_dom is not None
-            and not pa_dom.empty
-            and is_block_enabled(presentation_cfg, "sec33.show_table", True)
-        ):
-            tbl = [["Domaine", "Nombre PA"]]
-            for _, row in pa_dom.head(15).iterrows():
-                tbl.append([str(row["domaine"]), str(int(row["nb_pa"]))])
-            builder.add_table(
-                tbl,
-                caption="PA par domaine",
-                col_widths=[avail_w * 0.60, avail_w * 0.40],
-                col_aligns=["LEFT", "RIGHT"],
-            )
-        elif show_placeholder:
-            builder.add_paragraph("Aucune procédure administrative sur la période.")
-        elif nb_pa > 0:
-            builder.add_paragraph(
-                "<i>Ventilation par domaine indisponible pour les procédures administratives "
-                f"({nb_pa} procédure(s) sur la période). Vérifier la présence de la colonne DOMAINE "
-                "dans les exports OSCEAN.</i>",
-                style="BodySmall",
-            )
-
-    def _render_sec3_bundle() -> None:
-        _render_sec3()
-        sec3_registry = SectionRegistry()
-        sec3_registry.register("sec31", lambda _ctx: _render_sec31())
-        sec3_registry.register("sec32", lambda _ctx: _render_sec32())
-        sec3_registry.register("sec33", lambda _ctx: _render_sec33())
-
-        sec3_order = [
-            sid
-            for sid in ("sec31", "sec32", "sec33")
-            if is_section_enabled(presentation_cfg, sid, True)
-        ]
-        sec3_registry.render_many(sec3_order, {})
-
-    def _render_sec4() -> None:
-        # Gabarit resserré : viser une section 4 sur une page A4 (hors cas extrêmes).
-        sec4_bar_w = float(chart_ratios.get("global_type_usager_bar_ratio", chart_bar_w)) * 0.86
-        sec4_tbl_sp = 1.0
-        sec4_img_sp = 0.8
-        if is_section_enabled(presentation_cfg, "sec4", True):
-            builder.add_section(
-                "sec4",
-                section_title["sec4"],
-                start_on_new_page=True,
-                compact=True,
-            )
-            builder.add_paragraph(
-                "⚠️ <i>Note importante : Le décompte des effectifs selon le type d'usager suit des règles spécifiques qui sont détaillées dans la notice méthodologique.</i>",
-            )
-            builder.add_spacer(2)
-        if is_section_enabled(presentation_cfg, "sec4", True) and (agg_usager is None or agg_usager.empty):
-            if show_placeholder:
-                builder.add_paragraph(
-                    "Aucune donnée « type d’usagers » n’est disponible dans les points de contrôle OSCEAN pour la période.",
-                )
-        elif is_section_enabled(presentation_cfg, "sec4", True):
-            total_usagers = sum(int(row["nb"]) for _, row in agg_usager.iterrows())
-            nb_multi = (
-                int(usagers_resume["nb_localisations_multi_usagers"].iloc[0])
-                if usagers_resume is not None
-                and not usagers_resume.empty
-                and "nb_localisations_multi_usagers" in usagers_resume.columns
-                else 0
-            )
-            if is_block_enabled(presentation_cfg, "sec4.show_intro_text", True):
-                builder.add_paragraph(
-                    "Répartition des usagers contrôlés par type (chaque type d’usager est compté avec son effectif).",
-                )
-            if is_block_enabled(presentation_cfg, "sec4.show_key_figures", True):
-                builder.add_key_figures(
-                    [
-                        (str(total_usagers), "Total effectifs usagers"),
-                        (str(nb_multi), "Fiches multi-usagers"),
-                    ],
-                    spacer_after_mm=2.0,
-                )
-            if is_block_enabled(presentation_cfg, "sec4.show_table_usagers", True):
-                tbl_u = [["Type d’usagers", "Opérations", "Localisations", "Taux loc."]]
-                nbs_ug = [int(row["nb"]) for _, row in agg_usager.iterrows()]
-                pct_ug = tab_counts_to_pct_strings(nbs_ug)
-                for i, (_, row) in enumerate(agg_usager.iterrows()):
-                    nb_ops_val = row.get("nb_operations", 0)
-                    try:
-                        nb_ops_str = str(int(nb_ops_val)) if pd.notna(nb_ops_val) else "0"
-                    except (ValueError, TypeError):
-                        nb_ops_str = "0"
-                    tbl_u.append([str(row["type_usager"]), nb_ops_str, str(int(row["nb"])), pct_ug[i]])
-                builder.add_table(
-                    tbl_u,
-                    caption="Usagers contrôlés par type",
-                    col_widths=[avail_w * 0.44, avail_w * 0.18, avail_w * 0.19, avail_w * 0.19],
-                    col_aligns=["LEFT", "RIGHT", "RIGHT", "RIGHT"],
-                    spacer_after_mm=sec4_tbl_sp,
-                )
-
-            if is_block_enabled(presentation_cfg, "sec4.show_pie_usagers", True):
-                pie_data = {str(r["type_usager"])[:40]: int(r["nb"]) for _, r in agg_usager.iterrows()}
-                if pie_data:
-                    pie_path = chart_pie(
-                        pie_data,
-                        "Usagers contrôlés par type",
-                        tmp_dir,
-                        "pie_usagers.png",
-                        **_chart_pie_compact_legend_kw(
-                            len(pie_data),
-                            legend_fontsize=ref_pie_legend_fs,
-                            legend_ncol_max=legend_ncol_max,
-                        ),
-                        figure_scale=ref_pie_fs,
-                    )
-                    builder.add_image(
-                        Path(pie_path),
-                        width_ratio=ref_pie_w,
-                        spacer_after_mm=sec4_img_sp,
-                    )
-
-            if (
-                is_block_enabled(presentation_cfg, "sec4.show_table_usagers_x_domaine", True)
-                and cross_usager_dom is not None
-                and not cross_usager_dom.empty
-            ):
-                temp_cross = cross_usager_dom.copy()
-                domain_cols = [
-                    c
-                    for c in temp_cross.columns
-                    if c not in ("type_usager", "total", "Total")
-                ]
-                if "total" not in temp_cross.columns and domain_cols:
-                    temp_cross["total"] = temp_cross[domain_cols].sum(axis=1)
-                if "total" in temp_cross.columns:
-                    temp_cross = temp_cross.sort_values(by="total", ascending=False, kind="stable")
-                tbl_cross, overflow_html = build_usagers_x_domaine_pdf_rows(
-                    temp_cross,
-                    tables_layout=tables_layout,
-                )
-                if tbl_cross:
-                    n_dom = len(tbl_cross[0]) - 1
-                    col_widths = usagers_x_domaine_col_widths(avail_w, n_dom, tables_layout)
-                    col_aligns = ["LEFT"] + ["RIGHT"] * n_dom
-                    cap = pdf_metric_caption("Usagers × Domaine", "effectifs")
-                    if overflow_html:
-                        cap = f"{cap}<br/><br/>{overflow_html}"
-                    builder.add_table(
-                        tbl_cross,
-                        caption=cap,
-                        col_widths=col_widths,
-                        col_aligns=col_aligns,
-                        wide_headers=True,
-                        wide_header_layout=resolve_usagers_x_domaine_header_layout(
-                            tables_layout
-                        ),
-                        wide_header_font_size=resolve_usagers_x_domaine_header_font_size(
-                            tables_layout
-                        ),
-                        wide_header_max_lines=resolve_usagers_x_domaine_header_max_lines(
-                            tables_layout
-                        ),
-                        keep_together=True,
-                        spacer_after_mm=sec4_tbl_sp,
-                    )
-
-            if (
-                (
-                    is_block_enabled(presentation_cfg, "sec4.show_resultats_par_type_usager_chart", True)
-                    or is_block_enabled(presentation_cfg, "sec4.show_resultats_par_type_usager_table", True)
-                )
-                and res_usager is not None
-                and not res_usager.empty
-            ):
-                if is_section_enabled(presentation_cfg, "sec42", True):
-                    builder.add_section(
-                        "sec42",
-                        section_title["sec42"],
-                        level=2,
-                        toc_level=1,
-                    )
-                df_ru = res_usager.copy()
-                required_cols = {"type_usager", "Conforme", "Infraction", "Manquement"}
-                if required_cols.issubset(set(df_ru.columns)):
-                    if "Total" not in df_ru.columns:
-                        df_ru["Total"] = (
-                            df_ru["Conforme"].fillna(0).astype(int)
-                            + df_ru["Infraction"].fillna(0).astype(int)
-                            + df_ru["Manquement"].fillna(0).astype(int)
-                            + (
-                                df_ru["Autre_resultat"].fillna(0).astype(int)
-                                if "Autre_resultat" in df_ru.columns
-                                else 0
-                            )
-                        )
-                    df_ru = df_ru.sort_values(by="Total", ascending=False, kind="stable").reset_index(drop=True)
-                    labels = [str(x) for x in df_ru["type_usager"].tolist()]
-                    series: dict[str, list[int]] = {
-                        "Conforme": [int(x) for x in df_ru["Conforme"].tolist()],
-                        "Infraction": [int(x) for x in df_ru["Infraction"].tolist()],
-                        "Manquement": [int(x) for x in df_ru["Manquement"].tolist()],
-                    }
-                    has_autre = "Autre_resultat" in df_ru.columns and int(df_ru["Autre_resultat"].sum()) > 0
-                    if has_autre:
-                        series["En attente"] = [int(x) for x in df_ru["Autre_resultat"].tolist()]
-
-                    if is_block_enabled(presentation_cfg, "sec4.show_resultats_par_type_usager_chart", True):
-                        bar_path = chart_bar_horizontal_stacked(
-                            labels,
-                            series,
-                            "Résultats des contrôles par type d'usager",
-                            "Contrôles",
-                            tmp_dir,
-                            "bar_resultats_par_type_usager_global.png",
-                            legend_fontsize=max(6.5, legend_fontsize - 0.5),
-                            legend_ncol_max=legend_ncol_max,
-                            figure_scale=max(0.88, float(figure_scale) * 0.88),
-                        )
-                        builder.add_image(
-                            Path(bar_path),
-                            width_ratio=sec4_bar_w,
-                            spacer_after_mm=sec4_img_sp,
-                        )
-
-                    total_global = float(
-                        df_ru["Conforme"].sum()
-                        + df_ru["Infraction"].sum()
-                        + df_ru["Manquement"].sum()
-                        + (df_ru["Autre_resultat"].sum() if "Autre_resultat" in df_ru.columns else 0)
-                    ) or 1.0
-                    tbl_res = [
-                        [
-                            "Type d'usager",
-                            "Conforme",
-                            "% conforme",
-                            "Infraction",
-                            "% infraction",
-                            "Manquement",
-                            "% manquement",
-                            *(["En attente", "% en attente"] if has_autre else []),
-                            "Total",
-                            "% du total",
-                        ]
-                    ]
-                    for _, row in df_ru.iterrows():
-                        c = int(row.get("Conforme", 0))
-                        i = int(row.get("Infraction", 0))
-                        m = int(row.get("Manquement", 0))
-                        a = int(row.get("Autre_resultat", 0)) if has_autre else 0
-                        t = c + i + m + a
-                        if t > 0:
-                            parts = [c, i, m] + ([a] if has_autre else [])
-                            pct_row = int_percents_largest_remainder(parts)
-                            k = 0
-                            pc_c = f"{pct_row[k]} %"; k += 1
-                            pc_i = f"{pct_row[k]} %"; k += 1
-                            pc_m = f"{pct_row[k]} %"; k += 1
-                            pc_a = (f"{pct_row[k]} %" if has_autre else "")
-                        else:
-                            pc_c = pc_i = pc_m = "n.d."
-                            pc_a = ""
-
-                        row_cells = [
-                            _truncate_with_dash(str(row.get("type_usager", "")), 34),
-                            str(c),
-                            pc_c,
-                            str(i),
-                            pc_i,
-                            str(m),
-                            pc_m,
-                        ]
-                        if has_autre:
-                            row_cells.extend([str(a), pc_a])
-                        row_cells.extend([str(t), _pct_table_cell(t, total_global)])
-                        tbl_res.append(row_cells)
-
-                    first_col_w = avail_w * 0.20
-                    n_other_cols = len(tbl_res[0]) - 1
-                    other_w = (avail_w - first_col_w) / float(max(1, n_other_cols))
-                    col_widths = [first_col_w] + [other_w] * n_other_cols
-                    if is_block_enabled(presentation_cfg, "sec4.show_resultats_par_type_usager_table", True):
-                        builder.add_table(
-                            tbl_res,
-                            caption="Résultats des contrôles par type d'usager",
-                            col_widths=col_widths,
-                            col_aligns=["LEFT"] + ["RIGHT"] * (len(tbl_res[0]) - 1),
-                            keep_together=True,
-                            header_font_size=7.5,
-                            wide_headers=False,
-                            spacer_after_mm=sec4_tbl_sp,
-                        )
-
-        if is_section_enabled(presentation_cfg, "sec4", True):
-            proc_precomputed = _load_csv_opt(out_dir, "procedures_global_par_type_usager.csv")
-            if proc_precomputed is not None and "type_usager" in proc_precomputed.columns:
-                proc_summary = proc_precomputed
-            else:
-                proc_by_dom = _load_csv_opt(out_dir, "procedures_par_type_usager_domaine.csv")
-                proc_summary = summarize_procedures_par_type_usager(proc_by_dom)
-            add_procedures_par_type_usager_subsection(
-                builder,
-                proc_summary,
-                avail_w=avail_w,
-                presentation_cfg=presentation_cfg,
-                section_title=section_title,
-            )
-
-    sec34_registry = SectionRegistry()
-    sec34_registry.register("sec3", lambda _ctx: _render_sec3_bundle())
-    sec34_registry.register("sec4", lambda _ctx: _render_sec4())
-    configured_order = (
-        presentation_cfg.get("sections", {}).get("order", [])
-        if isinstance(presentation_cfg.get("sections"), dict)
-        else []
+    
+    ctx = PdfContext(
+        builder=builder,
+        profile=profile,
+        presentation_cfg=presentation_cfg,
+        behavior_cfg=behavior_cfg,
+        show_placeholder=show_placeholder,
+        date_deb=date_deb,
+        date_fin=date_fin,
+        dept_code=dept_code,
+        dept_name_typo=dept_name_typo,
+        diffusion=diffusion,
+        ventilation_mode=ventilation_mode,
+        out_dir=out_dir,
+        avail_w=avail_w,
+        tmp_dir=tmp_dir,
+        chart_bar_w=chart_bar_w,
+        legend_fontsize=legend_fontsize,
+        legend_ncol_max=legend_ncol_max,
+        figure_scale=figure_scale,
+        ref_pie_w=ref_pie_w,
+        ref_pie_fs=ref_pie_fs,
+        ref_pie_legend_fs=ref_pie_legend_fs,
+        split_by_row=bool(tables_layout.get("split_by_row")),
+        tables_layout=tables_layout,
+        section_title=section_title,
+        nb_localisations=nb_localisations,
+        nb_ops=nb_ops,
+        nb_pej=nb_pej,
+        nb_pa=nb_pa,
+        nb_pve=nb_pve,
+        tab_resultats=tab_resultats,
+        tab_resultats_controles=tab_resultats_controles,
+        agg_domaine=agg_domaine,
+        agg_theme=agg_theme,
+        agg_usager=agg_usager,
+        res_usager=res_usager,
+        cross_usager_dom=cross_usager_dom,
+        usagers_resume=usagers_resume,
+        agg_periode=agg_periode,
+        pej_dom=None,
+        cartes=cartes,
+        global_map_paths=global_map_paths,
+        global_map_layout=global_map_layout,
+        map_captions=map_captions,
+        map_id=map_id,
     )
-    sec34_order = [
-        sid
-        for sid in configured_order
-        if sid in {"sec3", "sec4"} and is_section_enabled(presentation_cfg, sid, True)
-    ]
-    if not sec34_order:
-        sec34_order = [
-            sid
-            for sid in ("sec4", "sec3")
-            if is_section_enabled(presentation_cfg, sid, True)
-        ]
-    sec34_registry.render_many(sec34_order, {})
 
-    def _render_sec5map() -> None:
-        if is_section_enabled(presentation_cfg, "sec5map", True):
-            builder.add_section(
-                "sec5map",
-                section_title["sec5map"],
-                start_on_new_page=True,
-            )
-        show_map_block = is_block_enabled(presentation_cfg, "sec5.show_map", True)
-        show_map_fallback = is_block_enabled(presentation_cfg, "sec5.show_map_fallback_message", True)
-        if not cartes:
-            if is_section_enabled(presentation_cfg, "sec5map", True) and show_placeholder:
-                builder.add_paragraph("<i>Cartographie désactivée pour ce bilan.</i>")
-        elif is_section_enabled(presentation_cfg, "sec5map", True) and global_map_paths and show_map_block:
-            builder.add_paragraph(
-                "Répartition spatiale des contrôles et procédures sur le département "
-                "(générateur cartographique).",
-            )
-            builder.add_maps(
-                global_map_paths,
-                layout=global_map_layout,
-                captions=map_captions or None,
-            )
-        elif is_section_enabled(presentation_cfg, "sec5map", True) and show_map_fallback and show_placeholder:
-            if has_cartography_catalog(profile):
-                selected = list(profile.get("_cartes_selection") or [])
-                expected = expected_map_filenames_for_selection(profile, selected)
-            else:
-                expected = expected_map_filenames(
-                    map_id, profile=profile, presentation_cfg=presentation_cfg
-                )
-            files_hint = ", ".join(f"<b>{n}</b>" for n in expected) or f"<b>carte_{map_id}.png</b>"
-            builder.add_paragraph(
-                f"<i>Carte(s) non disponible(s). Déposez {files_hint} dans le dossier des cartes pour "
-                "les intégrer au bilan.</i>"
-            )
-
-    def _render_sec6() -> None:
-        if not is_section_enabled(presentation_cfg, "sec6", True):
-            return
-        builder.add_section("sec6", section_title["sec6"], start_on_new_page=True)
-        vent_mode = resolve_ventilation_mode_global(date_deb, date_fin)
-        methodo = build_sec6_methodology_html(
-            effective_cfg=presentation_cfg,
-            context=build_sec6_methodology_context(
-                period_str=f"du {date_deb.date():%d/%m/%Y} au {date_fin.date():%d/%m/%Y}",
-                dept_name=f"de la {dept_name_typo}",
-                dept_code=str(dept_code),
-                profile_label="Bilan global",
-                profile_id=profile_id,
-                diffusion=diffusion,
-                nb_localisations=nb_localisations,
-                nb_pej=nb_pej,
-                nb_pa=nb_pa,
-                nb_pve=nb_pve,
-                ventilation_mode=vent_mode,
-                show_usagers=is_section_enabled(presentation_cfg, "sec4", True),
-            ),
-        )
-        if is_block_enabled(presentation_cfg, "sec6.show_methodology", True):
-            builder.add_methodology(methodo)
-
-        gloss_cfg = load_glossary_config(_ROOT)
-        glossaire_rows = build_filtered_glossary_rows(
-            gloss_cfg=gloss_cfg,
-            nb_localisations=nb_localisations,
-            nb_pej=nb_pej,
-            nb_pa=nb_pa,
-            nb_pve=nb_pve,
-        )
-
-        if is_block_enabled(presentation_cfg, "sec6.show_glossary", True) and glossaire_rows:
-            builder.add_glossary(
-                glossaire_rows,
-                col_widths=[avail_w * 0.25, avail_w * 0.75],
-                col_aligns=["LEFT", "LEFT"],
-            )
-
-    sec56_registry = SectionRegistry()
-    sec56_registry.register("sec5map", lambda _ctx: _render_sec5map())
-    sec56_registry.register("sec6", lambda _ctx: _render_sec6())
-    sec56_registry.render_many(["sec5map", "sec6"], {})
+    registry = SectionRegistry()
+    registry.register("sec1", render_sec1)
+    registry.register("sec2", render_sec2_chap)  # Le YAML utilise l'ID "sec2" pour le titre de chapitre
+    registry.register("sec21", render_sec21)
+    registry.register("sec22", render_sec22)
+    registry.register("sec22theme", render_sec22theme)
+    registry.register("sec22res", render_sec22res)
+    registry.register("sec3", render_sec3)
+    registry.register("sec31", render_sec31)
+    registry.register("sec32", render_sec32)
+    registry.register("sec33", render_sec33)
+    registry.register("sec4", render_sec4)
+    registry.register("sec42", render_sec42)
+    registry.register("sec43", render_sec43)
+    registry.register("sec44", render_sec44)
+    registry.register("sec5map", render_sec5map)
+    registry.register("sec6", render_sec6)
+    # Pilotage dynamique : on itère sur les sections résolues depuis le YAML
+    for sec_id, _ in sections:
+        if registry.get(sec_id):
+            registry.render(sec_id, ctx)
 
     builder.build()

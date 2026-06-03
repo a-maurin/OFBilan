@@ -83,7 +83,7 @@ def test_local_heading_chart_table_keeps_heading_with_first_content(tmp_path: Pa
     first = builder.story[0]
     if isinstance(first, KeepTogether):
         content = getattr(first, "_content", [])
-        assert _has_image(content), "Le KeepTogether doit inclure le premier contenu."
+        assert not _has_image(content), "Le KeepTogether lié au titre ne doit plus inclure d'image lourde."
     else:
         assert getattr(first, "keepWithNext", 0) == 1, "Le titre local doit être lié par keepWithNext=1."
 
@@ -105,6 +105,6 @@ def test_local_heading_without_pending_still_keeps_first_content(tmp_path: Path)
     first = builder.story[0]
     if isinstance(first, KeepTogether):
         content = getattr(first, "_content", [])
-        assert _has_image(content), "Le KeepTogether doit inclure le premier contenu."
+        assert not _has_image(content), "Le KeepTogether lié au titre ne doit plus inclure d'image lourde."
     else:
         assert getattr(first, "keepWithNext", 0) == 1, "Le titre local doit rester lié par keepWithNext=1."

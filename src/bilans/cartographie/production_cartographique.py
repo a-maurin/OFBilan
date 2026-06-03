@@ -665,7 +665,7 @@ def apply_layer_symbology(layer, config: "LayerSymbologyConfig", geometry_mode_o
         layer.setRenderer(renderer)
 
     elif config.renderer_type == "categorized" and config.field:
-        # Palette cyclique (fallback) : hex séparés par virgule
+        # Palette cyclique ou générée
         palette_colors: list[str] = []
         if isinstance(config.palette, str) and "#" in config.palette:
             palette_colors = [p.strip() for p in config.palette.split(",") if p.strip()]
@@ -675,7 +675,7 @@ def apply_layer_symbology(layer, config: "LayerSymbologyConfig", geometry_mode_o
         # Dictionnaire {valeur → couleur} explicite (priorité sur palette cyclique)
         categories_map: dict[str, str] = getattr(config, "categories", None) or {}
 
-        # Récupérer les valeurs distinctes : champ réel ou expression
+        # Récupérer les valeurs distinctes
         values = []
         field_names = [f.name() for f in layer.fields()]
         if config.field in field_names:
@@ -685,10 +685,8 @@ def apply_layer_symbology(layer, config: "LayerSymbologyConfig", geometry_mode_o
             except Exception:
                 values = []
         else:
-            # Expression (ex. CASE WHEN...) : évaluer sur un échantillon de features
             try:
                 from qgis.core import QgsExpression, QgsExpressionContext, QgsExpressionContextUtils
-
                 expr = QgsExpression(config.field)
                 ctx = QgsExpressionContext()
                 ctx.appendScopes(QgsExpressionContextUtils.globalProjectLayerScopes(layer))
@@ -706,7 +704,6 @@ def apply_layer_symbology(layer, config: "LayerSymbologyConfig", geometry_mode_o
             except Exception:
                 values = []
 
-        # Si un dict categories est défini, utiliser son ordre pour prioriser l'affichage
         if categories_map:
             ordered_values = list(categories_map.keys())
             extra = [str(v) for v in values if str(v) not in categories_map]
@@ -714,16 +711,21 @@ def apply_layer_symbology(layer, config: "LayerSymbologyConfig", geometry_mode_o
         else:
             values = [str(v) for v in values]
 
-        # Construire les catégories
-        palette_idx = 0
+        # Si le nombre de valeurs dépasse la palette fournie, on génère une palette dynamique (hue spread)
+        def _get_color_for_idx(idx: int, total: int) -> QColor:
+            if idx < len(palette_colors):
+                return QColor(palette_colors[idx])
+            hue = int(360 * (idx / max(1, total)))
+            return QColor.fromHsv(hue, 180, 220)
+
         qgs_categories = []
-        for v in values:
+        for i, v in enumerate(values):
             v_str = str(v)
             if v_str in categories_map:
                 color = QColor(categories_map[v_str])
             else:
-                color = QColor(palette_colors[palette_idx % len(palette_colors)])
-                palette_idx += 1
+                color = _get_color_for_idx(i, len(values))
+                
             if is_polygon and geom_mode == "polygon_fill":
                 sym = QgsFillSymbol.createSimple({"color": color.name(), "outline_color": "35,35,35"})
             elif is_polygon and geom_mode == "polygon_centroid":

@@ -1690,22 +1690,52 @@ def get_points_infrac_pj_path(root: Path) -> Path:
     """
     Chemin du fichier des points infractions PJ (GPKG ou shapefile) le plus récent.
 
-    On recherche en priorité les GeoPackage dans sources/sig/points_infractions_pj/,
-    avec un nom du type localisation_infrac_FAITS_YYYYMMDD.gpkg, puis, à défaut,
-    un shapefile localisation_infrac_FAITS_YYYYMMDD.shp.
+    On recherche en priorité les GeoPackage dans sources/sig/points_infractions_pj/
+    ou sources/sig/point_infraction_PJ/, avec un nom du type localisation_infrac_FAITS_YYYYMMDD.gpkg,
+    puis, à défaut, un shapefile localisation_infrac_FAITS_YYYYMMDD.shp.
     """
-    base_dir = root / "data" / "sources" / "sig" / "points_infractions_pj"
-    if not base_dir.exists():
-        # Compatibilité ancienne arborescence : sources/points_infractions_pj
-        base_dir = root / "data" / "sources" / "points_infractions_pj"
+    candidates = [
+        root / "data" / "sources" / "sig" / "point_infraction_PJ",
+        root / "data" / "sources" / "sig" / "points_infractions_pj",
+        root / "data" / "sources" / "points_infractions_pj",
+    ]
+    
+    for base_dir in candidates:
+        if base_dir.exists():
+            try:
+                return _find_latest_dated_file(
+                    base_dir, "localisation_infrac_FAITS_", (".gpkg", ".shp")
+                )
+            except FileNotFoundError:
+                continue
+                
+    # On laisse l'appelant gérer l'absence de fichier
+    return root / "data" / "sources" / "sig" / "point_infraction_PJ" / "localisation_infrac_FAITS_00000000.gpkg"
 
-    try:
-        return _find_latest_dated_file(
-            base_dir, "localisation_infrac_FAITS_", (".gpkg", ".shp")
-        )
-    except FileNotFoundError:
-        # On laisse l'appelant gérer l'absence de fichier
-        return base_dir / "localisation_infrac_FAITS_00000000.gpkg"
+
+def load_pej_non_localises(root: Path) -> pd.DataFrame:
+    """
+    Charge le CSV des infractions PEJ non localisées (géométrie vide dans OSCEAN)
+    pour identifier les dossiers dont la commune est structurellement impossible à déterminer
+    par géomatique.
+    """
+    candidates = [
+        root / "data" / "sources" / "sig" / "point_infraction_PJ",
+        root / "data" / "sources" / "sig" / "points_infractions_pj",
+        root / "data" / "sources" / "points_infractions_pj",
+    ]
+    for base_dir in candidates:
+        if base_dir.exists():
+            try:
+                path = _find_latest_dated_file(base_dir, "infrac_FAITS_non_localises_", (".csv",))
+                df = pd.read_csv(path, sep=";", encoding="latin-1", on_bad_lines="skip")
+                return df
+            except FileNotFoundError:
+                continue
+            except Exception as e:
+                logger.warning("Erreur lors de la lecture du CSV des PEJ non localisés : %s", e)
+                return pd.DataFrame()
+    return pd.DataFrame()
 
 
 def merge_pej_faits_locations(
@@ -1767,7 +1797,7 @@ def merge_pej_faits_locations(
     )
     keep_cols = [doss_col, xcol, ycol] + ([commune_col] if commune_col else [])
     loc = gdf[keep_cols].copy()
-    loc["_doss"] = loc[doss_col].astype(str).str.strip()
+    loc["_doss"] = loc[doss_col].astype(str).astype(object).str.strip().str.replace(r"\.0$", "", regex=True)
     loc = loc.drop_duplicates(subset="_doss", keep="first")
     rename_map = {xcol: "x_faits", ycol: "y_faits"}
     if commune_col is not None:
@@ -1775,7 +1805,7 @@ def merge_pej_faits_locations(
     loc = loc.rename(columns=rename_map).drop(columns=[doss_col], errors="ignore")
 
     out = pej.copy()
-    out["_dc"] = out["DC_ID"].astype(str).str.strip()
+    out["_dc"] = out["DC_ID"].astype(str).astype(object).str.strip().str.replace(r"\.0$", "", regex=True)
     out = out.merge(loc, left_on="_dc", right_on="_doss", how="left")
     out = out.drop(columns=["_dc", "_doss"], errors="ignore")
     # Expose un nom de commune exploitable pour les tableaux PDF quand l'ODS ne le fournit pas.
@@ -1785,6 +1815,54 @@ def merge_pej_faits_locations(
             out["NOM_COM"] = out["NOM_COM"].astype(str).str.strip().replace({"": pd.NA})
         else:
             out["NOM_COM"] = out["NOM_COM_FAITS"].astype(str).str.strip().replace({"": pd.NA})
+            
+    # === FALLBACK OSCEAN : Tenter de récupérer la commune pour les PEJ non localisées ===
+    # On charge TOUTES les années OSCEAN disponibles (pas de filtre date) pour maximiser
+    # les chances de retrouver une commune, y compris pour les compléments de dossiers
+    # dont la date de contrôle est antérieure à la période du bilan.
+    missing = out["NOM_COM"].isna() if "NOM_COM" in out.columns else pd.Series(True, index=out.index)
+    if missing.any():
+        try:
+            oscean_gdf = load_point_ctrl(root, dept_code)  # toutes les années
+            
+            if not oscean_gdf.empty and "dc_id" in oscean_gdf.columns and "nom_commun" in oscean_gdf.columns:
+                oscean_dc = oscean_gdf[["dc_id", "nom_commun"]].dropna(subset=["nom_commun"]).copy()
+                oscean_dc["dc_id"] = oscean_dc["dc_id"].astype(str).str.replace(r"\.0$", "", regex=True)
+                oscean_dc = oscean_dc.drop_duplicates(subset=["dc_id"])
+                
+                oscean_num = pd.DataFrame()
+                if "code_pej" in oscean_gdf.columns:
+                    oscean_num = oscean_gdf[["code_pej", "nom_commun"]].dropna(subset=["nom_commun"]).copy()
+                    oscean_num["code_pej"] = oscean_num["code_pej"].astype(str).str.replace(r"\.0$", "", regex=True)
+                    oscean_num = oscean_num.drop_duplicates(subset=["code_pej"])
+                
+                def _recover_commune(row):
+                    if pd.notna(row.get("NOM_COM")):
+                        return row.get("NOM_COM")
+                    dc_id = str(row.get("DC_ID", "")).replace(".0", "")
+                    num_proc = str(row.get("NUMERO_PROCEDURE", "")).replace(".0", "")
+                    
+                    if dc_id:
+                        match = oscean_dc[oscean_dc["dc_id"] == dc_id]
+                        if not match.empty:
+                            return match.iloc[0]["nom_commun"]
+                    if num_proc and not oscean_num.empty:
+                        match = oscean_num[oscean_num["code_pej"] == num_proc]
+                        if not match.empty:
+                            return match.iloc[0]["nom_commun"]
+                    return pd.NA
+
+                out["NOM_COM"] = out.apply(_recover_commune, axis=1)
+                
+                # Re-vérifier les manquantes après récupération
+                new_missing = out["NOM_COM"].isna()
+                n_recup = missing.sum() - new_missing.sum()
+                if n_recup > 0:
+                    lg.info("PEJ : %s ligne(s) sans commune récupérée(s) via OSCEAN.", n_recup)
+        except Exception as e:
+            lg.warning("Impossible de charger les points OSCEAN pour la récupération des communes PEJ manquantes : %s", e)
+    # === FIN FALLBACK ===
+
     n = int(out["x_faits"].notna().sum())
     if n:
         lg.info("PEJ : %s ligne(s) avec localisation FAITS (jointure dossier).", n)

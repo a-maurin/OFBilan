@@ -222,23 +222,30 @@ def chart_pie(
         ncol = max(1, int(legend_ncol))
     else:
         ncol = min(len(legend_labels), 4) if legend_labels else 1
-    # On conserve la taille de police de référence ; on n'abaisse pas la police
-    # quand la légende est dense (on augmente plutôt le nombre de lignes).
+
+    # Heuristique pour la césure (wrap) et le nombre de colonnes
+    max_label_len = max([len(lb) for lb in labels] + [0])
+    if max_label_len > 25 and ncol > 2:
+        ncol = 2
+    if max_label_len > 40 and ncol > 1:
+        ncol = 1
+        
     leg_fs = CHART_LEGEND_FONT_SIZE_REF if legend_fontsize is None else float(legend_fontsize)
-    # Wrap explicite des libellés de légende pour éviter toute troncature horizontale.
-    wrap_width = max(42, int(fig_w * 10))
+    # Wrap proportionnel au nombre de colonnes (environ 100 caractères de base pour toute la largeur de 7.2 pouces)
+    wrap_width = max(20, int(90 / ncol))
     legend_labels_wrapped = [textwrap.fill(lbl, width=wrap_width, break_long_words=False) for lbl in legend_labels]
+    
     # Gabarit robuste : zone camembert fixe et zone légende variable.
-    # Cela garantit un disque de taille identique, tandis que la hauteur
-    # de l'image s'adapte au nombre de lignes de légende.
-    total_legend_lines = sum((lbl.count("\n") + 1) for lbl in legend_labels_wrapped) or 1
-    # Légende en ncol colonnes : approx. conservative du nombre de « rangs » verticaux
-    # (évite une figure trop haute quand ncol > 1).
-    effective_legend_rows = max(1, (total_legend_lines + ncol - 1) // ncol)
+    # On calcule le nombre de lignes réelles occupées par la légende (matplotlib dispose par ligne).
+    lines_per_item = [lbl.count("\n") + 1 for lbl in legend_labels_wrapped]
+    effective_legend_rows = 0
+    for i in range(0, len(lines_per_item), ncol):
+        effective_legend_rows += max(lines_per_item[i:i + ncol])
+    effective_legend_rows = max(1, effective_legend_rows)
     pie_h_in = CHART_FIG_HEIGHT_PIE_COMPACT * figure_scale * CHART_PIE_DISK_SCALE
     legend_row_h_in = 0.20 * (leg_fs / CHART_LEGEND_FONT_SIZE_REF)
     legend_h_in = 0.42 + effective_legend_rows * legend_row_h_in
-    top_pad_in = 0.28
+    top_pad_in = 0.45 if str(title).strip() else 0.28
     gap_in = 0.08
     bottom_pad_in = 0.14
     fig_h = pie_h_in + legend_h_in + top_pad_in + gap_in + bottom_pad_in
@@ -277,7 +284,7 @@ def chart_pie(
         columnspacing=0.85,
         borderpad=0.2,
     )
-    # "tight bbox" inclut toute la légende dans le PNG final (pas de troncature).
+    # Le tight bbox est activé pour optimiser l'espace vertical et éliminer les marges excessives.
     return save_chart(fig, tmp_dir, name, dpi=DEFAULT_RASTER_EXPORT_DPI, tight=True)
 
 
@@ -346,7 +353,7 @@ def chart_pie_legend_right(
         handlelength=0.9,
         handletextpad=0.35,
     )
-    fig.subplots_adjust(left=0.02, right=0.98, top=0.92, bottom=0.06)
+    fig.subplots_adjust(left=0.02, right=0.98, top=0.92 if not str(title).strip() else 0.85, bottom=0.06)
     return save_chart(fig, tmp_dir, name, dpi=DEFAULT_RASTER_EXPORT_DPI, tight=True)
 
 

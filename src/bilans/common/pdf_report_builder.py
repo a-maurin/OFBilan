@@ -688,15 +688,7 @@ class PDFReportBuilder:
         Enchaîne le titre de section en attente (s'il y en a un) avec des flowables
         dans un seul ``KeepTogether`` (ex. section 2.4 : tableau + graphiques sur une page).
         """
-        merged: List = []
-        if self._pending_section is not None:
-            merged.extend(self._pending_section)
-            self._pending_section = None
-        merged.extend(flowables)
-        if self._should_keep_block_together(merged):
-            self.story.append(KeepTogether(merged))
-        else:
-            self.story.extend(merged)
+        self._append_with_pending(flowables, keep_together=True)
 
     def _should_keep_block_together(self, flowables: List) -> bool:
         """Heuristique anti-pages vides: éviter KeepTogether sur blocs lourds.
@@ -770,33 +762,55 @@ class PDFReportBuilder:
 
         # Règle stricte: un titre (section/sous-section ou titre local de bloc)
         # reste lié au premier contenu afférent, même en pagination souple.
-        # Au lieu de créer un gros KeepTogether (qui provoque des pages vides),
-        # on utilise l'attribut natif keepWithNext=1 sur les paragraphes et spacers du préfixe.
+        #
+        # Stratégie à deux niveaux :
+        #  1. Tenter un KeepTogether sur le sous-bloc minimal (pending + titre local
+        #     + premier contenu réel, typiquement titre+caption+table sans image) —
+        #     ce sous-bloc est souvent suffisamment petit pour tenir dans un KeepTogether,
+        #     même quand le bloc complet (avec image) le dépasse.
+        #  2. Si même ce sous-bloc est trop grand, revenir à keepWithNext sur les
+        #     paragraphes du préfixe (dernier recours, moins fiable mais sans page vide).
         attach_count = self._leading_title_chunk_len(block)
         prefix = pending + block[:attach_count]
-        
-        for item in prefix:
-            if isinstance(item, (Paragraph, Spacer)):
-                item.keepWithNext = 1
-                
-        self.story.extend(prefix)
+
+        if prefix and self._should_keep_block_together(prefix):
+            # Le sous-bloc titre+table tient dans un KeepTogether → cohérence garantie
+            self.story.append(KeepTogether(prefix))
+        else:
+            # Dernier recours : keepWithNext sur les éléments du préfixe
+            for item in prefix:
+                if isinstance(item, (Paragraph, Spacer)):
+                    item.keepWithNext = 1
+            self.story.extend(prefix)
+
         self.story.extend(block[attach_count:])
 
     def _leading_title_chunk_len(self, block: List) -> int:
         """
         Taille minimale d'un préfixe à garder ensemble:
-        - titre local (Paragraph) + spacers immédiats + premier contenu réel,
+        - titre local (Paragraph) + spacers immédiats + premier contenu réel TEXT/TABLE,
+        - mais JAMAIS au-delà d'une image (RLImage) ou KeepTogether (qui contient typiquement
+          une image + légende) : ces blocs lourds ne sont pas inclus dans le préfixe du titre
+          afin d'éviter de gonfler le sous-bloc et de provoquer des sauts de page.
         - sinon au moins le premier élément.
         """
+        # Types considérés comme "lourds" — ne pas les inclure dans le préfixe du titre
+        _HEAVY_TYPES = (RLImage, KeepTogether)
+
         if not block:
             return 0
         if not isinstance(block[0], Paragraph):
-            return 1
+            # Le premier élément est déjà lourd ou non-Paragraph → ne lier que l'ancre (pending)
+            return 0 if isinstance(block[0], _HEAVY_TYPES) else 1
         idx = 1
         while idx < len(block) and isinstance(block[idx], Spacer):
             idx += 1
+        # Vérifier que le premier "contenu réel" n'est pas une image/KeepTogether lourd
         if idx < len(block):
-            return idx + 1
+            if isinstance(block[idx], _HEAVY_TYPES):
+                # Ne pas inclure l'image dans le préfixe — s'arrêter avant
+                return idx  # titre + spacers, sans le premier contenu lourd
+            return idx + 1  # titre + spacers + premier contenu texte/tableau
         return 1
 
     def add_heading_chart_table_keep_together(
@@ -1082,15 +1096,13 @@ class PDFReportBuilder:
         tbl = ofb_table(table_rows, col_widths=col_widths, col_aligns=col_aligns)
         block.append(tbl)
         block.append(Spacer(1, SPACING_L))
-        if self._pending_section is not None:
-            if merge_with_next:
+        if merge_with_next:
+            if self._pending_section is not None:
                 self._pending_section.extend(block)
             else:
-                self.story.append(KeepTogether(self._pending_section + block))
-                self._pending_section = None
+                self._pending_section = block
         else:
-            for el in block:
-                self.story.append(el)
+            self._append_with_pending(block, keep_together=True)
 
     def _build_key_figures_and_tables_block(
         self,
@@ -1140,15 +1152,13 @@ class PDFReportBuilder:
         block = self._build_key_figures_and_tables_block(figures, tables, compact=compact)
         if not block:
             return
-        if self._pending_section is not None:
-            if merge_with_next:
+        if merge_with_next:
+            if self._pending_section is not None:
                 self._pending_section.extend(block)
             else:
-                self.story.append(KeepTogether(self._pending_section + block))
-                self._pending_section = None
+                self._pending_section = block
         else:
-            for el in block:
-                self.story.append(el)
+            self._append_with_pending(block, keep_together=True)
 
     def add_key_figures_section_keep_together(
         self,
@@ -1689,6 +1699,26 @@ class PDFReportBuilder:
         if self._pending_section is not None:
             self.story.extend(self._pending_section)
             self._pending_section = None
+            
+        # Debug story flowables
+        try:
+            debug_path = r"C:\Users\aguirre.maurin\.gemini\antigravity\brain\3fa1562d-d681-494a-bf8c-f533542965b2\scratch\story_flowables.txt"
+            with open(debug_path, "w", encoding="utf-8") as f:
+                for idx, flowable in enumerate(self.story):
+                    f.write(f"{idx}: {type(flowable).__name__}\n")
+                    if hasattr(flowable, "_content"):
+                        f.write(f"  Nested: {[type(x).__name__ for x in flowable._content]}\n")
+                    # If it has text or other info
+                    if hasattr(flowable, "text"):
+                        f.write(f"  Text: {flowable.text[:100]}\n")
+                    # If it's a KeepTogether or has Paragraphs inside
+                    if type(flowable).__name__ == "KeepTogether":
+                        for sub in getattr(flowable, "_content", []):
+                            if hasattr(sub, "text"):
+                                f.write(f"    SubText: {sub.text[:100]}\n")
+        except Exception as e:
+            pass
+            
         try:
             self.doc.multiBuild(self.story)
         finally:

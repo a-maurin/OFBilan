@@ -100,7 +100,7 @@ defaults:
 
 
   sections:
-    order: ["sec1", "sec2", "sec3", "sec4", "sec5", "sec6"]
+    order: ["sec1", "sec2", "sec4", "sec3", "sec5", "sec6"]
     # sec3/sec4 : identifiants historiques — sec4 = chapitre « Activité par type d'usager »,
     # sec3 = chapitre « Procédures » (numérotation PDF via titles / section_defs).
     enabled: {}
@@ -120,13 +120,13 @@ defaults:
       la suite du document est la localisation de contrôle : une unité correspond à
       une localisation renseignée.
     control_operation_paragraph: >
-      Il convient de distinguer la localisation de contrôle de l'opération de contrôle.
+      La notion de localisation de contrôle diffère de celle d'opération de contrôle.
       L'opération de contrôle qualifie l'événement ou l'intervention dans son ensemble,
       tel qu'il a été mené par les agents sur le terrain. Une seule opération de contrôle
       peut générer plusieurs localisations géographiques ou concerner plusieurs usagers.
     pa_pj_distinction_paragraph: >
-      Il convient de distinguer l'activité de police administrative et l'activité de
-      police judiciaire. Dans ce document, le terme « contrôle » renvoie exclusivement
+      Par ailleurs, une distinction stricte s'impose entre la police administrative et la police judiciaire.
+      Dans ce document, le terme « contrôle » renvoie exclusivement
       à la police administrative. Le sigle « PEJ » (procédure d'enquête judiciaire) désigne l'activité
       de police judiciaire, qui ne se limite pas aux infractions relevées lors des
       contrôles et peut aussi inclure des saisines extérieures (infractions constatées
@@ -200,7 +200,7 @@ defaults:
     sec31:
       show_table: true
       show_key_figures: true
-      show_top_infractions: true
+      show_top_infractions: false
       show_detail_table: true
       # 0 = toutes les lignes (pagination PDF via split_by_row) ; entier > 0 = plafond
       max_detail_rows: 0

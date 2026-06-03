@@ -38,7 +38,19 @@ def archive_existing_sources():
         if item.name == ".gitkeep":
             continue
         dest = archive_path / item.name
-        shutil.move(str(item), str(dest))
+        try:
+            shutil.move(str(item), str(dest))
+        except PermissionError as e:
+            print(f"\n[ERREUR] Impossible de déplacer '{item.name}'.")
+            print(f"Détail de l'erreur : {e}")
+            print("\n-> Le fichier est probablement ouvert dans QGIS ou un autre programme.")
+            print("-> Veuillez fermer QGIS et relancer le script.")
+            import sys
+            sys.exit(1)
+        except Exception as e:
+            print(f"\n[ERREUR inattendue] Impossible de déplacer '{item.name}' : {e}")
+            import sys
+            sys.exit(1)
     
     print("Archivage terminé.")
 
@@ -119,7 +131,7 @@ def fetch_sig():
             shutil.rmtree(dest, onerror=remove_readonly)
         shutil.copytree(folder, dest)
         
-    # Optionnel: on copie aussi point_infraction_PJ
+    # Copie du dossier point_infraction_PJ (GPKG localisés + CSV non localisés)
     pj_folder = SIG_DIR / "point_infraction_PJ"
     if pj_folder.exists() and pj_folder.is_dir():
         dest = LOCAL_SOURCES_SIG / pj_folder.name
@@ -128,6 +140,32 @@ def fetch_sig():
             shutil.rmtree(dest, onerror=remove_readonly)
         shutil.copytree(pj_folder, dest)
 
+
+def fetch_infrac_non_localises():
+    """Copie le CSV des infractions PEJ non localisées (infrac_FAITS_non_localises_*.csv)
+    depuis le serveur vers data/sources/sig/point_infraction_PJ/.
+
+    Ce fichier recense les dossiers PEJ dont les faits n'ont pas pu être géolocalisés
+    dans OSCEAN (geometry vide). Il est utilisé pour comptabiliser de façon fiable
+    le nombre de PEJ sans commune dans le bilan.
+    """
+    print(f"\n--- Récupération des PEJ non localisées (CSV) ---")
+    pj_server = SIG_DIR / "point_infraction_PJ"
+    if not pj_server.exists():
+        print(f"Dossier point_infraction_PJ inaccessible sur le serveur : {pj_server}")
+        return
+
+    latest = get_latest_file(pj_server, "infrac_FAITS_non_localises_*.csv")
+    if not latest:
+        print("Aucun fichier infrac_FAITS_non_localises_*.csv trouvé.")
+        return
+
+    dest_dir = LOCAL_SOURCES_SIG / "point_infraction_PJ"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / latest.name
+    print(f"Copie de : {latest.name}")
+    shutil.copy2(latest, dest)
+
 def main():
     print("Démarrage de la récupération automatique des sources...")
     
@@ -135,6 +173,7 @@ def main():
     fetch_pve()
     fetch_pej_pa()
     fetch_sig()
+    fetch_infrac_non_localises()
     
     print("\nTerminé avec succès.")
 

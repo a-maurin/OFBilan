@@ -78,9 +78,15 @@ DEFAULT_PDF_PRESENTATION_CONFIG: dict[str, Any] = {
                 "la suite du document est la localisation de contrôle : une unité correspond à "
                 "une localisation renseignée."
             ),
+            "control_operation_paragraph": (
+                "La notion de localisation de contrôle diffère de celle d'opération de contrôle. "
+                "L'opération de contrôle qualifie l'événement ou l'intervention dans son ensemble, "
+                "tel qu'il a été mené par les agents sur le terrain. Une seule opération de contrôle "
+                "peut générer plusieurs localisations géographiques ou concerner plusieurs usagers."
+            ),
             "pa_pj_distinction_paragraph": (
-                "Il convient de distinguer l'activité de police administrative et l'activité de "
-                "police judiciaire. Dans ce document, le terme « contrôle » renvoie exclusivement "
+                "Par ailleurs, une distinction stricte s'impose entre la police administrative et la police judiciaire. "
+                "Dans ce document, le terme « contrôle » renvoie exclusivement "
                 "à la police administrative. Le sigle « PEJ » (procédure d'enquête judiciaire) "
                 "désigne l'activité de police judiciaire, qui ne se limite pas aux infractions "
                 "relevées lors des contrôles et peut aussi inclure des saisines extérieures "
@@ -767,6 +773,36 @@ def resolve_sec2_render_order(
     if include_zone_subsections:
         fallback.extend(["sec22theme", "sec22res"])
     return [sid for sid in fallback if sid in allowed]
+
+
+def resolve_sec34_render_order(
+    effective_cfg: dict[str, Any],
+) -> list[str]:
+    """
+    Ordre de rendu des chapitres « Activité par type d'usager » (sec4) et
+    « Procédures » (sec3), aligné sur la numérotation PDF (3 puis 4).
+
+    Priorité : ``sections.order`` du YAML, puis repli ``sec4`` puis ``sec3``.
+    """
+    canonical = ("sec4", "sec3")
+    sections_cfg = effective_cfg.get("sections", {})
+    if not isinstance(sections_cfg, dict):
+        sections_cfg = {}
+    order_raw = sections_cfg.get("order", [])
+    order = order_raw if isinstance(order_raw, list) else []
+    order_ids = [
+        normalize_section_id(str(x).strip(), emit_alias_warning=False)
+        for x in order
+        if str(x).strip()
+    ]
+    picked = [
+        sid
+        for sid in order_ids
+        if sid in canonical and is_section_enabled(effective_cfg, sid, True)
+    ]
+    if picked:
+        return picked
+    return [sid for sid in canonical if is_section_enabled(effective_cfg, sid, True)]
 
 
 def resolve_sections_for_toc(

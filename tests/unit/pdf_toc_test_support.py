@@ -15,15 +15,24 @@ def fake_chart_path(out_dir: Path, filename: str) -> str:
 
 def fake_any_chart(*args, **kwargs) -> str:
     """Stub générique pour chart_pie, chart_bar_*, chart_line_evolution, etc."""
+    # 1) Recherche de la signature (..., tmp_dir: Path, name: str, ...)
+    for i in range(len(args) - 1):
+        if isinstance(args[i], Path) and isinstance(args[i+1], str) and args[i+1].lower().endswith(".png"):
+            return fake_chart_path(args[i], args[i+1])
+            
+    # 2) Fallback si un chemin complet est passé en un seul argument
     for a in args:
         if isinstance(a, (str, Path)):
             p = Path(a)
-            if p.suffix.lower() == ".png":
+            if p.suffix.lower() == ".png" and p.parent != Path("."):
                 return fake_chart_path(p.parent, p.name)
-    if len(args) >= 4 and isinstance(args[2], (str, Path)):
-        return fake_chart_path(Path(args[2]), str(args[3]))
-    if len(args) >= 6 and isinstance(args[4], (str, Path)):
-        return fake_chart_path(Path(args[4]), str(args[5]))
+                
+    # 3) Fallbacks historiques indexés
+    if len(args) >= 4 and isinstance(args[2], Path):
+        return fake_chart_path(args[2], str(args[3]))
+    if len(args) >= 6 and isinstance(args[4], Path):
+        return fake_chart_path(args[4], str(args[5]))
+        
     raise ValueError(f"Impossible de déduire le chemin graphique : args={args!r}")
 
 

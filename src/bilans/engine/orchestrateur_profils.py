@@ -4059,7 +4059,7 @@ def _generate_pdf(
         """Ouvre le chapitre 3 sur la première sous-section (titre + contenu groupés)."""
         if not sec3_order or sec3_order[0] != subsection_id:
             return False
-        builder.add_section("sec3", section_title["sec3"], start_on_new_page=True)
+        builder.add_section("sec3", section_title["sec3"], start_on_new_page=is_block_enabled(presentation_cfg, "sec3.start_on_new_page", False))
         return True
 
     def _render_sec31() -> None:
@@ -4552,7 +4552,7 @@ def _generate_pdf(
         builder.add_section(
             "sec4",
             section_title["sec4"],
-            start_on_new_page=True,
+            start_on_new_page=is_block_enabled(presentation_cfg, "sec4.start_on_new_page", False),
             compact=True,
         )
         builder.add_paragraph(
@@ -4601,7 +4601,7 @@ def _generate_pdf(
     sec34_registry.render_many(sec34_order, {})
 
     # ── CARTOGRAPHIE ──
-    builder.add_section("sec5", section_title["sec5"], start_on_new_page=True)
+    builder.add_section("sec5", section_title["sec5"], start_on_new_page=is_block_enabled(presentation_cfg, "sec5.start_on_new_page", False))
     if options.get("cartes", False):
         map_id = profile.get("_map_id") or profil_id
         map_paths = resolve_profile_map_paths(
@@ -4623,7 +4623,7 @@ def _generate_pdf(
         builder.add_paragraph("<i>Cartographie désactivée pour ce bilan.</i>")
 
     # ── ANNEXES ──
-    builder.add_section("sec6", section_title["sec6"], start_on_new_page=True)
+    builder.add_section("sec6", section_title["sec6"], start_on_new_page=is_block_enabled(presentation_cfg, "sec6.start_on_new_page", False))
     zone_ctrl_annex = results.get("zone_ctrl")
     has_zone_table = zone_ctrl_annex is not None and not zone_ctrl_annex.empty
     has_pnf = bool(options.get("pnf", False)) and results.get("agg_pnf") is not None
