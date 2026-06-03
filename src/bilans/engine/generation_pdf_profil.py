@@ -298,8 +298,13 @@ def _generate_pdf_content(
     report_header = " — ".join(line.strip() for line in header_title_lines if line.strip())
     map_captions: list[str] = []
     if cartes and has_cartography_catalog(profile):
+        from bilans.common.utilitaires_metier import resolve_carto_dept_code
+
         selected = list(profile.get("_cartes_selection") or [])
-        global_map_paths, map_captions = resolve_selected_map_paths(profile, selected)
+        carto_dept = resolve_carto_dept_code(cfg.echelle, cfg.code)
+        global_map_paths, map_captions = resolve_selected_map_paths(
+            profile, selected, carto_dept=carto_dept
+        )
         global_map_layout = resolve_map_layout(profile=profile, presentation_cfg=presentation_cfg)
         map_id = str(profile.get("id", "global")).strip() or "global"
     elif cartes:

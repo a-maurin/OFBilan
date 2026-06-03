@@ -18,7 +18,12 @@ from pathlib import Path
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Génération de cartes (wrapper QGIS).")
-    parser.add_argument("--profil", type=str, default="tous", help="Profil de carte (agrainage, chasse, ... ou 'tous').")
+    parser.add_argument(
+        "--profil",
+        type=str,
+        default="tous",
+        help="Profil(s) carte : agrainage, global, global_usagers, ... ou liste séparée par des virgules.",
+    )
     parser.add_argument("--date-deb", type=str, required=True, help="Date début (YYYY-MM-DD).")
     parser.add_argument("--date-fin", type=str, required=True, help="Date fin (YYYY-MM-DD).")
     parser.add_argument("--dept-code", type=str, default="21", help="Code département (ex. 21).")

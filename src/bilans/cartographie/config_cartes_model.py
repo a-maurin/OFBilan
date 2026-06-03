@@ -225,6 +225,8 @@ class GlobalConfig:
     natinf_pve: List[int] = field(default_factory=lambda: [27742])
     natinf_pj: List[int] = field(default_factory=lambda: [27742, 25001])
     perimetre: PerimetreConfig = field(default_factory=PerimetreConfig)
+    # Code département par défaut (filtres pochoir, titres, etc.)
+    departement_code: str = "21"
     chasse_theme_value: str = "Chasse"
     # Mots-clés pour le filtre contrôles piégeage (nom_dossie / theme / type_actio)
     piegeage_keywords: List[str] = field(default_factory=lambda: ["piégeage", "piège"])

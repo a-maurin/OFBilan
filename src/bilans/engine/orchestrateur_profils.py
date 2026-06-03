@@ -463,14 +463,12 @@ def _run_global_profile_via_yaml(
     )
 
     from bilans.common.carte_helper import ensure_maps_for_profiles
-    profil_id = str(profile.get("id", "global"))
-    capabilities = profile.get("capabilities", {})
-    if isinstance(capabilities, dict):
-        map_profiles = capabilities.get("map_profiles", [profil_id])
-    else:
-        map_profiles = [profil_id]
+    from bilans.common.cartographie_config import resolve_qgis_profile_ids
 
-    if resolved_opts.get("cartes", False):
+    profil_id = str(profile.get("id", "global"))
+    map_profiles = resolve_qgis_profile_ids(profile, profil_id, resolved_opts)
+
+    if resolved_opts.get("cartes", False) and map_profiles:
         try:
             ensure_maps_for_profiles(
                 map_profiles,
@@ -488,6 +486,8 @@ def _run_global_profile_via_yaml(
         profile=profile,
         profil_id=profil_id,
         resolved_opts=resolved_opts,
+        echelle=echelle,
+        code=code,
     )
 
     print("Étape 3/3 : génération du PDF (graphiques et mise en page)...")
@@ -600,6 +600,8 @@ def prompt_cartography_integration(
     profil_id: str,
     resolved_opts: dict,
     map_id: str | None = None,
+    echelle: str | None = None,
+    code: str | None = None,
 ) -> None:
     """
     Pause interactive : dossier et noms de fichiers attendus pour les cartes du PDF.
@@ -618,9 +620,22 @@ def prompt_cartography_integration(
 
     if has_cartography_catalog(profile):
         selection = profile.get("_cartes_selection") or resolve_cartes_selection(profile, resolved_opts)
+        from bilans.cartographie.pochoir_helper import is_map_valid_for_dept
+        from bilans.common.carte_helper import qgis_available
+        from bilans.common.utilitaires_metier import resolve_carto_dept_code
+
+        carto_dept = resolve_carto_dept_code(
+            echelle or "departement",
+            code or "21",
+        )
+
         expected_names = expected_map_filenames_for_selection(profile, selection)
-        
-        all_exist = all((cartes_dir / name).exists() for name in expected_names) if expected_names else False
+
+        def _carte_ready(name: str) -> bool:
+            path = cartes_dir / name
+            return path.exists() and is_map_valid_for_dept(path, carto_dept)
+
+        all_exist = all(_carte_ready(name) for name in expected_names) if expected_names else False
         if all_exist:
             print("\n--- Cartographie ---")
             print(f"Les {len(expected_names)} cartes attendues ont été générées ou trouvées avec succès dans {cartes_dir}.")
@@ -630,6 +645,14 @@ def prompt_cartography_integration(
         print("\n--- Cartographie ---")
         print(f"Pour intégrer les cartes dans le bilan PDF ({section_hint}) :")
         print(f"  - dossier : {cartes_dir}")
+        print(f"  - département attendu : {carto_dept}")
+        if not qgis_available():
+            print(
+                "  - QGIS (PyQGIS) non détecté dans cet interpréteur Python : "
+                "génération automatique impossible. Utilisez scripts/windows/generer_cartes.bat "
+                f"avec --echelle departement --code {carto_dept}, ou déposez les PNG avec "
+                f"marqueur .{carto_dept}.dept (rétrocompat. : dept. 21 sans marqueur)."
+            )
         for name in expected_names:
             print(f"  - fichier : {name}")
         if len(expected_names) >= 2:
@@ -5021,13 +5044,11 @@ def _run_engine_thematic_pipeline(
     )
 
     from bilans.common.carte_helper import ensure_maps_for_profiles
-    capabilities = profile.get("capabilities", {})
-    if isinstance(capabilities, dict):
-        map_profiles = capabilities.get("map_profiles", [profil_id])
-    else:
-        map_profiles = [profil_id]
+    from bilans.common.cartographie_config import resolve_qgis_profile_ids
 
-    if resolved_opts.get("cartes", False):
+    map_profiles = resolve_qgis_profile_ids(profile, profil_id, resolved_opts)
+
+    if resolved_opts.get("cartes", False) and map_profiles:
         try:
             ensure_maps_for_profiles(
                 map_profiles,
@@ -5046,6 +5067,8 @@ def _run_engine_thematic_pipeline(
         profil_id=profil_id,
         resolved_opts=resolved_opts,
         map_id=map_id,
+        echelle=echelle,
+        code=code,
     )
 
     # ── PDF ──

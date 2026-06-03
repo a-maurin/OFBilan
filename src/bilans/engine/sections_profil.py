@@ -978,10 +978,13 @@ def render_sec5map(ctx: PdfContext) -> None:
             expected = expected_map_filenames(
                 ctx.map_id, profile=ctx.profile, presentation_cfg=ctx.presentation_cfg
             )
+        from bilans.chemins_projet import get_cartes_dir
+
+        cartes_dir = get_cartes_dir()
         files_hint = ", ".join(f"<b>{n}</b>" for n in expected) or f"<b>carte_{ctx.map_id}.png</b>"
         ctx.builder.add_paragraph(
-            f"<i>Carte(s) non disponible(s). Déposez {files_hint} dans le dossier des ctx.cartes pour "
-            "les intégrer au bilan.</i>"
+            f"<i>Carte(s) non disponible(s). Déposez {files_hint} dans "
+            f"<b>{cartes_dir.name}</b> ({cartes_dir}) pour les intégrer au bilan.</i>"
         )
 
 def render_sec6(ctx: PdfContext) -> None:

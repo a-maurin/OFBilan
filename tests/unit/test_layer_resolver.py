@@ -46,9 +46,10 @@ def test_resolve_exact_name_preferred():
         configured_name="pochoir_sd21",
         layer_role="pochoir",
         available_names=PROJECT_LAYERS,
+        dept_code="21",
     )
     assert name == "pochoir_sd21"
-    assert source == "exact"
+    assert source == "dept"
 
 
 def test_infer_role_from_layer_key():

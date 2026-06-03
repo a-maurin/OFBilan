@@ -301,6 +301,19 @@ def _load_profiles_from_param() -> Optional[tuple[Dict[str, "ProfileConfig"], st
     return result, global_symbology_source
 
 
+def _resolve_departement_code(config) -> str:
+    """Code département effectif : attribut direct ou perimetre.code."""
+    dept = getattr(config, "departement_code", None)
+    if dept:
+        return str(dept).strip()
+    perimetre = getattr(config, "perimetre", None)
+    if perimetre is not None:
+        code = getattr(perimetre, "code", None)
+        if code:
+            return str(code).strip()
+    return "21"
+
+
 def get_effective_config():
     """Retourne la config globale à utiliser : paramètres YAML si présents, sinon config_cartes.CONFIG.
     Les profils définis dans le YAML (param/profils_cartes.yaml) priment sur config_cartes.py."""
@@ -326,7 +339,8 @@ def get_effective_config():
             profiles=param_profiles,
             natinf_pve=CONFIG.natinf_pve,
             natinf_pj=CONFIG.natinf_pj,
-            departement_code=CONFIG.departement_code,
+            perimetre=CONFIG.perimetre,
+            departement_code=_resolve_departement_code(CONFIG),
             chasse_theme_value=CONFIG.chasse_theme_value,
             piegeage_keywords=CONFIG.piegeage_keywords,
             symbology_source=sym_src,
@@ -392,6 +406,7 @@ def resolve_layers_for_config(
     available_names: Optional[List[str]] = None,
     date_deb: Optional[str] = None,
     date_fin: Optional[str] = None,
+    dept_code: Optional[str] = None,
 ) -> list[tuple[Optional[Any], str, str]]:
     """
     Résout une couche de configuration vers une ou plusieurs couches QGIS du projet.
@@ -401,24 +416,147 @@ def resolve_layers_for_config(
     from layer_resolver import resolve_layer_names
 
     names = available_names if available_names is not None else get_project_layer_names()
+    layer_role = getattr(lcfg, "layer_role", None)
     resolved_infos = resolve_layer_names(
         configured_name=lcfg.layer_name,
-        layer_role=getattr(lcfg, "layer_role", None),
+        layer_role=layer_role,
         layer_key=layer_key,
         available_names=names,
         date_deb=date_deb,
         date_fin=date_fin,
+        dept_code=dept_code,
     )
-    
+
     results = []
     if not resolved_infos:
-        return [(None, "", "missing")]
-        
+        resolved_infos = []
+
     for resolved_name, source in resolved_infos:
-        layer = get_layer_by_name(resolved_name)
+        layer = get_layer_by_name(resolved_name) if resolved_name else None
         results.append((layer, resolved_name, source))
-        
+
+    if (
+        dept_code
+        and layer_role == "pochoir"
+        and (not results or not results[0][0])
+    ):
+        layer, layer_name = ensure_pochoir_layer_in_project(dept_code)
+        if layer and layer_name:
+            return [(layer, layer_name, "generated")]
+
+    if not results:
+        return [(None, "", "missing")]
+
     return results
+
+
+def _clone_pochoir_renderer_from_template():
+    """Reprend le renderer invertedPolygon du pochoir_sd21 du projet si présent."""
+    template = get_layer_by_name("pochoir_sd21")
+    if template is None:
+        template = get_layer_by_name("pochoir_sd21 copie")
+    if template is None or not template.renderer():
+        return None
+    return template.renderer().clone()
+
+
+def apply_pochoir_inverted_symbology(layer) -> None:
+    """Symbologie masque blanc hors département (inverted polygon)."""
+    cloned = _clone_pochoir_renderer_from_template()
+    if cloned is not None:
+        layer.setRenderer(cloned)
+        layer.triggerRepaint()
+        return
+    fill_sym = QgsFillSymbol.createSimple(
+        {"color": "255,255,255,255", "outline_color": "35,35,35", "outline_width": "0.26"}
+    )
+    try:
+        from qgis.core import QgsInvertedPolygonRenderer
+
+        layer.setRenderer(QgsInvertedPolygonRenderer(fill_sym))
+    except ImportError:
+        layer.setRenderer(QgsSingleSymbolRenderer(fill_sym))
+    layer.triggerRepaint()
+
+
+def ensure_pochoir_layer_in_project(dept_code: str) -> tuple[Optional[Any], str]:
+    """
+    Crée ou met à jour la couche pochoir_sd{dept} à partir de DEPARTEMENT_ADMIN_Express_200207.shp.
+    """
+    if not HAS_QGIS:
+        return None, ""
+
+    from bilans.cartographie.pochoir_helper import (
+        pochoir_cache_path,
+        pochoir_layer_name,
+        write_pochoir_gpkg,
+    )
+
+    layer_name = pochoir_layer_name(dept_code)
+    existing = get_layer_by_name(layer_name)
+    cache_dir = OUT_DIR_CARTES / ".pochoir_cache"
+    gpkg_path = pochoir_cache_path(dept_code, cache_dir)
+    write_pochoir_gpkg(dept_code, gpkg_path, project_root=PROJECT_ROOT)
+
+    uri = f"{gpkg_path}|layername={layer_name}"
+    if existing is not None:
+        existing.setDataSource(uri, layer_name, "ogr")
+        apply_pochoir_inverted_symbology(existing)
+        existing.triggerRepaint()
+        return existing, layer_name
+
+    layer = QgsVectorLayer(uri, layer_name, "ogr")
+    if not layer.isValid():
+        logger.error("Couche pochoir invalide pour %s : %s", dept_code, uri)
+        return None, ""
+
+    apply_pochoir_inverted_symbology(layer)
+    QgsProject.instance().addMapLayer(layer, False)
+    return layer, layer_name
+
+
+def apply_map_extent_for_department(layout, dept_code: str, *, margin_ratio: float = 0.05) -> bool:
+    """Ajuste l'emprise des QgsLayoutItemMap sur le département sélectionné."""
+    if not HAS_QGIS or not dept_code:
+        return False
+    from bilans.cartographie.pochoir_helper import department_bounds
+    from qgis.core import QgsRectangle
+
+    try:
+        xmin, ymin, xmax, ymax = department_bounds(
+            dept_code, margin_ratio=margin_ratio, project_root=PROJECT_ROOT
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        logger.warning("Emprise carte non ajustée (département %s) : %s", dept_code, exc)
+        return False
+
+    rect = QgsRectangle(xmin, ymin, xmax, ymax)
+    updated = False
+    for item in layout.items():
+        if isinstance(item, QgsLayoutItemMap):
+            item.setExtent(rect)
+            updated = True
+    if updated:
+        logger.info("Emprise carte ajustée au département %s", dept_code)
+    return updated
+
+
+def adapt_profile_texts_for_department(prof: "ProfileConfig", dept_code: str) -> "ProfileConfig":
+    """Substitue Côte-d'Or / SD21 dans les titres par le département courant."""
+    from dataclasses import replace
+
+    from bilans.cartographie.pochoir_helper import adapt_text_for_department
+    from bilans.common.utilitaires_metier import get_dept_name
+
+    dept_name = get_dept_name(dept_code)
+    title = adapt_text_for_department(getattr(prof, "title", "") or "", dept_code, dept_name)
+    title_main = adapt_text_for_department(
+        getattr(prof, "title_main", "") or "", dept_code, dept_name
+    )
+    subtitle = adapt_text_for_department(getattr(prof, "subtitle", "") or "", dept_code, dept_name)
+    if title == prof.title and title_main == prof.title_main and subtitle == prof.subtitle:
+        return prof
+    return replace(prof, title=title, title_main=title_main, subtitle=subtitle)
 
 
 def get_layout_by_name(layout_name: str):
@@ -759,6 +897,16 @@ def apply_layer_symbology(layer, config: "LayerSymbologyConfig", geometry_mode_o
     layer.triggerRepaint()
 
 
+def _depart_attr_condition(field_name: str, depart: str) -> str:
+    """Condition attribut département (chaîne ou entier INSEE)."""
+    depart = str(depart or "").strip()
+    try:
+        depart_int = int(depart)
+        return f'"{field_name}" IN ({depart!r}, {depart_int})'
+    except ValueError:
+        return f'"{field_name}" = {depart!r}'
+
+
 def _build_date_condition(fields, field_name: str, date_deb: str, date_fin: str) -> str:
     # 14 = QVariant.Date, 15 = QVariant.DateTime
     idx = fields.indexFromName(field_name)
@@ -830,9 +978,10 @@ def _build_point_ctrl_agrainage_expression(fields, date_deb: str, date_fin: str,
 
     depart = getattr(config, "departement_code", "21")
     date_cond = _build_date_condition(fields, "date_ctrl", date_deb, date_fin)
+    dept_cond = _depart_attr_condition("num_depart", depart)
     return (
         f'"{nom_col}" LIKE \'%agrain%\' AND '
-        f'"num_depart" = {repr(depart)} AND "resultat" = \'Conforme\' AND '
+        f'{dept_cond} AND "resultat" = \'Conforme\' AND '
         f'{date_cond}'
     )
 
@@ -846,7 +995,7 @@ def _build_point_ctrl_chasse_expression(fields, date_deb: str, date_fin: str, co
     depart = getattr(config, "departement_code", "21")
     date_cond = _build_date_condition(fields, "date_ctrl", date_deb, date_fin)
     expr = (
-        f'"num_depart" = {repr(depart)} AND "resultat" = \'Conforme\' AND '
+        f'{_depart_attr_condition("num_depart", depart)} AND "resultat" = \'Conforme\' AND '
         f'{date_cond}'
     )
     if "theme" in field_names:
@@ -864,7 +1013,7 @@ def _build_point_ctrl_global_expression(fields, date_deb: str, date_fin: str, co
 
     depart = getattr(config, "departement_code", "21")
     date_cond = _build_date_condition(fields, "date_ctrl", date_deb, date_fin)
-    return f'"num_depart" = {repr(depart)} AND {date_cond}'
+    return f'{_depart_attr_condition("num_depart", depart)} AND {date_cond}'
 
 
 def _build_point_ctrl_manquement_expression(fields, date_deb: str, date_fin: str, config) -> Optional[str]:
@@ -877,7 +1026,7 @@ def _build_point_ctrl_manquement_expression(fields, date_deb: str, date_fin: str
     depart = getattr(config, "departement_code", "21")
     date_cond = _build_date_condition(fields, "date_ctrl", date_deb, date_fin)
     return (
-        f'"num_depart" = {repr(depart)} AND '
+        f'{_depart_attr_condition("num_depart", depart)} AND '
         f'lower("resultat") LIKE \'%manquement%\' AND '
         f'{date_cond}'
     )
@@ -914,7 +1063,7 @@ def _build_point_ctrl_theme_expression(
         return None
     text_cond = "(" + " OR ".join(like_parts) + ")"
     date_cond = _build_date_condition(fields, "date_ctrl", date_deb, date_fin)
-    return f'{text_cond} AND "num_depart" = {repr(depart)} AND {date_cond}'
+    return f'{text_cond} AND {_depart_attr_condition("num_depart", depart)} AND {date_cond}'
 
 
 def _build_point_ctrl_keywords_expression(
@@ -959,7 +1108,7 @@ def _build_point_ctrl_keywords_expression(
         return None
     text_cond = "(" + " OR ".join(like_parts) + ")"
     date_cond = _build_date_condition(fields, "date_ctrl", date_deb, date_fin)
-    return f'{text_cond} AND "num_depart" = {repr(depart)} AND {date_cond}'
+    return f'{text_cond} AND {_depart_attr_condition("num_depart", depart)} AND {date_cond}'
 
 
 def _build_point_ctrl_piegeage_expression(fields, date_deb: str, date_fin: str, config) -> Optional[str]:
@@ -994,7 +1143,7 @@ def _build_point_ctrl_piegeage_expression(fields, date_deb: str, date_fin: str, 
         return None
     text_cond = "(" + " OR ".join(like_parts) + ")"
     date_cond = _build_date_condition(fields, "date_ctrl", date_deb, date_fin)
-    return f'{text_cond} AND "num_depart" = {repr(depart)} AND {date_cond}'
+    return f'{text_cond} AND {_depart_attr_condition("num_depart", depart)} AND {date_cond}'
 
 
 
@@ -1318,6 +1467,7 @@ def export_layout(
     dpi: int = 300,
     fmt: str = "png",
     legend_labels_map: Optional[Dict[str, str]] = None,
+    dept_code: Optional[str] = None,
 ) -> bool:
     """Exporte le layout du profil vers un fichier image."""
     from config_cartes import ProfileConfig, CONFIG
@@ -1368,6 +1518,12 @@ def export_layout(
     except Exception as e:
         logger.exception("Erreur logo bas droite (export continué): %s", e)
 
+    if dept_code:
+        try:
+            apply_map_extent_for_department(layout, dept_code)
+        except Exception as e:
+            logger.exception("Erreur ajustement emprise carte (export continué): %s", e)
+
     settings = QgsLayoutExporter.ImageExportSettings()
     settings.dpi = dpi
 
@@ -1378,22 +1534,39 @@ def export_layout(
     else:
         path_str = str(output_path.with_suffix(".png"))
 
-    # Supprimer le fichier existant (le pilote PNG ne permet pas l'accès en écriture sur fichier existant)
-    if Path(path_str).exists():
+    # Export vers un fichier temporaire : ne pas supprimer le PNG existant avant succès
+    final_path = Path(path_str)
+    export_path = final_path.with_name(f"{final_path.stem}._export_tmp{final_path.suffix}")
+    if export_path.exists():
         try:
-            Path(path_str).unlink()
+            export_path.unlink()
         except OSError:
             pass
 
     exporter = QgsLayoutExporter(layout)
-    res = exporter.exportToImage(path_str, settings)
+    res = exporter.exportToImage(str(export_path), settings)
 
     if res == QgsLayoutExporter.Success:
-        logger.info("Carte exportée pour le profil '%s' → %s", prof.id, path_str)
+        try:
+            if final_path.exists():
+                final_path.unlink()
+            export_path.replace(final_path)
+        except OSError as exc:
+            logger.error(
+                "Export réussi mais remplacement du fichier impossible (%s) : %s",
+                final_path,
+                exc,
+            )
+            return False
+        logger.info("Carte exportée pour le profil '%s' → %s", prof.id, final_path)
         return True
-    else:
-        logger.error("Échec de l'export du layout '%s' vers %s", prof.layout_name, path_str)
-        return False
+    if export_path.exists():
+        try:
+            export_path.unlink()
+        except OSError:
+            pass
+    logger.error("Échec de l'export du layout '%s' vers %s", prof.layout_name, final_path)
+    return False
 
 
 def run_interactive_wizard(profile_ids: List[str]) -> None:
@@ -1592,9 +1765,20 @@ def run_export(
     """Génère les cartes en mode non interactif à partir de la config."""
     CONFIG = get_effective_config()
 
+    effective_dept = (
+        str(dept_code).strip()
+        if dept_code
+        else str(getattr(CONFIG, "departement_code", "21")).strip()
+    )
     project_path = _resolve_qgis_project_path(CONFIG.project_qgis_path)
+    logger.info(
+        "run_export : profils=%s, département=%s, projet QGIS=%s",
+        ", ".join(profile_ids),
+        effective_dept,
+        project_path,
+    )
     if not load_project(project_path):
-        return
+        raise RuntimeError(f"Impossible de charger le projet QGIS : {project_path}")
 
     set_basemap_visibility(CONFIG.basemap.enabled)
 
@@ -1607,7 +1791,8 @@ def run_export(
     dpi = CONFIG.output.dpi
     fmt = CONFIG.output.format
 
-    carto_config = _ConfigDeptOverride(CONFIG, dept_code) if dept_code else CONFIG
+    carto_config = _ConfigDeptOverride(CONFIG, effective_dept)
+    exported_paths: list[Path] = []
 
     # Alias ref_themes_ctrl → config cartes : types_usager = global_usagers
     _REF_TO_CARTE = {"types_usager": "global_usagers"}
@@ -1635,7 +1820,15 @@ def run_export(
         if date_fin:
             prof.date_fin = date_fin
 
-        logger.info("Profil: %s (période %s → %s)", pid, prof.date_deb, prof.date_fin)
+        prof = adapt_profile_texts_for_department(prof, effective_dept)
+
+        logger.info(
+            "Profil: %s (période %s → %s, département %s)",
+            pid,
+            prof.date_deb,
+            prof.date_fin,
+            effective_dept,
+        )
 
         proj = QgsProject.instance()
         available_names = [lyr.name() for lyr in proj.mapLayers().values()]
@@ -1661,7 +1854,12 @@ def run_export(
 
         for lname, lcfg in layers_to_process.items():
             resolved_infos = resolve_layers_for_config(
-                lname, lcfg, available_names=available_names, date_deb=prof.date_deb, date_fin=prof.date_fin
+                lname,
+                lcfg,
+                available_names=available_names,
+                date_deb=prof.date_deb,
+                date_fin=prof.date_fin,
+                dept_code=effective_dept,
             )
             
             # Si aucune couche n'a été trouvée
@@ -1719,14 +1917,56 @@ def run_export(
 
         out_path = out_dir / prof.output_filename
 
-        export_layout(prof, out_path, dpi=dpi, fmt=fmt, legend_labels_map=legend_labels_map or None)
+        exported = export_layout(
+            prof,
+            out_path,
+            dpi=dpi,
+            fmt=fmt,
+            legend_labels_map=legend_labels_map or None,
+            dept_code=effective_dept,
+        )
 
-        # Dessiner la légende avec Pillow par-dessus l'export
-        try:
-            _draw_legend_on_image(out_path, legend_data)
-            logger.info("  Légende dessinée sur %s", out_path.name)
-        except Exception as e:
-            logger.error("  Erreur de dessin de légende sur %s : %s", out_path.name, e)
+        png_path = out_path.with_suffix(".png")
+        if exported and png_path.exists():
+            # Dessiner la légende avec Pillow par-dessus l'export
+            try:
+                _draw_legend_on_image(out_path, legend_data)
+                logger.info("  Légende dessinée sur %s", out_path.name)
+            except Exception as e:
+                logger.error("  Erreur de dessin de légende sur %s : %s", out_path.name, e)
+
+            # Marqueur département indépendant de la légende (requis hors SD21 legacy)
+            from bilans.cartographie.pochoir_helper import (
+                map_staleness_marker_path,
+                write_map_dept_marker,
+            )
+
+            write_map_dept_marker(png_path, effective_dept)
+            marker_path = map_staleness_marker_path(png_path, effective_dept)
+            exported_paths.append(png_path)
+            logger.info(
+                "SUCCESS carte %s (département %s) → %s ; marqueur %s",
+                pid,
+                effective_dept,
+                png_path.resolve(),
+                marker_path.name,
+            )
+        elif not exported:
+            logger.error("  Export PNG absent pour le profil '%s' (%s)", pid, out_path.name)
+
+    if exported_paths:
+        logger.info(
+            "run_export terminé : %d carte(s) pour le département %s dans %s",
+            len(exported_paths),
+            effective_dept,
+            out_dir.resolve(),
+        )
+    else:
+        logger.error(
+            "run_export terminé sans PNG produit (profils demandés : %s, département %s)",
+            ", ".join(profile_ids),
+            effective_dept,
+        )
 
 
 def run_from_qgis_console(profile_ids=None, gui=False):

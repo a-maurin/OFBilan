@@ -11,6 +11,8 @@ import re
 from dataclasses import dataclass
 from typing import Callable, Iterable, Optional, Sequence
 
+from bilans.cartographie.pochoir_helper import normalize_dept_code, pochoir_layer_name
+
 # Rôles métier reconnus dans profils_cartes.yaml
 LayerRole = str
 
@@ -40,7 +42,7 @@ LAYER_ROLE_SPECS: tuple[LayerRoleSpec, ...] = (
     ),
     LayerRoleSpec(
         role="pochoir",
-        patterns=("pochoir_sd21", "pochoir_*"),
+        patterns=("pochoir_sd*", "pochoir_*"),
         prefer_latest_dated=False,
     ),
     LayerRoleSpec(
@@ -96,11 +98,36 @@ def _match_patterns(name: str, patterns: Sequence[str]) -> bool:
     return any(fnmatch.fnmatch(name, pat) for pat in patterns)
 
 
+def candidates_for_pochoir(
+    available_names: Iterable[str],
+    dept_code: Optional[str] = None,
+) -> list[str]:
+    """Couches pochoir : uniquement pochoir_sd{code} (pas un autre département)."""
+    names = list(available_names)
+    if not dept_code:
+        return candidates_for_role("pochoir", names)
+    target = pochoir_layer_name(dept_code)
+    exact = [n for n in names if n == target and not _is_excluded(n, (" copie",))]
+    if exact:
+        return exact
+    code = normalize_dept_code(dept_code)
+    prefixed = [
+        n
+        for n in names
+        if n.lower() == f"pochoir_sd{code}".lower() and not _is_excluded(n, (" copie",))
+    ]
+    return sorted(prefixed)
+
+
 def candidates_for_role(
     role: LayerRole,
     available_names: Iterable[str],
+    *,
+    dept_code: Optional[str] = None,
 ) -> list[str]:
     """Liste les noms de couches correspondant à un rôle."""
+    if role == "pochoir" and dept_code:
+        return candidates_for_pochoir(available_names, dept_code)
     spec = _ROLE_BY_NAME.get(role)
     if spec is None:
         return []
@@ -144,6 +171,7 @@ def resolve_layer_names(
     available_names: Sequence[str],
     date_deb: Optional[str] = None,
     date_fin: Optional[str] = None,
+    dept_code: Optional[str] = None,
 ) -> list[tuple[str, str]]:
     """
     Résout les noms effectifs d'une ou plusieurs couches dans le projet QGIS.
@@ -153,12 +181,21 @@ def resolve_layer_names(
     if not names:
         return []
 
+    role = layer_role or infer_layer_role(layer_key, configured_name)
+    if role == "pochoir" and dept_code:
+        target = pochoir_layer_name(dept_code)
+        if target in names:
+            return [(target, "dept")]
+        pochoir_candidates = candidates_for_pochoir(names, dept_code)
+        if pochoir_candidates:
+            return [(pochoir_candidates[0], "dept")]
+        return []
+
     if configured_name and configured_name in names:
         return [(configured_name, "exact")]
 
-    role = layer_role or infer_layer_role(layer_key, configured_name)
     if role:
-        candidates = candidates_for_role(role, names)
+        candidates = candidates_for_role(role, names, dept_code=dept_code)
         if candidates:
             spec = _ROLE_BY_NAME[role]
             
@@ -212,6 +249,7 @@ def resolve_layer_name(
     layer_role: Optional[LayerRole] = None,
     layer_key: str = "",
     available_names: Sequence[str],
+    dept_code: Optional[str] = None,
 ) -> tuple[Optional[str], str]:
     """
     Rétrocompatibilité : retourne la première couche résolue, ou None.
@@ -221,6 +259,7 @@ def resolve_layer_name(
         layer_role=layer_role,
         layer_key=layer_key,
         available_names=available_names,
+        dept_code=dept_code,
     )
     if results:
         # Pour une compatibilité absolue avec l'ancien comportement qui prenait le "latest" (-1), 

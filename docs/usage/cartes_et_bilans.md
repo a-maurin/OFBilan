@@ -57,3 +57,64 @@ python -m bilans --profil chasse --no-cartes
 - Nouveau profil thématique : id YAML = id dans `ref/programme/tables_reference/ref_themes_ctrl.csv` → profil QGIS auto.
 - Keywords atypiques (ex. pollutions_urbaines) : alignés automatiquement via `filter.keywords` → filtre QGIS `point_ctrl_keywords`.
 - Override ponctuel : `cartographie.profil_qgis` ou `cartographie.keywords` dans le YAML profil.
+
+### Génération adaptative (pochoir, emprise, titres par département)
+
+La cartographie **dynamique** (pochoir depuis `ref/programme/sig/limites_admin_dep/DEPARTEMENT_ADMIN_Express_200207.shp`, zoom sur le département, titres adaptés) nécessite **PyQGIS** (`import qgis.core`). Le Python « classique » de `python -m bilans` ne le fournit en général pas → message du type *« QGIS non disponible »*.
+
+#### Génération automatique depuis `python -m bilans` (sans PyQGIS in-process)
+
+Si QGIS est installé mais que `python -m bilans` affiche encore un avertissement PyQGIS, le moteur tente un **export en sous-processus** via `lancer_production_cartographique.bat` (variable `BILANS_CARTO_HEADLESS=1`). Les 4 cartes du catalogue global sont générées en un seul appel si la sélection les inclut toutes.
+
+Sinon, utiliser explicitement :
+
+```bat
+scripts\windows\lancer_bilans_qgis.bat --profil global --cartes --echelle departement --code 25 --date-deb 2025-01-01 --date-fin 2025-12-31
+```
+
+#### Windows — bilan + cartes en une commande (recommandé)
+
+1. Installer **QGIS** (standalone ou OSGeo4W) depuis [qgis.org](https://qgis.org/).
+2. Installer le package bilan dans l’interpréteur **QGIS** (une fois) :
+   ```bat
+   cd C:\chemin\vers\Bilans_production
+   "C:\Program Files\QGIS 3.40.15\bin\python.exe" -m pip install -e .
+   ```
+   (Adapter le chemin : dans QGIS → *Extensions → Console Python* : `import sys; print(sys.executable)`.)
+3. Lancer le bilan avec le script dédié :
+   ```bat
+   scripts\windows\lancer_bilans_qgis.bat --profil global --cartes --echelle departement --code 25 --date-deb 2025-01-01 --date-fin 2025-12-31
+   ```
+   Ce script utilise le Python QGIS/OSGeo4W (même logique que `lancer_production_cartographique.bat`).
+
+   **Sans argument**, le script configure uniquement l'environnement QGIS puis délègue toute la saisie à `python -m bilans` (profils, période, échelle, cartes) — pas de double invite batch/CLI.
+
+#### Windows — pré-générer les PNG puis bilan classique
+
+1. Générer les cartes avec QGIS :
+   ```bat
+   scripts\windows\generer_cartes.bat --profil global --date-deb 2025-01-01 --date-fin 2025-12-31 --dept-code 25
+   ```
+   Répéter pour chaque vue du catalogue global si besoin (`global_usagers`, `procedures_pve`, `global_domaines`) via `src\bilans\cartographie\lancer_production_cartographique.bat <profil_qgis> --date-deb ... --date-fin ... --dept-code 25`.
+2. Vérifier `data/out/generateur_de_cartes/` : PNG + marqueur `carte_<nom>.XX.dept` (ex. `carte_global.25.dept`).
+3. Lancer le bilan avec le Python habituel :
+   ```bat
+   python -m bilans --profil global --cartes --echelle departement --code 25 --date-deb 2025-01-01 --date-fin 2025-12-31
+   ```
+
+#### Vérifier que PyQGIS est détecté
+
+```bat
+python -c "from qgis.core import Qgis; print('PyQGIS OK')"
+```
+→ doit échouer avec le Python système ; réussir avec le Python affiché par `lancer_bilans_qgis.bat` (ligne *Python QGIS : …*). Sans argument, le script délègue le menu interactif au CLI `bilans`.
+
+Si QGIS est installé mais non détecté : créer `scripts\windows\qgis_python_path.txt` ou `src\bilans\cartographie\qgis_python_path.txt` contenant **une ligne** = chemin complet vers `python.exe` QGIS.
+
+#### Marqueurs département et rétrocompatibilité
+
+- Après export QGIS : fichier sidecar `carte_global.25.dept` (texte `25`) à côté de `carte_global.png`.
+- Sans marqueur : seul le département **21** est accepté comme carte pré-générée legacy (Côte-d'Or).
+- Département **≠ 21** sans QGIS ni marqueur : cartes ignorées dans le PDF + avertissement dans les logs.
+
+Voir aussi : `docs/usage/README_Production_cartes.md`, `scripts/windows/lancer_bilans_qgis.bat`.

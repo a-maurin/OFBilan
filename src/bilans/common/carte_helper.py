@@ -46,12 +46,46 @@ def _find_single_map_legacy(profile_id: str) -> Optional[Path]:
     return None
 
 
-def find_map(profile_id: str) -> Optional[Path]:
+def find_map(
+    profile_id: str,
+    *,
+    bilan_profiles: dict[str, dict] | None = None,
+) -> Optional[Path]:
     """Return the path to a pre-generated map PNG for the given profile, or None."""
-    paths = resolve_profile_map_paths(profile_id)
+    return resolve_map_png_path(profile_id, bilan_profiles=bilan_profiles)
+
+
+def resolve_map_png_path(
+    profile_id: str,
+    *,
+    bilan_profiles: dict[str, dict] | None = None,
+) -> Optional[Path]:
+    """Chemin PNG d'une carte (catalogue bilan ou conventions carte_{id}.png)."""
+    pid = str(profile_id).strip()
+    if not pid:
+        return None
+
+    from bilans.common.cartographie_config import parse_cartography_catalog
+
+    for prof in (bilan_profiles or {}).values():
+        if not isinstance(prof, dict):
+            continue
+        for entry in parse_cartography_catalog(prof):
+            if str(entry.get("id", "")).strip() == pid:
+                candidate = get_cartes_dir() / str(entry.get("fichier", "")).strip()
+                if candidate.suffix.lower() != ".png":
+                    candidate = candidate.with_suffix(".png")
+                if candidate.exists():
+                    return candidate
+
+    bilan_profile = (bilan_profiles or {}).get(pid)
+    paths = resolve_profile_map_paths(
+        pid,
+        profile=bilan_profile if isinstance(bilan_profile, dict) else None,
+    )
     if paths:
         return paths[0]
-    return _find_single_map_legacy(profile_id)
+    return _find_single_map_legacy(pid)
 
 
 def _format_map_pattern(pattern: str, map_id: str) -> str:
@@ -186,6 +220,66 @@ def get_qgis_app():
         _qgis_app = init_qgis_headless()
     return _qgis_app
 
+def _resolve_carto_dept(
+    echelle: Optional[str],
+    code: Optional[str],
+    dept_code: Optional[str],
+) -> str:
+    from bilans.common.utilitaires_metier import resolve_carto_dept_code
+
+    echelle_eff = echelle or "departement"
+    code_eff = code or dept_code or "21"
+    return resolve_carto_dept_code(echelle_eff, code_eff)
+
+
+def _warn_qgis_unavailable_for_cartes(carto_dept: str, *, subprocess_failed: bool = False) -> None:
+    if subprocess_failed:
+        logger.warning(
+            "Génération cartes échouée (QGIS introuvable ou export sous-processus en erreur) "
+            "pour le département %s. Vérifiez l'installation QGIS, puis : "
+            "scripts\\windows\\lancer_bilans_qgis.bat --profil global --cartes "
+            "--echelle departement --code %s ...",
+            carto_dept,
+            carto_dept,
+        )
+        return
+    logger.warning(
+        "PyQGIS non importable dans cet interpréteur : tentative via sous-processus QGIS "
+        "(voir logs). Sinon : scripts\\windows\\lancer_bilans_qgis.bat --profil global --cartes "
+        "--echelle departement --code %s",
+        carto_dept,
+    )
+
+
+def _warn_unresolved_cartes(
+    profile_ids: list[str],
+    carto_dept: str,
+    *,
+    qgis_was_available: bool,
+) -> None:
+    if not profile_ids:
+        return
+    cartes_dir = get_cartes_dir()
+    if qgis_was_available:
+        logger.warning(
+            "Cartes non produites pour le département %s (profils : %s). "
+            "Vérifiez les logs QGIS et le dossier %s.",
+            carto_dept,
+            ", ".join(profile_ids),
+            cartes_dir,
+        )
+        return
+    logger.warning(
+        "Cartes absentes ou non valides pour le département %s (profils : %s). "
+        "Sans QGIS, seules des cartes pré-générées avec marqueur .%s.dept sont acceptées "
+        "(rétrocompatibilité : département 21 sans marqueur). Dossier : %s.",
+        carto_dept,
+        ", ".join(profile_ids),
+        carto_dept,
+        cartes_dir,
+    )
+
+
 def generate_maps(
     profile_ids: List[str],
     date_deb: Optional[str] = None,
@@ -198,43 +292,90 @@ def generate_maps(
 ) -> List[Path]:
     """
     Try to generate maps via QGIS. Returns list of generated map paths.
-    If QGIS is not available, returns empty list silently.
+    If QGIS is not available, returns empty list (avertissement journalisé).
     """
-    if not qgis_available():
-        logger.info("QGIS non disponible — utilisation des cartes pré-générées.")
-        return []
+    carto_dept = _resolve_carto_dept(echelle, code, dept_code)
+    date_deb_eff = date_deb or "2025-01-01"
+    date_fin_eff = date_fin or "2026-02-05"
 
-    if dept_code and not echelle:
-        echelle, code = "departement", dept_code
-    echelle = echelle or "departement"
-    code = code or "21"
-    from bilans.common.utilitaires_metier import resolve_carto_dept_code
+    if qgis_available():
+        try:
+            from bilans.cartographie.production_cartographique import run_export
+            from bilans.common.cartographie_config import build_qgis_overrides_from_bilan_profiles
 
-    carto_dept = resolve_carto_dept_code(echelle, code)
-    try:
-        from bilans.cartographie.production_cartographique import run_export
-        from bilans.common.cartographie_config import build_qgis_overrides_from_bilan_profiles
+            qgis_overrides = build_qgis_overrides_from_bilan_profiles(bilan_profiles)
+            logger.info(
+                "Génération cartes QGIS (in-process) : profils=%s, département=%s, période %s → %s",
+                ", ".join(profile_ids),
+                carto_dept,
+                date_deb_eff,
+                date_fin_eff,
+            )
+            get_qgis_app()
+            run_export(
+                profile_ids,
+                date_deb=date_deb_eff,
+                date_fin=date_fin_eff,
+                dept_code=carto_dept,
+                qgis_overrides=qgis_overrides,
+            )
+        except Exception:
+            logger.exception(
+                "Échec génération cartes QGIS in-process (département %s, profils : %s)",
+                carto_dept,
+                ", ".join(profile_ids),
+            )
+            return []
+    else:
+        from bilans.cartographie.qgis_runtime import run_cartography_export_subprocess
 
-        qgis_overrides = build_qgis_overrides_from_bilan_profiles(bilan_profiles)
-        
-        # L'instance QgsApplication doit être initialisée une seule fois
-        app = get_qgis_app()
-        run_export(
-            profile_ids,
-            date_deb=date_deb,
-            date_fin=date_fin,
-            dept_code=carto_dept,
-            qgis_overrides=qgis_overrides,
+        logger.info(
+            "PyQGIS absent de l'interpréteur courant — délégation export QGIS (sous-processus)."
         )
-    except Exception as e:
-        logger.warning("Échec génération cartes QGIS : %s", e)
-        return []
+        ok = run_cartography_export_subprocess(
+            profile_ids,
+            date_deb=date_deb_eff,
+            date_fin=date_fin_eff,
+            dept_code=carto_dept,
+        )
+        if not ok:
+            _warn_qgis_unavailable_for_cartes(carto_dept, subprocess_failed=True)
+            return []
+
+    from bilans.cartographie.pochoir_helper import (
+        is_map_valid_for_dept,
+        read_map_dept_marker,
+    )
 
     generated = []
     for pid in profile_ids:
-        m = find_map(pid)
-        if m:
+        m = resolve_map_png_path(pid, bilan_profiles=bilan_profiles)
+        if m and is_map_valid_for_dept(m, carto_dept):
             generated.append(m)
+            marker = read_map_dept_marker(m) or "(legacy 21)"
+            logger.info(
+                "Carte OK pour le département %s : %s (marqueur=%s, profil=%s)",
+                carto_dept,
+                m,
+                marker,
+                pid,
+            )
+        elif m:
+            logger.warning(
+                "Carte non retenue après export QGIS : %s (marqueur=%s, attendu dept. %s, profil=%s)",
+                m,
+                read_map_dept_marker(m) or "absent",
+                carto_dept,
+                pid,
+            )
+    if profile_ids and not generated:
+        logger.warning(
+            "Aucune carte valide produite pour le département %s (profils demandés : %s). "
+            "Dossier : %s",
+            carto_dept,
+            ", ".join(profile_ids),
+            get_cartes_dir(),
+        )
     return generated
 
 
@@ -268,12 +409,32 @@ def ensure_maps_for_profiles(
         if p not in unique_ids:
             unique_ids.append(p)
 
+    from bilans.cartographie.pochoir_helper import (
+        is_map_valid_for_dept,
+        read_map_dept_marker,
+        warn_if_unknown_carto_dept,
+    )
+
+    carto_dept = _resolve_carto_dept(echelle, code, dept_code)
+    warn_if_unknown_carto_dept(carto_dept)
+    qgis_ok = qgis_available()
+
     existing: List[Path] = []
     missing: List[str] = []
     for pid in unique_ids:
-        m = find_map(pid)
-        if m:
+        m = resolve_map_png_path(pid, bilan_profiles=bilan_profiles)
+        if m and is_map_valid_for_dept(m, carto_dept):
             existing.append(m)
+        elif m:
+            marker = read_map_dept_marker(m)
+            logger.info(
+                "Carte %s ignorée pour le département %s (marqueur=%s, profil=%s) — régénération QGIS prévue",
+                m.name,
+                carto_dept,
+                marker or "absent",
+                pid,
+            )
+            missing.append(pid)
         else:
             missing.append(pid)
 
@@ -296,4 +457,14 @@ def ensure_maps_for_profiles(
         if p not in seen:
             seen.add(p)
             result.append(p)
+
+    resolved_ids: set[str] = set()
+    for pid in unique_ids:
+        m = resolve_map_png_path(pid, bilan_profiles=bilan_profiles)
+        if m and is_map_valid_for_dept(m, carto_dept):
+            resolved_ids.add(pid)
+    unresolved = [p for p in unique_ids if p not in resolved_ids]
+    if unresolved:
+        _warn_unresolved_cartes(unresolved, carto_dept, qgis_was_available=qgis_ok)
+
     return result

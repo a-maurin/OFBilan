@@ -101,6 +101,7 @@ from config_cartes_model import (
         f"    basemap=BasemapConfig(enabled={cfg.basemap.enabled}),\n"
         f"    output=OutputConfig(format={repr(cfg.output.format)}, dpi={cfg.output.dpi}, "
         f"page_size={repr(cfg.output.page_size)}, orientation={repr(cfg.output.orientation)}),\n"
+        f"    departement_code={repr(cfg.departement_code)},\n"
         "    profiles=DEFAULT_PROFILES.copy(),\n"
         ")\n"
     )

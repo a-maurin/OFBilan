@@ -33,7 +33,7 @@ if exist "%LOCALAPPDATA_OSGEO%\bin\python.exe" (
         echo.
         echo Le script a echoue. Verifier les messages ci-dessus.
     )
-    pause
+    if not defined BILANS_CARTO_HEADLESS pause
     exit /b %ERRORLEVEL%
 )
 
@@ -94,7 +94,7 @@ if "!QGIS_PYTHON!"=="" (
     echo.
     echo Pour trouver python.exe : ouvrir QGIS, menu Extensions -^> Console Python,
     echo puis taper : import sys ; print(sys.executable)
-    pause
+    if not defined BILANS_CARTO_HEADLESS pause
     exit /b 1
 )
 
@@ -121,4 +121,4 @@ if errorlevel 1 (
     echo.
     echo Le script a echoue. Verifier les messages ci-dessus.
 )
-pause
+if not defined BILANS_CARTO_HEADLESS pause

@@ -87,6 +87,48 @@ def test_resolve_selected_map_paths_order(tmp_path: Path, monkeypatch) -> None:
     assert captions == ["Contrôles", "Procédures"]
 
 
+def test_resolve_selected_map_paths_rejects_wrong_dept(tmp_path: Path, monkeypatch, caplog) -> None:
+    import logging
+
+    from bilans.cartographie.pochoir_helper import write_map_dept_marker
+
+    cartes = tmp_path / "cartes"
+    cartes.mkdir()
+    png = cartes / "carte_global.png"
+    png.write_bytes(b"a")
+    write_map_dept_marker(png, "21")
+    monkeypatch.setattr("bilans.common.cartographie_config.get_cartes_dir", lambda: cartes)
+
+    with caplog.at_level(logging.WARNING):
+        paths, captions = resolve_selected_map_paths(
+            _global_profile(),
+            ["global"],
+            carto_dept="89",
+        )
+    assert paths == []
+    assert captions == []
+    assert any("ignorée" in r.message and "89" in r.message for r in caplog.records)
+
+
+def test_resolve_selected_map_paths_accepts_matching_dept(tmp_path: Path, monkeypatch) -> None:
+    from bilans.cartographie.pochoir_helper import write_map_dept_marker
+
+    cartes = tmp_path / "cartes"
+    cartes.mkdir()
+    png = cartes / "carte_global.png"
+    png.write_bytes(b"a")
+    write_map_dept_marker(png, "89")
+    monkeypatch.setattr("bilans.common.cartographie_config.get_cartes_dir", lambda: cartes)
+
+    paths, _ = resolve_selected_map_paths(
+        _global_profile(),
+        ["global"],
+        carto_dept="89",
+    )
+    assert len(paths) == 1
+    assert paths[0].name == "carte_global.png"
+
+
 def test_expected_filenames_for_selection() -> None:
     names = expected_map_filenames_for_selection(
         _global_profile(),

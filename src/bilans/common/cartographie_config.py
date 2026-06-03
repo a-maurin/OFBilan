@@ -6,11 +6,14 @@ Le code reste générique ; chaque profil déclare ``cartographie.catalog`` et
 """
 from __future__ import annotations
 
+import logging
 import sys
 from pathlib import Path
 from typing import Any
 
 from bilans.chemins_projet import get_cartes_dir
+
+logger = logging.getLogger(__name__)
 from bilans.common.carte_helper import resolve_map_layout
 
 
@@ -274,15 +277,23 @@ def resolve_map_file_for_catalog_entry(entry: dict[str, str]) -> Path:
 def resolve_selected_map_paths(
     profile: dict | None,
     selected_ids: list[str],
+    *,
+    carto_dept: str | None = None,
 ) -> tuple[list[Path], list[str]]:
     """
     Chemins PNG existants + légendes, dans l'ordre du catalogue puis de la sélection.
+
+    Si *carto_dept* est fourni, seules les cartes valides pour ce département
+    (marqueur ``.XX.dept`` ou rétrocompatibilité département 21) sont retenues.
     """
+    from bilans.cartographie.pochoir_helper import is_map_valid_for_dept, read_map_dept_marker
+
     by_id = _catalog_by_id(profile)
     catalog_order = [e["id"] for e in parse_cartography_catalog(profile)]
     order = [i for i in catalog_order if i in selected_ids]
     order.extend(i for i in selected_ids if i not in order)
 
+    cartes_dir = get_cartes_dir()
     paths: list[Path] = []
     captions: list[str] = []
     for map_id in order:
@@ -290,9 +301,26 @@ def resolve_selected_map_paths(
         if not entry:
             continue
         candidate = resolve_map_file_for_catalog_entry(entry)
-        if candidate.exists():
-            paths.append(candidate)
-            captions.append(entry["label"])
+        if not candidate.exists():
+            logger.warning(
+                "Carte PDF absente : %s (dossier %s, profil carto %s)",
+                entry["fichier"],
+                cartes_dir,
+                map_id,
+            )
+            continue
+        if carto_dept and not is_map_valid_for_dept(candidate, carto_dept):
+            marker = read_map_dept_marker(candidate)
+            logger.warning(
+                "Carte PDF ignorée : %s — marqueur département %s, attendu %s (profil carto %s)",
+                candidate.name,
+                marker or "absent",
+                carto_dept,
+                map_id,
+            )
+            continue
+        paths.append(candidate)
+        captions.append(entry["label"])
     return paths, captions
 
 
