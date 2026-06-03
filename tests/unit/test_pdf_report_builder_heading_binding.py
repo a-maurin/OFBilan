@@ -16,6 +16,16 @@ def _make_png(path: Path) -> Path:
     return path
 
 
+def _has_image(flowables: list) -> bool:
+    for f in flowables:
+        if type(f).__name__ == "Image":
+            return True
+        if type(f).__name__ == "KeepTogether":
+            if _has_image(getattr(f, "_content", [])):
+                return True
+    return False
+
+
 def test_section_heading_stays_bound_to_first_content_item_for_image(tmp_path: Path) -> None:
     pdf_path = tmp_path / "out.pdf"
     img_path = _make_png(tmp_path / "img.png")
@@ -25,7 +35,10 @@ def test_section_heading_stays_bound_to_first_content_item_for_image(tmp_path: P
     builder.add_image(img_path, width_ratio=0.4)
 
     assert builder.story, "Story vide inattendue."
-    assert isinstance(builder.story[0], KeepTogether)
+    first = builder.story[0]
+    assert isinstance(first, KeepTogether) or getattr(first, "keepWithNext", 0) == 1, (
+        "Le titre doit être lié (KeepTogether ou keepWithNext=1)."
+    )
 
 
 def test_subsection_heading_stays_bound_when_table_and_image_can_split(tmp_path: Path) -> None:
@@ -46,7 +59,10 @@ def test_subsection_heading_stays_bound_when_table_and_image_can_split(tmp_path:
     )
 
     assert builder.story, "Story vide inattendue."
-    assert isinstance(builder.story[0], KeepTogether)
+    first = builder.story[0]
+    assert isinstance(first, KeepTogether) or getattr(first, "keepWithNext", 0) == 1, (
+        "Le titre doit être lié (KeepTogether ou keepWithNext=1)."
+    )
 
 
 def test_local_heading_chart_table_keeps_heading_with_first_content(tmp_path: Path) -> None:
@@ -64,11 +80,12 @@ def test_local_heading_chart_table_keeps_heading_with_first_content(tmp_path: Pa
     )
 
     assert builder.story, "Story vide inattendue."
-    assert isinstance(builder.story[0], KeepTogether)
-    content = getattr(builder.story[0], "_content", [])
-    assert any(type(x).__name__ == "Image" for x in content), (
-        "Le premier bloc keep-together doit inclure le premier contenu du titre local."
-    )
+    first = builder.story[0]
+    if isinstance(first, KeepTogether):
+        content = getattr(first, "_content", [])
+        assert _has_image(content), "Le KeepTogether doit inclure le premier contenu."
+    else:
+        assert getattr(first, "keepWithNext", 0) == 1, "Le titre local doit être lié par keepWithNext=1."
 
 
 def test_local_heading_without_pending_still_keeps_first_content(tmp_path: Path) -> None:
@@ -85,8 +102,9 @@ def test_local_heading_without_pending_still_keeps_first_content(tmp_path: Path)
     )
 
     assert builder.story, "Story vide inattendue."
-    assert isinstance(builder.story[0], KeepTogether)
-    content = getattr(builder.story[0], "_content", [])
-    assert any(type(x).__name__ == "Image" for x in content), (
-        "Le titre local doit rester lié au premier contenu même sans pending section."
-    )
+    first = builder.story[0]
+    if isinstance(first, KeepTogether):
+        content = getattr(first, "_content", [])
+        assert _has_image(content), "Le KeepTogether doit inclure le premier contenu."
+    else:
+        assert getattr(first, "keepWithNext", 0) == 1, "Le titre local doit rester lié par keepWithNext=1."

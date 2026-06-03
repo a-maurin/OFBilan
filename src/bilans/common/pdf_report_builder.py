@@ -699,43 +699,87 @@ class PDFReportBuilder:
             self.story.extend(merged)
 
     def _should_keep_block_together(self, flowables: List) -> bool:
-        """Heuristique anti-pages vides: éviter KeepTogether sur blocs lourds."""
+        """Heuristique anti-pages vides: éviter KeepTogether sur blocs lourds.
+
+        Refuse le KeepTogether lorsque la hauteur estimée du bloc dépasse 40 %
+        de la zone utile (avail_h), pour éviter qu'un bloc trop grand ne soit
+        poussé entièrement sur la page suivante en laissant la précédente vide.
+        """
         if not flowables:
             return False
         table_count = sum(1 for f in flowables if isinstance(f, Table))
         image_count = sum(1 for f in flowables if isinstance(f, RLImage))
+        # Jamais KeepTogether sur un bloc avec beaucoup d'images ou de tableaux
         if image_count > 2:
             return False
         if table_count > 1:
             return False
+        # Estimation rapide de la hauteur du bloc
+        estimated_h = self._estimate_block_height(flowables)
+        max_keep_h = self.avail_h * 0.40
+        if estimated_h > max_keep_h:
+            return False
         return True
+
+    def _estimate_block_height(self, flowables: List) -> float:
+        """Estimation rapide de la hauteur d'un bloc de flowables (en points)."""
+        total = 0.0
+        for f in flowables:
+            if isinstance(f, Spacer):
+                total += f.height if hasattr(f, 'height') else getattr(f, '_height', 2 * mm)
+            elif isinstance(f, RLImage):
+                total += getattr(f, 'drawHeight', 0) or getattr(f, '_height', 150)
+            elif isinstance(f, Table):
+                # Wrap pour obtenir la taille réelle
+                try:
+                    w_h = f.wrap(self.avail_w, self.avail_h)
+                    total += w_h[1]
+                except Exception:
+                    total += 80  # fallback
+            elif isinstance(f, Paragraph):
+                try:
+                    w_h = f.wrap(self.avail_w, self.avail_h)
+                    total += w_h[1]
+                except Exception:
+                    total += 18  # fallback ~1 ligne
+            elif isinstance(f, KeepTogether):
+                # Recurse into nested KeepTogether
+                inner = getattr(f, '_content', []) or getattr(f, '_flowables', [])
+                if inner:
+                    total += self._estimate_block_height(list(inner))
+                else:
+                    total += 100  # fallback
+            else:
+                total += 20  # fallback pour flowable inconnu
+        return total
 
     def _append_with_pending(self, block: List, *, keep_together: bool) -> None:
         """Ajoute un bloc en gérant le titre pending avec KeepTogether optionnel."""
         has_pending = self._pending_section is not None
-        pending: List = []
+        pending: List = list(self._pending_section or [])
         if has_pending:
-            pending = list(self._pending_section or [])
             self._pending_section = None
-        if not has_pending:
-            if keep_together:
-                self.story.append(KeepTogether(block))
-            else:
-                attach_count = self._leading_title_chunk_len(block)
-                self.story.append(KeepTogether(block[:attach_count]))
-                self.story.extend(block[attach_count:])
-            return
-        if not block:
-            self.story.extend(pending)
-            return
+            
         merged: List = pending + block
-        if keep_together:
+        if not merged:
+            return
+            
+        if keep_together and self._should_keep_block_together(merged):
             self.story.append(KeepTogether(merged))
             return
+
         # Règle stricte: un titre (section/sous-section ou titre local de bloc)
         # reste lié au premier contenu afférent, même en pagination souple.
+        # Au lieu de créer un gros KeepTogether (qui provoque des pages vides),
+        # on utilise l'attribut natif keepWithNext=1 sur les paragraphes et spacers du préfixe.
         attach_count = self._leading_title_chunk_len(block)
-        self.story.append(KeepTogether(pending + block[:attach_count]))
+        prefix = pending + block[:attach_count]
+        
+        for item in prefix:
+            if isinstance(item, (Paragraph, Spacer)):
+                item.keepWithNext = 1
+                
+        self.story.extend(prefix)
         self.story.extend(block[attach_count:])
 
     def _leading_title_chunk_len(self, block: List) -> int:
