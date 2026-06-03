@@ -8,6 +8,7 @@ from bilans.common.pdf_report_builder import (
     THEMATIC_CHART_WIDTH_RATIO,
     THEMATIC_PIE_CHART_WIDTH_RATIO,
 )
+from bilans.common.pdf_presentation_config import load_pdf_presentation_raw_config
 
 
 DEFAULT_CHART_DISPLAY_CONFIG: dict[str, Any] = {
@@ -128,6 +129,12 @@ def load_chart_display_config(root: Path, preset: str | None = None) -> dict[str
     Si le fichier est absent (ou invalide), retourne les valeurs par défaut.
     """
     cfg = DEFAULT_CHART_DISPLAY_CONFIG.copy()
+    # Lecture depuis la charte définie dans pdf_presentation.yaml (si présente)
+    presentation_cfg = load_pdf_presentation_raw_config(root)
+    presentation_charts = (presentation_cfg.get("defaults") or {}).get("charte", {}).get("charts", {})
+    if presentation_charts and "pie_width_ratio_base" in presentation_charts:
+        cfg["pdf"]["pie_width_ratio_base"] = float(presentation_charts["pie_width_ratio_base"])
+
     candidates = [
         root / "config" / "charts" / "charts_config.yaml",
         root / "ref" / "programme" / "charts_config.yaml",

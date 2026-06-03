@@ -150,7 +150,11 @@ class PDFReportBuilder:
         self.footer_line1 = footer_line1
         self.footer_line2 = footer_line2
 
-        self.styles = _get_styles()
+        self._charte = deepcopy(
+            charte_config if charte_config is not None else resolve_charte_config({})
+        )
+        typography_cfg = self._charte.get("typography", {})
+        self.styles = _get_styles(typography_config=typography_cfg)
         # Titres : espace minimal en tête de bloc (le cadre démarre déjà sous l'en-tête page).
         self.styles["Heading1"] = ParagraphStyle(
             "OFBH1_compact",
@@ -184,9 +188,6 @@ class PDFReportBuilder:
         self.avail_h = self._page_h - margin_top - self._margin_bottom
         self._tables_layout = deepcopy(
             tables_layout if tables_layout is not None else resolve_tables_layout({})
-        )
-        self._charte = deepcopy(
-            charte_config if charte_config is not None else resolve_charte_config({})
         )
         self._diffusion = str(diffusion or "interne").strip().lower()
         self._internal_diffusion_notice = resolve_internal_diffusion_notice_config(

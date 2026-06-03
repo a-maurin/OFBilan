@@ -271,6 +271,12 @@ DEFAULT_PDF_PRESENTATION_CONFIG: dict[str, Any] = {
                 "footer_deco_margin_left_mm": 0.0,
                 "footer_deco_margin_bottom_mm": 18.0,
             },
+            "typography": {
+                "subsections_italic": True,
+            },
+            "charts": {
+                "pie_width_ratio_base": 0.34,
+            },
         },
         "blocks": {},
     },

@@ -53,13 +53,13 @@ defaults:
   title_page:
     alignment: right
     right_indent_mm: 25
-    paragraph_space_after: 8
+    paragraph_space_after: 4
     main_title_font_size: 24
     profile_department_font_size: 20
     meta_font_size: 12
-    top_spacer_ratio: 0.30
-    meta_block_space_before: 12
-    meta_block_space_between: 8
+    top_spacer_ratio: 0.22
+    meta_block_space_before: 6
+    meta_block_space_between: 4
     # Sous-titre de page de garde (pilotage YAML, sans logique codée locale).
     # - none: pas de sous-titre
     # - fixed: texte fixe via subtitle_fixed
@@ -91,6 +91,13 @@ defaults:
       filigrane_height_ratio: 0.50
       filigrane_align: bottom_right
       footer_deco_enabled: false
+
+    typography:
+      subsections_italic: true
+      
+    charts:
+      pie_width_ratio_base: 0.34
+
 
   sections:
     order: ["sec1", "sec2", "sec3", "sec4", "sec5", "sec6"]
@@ -149,7 +156,7 @@ defaults:
       pad_x_pt: 0
       max_lines: 6
       font_size: 7.0
-      row_padding_pt: 8.0
+      row_padding_pt: 4.0
     usagers_x_domaine:
       # horizontal_wrap : libellés domaine lisibles (évite la coupe des en-têtes verticaux)
       header_layout: horizontal_wrap

@@ -70,16 +70,16 @@ CHART_BAR_GROUPED_COLORS = [COLOR_CHART_1, COLOR_CHART_2, COLOR_CHART_3, COLOR_C
 
 PAGE_W, PAGE_H = A4
 # Marges latérales (moitié de l’ancien 17 mm) : zone utile du PDF plus large.
-MARGIN_LEFT = 8.5 * mm
-MARGIN_RIGHT = 8.5 * mm
-MARGIN_BOTTOM = 28 * mm
-# Marge haute par défaut (recalculée dans PDFReportBuilder selon le nombre de lignes d'en-tête).
-MARGIN_TOP = 17 * mm
-SPACING_XXS = 1 * mm
-SPACING_XS = 1.5 * mm
-SPACING_S = 2 * mm
-SPACING_M = 4 * mm
-SPACING_L = 6 * mm
+MARGIN_LEFT = 7.0 * mm
+MARGIN_RIGHT = 7.0 * mm
+MARGIN_BOTTOM = 22 * mm
+# Marge supérieure pour pages intérieures
+MARGIN_TOP = 14 * mm
+SPACING_XXS = 0.5 * mm
+SPACING_XS = 1.0 * mm
+SPACING_S = 1.5 * mm
+SPACING_M = 2.0 * mm
+SPACING_L = 4.0 * mm
 
 _HEADER_LINE_STEP = 3.2 * mm
 _HEADER_GAP_RULE = 2.5 * mm
@@ -321,9 +321,16 @@ _CELL_HEADER_RIGHT = ParagraphStyle(
 )
 
 
-def _get_styles():
+def _get_styles(typography_config: dict | None = None):
     """Construit les ParagraphStyles conformes à la charte OFB."""
     ss = getSampleStyleSheet()
+    
+    sub_italic = True
+    if typography_config is not None:
+        sub_italic = bool(typography_config.get("subsections_italic", True))
+    
+    h_font = f"{FONT_FAMILY}-BoldItalic" if sub_italic else f"{FONT_FAMILY}-Bold"
+
     styles = {
         "Title": ParagraphStyle(
             "OFBTitle",
@@ -333,7 +340,7 @@ def _get_styles():
             leading=36,
             textColor=rl_colors.HexColor(COLOR_PRIMARY),
             alignment=TA_CENTER,
-            spaceAfter=6 * mm,
+            spaceAfter=3 * mm,
         ),
         "Heading1": ParagraphStyle(
             "OFBH1",
@@ -343,32 +350,32 @@ def _get_styles():
             leading=24,
             textColor=rl_colors.HexColor(COLOR_PRIMARY),
             alignment=TA_LEFT,
-            spaceBefore=2 * mm,
-            spaceAfter=2 * mm,
+            spaceBefore=1 * mm,
+            spaceAfter=1 * mm,
             keepWithNext=1,
         ),
         "Heading2": ParagraphStyle(
             "OFBH2",
             parent=ss["Heading2"],
-            fontName=f"{FONT_FAMILY}-Bold",
+            fontName=h_font,
             fontSize=14,
             leading=18,
             textColor=rl_colors.HexColor(COLOR_PRIMARY),
             alignment=TA_LEFT,
-            spaceBefore=2 * mm,
-            spaceAfter=2 * mm,
+            spaceBefore=1 * mm,
+            spaceAfter=1 * mm,
             keepWithNext=1,
         ),
         "Heading3": ParagraphStyle(
             "OFBH3",
             parent=ss["Heading3"],
-            fontName=f"{FONT_FAMILY}-Italic",
+            fontName=h_font,
             fontSize=12,
             leading=15,
             textColor=rl_colors.HexColor(COLOR_GREY),
             alignment=TA_LEFT,
-            spaceBefore=1 * mm,
-            spaceAfter=1 * mm,
+            spaceBefore=0.5 * mm,
+            spaceAfter=0.5 * mm,
             keepWithNext=1,
         ),
         "BodyText": ParagraphStyle(
@@ -376,11 +383,11 @@ def _get_styles():
             parent=ss["BodyText"],
             fontName=FONT_FAMILY,
             fontSize=10,
-            leading=15,
+            leading=14,
             textColor=rl_colors.black,
             alignment=TA_JUSTIFY,
-            spaceBefore=1 * mm,
-            spaceAfter=2 * mm,
+            spaceBefore=0.5 * mm,
+            spaceAfter=1 * mm,
         ),
         "BodySmall": ParagraphStyle(
             "OFBBodySmall",
@@ -390,8 +397,8 @@ def _get_styles():
             leading=11,
             textColor=rl_colors.HexColor("#666666"),
             alignment=TA_LEFT,
-            spaceBefore=1 * mm,
-            spaceAfter=1 * mm,
+            spaceBefore=0.5 * mm,
+            spaceAfter=0.5 * mm,
         ),
         "TableCaption": ParagraphStyle(
             "OFBTableCaption",
@@ -401,8 +408,8 @@ def _get_styles():
             leading=13,
             textColor=rl_colors.HexColor(COLOR_PRIMARY),
             alignment=TA_LEFT,
-            spaceBefore=4 * mm,
-            spaceAfter=2 * mm,
+            spaceBefore=2 * mm,
+            spaceAfter=1 * mm,
             keepWithNext=1,
         ),
         "FigureCaption": ParagraphStyle(
@@ -414,7 +421,7 @@ def _get_styles():
             textColor=rl_colors.HexColor(COLOR_PRIMARY),
             alignment=TA_CENTER,
             spaceBefore=0,
-            spaceAfter=4 * mm,
+            spaceAfter=2 * mm,
         ),
         "KeyFigure": ParagraphStyle(
             "OFBKeyFigure",
