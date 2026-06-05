@@ -115,7 +115,7 @@ procedures_pj:
   renderer_type: single
   palette: "#3498DB"
   symbol_size_mm: 2.25
-  symbol_shape: triangle
+  symbol_shape: circle
   visible: true
 
 # PVe = Procès-Verbaux électroniques → Orange
@@ -134,7 +134,7 @@ procedures_pa:
   renderer_type: single
   palette: "#9B59B6"
   symbol_size_mm: 2.25
-  symbol_shape: square
+  symbol_shape: circle
   visible: true
 
 points_usagers_agriculteurs:

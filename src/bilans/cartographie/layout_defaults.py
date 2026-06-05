@@ -231,13 +231,14 @@ def _layout_item_set_rect(item: Any, rect: LayoutItemRectConfig) -> None:
     if rect.width_mm <= 0 or rect.height_mm <= 0:
         return
     try:
-        from qgis.core import QgsLayoutPoint, QgsLayoutSize
+        from qgis.core import QgsLayoutPoint, QgsLayoutSize, QgsLayoutItemScaleBar
     except ImportError:
         return
     try:
         size_mm = QgsLayoutSize(rect.width_mm, rect.height_mm)
         if hasattr(item, "attemptResize"):
             item.attemptResize(size_mm)
+                
         if hasattr(item, "attemptMove"):
             item.attemptMove(QgsLayoutPoint(rect.x_mm, rect.y_mm))
         elif hasattr(item, "setPosition"):

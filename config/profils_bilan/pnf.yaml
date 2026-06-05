@@ -45,3 +45,9 @@ options:
     label: "Indicateurs par commune"
     default: true
     ask: false
+
+cartographie:
+  pochoir: aoa
+  emprise: aoa
+  couches_vecteurs_extra:
+    - coeur_parc

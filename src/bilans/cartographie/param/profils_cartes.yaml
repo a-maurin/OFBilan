@@ -1,324 +1,56 @@
-# Profils de cartes : types de cartes et couches à afficher.
-# Si ce fichier existe, il est chargé en priorité sur config_cartes.py (rétrocompatibilité).
-#
-# symbology_source (global, défaut qgis) :
-#   qgis  — conserver symbologies et règles du projet bilans_carte.qgz (recommandé)
-#   yaml  — écraser via param/symbologies.yaml (mode legacy)
-#
-# layer_role : résolution dynamique si layer_name absent ou renommé dans QGIS
-#   (point_controles, pej, pochoir, zone_interdiction_agrainage, …)
-#
-# layers_from_layout (global, défaut true) :
-#   true  — couches découvertes depuis le layout QGIS ; section layers = surcharges (filtres, légende)
-#   false — liste explicite layers (mode legacy)
-
+# Profils de cartes : configuration socle commun (les surcharges se font dans les YAML de profils)
 symbology_source: yaml
 layers_from_layout: false
 
-profiles:
-  agrainage:
-    id: agrainage
-    title: "Bilan agrainage 2025-2026 — Agrainage illicite (NATINF 27742 et 25001) — Côte-d'Or"
-    layout_name: "Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or"
-    layout_defaults_ref: ratio_141
-    layout_layer_group: agrainage
-    output_filename: carte_agrainage.png
-    date_deb: "2025-01-01"
-    date_fin: "2026-02-05"
-    title_main: ""
-    subtitle: ""
-    layout_title_item_id: titre_principal
-    layout_subtitle_item_id: sous_titre
-    layers:
-      "Zone d'interdiction d'agrainage":
-        layer_role: zone_interdiction_agrainage
-        symbology_ref: default_polygon
-        layer_name: "Zone d'interdiction d'agrainage"
-      "Zone infectée":
-        layer_role: zone_infectee
-        symbology_ref: default_polygon
-        layer_name: "Zone infectée"
-      "Zone à risque":
-        layer_role: zone_risque
-        symbology_ref: default_polygon
-        layer_name: "Zone à risque"
-      pochoir_sd21:
-        layer_role: pochoir
-        symbology_ref: pochoir
-        layer_name: pochoir_sd21
-      point_ctrl_20260205_wgs84:
-        layer_role: point_controles
-        symbology_ref: points_agrainage
-        layer_name: point_ctrl_20260205_wgs84
-      pve_agrainage_points_centroides:
-        symbology_ref: default_polygon
-        layer_name: pve_agrainage_points_centroides
+default:
+  cartes_actives: ['domaines', 'usagers', 'resultats', 'procedures']
+  pochoir: departement
+  couches_vecteurs_extra: []
 
-  chasse:
-    id: chasse
-    title: "Bilan chasse 2025-2026 — Chasse — Côte-d'Or"
-    layout_name: "Bilan – Chasse – SD21"
-    layout_defaults_ref: a4_paysage
-    layout_layer_group: Contrôles
-    output_filename: carte_chasse.png
-    date_deb: "2025-09-01"
-    date_fin: "2026-03-01"
-    title_main: ""
-    subtitle: ""
-    layout_title_item_id: titre_principal
-    layout_subtitle_item_id: sous_titre
-    layers:
-      pochoir_sd21:
-        layer_role: pochoir
-        symbology_ref: pochoir
-        layer_name: pochoir_sd21
-      point_ctrl_20260205_wgs84:
-        layer_role: point_controles
-        symbology_ref: points_chasse
-        layer_name: point_ctrl_20260205_wgs84
+  cartes_definitions:
+    domaines:
+      suffixe_nom: "_domaines"
+      title_main: "Contrôles par domaine"
+      layers:
+        pochoir:
+          layer_role: pochoir
+          symbology_ref: pochoir
+        point_controles:
+          layer_role: point_controles
+          symbology_ref: points_domaines
 
-  piegeage:
-    id: piegeage
-    title: "Bilan piégeage — Contrôles piégeage — Côte-d'Or"
-    layout_name: "Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or"
-    layout_defaults_ref: ratio_141
-    output_filename: carte_piegeage.png
-    date_deb: "2025-01-01"
-    date_fin: "2026-02-05"
-    title_main: "Contrôles piégeage — Côte-d'Or"
-    subtitle: ""
-    layout_title_item_id: titre_principal
-    layout_subtitle_item_id: sous_titre
-    layers:
-      localisation_infrac_FAITS_20260205:
-        layer_role: pej
-        legend_label: Infractions PJ
-        filter_type: ""
-        layer_name: localisation_infrac_FAITS_20260205
-      pochoir_sd21:
-        layer_role: pochoir
-        symbology_ref: pochoir
-        layer_name: pochoir_sd21
-      point_ctrl_20260205_wgs84:
-        layer_role: point_controles
-        symbology_ref: points_piegeage
-        layer_name: point_ctrl_20260205_wgs84
+    usagers:
+      suffixe_nom: "_usagers"
+      title_main: "Contrôles par type d'usager"
+      layers:
+        pochoir:
+          layer_role: pochoir
+          symbology_ref: pochoir
+        point_controles:
+          layer_role: point_controles
+          symbology_ref: points_usagers
 
-  global:
-    id: global
-    title: "Bilan global — Contrôles et procédures — Côte-d'Or"
-    layout_name: "Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or"
-    layout_defaults_ref: ratio_141
-    output_filename: carte_global.png
-    date_deb: "2025-01-01"
-    date_fin: "2026-02-05"
-    title_main: "Contrôles et procédures — Côte-d'Or"
-    subtitle: ""
-    layout_title_item_id: titre_principal
-    layout_subtitle_item_id: sous_titre
-    layers:
-      pochoir_sd21:
-        layer_role: pochoir
-        symbology_ref: pochoir
-        layer_name: pochoir_sd21
-      point_ctrl_20260205_wgs84:
-        layer_role: point_controles
-        symbology_ref: points_global_resultats
-        layer_name: point_ctrl_20260205_wgs84
-      localisation_infrac_FAITS_20260205:
-        layer_role: pej
-        filter_type: pj
-        layer_name: localisation_infrac_FAITS_20260205
+    resultats:
+      suffixe_nom: "_resultats"
+      title_main: "Résultats des contrôles"
+      layers:
+        pochoir:
+          layer_role: pochoir
+          symbology_ref: pochoir
+        point_controles:
+          layer_role: point_controles
+          symbology_ref: points_resultats
 
-  global_usagers:
-    id: global_usagers
-    title: "Bilan global SD21 — Contrôles par types d’usagers — Côte-d'Or"
-    layout_name: "Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or"
-    layout_defaults_ref: ratio_141
-    output_filename: carte_global_usagers.png
-    date_deb: "2025-01-01"
-    date_fin: "2026-02-05"
-    title_main: "Contrôles — types d’usagers — Côte-d'Or"
-    subtitle: ""
-    layout_title_item_id: titre_principal
-    layout_subtitle_item_id: sous_titre
-    layers:
-      pochoir_sd21:
-        layer_role: pochoir
-        symbology_ref: pochoir
-        layer_name: pochoir_sd21
-      point_ctrl_20260205_wgs84:
-        layer_role: point_controles
-        symbology_ref: points_global_usagers
-        layer_name: point_ctrl_20260205_wgs84
-
-  global_usagers_agriculteurs:
-    id: global_usagers_agriculteurs
-    title: "Bilan SD21 — Contrôles agriculteurs — Côte-d'Or"
-    layout_name: "Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or"
-    layout_defaults_ref: ratio_141
-    output_filename: carte_global_usagers_agriculteurs.png
-    date_deb: "2025-01-01"
-    date_fin: "2026-02-05"
-    title_main: "Contrôles — agriculteurs — Côte-d'Or"
-    subtitle: ""
-    layout_title_item_id: titre_principal
-    layout_subtitle_item_id: sous_titre
-    layers:
-      pochoir_sd21:
-        layer_role: pochoir
-        symbology_ref: pochoir
-        layer_name: pochoir_sd21
-      point_ctrl_20260205_wgs84:
-        layer_role: point_controles
-        symbology_ref: points_usagers_agriculteurs
-        layer_name: point_ctrl_20260205_wgs84
-
-  global_usagers_cibles:
-    id: global_usagers_cibles
-    title: "Bilan SD21 — Contrôles types d’usagers (ciblés) — Côte-d'Or"
-    layout_name: "Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or"
-    layout_defaults_ref: ratio_141
-    output_filename: carte_global_usagers_cibles.png
-    date_deb: "2025-01-01"
-    date_fin: "2026-02-05"
-    title_main: "Contrôles — types d’usagers (ciblés) — Côte-d'Or"
-    subtitle: ""
-    layout_title_item_id: titre_principal
-    layout_subtitle_item_id: sous_titre
-    layers:
-      pochoir_sd21:
-        layer_role: pochoir
-        symbology_ref: pochoir
-        layer_name: pochoir_sd21
-      point_ctrl_20260205_wgs84:
-        layer_role: point_controles
-        symbology_ref: points_usagers_cibles
-        layer_name: point_ctrl_20260205_wgs84
-
-  global_domaines:
-    id: global_domaines
-    title: "Bilan global — Contrôles par domaines — Côte-d'Or"
-    layout_name: "Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or"
-    layout_defaults_ref: ratio_141
-    output_filename: carte_global_domaines.png
-    date_deb: "2025-01-01"
-    date_fin: "2026-02-05"
-    title_main: "Contrôles par domaines — Côte-d'Or"
-    subtitle: ""
-    layout_title_item_id: titre_principal
-    layout_subtitle_item_id: sous_titre
-    layers:
-      pochoir_sd21:
-        layer_role: pochoir
-        symbology_ref: pochoir
-        layer_name: pochoir_sd21
-      point_ctrl_20260205_wgs84:
-        layer_role: point_controles
-        symbology_ref: points_global_domaines
-        layer_name: point_ctrl_20260205_wgs84
-
-  procedures_pve:
-    id: procedures_pve
-    title: "Bilan procédures judiciaires et PVe — Côte-d'Or"
-    layout_name: "Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or"
-    layout_defaults_ref: ratio_141
-    output_filename: carte_procedures_pve.png
-    date_deb: "2025-01-01"
-    date_fin: "2026-02-05"
-    title_main: "Procédures judiciaires et PVe — Côte-d'Or"
-    subtitle: ""
-    layout_title_item_id: titre_principal
-    layout_subtitle_item_id: sous_titre
-    layers:
-      pochoir_sd21:
-        layer_role: pochoir
-        symbology_ref: pochoir
-        layer_name: pochoir_sd21
-      localisation_infrac_FAITS_20260205:
-        layer_role: pej
-        symbology_ref: procedures_pj
-        filter_type: pj
-        layer_name: localisation_infrac_FAITS_20260205
-      pve_infractions:
-        layer_role: pve
-        symbology_ref: procedures_pve
-        filter_type: pve
-        layer_name: pve_infractions
-      # PA = proxy sur points de contrôle filtrés sur résultat contenant 'manquement'
-      point_ctrl_20260205_wgs84:
-        layer_role: point_controles
-        symbology_ref: procedures_pa
-        filter_type: point_ctrl_manquement
-        layer_name: point_ctrl_20260205_wgs84
-
-  toutes:
-    id: toutes
-    title: "Bilan global — Toutes les cartes — Côte-d'Or"
-    layout_name: "Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or"
-    layout_defaults_ref: ratio_141
-    output_filename: carte_toutes.png
-    date_deb: "2025-01-01"
-    date_fin: "2026-02-05"
-    title_main: "Bilan global — Toutes les cartes — Côte-d'Or"
-    subtitle: ""
-    layout_title_item_id: titre_principal
-    layout_subtitle_item_id: sous_titre
-    layers:
-      pochoir_sd21:
-        layer_role: pochoir
-        symbology_ref: pochoir
-        layer_name: pochoir_sd21
-      point_ctrl_20260205_wgs84:
-        layer_role: point_controles
-        symbology_ref: points_chasse
-        layer_name: point_ctrl_20260205_wgs84
-
-  synthese_activite_PA_PJ:
-    id: synthese_activite_PA_PJ
-    title: "Synthèse PA/PJ — Contrôles — Côte-d'Or"
-    layout_name: "Synthese_activité"
-    layout_defaults_ref: a4_paysage
-    output_filename: carte_synthese_activite_PA_PJ.png
-    date_deb: "2025-01-01"
-    date_fin: "2026-02-05"
-    title_main: "Synthèse — Contrôles — Côte-d'Or"
-    subtitle: ""
-    layout_title_item_id: titre_principal
-    layout_subtitle_item_id: sous_titre
-    layers:
-      pochoir_sd21:
-        layer_role: pochoir
-        symbology_ref: pochoir
-        layer_name: pochoir_sd21
-      point_ctrl_20260205_wgs84:
-        layer_role: point_controles
-        symbology_ref: points_global
-        layer_name: point_ctrl_20260205_wgs84
-
-  synthese_activite_PA_PJ_2:
-    id: synthese_activite_PA_PJ_2
-    title: "Synthèse PA/PJ — Procédures — Côte-d'Or"
-    layout_name: "Synthese_activité"
-    layout_defaults_ref: a4_paysage
-    output_filename: carte_synthese_activite_PA_PJ_2.png
-    date_deb: "2025-01-01"
-    date_fin: "2026-02-05"
-    title_main: "Synthèse — Procédures — Côte-d'Or"
-    subtitle: ""
-    layout_title_item_id: titre_principal
-    layout_subtitle_item_id: sous_titre
-    layers:
-      pochoir_sd21:
-        layer_role: pochoir
-        symbology_ref: pochoir
-        layer_name: pochoir_sd21
-      point_ctrl_20260205_wgs84:
-        layer_role: point_controles
-        symbology_ref: points_chasse
-        layer_name: point_ctrl_20260205_wgs84
-      localisation_infrac_FAITS_20260205:
-        layer_role: pej
-        legend_label: Procédures judiciaires (FAITS)
-        filter_type: pj
-        layer_name: localisation_infrac_FAITS_20260205
+    procedures:
+      suffixe_nom: "_procedures"
+      title_main: "Procédures et PVe"
+      layers:
+        pochoir:
+          layer_role: pochoir
+          symbology_ref: pochoir
+        pej:
+          layer_role: pej
+          symbology_ref: points_pej
+        pve:
+          layer_role: pve
+          symbology_ref: points_pve

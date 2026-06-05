@@ -51,3 +51,12 @@ options:
     label: "Synthèse croisée par zone (Ctrl × PVe × PEJ)"
     default: true
     ask: true
+
+cartographie:
+  cartes_actives:
+    - resultats
+    - procedures
+  couches_vecteurs_extra:
+    - zone_tub
+    - coeur_parc
+    - aoa

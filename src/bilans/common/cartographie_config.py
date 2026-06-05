@@ -18,25 +18,43 @@ from bilans.common.carte_helper import resolve_map_layout
 
 
 def parse_cartography_catalog(profile: dict | None) -> list[dict[str, str]]:
-    """Entrées ``{id, label, fichier}`` depuis ``cartographie.catalog``."""
-    carto = (profile or {}).get("cartographie") or {}
+    """Entrées ``{id, label, fichier}`` générées dynamiquement depuis ``cartes_actives`` (Lot 2)."""
+    if not profile:
+        return []
+    
+    # On récupère l'identifiant du profil (ex: 'agrainage')
+    pid = str(profile.get("id", profile.get("titre_bilan", ""))).strip().lower()
+    if not pid:
+        # Fallback heuristique si pas d'ID clair
+        pid = "bilan"
+        
+    carto = profile.get("cartographie") or {}
     if not isinstance(carto, dict):
         return []
-    raw = carto.get("catalog")
-    if not isinstance(raw, list):
+        
+    # La liste des cartes actives pilote le catalogue. Par défaut les 4 génériques si absent.
+    actives = carto.get("cartes_actives", ["domaines", "usagers", "resultats", "procedures"])
+    if not isinstance(actives, list):
         return []
+
     entries: list[dict[str, str]] = []
-    for item in raw:
-        if not isinstance(item, dict):
+    
+    # Dictionnaire de correspondance générique socle
+    labels_map = {
+        "domaines": "Contrôles par domaine",
+        "usagers": "Contrôles par usager",
+        "resultats": "Résultats des contrôles",
+        "procedures": "Procédures"
+    }
+
+    for map_id in actives:
+        if not isinstance(map_id, str) or not map_id.strip():
             continue
-        map_id = str(item.get("id", "")).strip()
-        if not map_id:
-            continue
-        label = str(item.get("label", map_id)).strip() or map_id
-        fichier = str(item.get("fichier", f"carte_{map_id}.png")).strip()
-        if not fichier.lower().endswith(".png"):
-            fichier = f"{fichier}.png"
-        entries.append({"id": map_id, "label": label, "fichier": fichier})
+        mid = map_id.strip()
+        label = labels_map.get(mid, mid.capitalize())
+        fichier = f"carte_{pid}_{mid}.png"
+        entries.append({"id": f"{pid}_{mid}", "label": label, "fichier": fichier})
+        
     return entries
 
 
@@ -225,10 +243,8 @@ def resolve_qgis_profile_ids(
         return []
 
     mode = infer_cartographie_mode(profile, profil_id)
-    if mode in ("none", "manuel"):
+    if mode in ("none", "manuel", "catalog"):
         return []
-    if mode == "catalog":
-        return resolve_cartes_selection(profile, opts)
 
     if mode == "synthese":
         carto = (profile or {}).get("cartographie") or {}

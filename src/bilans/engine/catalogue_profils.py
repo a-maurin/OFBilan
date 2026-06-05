@@ -44,10 +44,12 @@ def list_profiles() -> list[str]:
             id_to_label[types_usager_cible_id] = "Types d'usagers – ciblé"
 
     priority_order: dict[str, int] = {
-        "chasse": 0,
-        "agrainage": 1,
-        "types_usager": 2,
-        "types_usager_cible": 3,
+        "global": 0,
+        "synthese_activite_PA_PJ": 1,
+        "agrainage": 2,
+        "tub": 3,
+        "controles_secheresse": 4,
+        "pnf": 5,
     }
 
     def _sort_key(pid: str) -> tuple[int, str]:

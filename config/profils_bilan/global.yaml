@@ -12,15 +12,15 @@ capabilities:
 
 cartographie:
   catalog:
-    - id: global
+    - id: global_resultats
       label: "Contrôles"
-      fichier: carte_global.png
+      fichier: carte_global_resultats.png
     - id: global_usagers
       label: "Types d'usagers"
       fichier: carte_global_usagers.png
-    - id: procedures_pve
+    - id: global_procedures
       label: "Procédures"
-      fichier: carte_procedures_pve.png
+      fichier: carte_global_procedures.png
     - id: global_domaines
       label: "Domaines"
       fichier: carte_global_domaines.png
@@ -46,8 +46,8 @@ options:
     label: "Cartes à intégrer au PDF"
     type: multi_choice
     default:
-      - global
+      - global_resultats
       - global_usagers
-      - procedures_pve
+      - global_procedures
       - global_domaines
     ask: true

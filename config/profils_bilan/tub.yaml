@@ -22,3 +22,13 @@ presentation:
   blocks:
     sec22:
       group_by: theme
+
+cartographie:
+  pochoir: zone_a_risque
+  emprise: zone_a_risque
+  cartes_actives:
+    - domaines
+    - resultats
+    - procedures
+  couches_vecteurs_extra:
+    - zone_tub

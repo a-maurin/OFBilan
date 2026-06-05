@@ -68,6 +68,10 @@ LAYER_ROLE_SPECS: tuple[LayerRoleSpec, ...] = (
         patterns=("communes_france",),
     ),
     LayerRoleSpec(
+        role="pve",
+        patterns=("pve_infractions", "pv_electronique", "communes_france"),
+    ),
+    LayerRoleSpec(
         role="pve_agrainage_centroides",
         patterns=("pve_agrainage_points_centroides", "pve_agrainage*"),
     ),

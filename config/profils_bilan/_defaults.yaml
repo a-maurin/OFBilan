@@ -8,7 +8,15 @@ pdf:
 capabilities:
   combine: true
   mix_batch: true
-cartes:
+cartographie:
+  cartes_actives:
+    - domaines
+    - usagers
+    - resultats
+    - procedures
+  emprise: departement
+  pochoir: departement
+  couches_vecteurs_extra: []
   extra_texts:
     texte_bandeau_haut: "{nom_bilan} — {periode_formatee}"
     texte_bandeau_bas: "Sources : OFB/OSCEAN – MININT/AGC – OpenStreetMap\nRéalisation : OFB SD{departement} – {date_fin} | Projection : RGF93 / Lambert-93 (EPSG:2154)"

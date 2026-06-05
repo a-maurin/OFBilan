@@ -154,13 +154,15 @@ def _load_profiles_from_param() -> Optional[tuple[Dict[str, "ProfileConfig"], st
         logger.warning("Erreur lecture param/profils_cartes.yaml : %s", e)
         return None
 
-    profiles_data = data.get("profiles") if isinstance(data, dict) else None
-    if not profiles_data:
+    default_data = data.get("default") if isinstance(data, dict) else None
+    if not default_data:
+        logger.warning("Bloc 'default' introuvable dans profils_cartes.yaml")
         return None
 
     from config_cartes_model import (
         ProfileConfig,
         LayerSymbologyConfig,
+        MapDefinition,
     )
     from typing import get_args
     from config_cartes_model import FilterType
@@ -177,7 +179,7 @@ def _load_profiles_from_param() -> Optional[tuple[Dict[str, "ProfileConfig"], st
         for k, v in d.items():
             if k != "symbology_ref" and v is not None:
                 base[k] = v
-        base["layer_name"] = layer_name
+        base["layer_name"] = d.get("layer_name", "")
         legend = base.get("legend_label", layer_name)
         filter_type = base.get("filter_type", "")
         if filter_type not in valid_filter_types:
@@ -221,92 +223,85 @@ def _load_profiles_from_param() -> Optional[tuple[Dict[str, "ProfileConfig"], st
         if "extra_texts" in data:
             global_extra_texts = dict(data.get("extra_texts", {}))
 
-    for pid, pdata in profiles_data.items():
-        if not isinstance(pdata, dict):
-            continue
-        layers_raw = pdata.get("layers") or {}
+    # Parsing du bloc default pour la refonte (Lot 2)
+    default_cartes_actives = default_data.get("cartes_actives", [])
+    default_pochoir = default_data.get("pochoir", "departement")
+    default_couches_vecteurs = default_data.get("couches_vecteurs_extra", [])
+    
+    cartes_definitions: Dict[str, MapDefinition] = {}
+    defs_raw = default_data.get("cartes_definitions", {})
+    for def_id, def_data in defs_raw.items():
         layers: Dict[str, LayerSymbologyConfig] = {}
+        layers_raw = def_data.get("layers", {})
         for lname, lval in layers_raw.items():
             if isinstance(lval, dict):
-                lcfg = _layer_config_from_dict(lname, lval, symbologies)
+                layers[lname] = _layer_config_from_dict(lname, lval, symbologies)
             else:
-                lcfg = LayerSymbologyConfig(layer_name=lname, legend_label=lname)
-            layers[lname] = lcfg
-        prof_sym_src = str(pdata.get("symbology_source", global_symbology_source)).strip().lower()
-        if prof_sym_src not in ("qgis", "yaml"):
-            prof_sym_src = global_symbology_source
-        prof_extra_texts = {**global_extra_texts}
-        if "extra_texts" in pdata and isinstance(pdata["extra_texts"], dict):
-            prof_extra_texts.update(pdata["extra_texts"])
-            
-        result[pid] = ProfileConfig(
-            id=str(pdata.get("id", pid)),
-            title=str(pdata.get("title", pid)),
-            layout_name=str(pdata.get("layout_name", "")),
-            output_filename=str(pdata.get("output_filename", f"carte_{pid}.png")),
-            date_deb=str(pdata.get("date_deb", "2025-01-01")),
-            date_fin=str(pdata.get("date_fin", "2026-02-05")),
+                layers[lname] = LayerSymbologyConfig(layer_name=lname, legend_label=lname)
+        cartes_definitions[def_id] = MapDefinition(
+            suffixe_nom=def_data.get("suffixe_nom", f"_{def_id}"),
+            title_main=def_data.get("title_main", ""),
             layers=layers,
-            title_main=str(pdata.get("title_main", "")),
-            subtitle=str(pdata.get("subtitle", "")),
-            layout_title_item_id=str(pdata.get("layout_title_item_id", "titre_principal")),
-            layout_subtitle_item_id=str(pdata.get("layout_subtitle_item_id", "sous_titre")),
-            theme_id=pdata.get("theme_id") or None,
-            symbology_source=prof_sym_src,
-            layers_from_layout=bool(pdata.get("layers_from_layout", global_layers_from_layout)),
-            layout_layer_group=pdata.get("layout_layer_group") or None,
-            layout_defaults_ref=pdata.get("layout_defaults_ref") or None,
-            extra_texts=prof_extra_texts,
         )
 
-    # Profils cartes par défaut : thèmes de ref_themes_ctrl sans entrée dans le YAML
-    try:
-        themes = _load_ref_themes_ctrl_safe(PROJECT_ROOT)
-        point_ctrl_layer = "point_ctrl_20260205_wgs84"
-        layout_default = "Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or"
-        for t in themes:
-            tid = t.get("id", "")
-            if not tid or tid in result:
-                continue
-            label = t.get("label", tid.replace("_", " "))
-            points_cfg = _layer_config_from_dict(
-                "point_controles",
-                {
-                    "layer_role": "point_controles",
-                    "layer_name": point_ctrl_layer,
-                    "symbology_ref": "points_default",
-                    "filter_type": "point_ctrl_theme",
-                },
-                symbologies,
-            )
-            result[tid] = ProfileConfig(
-                id=tid,
-                title=f"Bilan {label} — Côte-d'Or",
-                layout_name=layout_default,
-                output_filename=f"carte_{tid}.png",
-                date_deb="2025-01-01",
-                date_fin="2026-02-05",
-                layers={
-                    "pochoir_sd21": _layer_config_from_dict(
-                        "pochoir_sd21",
-                        {"layer_role": "pochoir", "layer_name": "pochoir_sd21", "symbology_ref": "pochoir"},
-                        symbologies,
-                    ),
-                    "point_controles": points_cfg,
-                },
-                title_main=f"{label} — Côte-d'Or",
-                subtitle="",
-                layout_title_item_id="titre_principal",
-                layout_subtitle_item_id="sous_titre",
-                theme_id=tid,
-                extra_texts=global_extra_texts,
-            )
-        if themes:
-            logger.info("Profils cartes (YAML + défaut) : %s", list(result.keys()))
-    except Exception as e:
-        logger.warning("Impossible d'ajouter les profils cartes par défaut : %s", e)
+    # Chargement dynamique des profils bilan pour créer les ProfileConfig fusionnés
+    from bilans.engine.catalogue_profils import list_profiles
+    from bilans.engine.orchestrateur_profils import load_profile_config
+    
+    bilan_profiles = {}
+    for pid in list_profiles():
+        try:
+            bilan_profiles[pid] = load_profile_config(PROJECT_ROOT, pid)
+        except Exception:
+            pass
 
-    logger.info("Profils chargés depuis param/profils_cartes.yaml : %s", list(result.keys()))
+    for pid, pdata in bilan_profiles.items():
+        if not isinstance(pdata, dict):
+            continue
+            
+        carto_cfg = pdata.get("cartographie", {})
+        
+        # Sur-charges spécifiques au profil
+        cartes_actives = carto_cfg.get("cartes_actives", default_cartes_actives)
+        pochoir = carto_cfg.get("pochoir", default_pochoir)
+        couches_extra = carto_cfg.get("couches_vecteurs_extra", default_couches_vecteurs)
+        
+        prof_sym_src = str(carto_cfg.get("symbology_source", global_symbology_source)).strip().lower()
+        if prof_sym_src not in ("qgis", "yaml"):
+            prof_sym_src = global_symbology_source
+            
+        prof_extra_texts = {**global_extra_texts}
+        if "extra_texts" in carto_cfg and isinstance(carto_cfg["extra_texts"], dict):
+            prof_extra_texts.update(carto_cfg["extra_texts"])
+            
+        titre_bilan = str(pdata.get("titre_bilan", pid))
+        layout_name = str(carto_cfg.get("layout_name", titre_bilan))
+
+        result[pid] = ProfileConfig(
+            id=pid,
+            title=titre_bilan,
+            layout_name=layout_name,
+            output_filename=f"carte_{pid}.png", # Será surchargé par boucle
+            date_deb="2025-01-01",
+            date_fin="2026-02-05",
+            layers={}, # Déplacé dans cartes_definitions
+            title_main="", # Déplacé dans cartes_definitions
+            subtitle="",
+            layout_title_item_id=str(carto_cfg.get("layout_title_item_id", "titre_principal")),
+            layout_subtitle_item_id=str(carto_cfg.get("layout_subtitle_item_id", "sous_titre")),
+            theme_id=pdata.get("filter", {}).get("theme_id", pid) if isinstance(pdata.get("filter"), dict) else pid,
+            symbology_source=prof_sym_src,
+            layers_from_layout=bool(carto_cfg.get("layers_from_layout", global_layers_from_layout)),
+            layout_layer_group=carto_cfg.get("layout_layer_group") or None,
+            layout_defaults_ref=carto_cfg.get("layout_defaults_ref") or None,
+            extra_texts=prof_extra_texts,
+            cartes_actives=cartes_actives,
+            cartes_definitions=cartes_definitions,
+            pochoir=pochoir,
+            couches_vecteurs_extra=couches_extra,
+        )
+
+    logger.info("Profils cartographiques fusionnés : %s", list(result.keys()))
     return result, global_symbology_source
 
 
@@ -416,6 +411,7 @@ def resolve_layers_for_config(
     date_deb: Optional[str] = None,
     date_fin: Optional[str] = None,
     dept_code: Optional[str] = None,
+    profil_prefix: Optional[str] = None,
 ) -> list[tuple[Optional[Any], str, str]]:
     """
     Résout une couche de configuration vers une ou plusieurs couches QGIS du projet.
@@ -442,6 +438,23 @@ def resolve_layers_for_config(
 
     for resolved_name, source in resolved_infos:
         layer = get_layer_by_name(resolved_name) if resolved_name else None
+        
+        # Override data source if an automatic GPKG export exists for this profile (Lot 3 - Filtrage Spatial)
+        if layer and profil_prefix and layer_role != "pochoir" and layer_role != "contexte":
+            from bilans.chemins_projet import PROJECT_ROOT
+            carto_dir = PROJECT_ROOT / "data" / "sources" / "sig" / "CARTO"
+            
+            gpkg_path = None
+            if "pve" in layer_key.lower():
+                gpkg_path = carto_dir / f"pve_{profil_prefix}_export_automatique.gpkg"
+            elif "controle" in layer_key.lower() or "ctrl" in layer_key.lower() or "donnees" in layer_key.lower():
+                gpkg_path = carto_dir / f"controles_{profil_prefix}_export_automatique.gpkg"
+                
+            if gpkg_path and gpkg_path.exists():
+                uri = f"{gpkg_path}|layername={gpkg_path.stem}"
+                layer.setDataSource(uri, layer.name(), "ogr")
+                logger.info("Source de données '%s' substituée par l'export spatial : %s", layer.name(), gpkg_path.name)
+        
         results.append((layer, resolved_name, source))
 
     if (
@@ -449,7 +462,12 @@ def resolve_layers_for_config(
         and layer_role == "pochoir"
         and (not results or not results[0][0])
     ):
-        layer, layer_name = ensure_pochoir_layer_in_project(dept_code)
+        pochoir_id = "departement"
+        if lcfg.layer_name and lcfg.layer_name.startswith("pochoir_"):
+            if not lcfg.layer_name.startswith("pochoir_sd"):
+                pochoir_id = lcfg.layer_name.replace("pochoir_", "", 1)
+                
+        layer, layer_name = ensure_pochoir_layer_in_project(dept_code, pochoir_id=pochoir_id)
         if layer and layer_name:
             return [(layer, layer_name, "generated")]
 
@@ -479,9 +497,9 @@ def apply_pochoir_inverted_symbology(layer) -> None:
     layer.triggerRepaint()
 
 
-def ensure_pochoir_layer_in_project(dept_code: str) -> tuple[Optional[Any], str]:
+def ensure_pochoir_layer_in_project(dept_code: str, pochoir_id: str = "departement") -> tuple[Optional[Any], str]:
     """
-    Crée ou met à jour la couche pochoir_sd{dept} à partir de DEPARTEMENT_ADMIN_Express_200207.shp.
+    Crée ou met à jour la couche pochoir_sd{dept} à partir de la géométrie appropriée.
     """
     if not HAS_QGIS:
         return None, ""
@@ -492,11 +510,17 @@ def ensure_pochoir_layer_in_project(dept_code: str) -> tuple[Optional[Any], str]
         write_pochoir_gpkg,
     )
 
-    layer_name = pochoir_layer_name(dept_code)
+    layer_name = pochoir_id if pochoir_id.startswith("pochoir_") else f"pochoir_{pochoir_id}"
+    if pochoir_id in ("departement", "aucun"):
+        layer_name = pochoir_layer_name(dept_code)
+        
     existing = get_layer_by_name(layer_name)
     cache_dir = OUT_DIR_CARTES / ".pochoir_cache"
-    gpkg_path = pochoir_cache_path(dept_code, cache_dir)
-    write_pochoir_gpkg(dept_code, gpkg_path, project_root=PROJECT_ROOT)
+    
+    # Cache path can just be based on the layer name
+    gpkg_path = cache_dir / f"{layer_name}.gpkg"
+    
+    write_pochoir_gpkg(dept_code, gpkg_path, pochoir_id=pochoir_id, project_root=PROJECT_ROOT)
 
     uri = f"{gpkg_path}|layername={layer_name}"
     if existing is not None:
@@ -1489,8 +1513,14 @@ def export_layout(
     layout = manager.layoutByName(prof.layout_name)
 
     if not layout:
-        logger.error("Layout '%s' introuvable dans le projet.", prof.layout_name)
-        return False
+        layouts = manager.printLayouts()
+        if layouts:
+            fallback_layout = next((l for l in layouts if l.name() == "Synthese_activité"), layouts[0])
+            logger.info("Layout '%s' introuvable. Utilisation du layout fallback: '%s'", prof.layout_name, fallback_layout.name())
+            layout = fallback_layout
+        else:
+            logger.error("Layout '%s' introuvable dans le projet et aucun autre layout disponible.", prof.layout_name)
+            return False
 
     from layout_defaults import apply_layout_defaults, load_layout_defaults, resolve_title_ids
 
@@ -1517,8 +1547,16 @@ def export_layout(
             except AttributeError:
                 item_id = ""
                 
-            # Titres natifs
-            if item_id == title_id:
+            # Titres natifs (ou heuristique par contenu si ID absent/différent)
+            current_text = item.text() if hasattr(item, "text") else ""
+            
+            known_titles = ["Localisation et", "Localisation et résultats des contrôles PA"]
+            if hasattr(prof, 'cartes_definitions'):
+                known_titles.extend([m.title_main for m in prof.cartes_definitions.values() if m.title_main])
+                
+            is_title = item_id == title_id or any(k in current_text for k in known_titles) or "titre" in item_id.lower()
+            
+            if is_title:
                 item.setText(title_text)
             elif subtitle_id and item_id == subtitle_id:
                 item.setText(subtitle_text)
@@ -1816,11 +1854,16 @@ def run_export(
         else str(getattr(CONFIG, "departement_code", "21")).strip()
     )
     project_path = _resolve_qgis_project_path(CONFIG.project_qgis_path)
+    try:
+        display_path = Path(project_path).relative_to(PROJECT_ROOT)
+    except ValueError:
+        display_path = project_path
+
     logger.info(
         "run_export : profils=%s, département=%s, projet QGIS=%s",
         ", ".join(profile_ids),
         effective_dept,
-        project_path,
+        display_path,
     )
     if not load_project(project_path):
         raise RuntimeError(f"Impossible de charger le projet QGIS : {project_path}")
@@ -1852,8 +1895,21 @@ def run_export(
             if prof_old:
                 from dataclasses import replace
                 prof = replace(prof_old, id="chasse", output_filename="carte_chasse.png")
+        # Résolution si c'est une sous-carte (ex: global_resultats -> profil: global, carte: resultats)
+        carte_filtre = None
         if not prof:
-            logger.warning("Profil '%s' inconnu. Ignoré.", pid)
+            for base_pid, base_prof in CONFIG.profiles.items():
+                if pid.startswith(f"{base_pid}_"):
+                    sub_id = pid[len(base_pid)+1:]
+                    # Vérifier si sub_id est une carte active ou dans les définitions par défaut
+                    cartes_possibles = getattr(base_prof, 'cartes_actives', []) or ["domaines", "usagers", "resultats", "procedures"]
+                    if sub_id in cartes_possibles or (hasattr(base_prof, 'cartes_definitions') and sub_id in base_prof.cartes_definitions):
+                        prof = base_prof
+                        carte_filtre = sub_id
+                        break
+
+        if not prof:
+            logger.warning("Profil ou sous-carte '%s' inconnu. Ignoré.", pid)
             continue
 
         if qgis_overrides and config_id in qgis_overrides:
@@ -1875,142 +1931,187 @@ def run_export(
             effective_dept,
         )
 
-        proj = QgsProject.instance()
-        available_names = [lyr.name() for lyr in proj.mapLayers().values()]
-        legend_labels_map: Dict[str, str] = {}
-        global_sym_src = getattr(CONFIG, "symbology_source", "qgis")
-        prof_sym_src = getattr(prof, "symbology_source", global_sym_src)
+        cartes_a_generer = prof.cartes_actives if hasattr(prof, 'cartes_actives') and prof.cartes_actives else ["defaut"]
+        if carte_filtre:
+            cartes_a_generer = [carte_filtre]
 
-        from layer_resolver import should_apply_yaml_symbology
-        from layout_layers import is_operational_layer
-
-        layout = get_layout_by_name(prof.layout_name) if getattr(prof, "layers_from_layout", False) else None
-        layers_to_process = resolve_profile_layers(prof, layout=layout)
-
-        # Cacher toutes les couches métiers avant d'appliquer celles du profil
-        root = proj.layerTreeRoot()
-        for layer in proj.mapLayers().values():
-            if is_operational_layer(layer.name()):
-                node = root.findLayer(layer.id())
-                if node:
-                    node.setItemVisibilityChecked(False)
-
-        legend_data = []
-
-        # Collecte explicite des couches à rendre dans la carte
-        layers_to_render = []
-        for lname, lcfg in layers_to_process.items():
-            resolved_infos = resolve_layers_for_config(
-                lname,
-                lcfg,
-                available_names=available_names,
-                date_deb=prof.date_deb,
-                date_fin=prof.date_fin,
-                dept_code=effective_dept,
-            )
+        for carte_id in cartes_a_generer:
+            import copy
             
-            # Si aucune couche n'a été trouvée
-            if not resolved_infos or (len(resolved_infos) == 1 and not resolved_infos[0][1]):
-                logger.warning(
-                    "Couche '%s' introuvable pour le profil '%s' (rôle=%s, ignorée). Couches du projet: %s",
-                    lcfg.layer_name,
-                    pid,
-                    getattr(lcfg, "layer_role", None),
-                    available_names,
-                )
-                continue
-
-            for layer, resolved_name, resolve_source in resolved_infos:
-                if not layer or not resolved_name or not layer.isValid():
-                    continue
+            # Application de la définition de carte courante
+            if hasattr(prof, 'cartes_definitions') and carte_id in prof.cartes_definitions:
+                map_def = prof.cartes_definitions[carte_id]
+                prof.title_main = map_def.title_main
+                prof.output_filename = f"carte_{prof.id}_{carte_id}.png"
+                prof.layers = copy.deepcopy(map_def.layers)
+            else:
+                prof.output_filename = f"carte_{prof.id}.png"
                 
-                layers_to_render.append(layer)
+            # Intégration dynamique du pochoir (Lot 2)
+            if hasattr(prof, 'pochoir') and prof.pochoir and prof.pochoir != "aucun":
+                from config_cartes_model import LayerSymbologyConfig
+                pochoir_name = prof.pochoir if prof.pochoir.startswith("pochoir_") else f"pochoir_{prof.pochoir}"
+                if pochoir_name == "pochoir_departement":
+                    pochoir_name = f"pochoir_sd{effective_dept}"
+                prof.layers["pochoir"] = LayerSymbologyConfig(
+                    layer_name=pochoir_name,
+                    layer_role="pochoir"
+                )
+                
+            # Intégration dynamique des couches de contexte (Lot 2)
+            if hasattr(prof, 'couches_vecteurs_extra'):
+                for extra in prof.couches_vecteurs_extra:
+                    if extra not in prof.layers:
+                        prof.layers[extra] = LayerSymbologyConfig(layer_name=extra, layer_role="contexte")
 
-                if resolve_source != "exact":
-                    logger.info(
-                        "  → Couche résolue '%s' → '%s' (%s)",
+            logger.info("  -> Génération : %s", prof.output_filename)
+
+            proj = QgsProject.instance()
+            available_names = [lyr.name() for lyr in proj.mapLayers().values()]
+            legend_labels_map: Dict[str, str] = {}
+            global_sym_src = getattr(CONFIG, "symbology_source", "qgis")
+            prof_sym_src = getattr(prof, "symbology_source", global_sym_src)
+
+            from layer_resolver import should_apply_yaml_symbology
+            from layout_layers import is_operational_layer
+
+            layout = get_layout_by_name(prof.layout_name) if getattr(prof, "layers_from_layout", False) else None
+            layers_to_process = resolve_profile_layers(prof, layout=layout)
+
+            # Cacher toutes les couches métiers avant d'appliquer celles du profil
+            root = proj.layerTreeRoot()
+            for layer in proj.mapLayers().values():
+                if is_operational_layer(layer.name()):
+                    node = root.findLayer(layer.id())
+                    if node:
+                        node.setItemVisibilityChecked(False)
+
+            legend_data = []
+
+            # Collecte explicite des couches à rendre dans la carte
+            layers_to_render = []
+            for lname, lcfg in layers_to_process.items():
+                # Construction du prefix identique à celui de l'orchestrateur
+                base_prefix = getattr(prof, "_export_prefix", None) or prof.id
+                profil_prefix = f"{base_prefix}_{effective_dept}" if str(effective_dept).strip() else base_prefix
+
+                resolved_infos = resolve_layers_for_config(
+                    lname,
+                    lcfg,
+                    available_names=available_names,
+                    date_deb=prof.date_deb,
+                    date_fin=prof.date_fin,
+                    dept_code=effective_dept,
+                    profil_prefix=profil_prefix,
+                )
+                
+                # Si aucune couche n'a été trouvée
+                if not resolved_infos or (len(resolved_infos) == 1 and not resolved_infos[0][1]):
+                    logger.warning(
+                        "Couche '%s' introuvable pour le profil '%s' (rôle=%s, ignorée). Couches du projet: %s",
                         lcfg.layer_name,
-                        resolved_name,
-                        resolve_source,
+                        pid,
+                        getattr(lcfg, "layer_role", None),
+                        available_names,
                     )
-                else:
-                    logger.info("  → Couche: %s", resolved_name)
+                    continue
 
-                # Rendre la couche visible et s'assurer que ses groupes parents le sont aussi
-                node = root.findLayer(layer.id())
-                if node:
-                    node.setItemVisibilityChecked(True)
-                    parent = node.parent()
-                    while parent and parent != root:
-                        parent.setItemVisibilityChecked(True)
-                        parent = parent.parent()
-
-                if lcfg.legend_label:
-                    legend_labels_map[resolved_name] = lcfg.legend_label
-
-                if should_apply_yaml_symbology(
-                    getattr(lcfg, "symbology_source", None),
-                    prof_sym_src,
-                    global_sym_src,
-                ):
-                    apply_layer_symbology(layer, lcfg)
-                else:
-                    logger.debug("  Symbologie QGIS conservée pour '%s'", resolved_name)
-
-                apply_date_filter(layer, lcfg, prof.date_deb, prof.date_fin, config=carto_config, profile=prof)
-
-                # Extraction pour la légende PIL
-                legend_info = _extract_legend_info(layer, lcfg)
-                if legend_info:
-                    legend_data.append(legend_info)
-
-        # Ajouter les fonds de plan explicitement (dessinés en dernier dans la liste QGIS = au fond de la carte)
-        from layout_layers import is_basemap_layer
-        for layer in proj.mapLayers().values():
-            if is_basemap_layer(layer.name()):
-                node = root.findLayer(layer.id())
-                if node and node.isVisible():
+                for layer, resolved_name, resolve_source in resolved_infos:
+                    if not layer or not resolved_name or not layer.isValid():
+                        continue
+                    
                     layers_to_render.append(layer)
 
-        out_path = out_dir / prof.output_filename
+                    if resolve_source != "exact":
+                        logger.info(
+                            "  → Couche résolue '%s' → '%s' (%s)",
+                            lcfg.layer_name,
+                            resolved_name,
+                            resolve_source,
+                        )
+                    else:
+                        logger.info("  → Couche: %s", resolved_name)
 
-        exported = export_layout(
-            prof,
-            out_path,
-            dpi=dpi,
-            fmt=fmt,
-            legend_labels_map=legend_labels_map or None,
-            dept_code=effective_dept,
-            layers_to_render=layers_to_render,
-        )
+                    # Rendre la couche visible et s'assurer que ses groupes parents le sont aussi
+                    node = root.findLayer(layer.id())
+                    if node:
+                        node.setItemVisibilityChecked(True)
+                        parent = node.parent()
+                        while parent and parent != root:
+                            parent.setItemVisibilityChecked(True)
+                            parent = parent.parent()
 
-        png_path = out_path.with_suffix(".png")
-        if exported and png_path.exists():
-            # Dessiner la légende avec Pillow par-dessus l'export
-            try:
-                _draw_legend_on_image(out_path, legend_data)
-                logger.info("  Légende dessinée sur %s", out_path.name)
-            except Exception as e:
-                logger.error("  Erreur de dessin de légende sur %s : %s", out_path.name, e)
+                    if lcfg.legend_label:
+                        legend_labels_map[resolved_name] = lcfg.legend_label
 
-            # Marqueur département indépendant de la légende (requis hors SD21 legacy)
-            from bilans.cartographie.pochoir_helper import (
-                map_staleness_marker_path,
-                write_map_dept_marker,
+                    if should_apply_yaml_symbology(
+                        getattr(lcfg, "symbology_source", None),
+                        prof_sym_src,
+                        global_sym_src,
+                    ):
+                        apply_layer_symbology(layer, lcfg)
+                    else:
+                        logger.debug("  Symbologie QGIS conservée pour '%s'", resolved_name)
+
+                    # Heuristique pour filter_type si non précisé dans le YAML
+                    if not getattr(lcfg, "filter_type", None):
+                        from layout_layers import infer_filter_type_for_layer
+                        lcfg.filter_type = infer_filter_type_for_layer(resolved_name, pid, prof)
+
+                    apply_date_filter(layer, lcfg, prof.date_deb, prof.date_fin, config=carto_config, profile=prof)
+
+                    # Extraction pour la légende PIL
+                    legend_info = _extract_legend_info(layer, lcfg)
+                    if legend_info:
+                        legend_data.append(legend_info)
+
+            # Ajouter les fonds de plan explicitement (dessinés en dernier dans la liste QGIS = au fond de la carte)
+            from layout_layers import is_basemap_layer
+            for layer in proj.mapLayers().values():
+                if is_basemap_layer(layer.name()):
+                    node = root.findLayer(layer.id())
+                    if node and node.isVisible():
+                        layers_to_render.append(layer)
+
+            out_path = out_dir / prof.output_filename
+
+            exported = export_layout(
+                prof,
+                out_path,
+                dpi=dpi,
+                fmt=fmt,
+                legend_labels_map=legend_labels_map or None,
+                dept_code=effective_dept,
+                layers_to_render=layers_to_render,
             )
 
-            write_map_dept_marker(png_path, effective_dept)
-            marker_path = map_staleness_marker_path(png_path, effective_dept)
-            exported_paths.append(png_path)
-            logger.info(
-                "SUCCESS carte %s (département %s) → %s ; marqueur %s",
-                pid,
-                effective_dept,
-                png_path.resolve(),
-                marker_path.name,
-            )
-        elif not exported:
-            logger.error("  Export PNG absent pour le profil '%s' (%s)", pid, out_path.name)
+            png_path = out_path.with_suffix(".png")
+            if exported and png_path.exists():
+                # Dessiner la légende avec Pillow par-dessus l'export
+                try:
+                    _draw_legend_on_image(out_path, legend_data)
+                    logger.info("  Légende dessinée sur %s", out_path.name)
+                except Exception as e:
+                    logger.error("  Erreur de dessin de légende sur %s : %s", out_path.name, e)
+
+                # Marqueur département indépendant de la légende (requis hors SD21 legacy)
+                from bilans.cartographie.pochoir_helper import (
+                    map_staleness_marker_path,
+                    write_map_dept_marker,
+                )
+
+                write_map_dept_marker(png_path, effective_dept)
+                marker_path = map_staleness_marker_path(png_path, effective_dept)
+                exported_paths.append(png_path)
+                logger.info(
+                    "SUCCESS carte %s (département %s) → %s ; marqueur %s",
+                    pid,
+                    effective_dept,
+                    png_path.resolve(),
+                    marker_path.name,
+                )
+            elif not exported:
+                logger.error("Échec export layout carte %s (département %s)", pid, effective_dept)
 
     if exported_paths:
         logger.info(

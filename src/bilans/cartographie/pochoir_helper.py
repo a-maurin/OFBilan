@@ -23,6 +23,8 @@ DEPARTEMENTS_ADMIN_SHP = (
     get_sig_dir() / "limites_admin_dep" / "DEPARTEMENT_ADMIN_Express_200207.shp"
 )
 
+from bilans.common.chargeurs_donnees import load_pnf_aoa_gdf, load_zone_tub_gdf
+
 _INSEE_DEP_COL = "INSEE_DEP"
 
 
@@ -140,18 +142,48 @@ def department_bounds(
     return (X_min, Y_min, X_max, Y_max)
 
 
+def load_pochoir_gdf(
+    pochoir_id: str,
+    dept_code: str,
+    *,
+    project_root: Optional[Path] = None,
+) -> gpd.GeoDataFrame:
+    """
+    Charge le GeoDataFrame correspondant au pochoir demandé (departement, zone_a_risque, aoa...).
+    Si pochoir_id est 'departement' ou 'aucun', on renvoie le département par défaut.
+    """
+    if not pochoir_id or pochoir_id in ("departement", "aucun", "pochoir_departement"):
+        return load_department_gdf(dept_code, project_root=project_root)
+    
+    if pochoir_id in ("zone_a_risque", "zone_tub", "pochoir_zone_a_risque"):
+        root = project_root or PROJECT_ROOT
+        return load_zone_tub_gdf(root)
+        
+    if pochoir_id in ("aoa", "pnf", "pochoir_aoa"):
+        root = project_root or PROJECT_ROOT
+        return load_pnf_aoa_gdf(root)
+        
+    logger.warning("Pochoir_id inconnu '%s', fallback sur département %s", pochoir_id, dept_code)
+    return load_department_gdf(dept_code, project_root=project_root)
+
+
 def write_pochoir_gpkg(
     dept_code: str,
     output_path: Path,
     *,
+    pochoir_id: str = "departement",
     project_root: Optional[Path] = None,
 ) -> Path:
-    """Écrit un GeoPackage pochoir (donut) pour le département (une entité)."""
-    gdf = load_department_gdf(dept_code, project_root=project_root)
+    """Écrit un GeoPackage pochoir (donut) pour l'emprise demandée."""
+    gdf = load_pochoir_gdf(pochoir_id, dept_code, project_root=project_root)
     
     # Transformation en véritable polygone pochoir (donut) avec Shapely
     import shapely.geometry
     mask_box = shapely.geometry.box(-2000000, 2000000, 4000000, 10000000)
+    
+    if len(gdf) > 1:
+        gdf = gdf.dissolve()
+        
     donut_geom = mask_box.difference(gdf.geometry.iloc[0])
     gdf.geometry = [donut_geom]
     
@@ -159,8 +191,44 @@ def write_pochoir_gpkg(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     if output_path.exists():
         output_path.unlink()
-    gdf.to_file(output_path, driver="GPKG", layer=pochoir_layer_name(dept_code))
+    
+    layer_n = pochoir_id if pochoir_id.startswith("pochoir_") else f"pochoir_{pochoir_id}"
+    if pochoir_id in ("departement", "aucun"):
+        layer_n = pochoir_layer_name(dept_code)
+        
+    gdf.to_file(output_path, driver="GPKG", layer=layer_n)
     return output_path
+
+
+def clip_gdf_to_pochoir(
+    gdf_points: gpd.GeoDataFrame,
+    pochoir_id: str,
+    dept_code: str,
+    *,
+    project_root: Optional[Path] = None,
+) -> gpd.GeoDataFrame:
+    """
+    Filtre spatialement un GeoDataFrame de points pour ne conserver que
+    ceux à l'intérieur du polygone de pochoir.
+    """
+    if gdf_points.empty:
+        return gdf_points
+
+    poly_gdf = load_pochoir_gdf(pochoir_id, dept_code, project_root=project_root)
+    if poly_gdf.empty:
+        return gdf_points
+
+    if len(poly_gdf) > 1:
+        poly_gdf = poly_gdf.dissolve()
+
+    # Uniformisation du CRS
+    target_crs = poly_gdf.crs
+    if gdf_points.crs and target_crs and gdf_points.crs != target_crs:
+        gdf_points = gdf_points.to_crs(target_crs)
+
+    # Intersection (clip)
+    clipped = gpd.clip(gdf_points, poly_gdf)
+    return clipped
 
 
 def pochoir_cache_path(dept_code: str, cache_dir: Path) -> Path:

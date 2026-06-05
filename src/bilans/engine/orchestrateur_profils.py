@@ -2610,6 +2610,42 @@ def _export_csv(
             out_dir / f"controles_{prefix}_points.csv", sep=";", index=False
         )
 
+        # Export GeoPackage pour le moteur cartographique QGIS (Lot 3 - Filtrage Spatial)
+        try:
+            import geopandas as gpd
+            import logging
+            from pathlib import Path
+            logger = logging.getLogger(__name__)
+            
+            df_pts = point_filtered.copy()
+            lon_col, lat_col = "x", "y"
+            if lon_col in df_pts.columns and lat_col in df_pts.columns:
+                df_pts["_lon"] = pd.to_numeric(df_pts[lon_col], errors="coerce")
+                df_pts["_lat"] = pd.to_numeric(df_pts[lat_col], errors="coerce")
+                mask_geo = df_pts["_lon"].notna() & df_pts["_lat"].notna()
+                
+                if mask_geo.any():
+                    # Les coordonnées x,y dans point_ctrl sont généralement en WGS84 ou L93.
+                    # On suppose WGS84 (EPSG:4326) et on projette en L93 (EPSG:2154)
+                    gdf_pts = gpd.GeoDataFrame(
+                        df_pts[mask_geo],
+                        geometry=gpd.points_from_xy(df_pts.loc[mask_geo, "_lon"], df_pts.loc[mask_geo, "_lat"]),
+                        crs="EPSG:4326"
+                    ).to_crs("EPSG:2154")
+                    
+                    for col in gdf_pts.select_dtypes(include=['datetime64[ns, UTC]', 'datetime64[ns]', 'datetime64']).columns:
+                        gdf_pts[col] = gdf_pts[col].astype(str)
+                        
+                    root = Path(__file__).resolve().parent.parent.parent.parent
+                    carto_dir = root / "data" / "sources" / "sig" / "CARTO"
+                    carto_dir.mkdir(parents=True, exist_ok=True)
+                    gpkg_path_pts = carto_dir / f"controles_{prefix}_export_automatique.gpkg"
+                    
+                    gdf_pts.to_file(gpkg_path_pts, driver="GPKG")
+                    logger.info(f"Couche géographique Contrôles générée pour QGIS : {gpkg_path_pts} ({mask_geo.sum()} points)")
+        except Exception as e:
+            logger.warning(f"Impossible d'exporter la couche QGIS des Contrôles : {e}")
+
     # Résultats
     if "tab_resultats" in results:
         results["tab_resultats"].to_csv(

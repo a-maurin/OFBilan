@@ -81,6 +81,14 @@ class LayerSymbologyConfig:
 
 
 @dataclass
+class MapDefinition:
+    """Configuration d'une carte spécifique au sein d'un profil."""
+    suffixe_nom: str
+    title_main: str
+    layers: Dict[str, LayerSymbologyConfig] = field(default_factory=dict)
+
+
+@dataclass
 class ProfileConfig:
     """Configuration d'un profil de carte (ex: agrainage, chasse)."""
 
@@ -96,6 +104,13 @@ class ProfileConfig:
     title_main: str = ""
     # Sous-titre ou description de la période (ex: \"Campagne 2025-2026\")
     subtitle: str = ""
+    
+    # Paramètres ajoutés pour la refonte cartographique (Lot 2)
+    cartes_actives: List[str] = field(default_factory=list)
+    cartes_definitions: Dict[str, MapDefinition] = field(default_factory=dict)
+    pochoir: str = "departement"
+    couches_vecteurs_extra: List[str] = field(default_factory=list)
+
     # Identifiants des éléments texte dans le layout QGIS
     layout_title_item_id: str = "titre_principal"
     layout_subtitle_item_id: str = "sous_titre"

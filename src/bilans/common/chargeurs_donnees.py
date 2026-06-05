@@ -646,6 +646,28 @@ def load_tub(root: Path) -> pd.DataFrame:
     )
 
 
+def load_zone_tub_gdf(root: Path) -> gpd.GeoDataFrame:
+    """
+    Charge la couche polygonale de la zone TUB (ex: Zone a Risque).
+    Recherche dans ref/programme/sig/TUB/ le shapefile le plus récent.
+    """
+    import glob
+    tub_dir = ref_programme(root) / "sig" / "TUB"
+    if not tub_dir.exists():
+        return gpd.GeoDataFrame(columns=["geometry"], geometry="geometry", crs=None)
+        
+    # Recherche d'un shapefile "Zone a Risque" dans les sous-dossiers
+    search_pattern = str(tub_dir / "**" / "Zone a Risque*.shp")
+    matches = glob.glob(search_pattern, recursive=True)
+    
+    if not matches:
+        return gpd.GeoDataFrame(columns=["geometry"], geometry="geometry", crs=None)
+        
+    # Prendre le plus récent par ordre alphabétique (qui inclut l'année)
+    matches.sort(reverse=True)
+    return gpd.read_file(matches[0])
+
+
 def load_ref_themes_ctrl(root: Path) -> List[dict]:
     """
     Charge le référentiel des thèmes des contrôles.
