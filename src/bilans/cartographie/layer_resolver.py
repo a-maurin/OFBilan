@@ -275,14 +275,14 @@ def resolve_layer_name(
 def should_apply_yaml_symbology(
     layer_symbology_source: Optional[str],
     profile_symbology_source: Optional[str] = None,
-    global_symbology_source: str = "qgis",
+    global_symbology_source: str = "yaml",
 ) -> bool:
     """True si la symbologie YAML doit écraser celle du projet QGIS."""
     for src in (layer_symbology_source, profile_symbology_source, global_symbology_source):
         if not src:
             continue
-        if src == "yaml":
-            return True
         if src == "qgis":
             return False
-    return False
+        if src == "yaml":
+            return True
+    return True

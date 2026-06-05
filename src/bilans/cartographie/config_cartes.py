@@ -415,6 +415,19 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
         symbol_size_mm=2.0,
         symbol_shape='circle'
     ),
+            'point_ctrl_20260205_wgs84': LayerSymbologyConfig(
+        layer_name='point_ctrl_20260205_wgs84',
+        legend_label='Contrôles',
+        filter_type='point_ctrl_global',
+        geometry_mode='polygon_fill',
+        renderer_type='single',
+        field='',
+        classification_mode='quantile',
+        num_classes=5,
+        palette='Blues',
+        symbol_size_mm=1.5,
+        symbol_shape='circle'
+    ),
         },
         title_main="Procédures judiciaires et PVe — Côte-d'Or",
         subtitle='',
@@ -461,11 +474,11 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
         layout_title_item_id='titre_principal',
         layout_subtitle_item_id='sous_titre',
     ),
-    'global_usagers_cibles': ProfileConfig(
-        id='global_usagers_cibles',
-        title="Bilan SD21 — Contrôles types d’usagers (ciblés) — Côte-d'Or",
+    'global_resultats': ProfileConfig(
+        id='global_resultats',
+        title="Bilan SD21 — Résultats des contrôles — Côte-d'Or",
         layout_name="Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or",
-        output_filename='carte_global_usagers_cibles.png',
+        output_filename='carte_global_resultats.png',
         date_deb='2025-01-01',
         date_fin='2025-12-31',
         layers={
@@ -524,7 +537,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
         symbol_shape='circle'
     ),
         },
-        title_main="Contrôles — types d’usagers (ciblés) — Côte-d'Or",
+        title_main="Contrôles — résultats — Côte-d'Or",
         subtitle='',
         layout_title_item_id='titre_principal',
         layout_subtitle_item_id='sous_titre',

@@ -1978,10 +1978,15 @@ def run_export(
             layout = get_layout_by_name(prof.layout_name) if getattr(prof, "layers_from_layout", False) else None
             layers_to_process = resolve_profile_layers(prof, layout=layout)
 
-            # Cacher toutes les couches métiers avant d'appliquer celles du profil
+            # Cacher toutes les couches métiers et purger les filtres avant d'appliquer celles du profil
             root = proj.layerTreeRoot()
             for layer in proj.mapLayers().values():
                 if is_operational_layer(layer.name()):
+                    # Purge du filtre
+                    try:
+                        layer.setSubsetString("")
+                    except Exception:
+                        pass
                     node = root.findLayer(layer.id())
                     if node:
                         node.setItemVisibilityChecked(False)
