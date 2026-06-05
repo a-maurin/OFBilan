@@ -31,7 +31,11 @@ def _qgis_python_path_candidates() -> list[Path]:
     ):
         if not rel.exists():
             continue
-        for line in rel.read_text(encoding="utf-8").splitlines():
+        try:
+            content = rel.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            content = rel.read_text(encoding="utf-16")
+        for line in content.splitlines():
             line = line.strip()
             if line and not line.startswith("#"):
                 candidates.append(Path(line))

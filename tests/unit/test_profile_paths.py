@@ -89,7 +89,7 @@ def test_run_profiles_batch_combine_uses_data_out_dir(tmp_path: Path, monkeypatc
         profil_id: str, date_deb: str, date_fin: str, echelle: str, code: str, options: dict | None = None
     ) -> int:
         calls.append(profil_id)
-        out_dir = tmp_path / "data" / "out" / f"bilan_{profil_id}"
+        out_dir = tmp_path / "data" / "out" / f"bilan_{profil_id}_{code}"
         out_dir.mkdir(parents=True, exist_ok=True)
         (out_dir / f"{profil_id}.pdf").write_text("pdf", encoding="utf-8")
         return 0
@@ -121,7 +121,7 @@ def test_run_profiles_batch_combine_uses_data_out_dir(tmp_path: Path, monkeypatc
     assert out_dir.exists()
     assert (out_dir / "README.txt").exists()
     assert len(revealed) == 1
-    assert revealed[0] == (tmp_path / "data" / "out" / "bilan_agrainage" / "agrainage.pdf").resolve()
+    assert revealed[0] == (tmp_path / "data" / "out" / "bilan_agrainage_21" / "agrainage.pdf").resolve()
 
 
 def test_run_profiles_batch_sequential_reveals_last_output(tmp_path: Path, monkeypatch) -> None:
@@ -131,7 +131,7 @@ def test_run_profiles_batch_sequential_reveals_last_output(tmp_path: Path, monke
     def _fake_run_profile(
         profil_id: str, date_deb: str, date_fin: str, echelle: str, code: str, options: dict | None = None
     ) -> int:
-        out_dir = tmp_path / "data" / "out" / f"bilan_{profil_id}"
+        out_dir = tmp_path / "data" / "out" / f"bilan_{profil_id}_{code}"
         out_dir.mkdir(parents=True, exist_ok=True)
         (out_dir / f"{profil_id}.pdf").write_text("pdf", encoding="utf-8")
         return 0
@@ -158,7 +158,7 @@ def test_run_profiles_batch_sequential_reveals_last_output(tmp_path: Path, monke
     )
 
     assert ret == 0
-    assert revealed == [(tmp_path / "data" / "out" / "bilan_agrainage" / "agrainage.pdf").resolve()]
+    assert revealed == [(tmp_path / "data" / "out" / "bilan_agrainage_21" / "agrainage.pdf").resolve()]
 
 
 def test_run_profiles_batch_rejects_global_mixed_with_other_profile() -> None:
@@ -185,7 +185,7 @@ def test_run_profiles_batch_opens_all_generated_pdfs_for_last_profile(
     def _fake_run_profile(
         profil_id: str, date_deb: str, date_fin: str, echelle: str, code: str, options: dict | None = None
     ) -> int:
-        out_dir = tmp_path / "data" / "out" / f"bilan_{profil_id}"
+        out_dir = tmp_path / "data" / "out" / f"bilan_{profil_id}_{code}"
         out_dir.mkdir(parents=True, exist_ok=True)
         if profil_id == "synthese_activite_PA_PJ":
             (out_dir / "synthese_detail.pdf").write_text("pdf", encoding="utf-8")
@@ -215,7 +215,7 @@ def test_run_profiles_batch_opens_all_generated_pdfs_for_last_profile(
 
     assert ret == 0
     assert revealed == [
-        (tmp_path / "data" / "out" / "bilan_synthese_activite_PA_PJ" / "synthese_brochure.pdf").resolve(),
-        (tmp_path / "data" / "out" / "bilan_synthese_activite_PA_PJ" / "synthese_detail.pdf").resolve(),
+        (tmp_path / "data" / "out" / "bilan_synthese_activite_PA_PJ_21" / "synthese_brochure.pdf").resolve(),
+        (tmp_path / "data" / "out" / "bilan_synthese_activite_PA_PJ_21" / "synthese_detail.pdf").resolve(),
     ]
 

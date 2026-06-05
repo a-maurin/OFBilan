@@ -18,7 +18,8 @@ def test_no_orphan_titles_in_keeptogether():
         styles = getSampleStyleSheet()
         title_para = Paragraph("Titre test", styles["Heading1"])
         spacer = Spacer(1, 10)
-        img = RLImage("dummy.jpg", width=100, height=100) # Heavy type
+        from unittest.mock import MagicMock
+        img = MagicMock(spec=RLImage)
         
         block = [title_para, spacer, img]
         

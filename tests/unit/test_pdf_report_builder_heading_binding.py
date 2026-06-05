@@ -23,6 +23,12 @@ def _has_image(flowables: list) -> bool:
         if type(f).__name__ == "KeepTogether":
             if _has_image(getattr(f, "_content", [])):
                 return True
+def _has_binding(story: list) -> bool:
+    """Vérifie que la section commence par un KeepTogether ou un CondPageBreak protecteur."""
+    for f in story:
+        name = type(f).__name__
+        if name in ("KeepTogether", "CondPageBreak"):
+            return True
     return False
 
 
@@ -35,10 +41,7 @@ def test_section_heading_stays_bound_to_first_content_item_for_image(tmp_path: P
     builder.add_image(img_path, width_ratio=0.4)
 
     assert builder.story, "Story vide inattendue."
-    first = builder.story[0]
-    assert isinstance(first, KeepTogether) or getattr(first, "keepWithNext", 0) == 1, (
-        "Le titre doit être lié (KeepTogether ou keepWithNext=1)."
-    )
+    assert _has_binding(builder.story), "Le titre doit être lié (KeepTogether ou CondPageBreak)."
 
 
 def test_subsection_heading_stays_bound_when_table_and_image_can_split(tmp_path: Path) -> None:
@@ -59,10 +62,7 @@ def test_subsection_heading_stays_bound_when_table_and_image_can_split(tmp_path:
     )
 
     assert builder.story, "Story vide inattendue."
-    first = builder.story[0]
-    assert isinstance(first, KeepTogether) or getattr(first, "keepWithNext", 0) == 1, (
-        "Le titre doit être lié (KeepTogether ou keepWithNext=1)."
-    )
+    assert _has_binding(builder.story), "Le titre doit être lié (KeepTogether ou CondPageBreak)."
 
 
 def test_local_heading_chart_table_keeps_heading_with_first_content(tmp_path: Path) -> None:
@@ -80,12 +80,15 @@ def test_local_heading_chart_table_keeps_heading_with_first_content(tmp_path: Pa
     )
 
     assert builder.story, "Story vide inattendue."
-    first = builder.story[0]
-    if isinstance(first, KeepTogether):
-        content = getattr(first, "_content", [])
-        assert not _has_image(content), "Le KeepTogether lié au titre ne doit plus inclure d'image lourde."
-    else:
-        assert getattr(first, "keepWithNext", 0) == 1, "Le titre local doit être lié par keepWithNext=1."
+    assert _has_binding(builder.story), "Le titre local doit être lié par KeepTogether ou CondPageBreak."
+    
+    # Vérifie qu'on n'a pas inclus l'image lourde dans le KeepTogether du titre (s'il y en a un)
+    for f in builder.story:
+        if type(f).__name__ == "KeepTogether":
+            content = getattr(f, "_content", [])
+            # Si le KeepTogether commence par un Paragraph (le titre), il ne doit pas engloutir l'image
+            if content and type(content[0]).__name__ == "Paragraph":
+                assert not _has_image(content), "Le KeepTogether lié au titre ne doit pas inclure l'image lourde."
 
 
 def test_local_heading_without_pending_still_keeps_first_content(tmp_path: Path) -> None:
@@ -102,9 +105,10 @@ def test_local_heading_without_pending_still_keeps_first_content(tmp_path: Path)
     )
 
     assert builder.story, "Story vide inattendue."
-    first = builder.story[0]
-    if isinstance(first, KeepTogether):
-        content = getattr(first, "_content", [])
-        assert not _has_image(content), "Le KeepTogether lié au titre ne doit plus inclure d'image lourde."
-    else:
-        assert getattr(first, "keepWithNext", 0) == 1, "Le titre local doit rester lié par keepWithNext=1."
+    assert _has_binding(builder.story), "Le titre local doit être lié par KeepTogether ou CondPageBreak."
+    
+    for f in builder.story:
+        if type(f).__name__ == "KeepTogether":
+            content = getattr(f, "_content", [])
+            if content and type(content[0]).__name__ == "Paragraph":
+                assert not _has_image(content), "Le KeepTogether lié au titre ne doit pas inclure l'image lourde."

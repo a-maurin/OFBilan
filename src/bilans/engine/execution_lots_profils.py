@@ -151,7 +151,7 @@ def run_profiles_batch(
             ret = run_profile(pid, date_deb, date_fin, echelle, code, options=cli_options)
             if ret != 0:
                 return ret
-            generated_pdfs_last_profile = _list_generated_pdf_files(pid, started_at)
+            generated_pdfs_last_profile = _list_generated_pdf_files(pid, started_at, code=code)
         (out_combine / "README.txt").write_text(
             f"Bilan combiné : {', '.join(profils)}\n"
             f"Période : {date_deb} au {date_fin}, périmètre : {echelle} {code}.\n"

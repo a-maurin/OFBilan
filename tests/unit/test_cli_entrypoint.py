@@ -46,7 +46,7 @@ def test_bilans_cli_interactive_profile_prompt(monkeypatch) -> None:
     assert captured["args"] == (
         ["chasse"],
         "2025-01-01",
-        "2025-12-31",
+        "2025-12-31 23:59:59",
         "departement",
         "21",
         False,
