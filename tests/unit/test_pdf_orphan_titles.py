@@ -34,19 +34,11 @@ def test_no_orphan_titles_in_keeptogether():
         # le préfixe (qui n'a QUE le titre et l'espace) ne finit pas bêtement dans un KeepTogether
         # sinon on perd l'effet keepWithNext !
         
-        def mock_story_append(item):
-            # Guard: on ne devrait jamais ajouter un KeepTogether qui ne contient
-            # aucun "vrai" contenu de fond (texte ou tableau), c'est-à-dire 
-            # seulement des Paragraph (titres) et Spacer.
-            if isinstance(item, KeepTogether):
-                has_content = False
-                for inner_item in item._flowables:
-                    # Dans notre cas d'usage, si le prefix est juste [titre, spacer], 
-                    # il ne devrait pas être encapsulé.
-                    pass
-                # Vérification simplifiée: si item correspond exactement à [Titre, Spacer]
-                if len(item._flowables) == 2 and isinstance(item._flowables[0], Paragraph) and isinstance(item._flowables[1], Spacer):
-                    pytest.fail("Un [Titre, Spacer] a été enfermé dans un KeepTogether, ce qui crée un titre orphelin.")
-                    
-        builder.story.append = mock_story_append
         builder._append_with_pending(block, keep_together=True)
+        
+        for item in builder.story:
+            if isinstance(item, KeepTogether):
+                # Vérification simplifiée: si item correspond exactement à [Titre, Spacer]
+                content = getattr(item, "_content", [])
+                if len(content) == 2 and isinstance(content[0], Paragraph) and isinstance(content[1], Spacer):
+                    pytest.fail("Un [Titre, Spacer] a été enfermé dans un KeepTogether, ce qui crée un titre orphelin.")
