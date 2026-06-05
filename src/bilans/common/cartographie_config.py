@@ -32,6 +32,9 @@ def parse_cartography_catalog(profile: dict | None) -> list[dict[str, str]]:
     if not isinstance(carto, dict):
         return []
         
+    if "catalog" in carto and isinstance(carto["catalog"], list) and carto["catalog"]:
+        return carto["catalog"]
+
     # La liste des cartes actives pilote le catalogue. Par défaut les 4 génériques si absent.
     actives = carto.get("cartes_actives", ["domaines", "usagers", "resultats", "procedures"])
     if not isinstance(actives, list):
