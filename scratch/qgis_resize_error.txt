@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "C:\Users\aguirre.maurin\Documents\GitHub\Bilans_production\src\bilans\cartographie\layout_defaults.py", line 399, in apply_layout_defaults
+    pos = item.positionWithUnits()
+          ^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'QGraphicsRectItem' object has no attribute 'positionWithUnits'

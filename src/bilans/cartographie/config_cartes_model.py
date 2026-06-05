@@ -112,6 +112,8 @@ class ProfileConfig:
     layout_layer_group: Optional[str] = None
     # Template layout_defaults.yaml (ex. carre_210, a4_paysage) ; None = auto depuis la page
     layout_defaults_ref: Optional[str] = None
+    # Textes dynamiques injectés dans la mise en page (ex: {"id_bandeau": "Bilan {departement}"})
+    extra_texts: Dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -164,6 +166,8 @@ class LayoutTemplateConfig:
     scalebar: LayoutItemRectConfig = field(default_factory=LayoutItemRectConfig)
     logo_bas_droite: LayoutLogoDefaultsConfig = field(default_factory=LayoutLogoDefaultsConfig)
     bandeau_haut: LayoutBandeauDefaultsConfig = field(default_factory=LayoutBandeauDefaultsConfig)
+    # Éléments additionnels dont on veut contrôler le placement absolu via l'ID QGIS
+    extra_items: Dict[str, LayoutItemRectConfig] = field(default_factory=dict)
 
 
 @dataclass

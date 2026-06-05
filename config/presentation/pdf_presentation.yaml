@@ -152,6 +152,7 @@ defaults:
   # Tableaux PDF (ReportLab) : coupure inter-pages, en-têtes verticaux, tableau Usagers×Domaine.
   tables:
     split_by_row: false
+    max_rows_keep_together: 15
     vertical_header:
       pad_x_pt: 0
       max_lines: 6

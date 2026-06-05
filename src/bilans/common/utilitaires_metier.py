@@ -1779,6 +1779,8 @@ def _load_csv_opt(out_dir: Path, name: str) -> pd.DataFrame | None:
         return None
     try:
         return pd.read_csv(p, sep=";", encoding="utf-8")
+    except pd.errors.EmptyDataError:
+        return None
     except UnicodeDecodeError:
         return pd.read_csv(p, sep=";", encoding="latin-1")
 

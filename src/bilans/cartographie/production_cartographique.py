@@ -211,12 +211,15 @@ def _load_profiles_from_param() -> Optional[tuple[Dict[str, "ProfileConfig"], st
     result: Dict[str, ProfileConfig] = {}
     global_symbology_source = "qgis"
     global_layers_from_layout = False
+    global_extra_texts = {}
     if isinstance(data, dict):
         raw_default = str(data.get("symbology_source", "qgis")).strip().lower()
         if raw_default in ("qgis", "yaml"):
             global_symbology_source = raw_default
         if "layers_from_layout" in data:
             global_layers_from_layout = bool(data.get("layers_from_layout"))
+        if "extra_texts" in data:
+            global_extra_texts = dict(data.get("extra_texts", {}))
 
     for pid, pdata in profiles_data.items():
         if not isinstance(pdata, dict):
@@ -232,6 +235,10 @@ def _load_profiles_from_param() -> Optional[tuple[Dict[str, "ProfileConfig"], st
         prof_sym_src = str(pdata.get("symbology_source", global_symbology_source)).strip().lower()
         if prof_sym_src not in ("qgis", "yaml"):
             prof_sym_src = global_symbology_source
+        prof_extra_texts = {**global_extra_texts}
+        if "extra_texts" in pdata and isinstance(pdata["extra_texts"], dict):
+            prof_extra_texts.update(pdata["extra_texts"])
+            
         result[pid] = ProfileConfig(
             id=str(pdata.get("id", pid)),
             title=str(pdata.get("title", pid)),
@@ -249,6 +256,7 @@ def _load_profiles_from_param() -> Optional[tuple[Dict[str, "ProfileConfig"], st
             layers_from_layout=bool(pdata.get("layers_from_layout", global_layers_from_layout)),
             layout_layer_group=pdata.get("layout_layer_group") or None,
             layout_defaults_ref=pdata.get("layout_defaults_ref") or None,
+            extra_texts=prof_extra_texts,
         )
 
     # Profils cartes par défaut : thèmes de ref_themes_ctrl sans entrée dans le YAML
@@ -291,6 +299,7 @@ def _load_profiles_from_param() -> Optional[tuple[Dict[str, "ProfileConfig"], st
                 layout_title_item_id="titre_principal",
                 layout_subtitle_item_id="sous_titre",
                 theme_id=tid,
+                extra_texts=global_extra_texts,
             )
         if themes:
             logger.info("Profils cartes (YAML + défaut) : %s", list(result.keys()))
@@ -461,21 +470,12 @@ def _clone_pochoir_renderer_from_template():
 
 
 def apply_pochoir_inverted_symbology(layer) -> None:
-    """Symbologie masque blanc hors département (inverted polygon)."""
-    cloned = _clone_pochoir_renderer_from_template()
-    if cloned is not None:
-        layer.setRenderer(cloned)
-        layer.triggerRepaint()
-        return
+    """Symbologie masque blanc hors département (polygon normal car géométrie donut)."""
     fill_sym = QgsFillSymbol.createSimple(
         {"color": "255,255,255,255", "outline_color": "35,35,35", "outline_width": "0.26"}
     )
-    try:
-        from qgis.core import QgsInvertedPolygonRenderer
-
-        layer.setRenderer(QgsInvertedPolygonRenderer(fill_sym))
-    except ImportError:
-        layer.setRenderer(QgsSingleSymbolRenderer(fill_sym))
+    from qgis.core import QgsSingleSymbolRenderer
+    layer.setRenderer(QgsSingleSymbolRenderer(fill_sym))
     layer.triggerRepaint()
 
 
@@ -511,7 +511,7 @@ def ensure_pochoir_layer_in_project(dept_code: str) -> tuple[Optional[Any], str]
         return None, ""
 
     apply_pochoir_inverted_symbology(layer)
-    QgsProject.instance().addMapLayer(layer, False)
+    QgsProject.instance().addMapLayer(layer, True)
     return layer, layer_name
 
 
@@ -530,11 +530,22 @@ def apply_map_extent_for_department(layout, dept_code: str, *, margin_ratio: flo
         logger.warning("Emprise carte non ajustée (département %s) : %s", dept_code, exc)
         return False
 
+    from qgis.core import QgsRectangle, QgsCoordinateReferenceSystem, QgsCoordinateTransform, QgsProject
+    
     rect = QgsRectangle(xmin, ymin, xmax, ymax)
     updated = False
+    
+    crs_src = QgsCoordinateReferenceSystem("EPSG:2154")
+    
     for item in layout.items():
         if isinstance(item, QgsLayoutItemMap):
-            item.setExtent(rect)
+            crs_map = item.crs()
+            if crs_src != crs_map:
+                transform = QgsCoordinateTransform(crs_src, crs_map, QgsProject.instance())
+                rect_transformed = transform.transformBoundingBox(rect)
+                item.setExtent(rect_transformed)
+            else:
+                item.setExtent(rect)
             updated = True
     if updated:
         logger.info("Emprise carte ajustée au département %s", dept_code)
@@ -749,7 +760,7 @@ def apply_layer_symbology(layer, config: "LayerSymbologyConfig", geometry_mode_o
                 "outline_color": "128,17,25" if config.symbol_shape == "diamond" else "35,35,35",
             })
             cluster_marker.setOutputUnit(Qgis.RenderUnit.Millimeters)
-            cluster_marker.setDataDefinedSize(QgsProperty.fromExpression("scale_linear(@cluster_size, 1, 20, 4, 15)"))
+            cluster_marker.setDataDefinedSize(QgsProperty.fromExpression("scale_linear(@cluster_size, 1, 20, 2, 7.5)"))
             
             font_marker = QgsFontMarkerSymbolLayer()
             font_marker.setFontFamily("sans-serif")
@@ -1468,6 +1479,7 @@ def export_layout(
     fmt: str = "png",
     legend_labels_map: Optional[Dict[str, str]] = None,
     dept_code: Optional[str] = None,
+    layers_to_render: Optional[list] = None,
 ) -> bool:
     """Exporte le layout du profil vers un fichier image."""
     from config_cartes import ProfileConfig, CONFIG
@@ -1493,15 +1505,47 @@ def export_layout(
     title_id, subtitle_id = resolve_title_ids(prof, layout_defaults_root)
 
     for item in layout.items():
-        if isinstance(item, QgsLayoutItemLabel):
+        if isinstance(item, QgsLayoutItemMap):
+            if layers_to_render is not None:
+                item.setLayers(layers_to_render)
+                item.setKeepLayerSet(True)
+            elif hasattr(item, "setKeepLayerSet"):
+                item.setKeepLayerSet(False)
+        elif isinstance(item, QgsLayoutItemLabel):
             try:
                 item_id = item.id()
             except AttributeError:
                 item_id = ""
+                
+            # Titres natifs
             if item_id == title_id:
                 item.setText(title_text)
             elif subtitle_id and item_id == subtitle_id:
                 item.setText(subtitle_text)
+                
+            # Textes additionnels dynamiques (Hybride Avancé)
+            if item_id and hasattr(prof, "extra_texts") and item_id in prof.extra_texts:
+                template_str = prof.extra_texts[item_id]
+                
+                periode_formatee = ""
+                if hasattr(prof, "date_deb") and hasattr(prof, "date_fin") and prof.date_deb and prof.date_fin:
+                    if prof.date_deb.endswith("-01-01") and prof.date_fin.endswith("-12-31") and prof.date_deb[:4] == prof.date_fin[:4]:
+                        periode_formatee = "Année " + prof.date_deb[:4]
+                    else:
+                        periode_formatee = f"Période : {prof.date_deb} - {prof.date_fin}"
+
+                try:
+                    formatted_text = template_str.format(
+                        departement=dept_code or "",
+                        date_deb=prof.date_deb,
+                        date_fin=prof.date_fin,
+                        nom_bilan=prof.title,
+                        periode_formatee=periode_formatee
+                    )
+                    item.setText(formatted_text)
+                except Exception as e:
+                    logger.warning("Erreur formatage texte dynamique pour '%s': %s", item_id, e)
+                    item.setText(template_str)
         elif isinstance(item, QgsLayoutItemLegend):
             # Supprimer la légende native QGIS car nous la générons avec Pillow post-export
             layout.removeLayoutItem(item)
@@ -1746,6 +1790,7 @@ def _apply_qgis_override_to_profile(prof: "ProfileConfig", override: dict) -> "P
         if "point_ctrl" in layer_name and lcfg.filter_type in (
             "point_ctrl_theme",
             "point_ctrl_global",
+            "point_ctrl",
             "",
         ):
             new_layers[key] = replace(lcfg, filter_type="point_ctrl_keywords")
@@ -1852,6 +1897,8 @@ def run_export(
 
         legend_data = []
 
+        # Collecte explicite des couches à rendre dans la carte
+        layers_to_render = []
         for lname, lcfg in layers_to_process.items():
             resolved_infos = resolve_layers_for_config(
                 lname,
@@ -1874,8 +1921,10 @@ def run_export(
                 continue
 
             for layer, resolved_name, resolve_source in resolved_infos:
-                if not layer or not resolved_name:
+                if not layer or not resolved_name or not layer.isValid():
                     continue
+                
+                layers_to_render.append(layer)
 
                 if resolve_source != "exact":
                     logger.info(
@@ -1915,6 +1964,14 @@ def run_export(
                 if legend_info:
                     legend_data.append(legend_info)
 
+        # Ajouter les fonds de plan explicitement (dessinés en dernier dans la liste QGIS = au fond de la carte)
+        from layout_layers import is_basemap_layer
+        for layer in proj.mapLayers().values():
+            if is_basemap_layer(layer.name()):
+                node = root.findLayer(layer.id())
+                if node and node.isVisible():
+                    layers_to_render.append(layer)
+
         out_path = out_dir / prof.output_filename
 
         exported = export_layout(
@@ -1924,6 +1981,7 @@ def run_export(
             fmt=fmt,
             legend_labels_map=legend_labels_map or None,
             dept_code=effective_dept,
+            layers_to_render=layers_to_render,
         )
 
         png_path = out_path.with_suffix(".png")
@@ -2125,6 +2183,14 @@ def _extract_legend_info(layer, lcfg):
         return None
         
     rtype = renderer.type()
+    
+    # Lot 1 : Accès au renderer imbriqué pour les clusters
+    if rtype == "pointCluster" and hasattr(renderer, "embeddedRenderer"):
+        embedded = renderer.embeddedRenderer()
+        if embedded:
+            renderer = embedded
+            rtype = renderer.type()
+
     if rtype == "singleSymbol":
         color = renderer.symbol().color().name() if renderer.symbol() else "#000000"
         items.append({"label": title, "color": color})

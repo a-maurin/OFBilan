@@ -20,7 +20,7 @@ profiles:
     id: agrainage
     title: "Bilan agrainage 2025-2026 — Agrainage illicite (NATINF 27742 et 25001) — Côte-d'Or"
     layout_name: "Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or"
-    layout_defaults_ref: carre_210
+    layout_defaults_ref: ratio_141
     layout_layer_group: agrainage
     output_filename: carte_agrainage.png
     date_deb: "2025-01-01"
@@ -81,7 +81,7 @@ profiles:
     id: piegeage
     title: "Bilan piégeage — Contrôles piégeage — Côte-d'Or"
     layout_name: "Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or"
-    layout_defaults_ref: carre_210
+    layout_defaults_ref: ratio_141
     output_filename: carte_piegeage.png
     date_deb: "2025-01-01"
     date_fin: "2026-02-05"
@@ -108,7 +108,7 @@ profiles:
     id: global
     title: "Bilan global — Contrôles et procédures — Côte-d'Or"
     layout_name: "Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or"
-    layout_defaults_ref: carre_210
+    layout_defaults_ref: ratio_141
     output_filename: carte_global.png
     date_deb: "2025-01-01"
     date_fin: "2026-02-05"
@@ -134,7 +134,7 @@ profiles:
     id: global_usagers
     title: "Bilan global SD21 — Contrôles par types d’usagers — Côte-d'Or"
     layout_name: "Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or"
-    layout_defaults_ref: carre_210
+    layout_defaults_ref: ratio_141
     output_filename: carte_global_usagers.png
     date_deb: "2025-01-01"
     date_fin: "2026-02-05"
@@ -156,7 +156,7 @@ profiles:
     id: global_usagers_agriculteurs
     title: "Bilan SD21 — Contrôles agriculteurs — Côte-d'Or"
     layout_name: "Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or"
-    layout_defaults_ref: carre_210
+    layout_defaults_ref: ratio_141
     output_filename: carte_global_usagers_agriculteurs.png
     date_deb: "2025-01-01"
     date_fin: "2026-02-05"
@@ -178,7 +178,7 @@ profiles:
     id: global_usagers_cibles
     title: "Bilan SD21 — Contrôles types d’usagers (ciblés) — Côte-d'Or"
     layout_name: "Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or"
-    layout_defaults_ref: carre_210
+    layout_defaults_ref: ratio_141
     output_filename: carte_global_usagers_cibles.png
     date_deb: "2025-01-01"
     date_fin: "2026-02-05"
@@ -200,7 +200,7 @@ profiles:
     id: global_domaines
     title: "Bilan global — Contrôles par domaines — Côte-d'Or"
     layout_name: "Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or"
-    layout_defaults_ref: carre_210
+    layout_defaults_ref: ratio_141
     output_filename: carte_global_domaines.png
     date_deb: "2025-01-01"
     date_fin: "2026-02-05"
@@ -222,7 +222,7 @@ profiles:
     id: procedures_pve
     title: "Bilan procédures judiciaires et PVe — Côte-d'Or"
     layout_name: "Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or"
-    layout_defaults_ref: carre_210
+    layout_defaults_ref: ratio_141
     output_filename: carte_procedures_pve.png
     date_deb: "2025-01-01"
     date_fin: "2026-02-05"
@@ -256,7 +256,7 @@ profiles:
     id: toutes
     title: "Bilan global — Toutes les cartes — Côte-d'Or"
     layout_name: "Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or"
-    layout_defaults_ref: carre_210
+    layout_defaults_ref: ratio_141
     output_filename: carte_toutes.png
     date_deb: "2025-01-01"
     date_fin: "2026-02-05"

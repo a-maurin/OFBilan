@@ -1,0 +1,54 @@
+departements:
+  "21":
+    nom: "Service départemental de la Côte-d'Or"
+    adresse: "57 rue de Mulhouse"
+    code_postal: "21000"
+    ville: "Dijon"
+    email: "sd21@ofb.gouv.fr"
+    telephone: "03 80 29 43 91"
+  "25":
+    nom: "Service départemental du Doubs"
+    adresse: "7 Rue des Noyers"
+    code_postal: "25530"
+    ville: "Vercel-Villedieu-le-Camp"
+    email: "sd25@ofb.gouv.fr"
+    telephone: "03 81 58 39 65"
+  "39":
+    nom: "Service départemental du Jura"
+    adresse: "4, rue du Curé Marion"
+    code_postal: "39000"
+    ville: "Lons-le-Saunier"
+    email: "sd39@ofb.gouv.fr"
+    telephone: "03 84 86 81 79"
+  "70":
+    nom: "Service départemental de la Haute-Saône"
+    adresse: "4, rue des marronniers"
+    code_postal: "70000"
+    ville: "Vesoul"
+    email: "sd70@ofb.gouv.fr"
+    telephone: "03 84 76 21 21"
+  "90":
+    nom: "Service départemental du Territoire de Belfort"
+    adresse: "12 rue des prés"
+    code_postal: "90000"
+    ville: "Belfort"
+    email: "sd90@ofb.gouv.fr"
+    telephone: "03 84 21 00 00"
+
+regions:
+  "27":
+    nom: "Direction régionale Bourgogne-Franche-Comté"
+    adresse: "Immeuble Le Richelieu, 10 Bd Carnot"
+    code_postal: "21000"
+    ville: "Dijon"
+    email: "dr.bfc@ofb.gouv.fr"
+    telephone: "03 80 29 43 90"
+
+national:
+  "FR":
+    nom: "Office français de la biodiversité (Siège)"
+    adresse: "85 bis avenue de Wagram"
+    code_postal: "75017"
+    ville: "Paris"
+    email: "contact@ofb.gouv.fr"
+    telephone: "01 44 15 17 17"

@@ -847,3 +847,6 @@ def run_profile_aggregations(
                 "nb_pve",
             ]
         ).to_csv(out_dir / "indicateurs_global_par_annee.csv", sep=";", index=False)
+        
+    from bilans.engine.agregations_region import analyse_region_par_departement
+    analyse_region_par_departement(point, pa, pej, pve, echelle, code, out_dir)

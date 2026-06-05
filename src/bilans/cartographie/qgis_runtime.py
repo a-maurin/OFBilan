@@ -93,6 +93,7 @@ def run_cartography_export_subprocess(
     date_deb: str,
     date_fin: str,
     dept_code: str,
+    target_dir: Optional[Path] = None,
 ) -> bool:
     """
     Lance l'export QGIS via le lanceur Windows (environnement OSGeo4W) ou Python QGIS direct.
@@ -127,6 +128,8 @@ def run_cartography_export_subprocess(
         )
         env = os.environ.copy()
         env["BILANS_CARTO_HEADLESS"] = "1"
+        if target_dir:
+            env["CARTO_OUTPUT_DIR"] = str(target_dir)
         try:
             proc = subprocess.run(
                 cmd,
@@ -156,6 +159,8 @@ def run_cartography_export_subprocess(
 
     script = PROJECT_ROOT / "src" / "bilans" / "cartographie" / "production_cartographique.py"
     env = os.environ.copy()
+    if target_dir:
+        env["CARTO_OUTPUT_DIR"] = str(target_dir)
     src = str(PROJECT_ROOT / "src")
     env["PYTHONPATH"] = src + os.pathsep + env.get("PYTHONPATH", "")
     cmd = [

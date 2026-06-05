@@ -3,8 +3,8 @@
 # Une seule légende conservée, colonne droite (fusion des deux emplacements d'origine).
 
 enabled: true
-default_template: carre_210
-auto_template_from_page: true
+default_template: ratio_141
+auto_template_from_page: false
 
 # Ids d'éléments titre par layout QGIS (si différents de titre_principal / sous_titre)
 layout_title_ids:
@@ -16,6 +16,49 @@ layout_title_ids:
     title_item_id: titre_principal
 
 templates:
+  ratio_141:
+    page:
+      width_mm: 210
+      height_mm: 149
+    map:
+      x_mm: -0.15
+      y_mm: 10
+      width_mm: 210.15
+      height_mm: 139
+    legend:
+      single: true
+      hide_extra: true
+      x_mm: 154
+      y_mm: 10
+      width_mm: 56
+      height_mm: 98
+    scalebar:
+      x_mm: 4
+      y_mm: 123
+      width_mm: 38.786
+      height_mm: 13.222
+    logo_bas_droite:
+      x_mm: 151.79
+      y_mm: 125.258
+      width_mm: 58.21
+      height_mm: 24
+      picture_id: logo_ofb_bas_droite
+      skip_if_qgis_picture: true
+    bandeau_haut:
+      y_mm: 0
+      height_mm: 25
+      height_max_fraction: 0.15
+      picture_id: bandeau_logos_ofb
+    # --- Architecture Hybride Avancée ---
+    # Permet de forcer la position absolue d'un élément via son ID QGIS.
+    # extra_items:
+    #   id_qgis_de_la_fleche_nord:
+    #     x_mm: 10.0
+    #     y_mm: 100.0
+    #   id_qgis_du_bandeau_sources:
+    #     x_mm: 0.0
+    #     y_mm: 130.0
+
   carre_210:
     page:
       width_mm: 210
@@ -49,6 +92,28 @@ templates:
       height_mm: 25
       height_max_fraction: 0.15
       picture_id: bandeau_logos_ofb
+    extra_items:
+      texte_bandeau_haut:
+        pos_x_mm: -0.15
+        pos_y_mm: 0
+      texte_bandeau_bas:
+        pos_x_mm: 2
+        pos_y_mm: 200
+      bloc_marque_rf_ofb:
+        pos_x_mm: 147
+        pos_y_mm: 184.147
+      bandeau_bas:
+        pos_x_mm: 0
+        pos_y_mm: 200
+      bandeau_haut:
+        pos_x_mm: 0
+        pos_y_mm: 0
+      fleche_nord:
+        pos_x_mm: 5.836
+        pos_y_mm: 165.957
+      echelle:
+        pos_x_mm: 4
+        pos_y_mm: 184
 
   a4_paysage:
     page:

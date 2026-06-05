@@ -427,6 +427,10 @@ def _generate_synthese_pdf(
     pdf_path = apply_diffusion_pdf_suffix(out_dir / pdf_name, diffusion)
     charte_cfg = resolve_charte_config(presentation_cfg)
     title_page_cfg = resolve_title_page_config(_ROOT, scope=scope, profile_id=profil_id)
+    
+    from reportlab.lib.pagesizes import A4, landscape
+    pagesize = landscape(A4) if cfg.echelle == "region" else A4
+    
     builder = PDFReportBuilder(
         pdf_path=pdf_path,
         header_title=report_header,
@@ -435,6 +439,7 @@ def _generate_synthese_pdf(
         charte_config=charte_cfg,
         diffusion=diffusion,
         title_page_config=title_page_cfg,
+        pagesize=pagesize,
     )
     avail_w = builder.avail_w
     tmp_dir = builder.tmp_dir
@@ -528,6 +533,18 @@ def _generate_synthese_pdf(
     registry.register("sec5", render_sec5)
     registry.register("sec6", render_sec6)
     
+    from bilans.engine.sections_region import render_sec_region_detail
+    registry.register("secregion", render_sec_region_detail)
+    if cfg.echelle == "region":
+        # Inject just before sec5 (cartographie) or sec6
+        insert_idx = len(sections_toc)
+        for i, (sid, _) in enumerate(sections_toc):
+            if sid in ("sec5", "sec6"):
+                insert_idx = i
+                break
+        sections_toc.insert(insert_idx, ("secregion", "Détail par département"))
+        ctx.section_title["secregion"] = "Détail par département"
+
     # Pilotage dynamique : on itère sur les sections résolues depuis le YAML
     for sec_id, _ in sections_toc:
         if registry.get(sec_id):

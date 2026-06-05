@@ -42,7 +42,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
         classification_mode='quantile',
         num_classes=5,
         palette='Blues',
-        symbol_size_mm=4.0,
+        symbol_size_mm=2.0,
         symbol_shape='circle'
     ),
             'Zone infectée': LayerSymbologyConfig(
@@ -55,7 +55,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
         classification_mode='quantile',
         num_classes=5,
         palette='Blues',
-        symbol_size_mm=4.0,
+        symbol_size_mm=2.0,
         symbol_shape='circle'
     ),
             'Zone à risque': LayerSymbologyConfig(
@@ -68,7 +68,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
         classification_mode='quantile',
         num_classes=5,
         palette='Blues',
-        symbol_size_mm=4.0,
+        symbol_size_mm=2.0,
         symbol_shape='circle'
     ),
             'localisation_infrac_FAITS_20260205': LayerSymbologyConfig(
@@ -81,7 +81,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
         classification_mode='quantile',
         num_classes=5,
         palette='Blues',
-        symbol_size_mm=4.0,
+        symbol_size_mm=2.0,
         symbol_shape='circle'
     ),
             'pochoir_sd21': LayerSymbologyConfig(
@@ -94,7 +94,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
         classification_mode='quantile',
         num_classes=5,
         palette='Blues',
-        symbol_size_mm=4.0,
+        symbol_size_mm=2.0,
         symbol_shape='circle'
     ),
             'point_ctrl_20251231_wgs84': LayerSymbologyConfig(
@@ -107,7 +107,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
         classification_mode='quantile',
         num_classes=5,
         palette='Blues',
-        symbol_size_mm=4.0,
+        symbol_size_mm=2.0,
         symbol_shape='circle'
     ),
             'point_ctrl_20260205_wgs84': LayerSymbologyConfig(
@@ -120,7 +120,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
         classification_mode='quantile',
         num_classes=5,
         palette='Blues',
-        symbol_size_mm=4.0,
+        symbol_size_mm=2.0,
         symbol_shape='circle'
     ),
             'pve_agrainage_points_centroides': LayerSymbologyConfig(
@@ -133,7 +133,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
         classification_mode='quantile',
         num_classes=5,
         palette='Blues',
-        symbol_size_mm=4.0,
+        symbol_size_mm=2.0,
         symbol_shape='circle'
     ),
         },
@@ -160,7 +160,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
         classification_mode='quantile',
         num_classes=5,
         palette='Blues',
-        symbol_size_mm=4.0,
+        symbol_size_mm=2.0,
         symbol_shape='circle'
     ),
             'pochoir_sd21': LayerSymbologyConfig(
@@ -173,7 +173,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
         classification_mode='quantile',
         num_classes=5,
         palette='Blues',
-        symbol_size_mm=4.0,
+        symbol_size_mm=2.0,
         symbol_shape='circle'
     ),
             'point_ctrl_20251231_wgs84': LayerSymbologyConfig(
@@ -186,7 +186,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
         classification_mode='quantile',
         num_classes=5,
         palette='Blues',
-        symbol_size_mm=4.0,
+        symbol_size_mm=2.0,
         symbol_shape='circle'
     ),
             'point_ctrl_20260205_wgs84': LayerSymbologyConfig(
@@ -199,7 +199,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
         classification_mode='quantile',
         num_classes=5,
         palette='Blues',
-        symbol_size_mm=4.0,
+        symbol_size_mm=2.0,
         symbol_shape='circle'
     ),
         },
@@ -226,7 +226,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
         classification_mode='quantile',
         num_classes=5,
         palette='Blues',
-        symbol_size_mm=4.0,
+        symbol_size_mm=2.0,
         symbol_shape='circle'
     ),
             'pochoir_sd21': LayerSymbologyConfig(
@@ -239,7 +239,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
         classification_mode='quantile',
         num_classes=5,
         palette='Blues',
-        symbol_size_mm=4.0,
+        symbol_size_mm=2.0,
         symbol_shape='circle'
     ),
             'point_ctrl_20251231_wgs84': LayerSymbologyConfig(
@@ -252,7 +252,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
         classification_mode='quantile',
         num_classes=5,
         palette='Oranges',
-        symbol_size_mm=4.0,
+        symbol_size_mm=2.0,
         symbol_shape='circle'
     ),
             'point_ctrl_20260205_wgs84': LayerSymbologyConfig(
@@ -265,7 +265,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
         classification_mode='quantile',
         num_classes=5,
         palette='Oranges',
-        symbol_size_mm=4.0,
+        symbol_size_mm=2.0,
         symbol_shape='circle'
     ),
         },
@@ -292,7 +292,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
         classification_mode='quantile',
         num_classes=5,
         palette='Blues',
-        symbol_size_mm=4.0,
+        symbol_size_mm=2.0,
         symbol_shape='circle'
     ),
             'point_ctrl_20260205_wgs84': LayerSymbologyConfig(
@@ -305,7 +305,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
         classification_mode='quantile',
         num_classes=5,
         palette='#003A76',
-        symbol_size_mm=3.8,
+        symbol_size_mm=1.9,
         symbol_shape='circle'
     ),
             'localisation_infrac_FAITS_20260205': LayerSymbologyConfig(
@@ -318,7 +318,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
         classification_mode='quantile',
         num_classes=5,
         palette='Oranges',
-        symbol_size_mm=4.0,
+        symbol_size_mm=2.0,
         symbol_shape='circle'
     ),
         },
@@ -345,7 +345,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
         classification_mode='quantile',
         num_classes=5,
         palette='Blues',
-        symbol_size_mm=4.0,
+        symbol_size_mm=2.0,
         symbol_shape='circle'
     ),
             'point_ctrl_20260205_wgs84': LayerSymbologyConfig(
@@ -358,7 +358,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
         classification_mode='quantile',
         num_classes=5,
         palette='#003A76,#53AB60,#F4A261,#E76F51,#90BF83,#4296CE',
-        symbol_size_mm=3.8,
+        symbol_size_mm=1.9,
         symbol_shape='circle'
     ),
         },
@@ -385,7 +385,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
         classification_mode='quantile',
         num_classes=5,
         palette='Blues',
-        symbol_size_mm=4.0,
+        symbol_size_mm=2.0,
         symbol_shape='circle'
     ),
             'localisation_infrac_FAITS_20260205': LayerSymbologyConfig(
@@ -398,7 +398,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
         classification_mode='quantile',
         num_classes=5,
         palette='Blues',
-        symbol_size_mm=4.0,
+        symbol_size_mm=2.0,
         symbol_shape='circle'
     ),
             'communes_france': LayerSymbologyConfig(
@@ -412,7 +412,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
         classification_mode='quantile',
         num_classes=5,
         palette='Blues',
-        symbol_size_mm=4.0,
+        symbol_size_mm=2.0,
         symbol_shape='circle'
     ),
         },
@@ -439,7 +439,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
         classification_mode='quantile',
         num_classes=5,
         palette='Blues',
-        symbol_size_mm=4.0,
+        symbol_size_mm=2.0,
         symbol_shape='circle'
     ),
             'point_ctrl_20260205_wgs84': LayerSymbologyConfig(
@@ -452,7 +452,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
         classification_mode='quantile',
         num_classes=5,
         palette='#53AB60',
-        symbol_size_mm=3.8,
+        symbol_size_mm=1.9,
         symbol_shape='circle'
     ),
         },
@@ -480,7 +480,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
         num_classes=5,
         palette='Blues',
         color_rgb=(31, 120, 180),
-        symbol_size_mm=4.0,
+        symbol_size_mm=2.0,
         symbol_shape='circle'
     ),
             'pochoir_sd21': LayerSymbologyConfig(
@@ -493,7 +493,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
         classification_mode='quantile',
         num_classes=5,
         palette='Blues',
-        symbol_size_mm=4.0,
+        symbol_size_mm=2.0,
         symbol_shape='circle'
     ),
             'point_ctrl_20251231_wgs84': LayerSymbologyConfig(
@@ -507,7 +507,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
         num_classes=5,
         palette='Blues',
         color_rgb=(31, 120, 180),
-        symbol_size_mm=3.0,
+        symbol_size_mm=1.5,
         symbol_shape='circle'
     ),
             'point_ctrl_20260205_wgs84': LayerSymbologyConfig(
@@ -520,7 +520,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
         classification_mode='quantile',
         num_classes=5,
         palette='Blues',
-        symbol_size_mm=4.0,
+        symbol_size_mm=2.0,
         symbol_shape='circle'
     ),
         },
@@ -547,7 +547,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
         classification_mode='quantile',
         num_classes=5,
         palette='Blues',
-        symbol_size_mm=4.0,
+        symbol_size_mm=2.0,
         symbol_shape='circle'
     ),
             'point_ctrl_20260205_wgs84': LayerSymbologyConfig(
@@ -560,7 +560,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
         classification_mode='quantile',
         num_classes=5,
         palette='#003A76,#53AB60,#F4A261,#E76F51,#90BF83,#4296CE,#264653,#2A9D8F',
-        symbol_size_mm=3.8,
+        symbol_size_mm=1.9,
         symbol_shape='circle'
     ),
         },
@@ -587,7 +587,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
         classification_mode='quantile',
         num_classes=5,
         palette='Blues',
-        symbol_size_mm=4.0,
+        symbol_size_mm=2.0,
         symbol_shape='circle'
     ),
             'point_ctrl_20260205_wgs84': LayerSymbologyConfig(
@@ -600,7 +600,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
         classification_mode='quantile',
         num_classes=5,
         palette='Blues',
-        symbol_size_mm=4.0,
+        symbol_size_mm=2.0,
         symbol_shape='circle'
     ),
         },

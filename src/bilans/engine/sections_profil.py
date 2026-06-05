@@ -668,7 +668,7 @@ def render_sec32(ctx: PdfContext) -> None:
         # --- Note d'information sur les non-localisés structurels ---
         nb_nd = sum(1 for c in pej_det_show["commune"] if str(c).strip() in ("n.d.", "", "nan", "None", "<NA>"))
         if nb_nd > 0:
-            ctx.builder.add_paragraph(
+            ctx.builder.append_pending_paragraph(
                 f"<i>À noter : {nb_nd} procédures ci-dessous n'ont pas pu être géolocalisées et apparaissent avec la mention « n.d. » "
                 "dans la colonne Commune. Cette absence s'explique majoritairement par un manque d'informations "
                 "géographiques renseignées dans la base de données source (OSCEAN).</i>"
@@ -961,14 +961,13 @@ def render_sec5map(ctx: PdfContext) -> None:
         if is_section_enabled(ctx.presentation_cfg, "sec5map", True) and ctx.show_placeholder:
             ctx.builder.add_paragraph("<i>Cartographie désactivée pour ce bilan.</i>")
     elif is_section_enabled(ctx.presentation_cfg, "sec5map", True) and ctx.global_map_paths and show_map_block:
-        ctx.builder.add_paragraph(
+        ctx.builder.append_pending_paragraph(
             "Répartition spatiale des contrôles et procédures sur le département "
             "(générateur cartographique).",
         )
         ctx.builder.add_maps(
             ctx.global_map_paths,
             layout=ctx.global_map_layout,
-            captions=ctx.map_captions or None,
         )
     elif is_section_enabled(ctx.presentation_cfg, "sec5map", True) and show_map_fallback and ctx.show_placeholder:
         if has_cartography_catalog(ctx.profile):

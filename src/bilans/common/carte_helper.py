@@ -50,15 +50,17 @@ def find_map(
     profile_id: str,
     *,
     bilan_profiles: dict[str, dict] | None = None,
+    target_dir: Path | None = None,
 ) -> Optional[Path]:
     """Return the path to a pre-generated map PNG for the given profile, or None."""
-    return resolve_map_png_path(profile_id, bilan_profiles=bilan_profiles)
+    return resolve_map_png_path(profile_id, bilan_profiles=bilan_profiles, target_dir=target_dir)
 
 
 def resolve_map_png_path(
     profile_id: str,
     *,
     bilan_profiles: dict[str, dict] | None = None,
+    target_dir: Path | None = None,
 ) -> Optional[Path]:
     """Chemin PNG d'une carte (catalogue bilan ou conventions carte_{id}.png)."""
     pid = str(profile_id).strip()
@@ -72,16 +74,22 @@ def resolve_map_png_path(
             continue
         for entry in parse_cartography_catalog(prof):
             if str(entry.get("id", "")).strip() == pid:
-                candidate = get_cartes_dir() / str(entry.get("fichier", "")).strip()
-                if candidate.suffix.lower() != ".png":
-                    candidate = candidate.with_suffix(".png")
+                file_name = str(entry.get("fichier", "")).strip()
+                if not file_name.lower().endswith(".png"):
+                    file_name = f"{file_name}.png"
+                candidate = get_cartes_dir() / file_name
                 if candidate.exists():
                     return candidate
+                if target_dir:
+                    candidate_target = target_dir / file_name
+                    if candidate_target.exists():
+                        return candidate_target
 
     bilan_profile = (bilan_profiles or {}).get(pid)
     paths = resolve_profile_map_paths(
         pid,
         profile=bilan_profile if isinstance(bilan_profile, dict) else None,
+        target_dir=target_dir,
     )
     if paths:
         return paths[0]
@@ -155,6 +163,7 @@ def resolve_profile_map_paths(
     *,
     profile: dict | None = None,
     presentation_cfg: dict | None = None,
+    target_dir: Path | None = None,
 ) -> list[Path]:
     """
     Chemins des cartes PNG à intégrer (ordre conservé, doublons retirés).
@@ -172,16 +181,22 @@ def resolve_profile_map_paths(
     patterns = _patterns_from_profile_and_presentation(
         mid, profile=profile, presentation_cfg=presentation_cfg
     )
+    dirs_to_check = [get_cartes_dir()]
+    if target_dir:
+        dirs_to_check.append(target_dir)
+
     found: list[Path] = []
-    seen: set[Path] = set()
+    seen: set[str] = set()
     for pattern in patterns:
         name = _format_map_pattern(pattern, mid)
         if not name.lower().endswith(".png"):
             name = f"{name}.png"
-        candidate = cartes_dir / name
-        if candidate.exists() and candidate not in seen:
-            seen.add(candidate)
-            found.append(candidate)
+        for d in dirs_to_check:
+            candidate = d / name
+            if candidate.exists() and name not in seen:
+                seen.add(name)
+                found.append(candidate)
+                break
 
     if found:
         return found
@@ -289,6 +304,7 @@ def generate_maps(
     *,
     dept_code: Optional[str] = None,
     bilan_profiles: dict[str, dict] | None = None,
+    target_dir: Path | None = None,
 ) -> List[Path]:
     """
     Try to generate maps via QGIS. Returns list of generated map paths.
@@ -312,6 +328,9 @@ def generate_maps(
                 date_fin_eff,
             )
             get_qgis_app()
+            import os
+            if target_dir:
+                os.environ["CARTO_OUTPUT_DIR"] = str(target_dir)
             run_export(
                 profile_ids,
                 date_deb=date_deb_eff,
@@ -319,6 +338,8 @@ def generate_maps(
                 dept_code=carto_dept,
                 qgis_overrides=qgis_overrides,
             )
+            if target_dir and "CARTO_OUTPUT_DIR" in os.environ:
+                del os.environ["CARTO_OUTPUT_DIR"]
         except Exception:
             logger.exception(
                 "Échec génération cartes QGIS in-process (département %s, profils : %s)",
@@ -337,6 +358,7 @@ def generate_maps(
             date_deb=date_deb_eff,
             date_fin=date_fin_eff,
             dept_code=carto_dept,
+            target_dir=target_dir,
         )
         if not ok:
             _warn_qgis_unavailable_for_cartes(carto_dept, subprocess_failed=True)
@@ -349,7 +371,7 @@ def generate_maps(
 
     generated = []
     for pid in profile_ids:
-        m = resolve_map_png_path(pid, bilan_profiles=bilan_profiles)
+        m = resolve_map_png_path(pid, bilan_profiles=bilan_profiles, target_dir=target_dir)
         if m and is_map_valid_for_dept(m, carto_dept):
             generated.append(m)
             marker = read_map_dept_marker(m) or "(legacy 21)"
@@ -388,6 +410,7 @@ def ensure_maps_for_profiles(
     *,
     dept_code: Optional[str] = None,
     bilan_profiles: dict[str, dict] | None = None,
+    target_dir: Path | None = None,
 ) -> List[Path]:
     """
     Ensure that maps exist for a list of cartographic profiles.
@@ -422,7 +445,7 @@ def ensure_maps_for_profiles(
     existing: List[Path] = []
     missing: List[str] = []
     for pid in unique_ids:
-        m = resolve_map_png_path(pid, bilan_profiles=bilan_profiles)
+        m = resolve_map_png_path(pid, bilan_profiles=bilan_profiles, target_dir=target_dir)
         if m and is_map_valid_for_dept(m, carto_dept):
             existing.append(m)
         elif m:
@@ -448,6 +471,7 @@ def ensure_maps_for_profiles(
             code=code,
             dept_code=dept_code,
             bilan_profiles=bilan_profiles,
+            target_dir=target_dir,
         )
 
     # Retourne l'ensemble des cartes trouvées / générées, sans doublons
@@ -460,7 +484,7 @@ def ensure_maps_for_profiles(
 
     resolved_ids: set[str] = set()
     for pid in unique_ids:
-        m = resolve_map_png_path(pid, bilan_profiles=bilan_profiles)
+        m = resolve_map_png_path(pid, bilan_profiles=bilan_profiles, target_dir=target_dir)
         if m and is_map_valid_for_dept(m, carto_dept):
             resolved_ids.add(pid)
     unresolved = [p for p in unique_ids if p not in resolved_ids]

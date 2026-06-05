@@ -7,7 +7,7 @@ from reportlab.lib import colors as rl_colors
 from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.pdfbase import pdfmetrics
-from reportlab.platypus import Flowable, Paragraph, Spacer, Table, TableStyle
+from reportlab.platypus import Flowable, Paragraph, Spacer, Table, TableStyle, PageBreak
 
 from bilans.common.ofb_charte import (
     COLOR_PRIMARY,
@@ -194,6 +194,60 @@ class VerticalText(Flowable):
         canv.restoreState()
 
 
+class OFBSplitTable(Table):
+    """Surcharge de Table pour appliquer une règle stricte de sécabilité.
+    Le tableau n'est coupé que si:
+    1. la première page contient au moins 5 lignes
+    2. la deuxième page contient au moins autant de lignes que la première.
+    Sinon, basculement complet sur la page suivante.
+    """
+    def split(self, availWidth, availHeight):
+        result = super().split(availWidth, availHeight)
+        if not result or len(result) != 2:
+            return result
+            
+        t1, t2 = result
+        lignes_avant = len(t1._rowHeights) if hasattr(t1, '_rowHeights') else len(t1._cellvalues)
+        lignes_apres = len(t2._rowHeights) if hasattr(t2, '_rowHeights') else len(t2._cellvalues)
+        
+        # Si le split initial satisfait la règle métier, on le conserve.
+        if lignes_avant >= 5 and lignes_apres >= lignes_avant:
+            return result
+            
+        # Si on a placé trop de lignes sur la première page (lignes_apres < lignes_avant),
+        # on peut réduire artificiellement le nombre de lignes de t1 pour satisfaire la règle.
+        if lignes_avant >= 5:
+            repeat = getattr(self, 'repeatRows', 0)
+            total_unique = lignes_avant + lignes_apres - repeat
+            # Le max_n idéal pour t1 est la moitié du total (plus le header)
+            max_n = (total_unique + repeat) // 2
+            
+            if max_n >= 5:
+                # On force le split à max_n lignes en réduisant la hauteur cible.
+                # L'utilisation de t1._rowHeights garantit qu'on a bien les hauteurs mesurées.
+                target_height = availHeight * 0.5
+                if hasattr(t1, '_rowHeights') and len(t1._rowHeights) >= max_n:
+                    # On ajoute un buffer (15pt) pour les bordures et marges internes
+                    target_height = sum(t1._rowHeights[:max_n]) + 15
+                
+                new_result = super().split(availWidth, target_height)
+                if new_result and len(new_result) == 2:
+                    nt1, nt2 = new_result
+                    nl_avant = len(nt1._rowHeights) if hasattr(nt1, '_rowHeights') else len(nt1._cellvalues)
+                    nl_apres = len(nt2._rowHeights) if hasattr(nt2, '_rowHeights') else len(nt2._cellvalues)
+                    if nl_avant >= 5 and nl_apres >= nl_avant:
+                        return [nt1, PageBreak(), nt2]
+
+        # Protection anti-LayoutError: 
+        # Si on est au début d'une nouvelle page (ex: availHeight > 550pt) et que 
+        # la règle ne peut pas être respectée, on force la coupe pour éviter le crash.
+        if availHeight > 450:
+            return result
+            
+        # Sinon, on refuse la coupe pour renvoyer à la page suivante (respect du keepWithNext).
+        return []
+
+
 def ofb_table_wide(
     data_rows: list,
     col_widths=None,
@@ -215,7 +269,7 @@ def ofb_table_wide(
       pour les libellés longs type domaines OFB).
     """
     if not data_rows:
-        return Table([], colWidths=[])
+        return OFBSplitTable([], colWidths=[])
 
     vh_fs = max(6.0, float(vertical_header_font_size))
     vh_leading = max(vh_fs + 1.5, vh_fs * 1.25)
@@ -243,7 +297,7 @@ def ofb_table_wide(
     avail_w = avail_w or _AVail_W
     n_cols = max(len(r) for r in data_rows)
     if n_cols == 0:
-        return Table([], colWidths=[])
+        return OFBSplitTable([], colWidths=[])
 
     def _looks_numeric(text: str) -> bool:
         txt = str(text).strip().replace("\u202f", "").replace(" ", "")
@@ -340,11 +394,11 @@ def ofb_table_wide(
         if i % 2 == 0:
             style_cmds.append(("BACKGROUND", (0, i), (-1, i), COLOR_TABLE_ALT_ROW))
 
-    tbl = Table(
+    tbl = OFBSplitTable(
         wrapped,
         colWidths=col_widths,
         repeatRows=1,
-        splitByRow=1 if split_by_row else 0,
+        splitByRow=1,
     )
     tbl.setStyle(TableStyle(style_cmds))
     return tbl
@@ -469,11 +523,11 @@ def ofb_table(
             if (i - start) % 2 == 1:
                 style_cmds.append(("BACKGROUND", (0, i), (-1, i), COLOR_TABLE_ALT_ROW))
 
-    tbl = Table(
+    tbl = OFBSplitTable(
         wrapped,
         colWidths=col_widths,
         repeatRows=1 if header_row else 0,
-        splitByRow=1 if split_by_row else 0,
+        splitByRow=1,
     )
     tbl.setStyle(TableStyle(style_cmds))
     return tbl
@@ -531,7 +585,7 @@ def key_figures_table(
             labels.append(Paragraph(lbl, lbl_style))
         total_w = float(table_width) if table_width is not None else (PAGE_W - MARGIN_LEFT - MARGIN_RIGHT)
         col_w = total_w / n
-        tbl = Table([header, labels], colWidths=[col_w] * n)
+        tbl = OFBSplitTable([header, labels], colWidths=[col_w] * n)
         tbl.setStyle(
             TableStyle(
                 [
@@ -593,7 +647,7 @@ def key_figures_table_rows(
         table_rows.append(lbl_cells)
     total_w = float(table_width) if table_width is not None else (PAGE_W - MARGIN_LEFT - MARGIN_RIGHT)
     col_w = total_w / n_cols
-    tbl = Table(table_rows, colWidths=[col_w] * n_cols)
+    tbl = OFBSplitTable(table_rows, colWidths=[col_w] * n_cols)
     style_cmds: list = [
         ("ALIGN", (0, 0), (-1, -1), "CENTER"),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),

@@ -303,14 +303,14 @@ def _generate_pdf_content(
         selected = list(profile.get("_cartes_selection") or [])
         carto_dept = resolve_carto_dept_code(cfg.echelle, cfg.code)
         global_map_paths, map_captions = resolve_selected_map_paths(
-            profile, selected, carto_dept=carto_dept
+            profile, selected, carto_dept=carto_dept, target_dir=out_dir
         )
         global_map_layout = resolve_map_layout(profile=profile, presentation_cfg=presentation_cfg)
         map_id = str(profile.get("id", "global")).strip() or "global"
     elif cartes:
         map_id = str(profile.get("_map_id") or "global").strip() or "global"
         global_map_paths = resolve_profile_map_paths(
-            map_id, profile=profile, presentation_cfg=presentation_cfg
+            map_id, profile=profile, presentation_cfg=presentation_cfg, target_dir=out_dir
         )
         global_map_layout = resolve_map_layout(profile=profile, presentation_cfg=presentation_cfg)
     else:
@@ -373,6 +373,10 @@ def _generate_pdf_content(
     tables_layout = resolve_tables_layout(presentation_cfg)
     charte_cfg = resolve_charte_config(presentation_cfg)
     title_page_cfg = resolve_title_page_config(_ROOT, scope=scope, profile_id=profile_id)
+    
+    from reportlab.lib.pagesizes import A4, landscape
+    pagesize = landscape(A4) if echelle == "region" else A4
+    
     builder = PDFReportBuilder(
         pdf_path=pdf_path,
         header_title=report_header,
@@ -382,6 +386,7 @@ def _generate_pdf_content(
         charte_config=charte_cfg,
         diffusion=diffusion,
         title_page_config=title_page_cfg,
+        pagesize=pagesize,
     )
     avail_w = builder.avail_w
     tmp_dir = builder.tmp_dir
@@ -479,6 +484,19 @@ def _generate_pdf_content(
     registry.register("sec44", render_sec44)
     registry.register("sec5map", render_sec5map)
     registry.register("sec6", render_sec6)
+    
+    from bilans.engine.sections_region import render_sec_region_detail
+    registry.register("secregion", render_sec_region_detail)
+    if echelle == "region":
+        # Inject just before sec5map or sec6
+        insert_idx = len(sections)
+        for i, (sid, _) in enumerate(sections):
+            if sid in ("sec5map", "sec6"):
+                insert_idx = i
+                break
+        sections.insert(insert_idx, ("secregion", "7. Détail par département"))
+        section_title["secregion"] = "7. Détail par département"
+
     # Pilotage dynamique : on itère sur les sections résolues depuis le YAML
     for sec_id, _ in sections:
         if registry.get(sec_id):

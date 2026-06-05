@@ -270,8 +270,9 @@ def resolve_map_profiles_for_batch(
     return resolve_qgis_profile_ids(prof, profil_id, opts)
 
 
-def resolve_map_file_for_catalog_entry(entry: dict[str, str]) -> Path:
-    return get_cartes_dir() / entry["fichier"]
+def resolve_map_file_for_catalog_entry(entry: dict[str, str], target_dir: Path | None = None) -> Path:
+    base = target_dir if target_dir else get_cartes_dir()
+    return base / entry["fichier"]
 
 
 def resolve_selected_map_paths(
@@ -279,6 +280,7 @@ def resolve_selected_map_paths(
     selected_ids: list[str],
     *,
     carto_dept: str | None = None,
+    target_dir: Path | None = None,
 ) -> tuple[list[Path], list[str]]:
     """
     Chemins PNG existants + légendes, dans l'ordre du catalogue puis de la sélection.
@@ -293,14 +295,14 @@ def resolve_selected_map_paths(
     order = [i for i in catalog_order if i in selected_ids]
     order.extend(i for i in selected_ids if i not in order)
 
-    cartes_dir = get_cartes_dir()
+    cartes_dir = target_dir if target_dir else get_cartes_dir()
     paths: list[Path] = []
     captions: list[str] = []
     for map_id in order:
         entry = by_id.get(map_id)
         if not entry:
             continue
-        candidate = resolve_map_file_for_catalog_entry(entry)
+        candidate = resolve_map_file_for_catalog_entry(entry, target_dir)
         if not candidate.exists():
             logger.warning(
                 "Carte PDF absente : %s (dossier %s, profil carto %s)",

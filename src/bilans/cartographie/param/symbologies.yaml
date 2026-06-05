@@ -9,7 +9,7 @@ default_polygon:
   classification_mode: quantile
   num_classes: 5
   palette: Blues
-  symbol_size_mm: 4.0
+  symbol_size_mm: 2.0
   symbol_shape: circle
   visible: true
 
@@ -17,7 +17,7 @@ points_agrainage:
   filter_type: point_ctrl_agrainage
   renderer_type: single
   palette: "#C0392B"
-  symbol_size_mm: 3.8
+  symbol_size_mm: 1.9
   symbol_shape: circle
   visible: true
 
@@ -25,7 +25,7 @@ points_chasse:
   filter_type: point_ctrl_chasse
   renderer_type: single
   palette: "#2C3E50"
-  symbol_size_mm: 3.8
+  symbol_size_mm: 1.9
   symbol_shape: circle
   visible: true
 
@@ -33,7 +33,7 @@ points_piegeage:
   filter_type: point_ctrl_piegeage
   renderer_type: single
   palette: "#8E44AD"
-  symbol_size_mm: 3.8
+  symbol_size_mm: 1.9
   symbol_shape: circle
   visible: true
 
@@ -41,7 +41,7 @@ points_global:
   filter_type: point_ctrl_global
   renderer_type: single
   palette: "#003A76"
-  symbol_size_mm: 3.8
+  symbol_size_mm: 1.9
   symbol_shape: circle
   visible: true
 
@@ -60,12 +60,12 @@ points_global_resultats:
     END
   # Vert=Conforme, Rouge=Infraction, Violet=Manquement, Orange=Infraction+Manquement, Gris=Autre
   categories:
-    "Conforme": "#2ECC71"
     "Infraction": "#E74C3C"
     "Manquement": "#9B59B6"
     "Infraction et manquement": "#E67E22"
+    "Conforme": "#2ECC71"
     "Autre": "#95A5A6"
-  symbol_size_mm: 3.8
+  symbol_size_mm: 1.9
   symbol_shape: circle
   visible: true
 
@@ -83,7 +83,7 @@ points_global_usagers:
       WHEN "type_usager" ILIKE '%sylvic%' THEN 'Acteur sylvicole'
       ELSE 'Autre'
     END
-  # Jaune=Agriculteur (demande utilisateur), Bleu foncé=Particulier, etc.
+  # Jaune=Agriculteur, Bleu foncé=Particulier, etc.
   categories:
     "Agriculteur": "#F1C40F"
     "Particulier": "#2980B9"
@@ -91,7 +91,7 @@ points_global_usagers:
     "Entreprise": "#E74C3C"
     "Acteur sylvicole": "#16A085"
     "Autre": "#95A5A6"
-  symbol_size_mm: 3.8
+  symbol_size_mm: 1.9
   symbol_shape: circle
   visible: true
 
@@ -103,7 +103,7 @@ points_global_domaines:
   field: 'coalesce("domaine", ''Hors domaine'')'
   # Palette multi-couleurs distinctives, assignées cycliquement par domaine rencontré
   palette: "#003A76,#E74C3C,#F1C40F,#27AE60,#8E44AD,#E67E22,#16A085,#2C3E50,#C0392B,#1ABC9C"
-  symbol_size_mm: 3.8
+  symbol_size_mm: 1.9
   symbol_shape: circle
   visible: true
 
@@ -114,8 +114,8 @@ procedures_pj:
   legend_label: "Procédures Judiciaires (PEJ)"
   renderer_type: single
   palette: "#3498DB"
-  symbol_size_mm: 4.5
-  symbol_shape: circle
+  symbol_size_mm: 2.25
+  symbol_shape: triangle
   visible: true
 
 # PVe = Procès-Verbaux électroniques → Orange
@@ -123,7 +123,7 @@ procedures_pve:
   legend_label: "Procès-Verbaux (PVe)"
   renderer_type: single
   palette: "#E67E22"
-  symbol_size_mm: 4.5
+  symbol_size_mm: 2.25
   symbol_shape: circle
   visible: true
 
@@ -133,8 +133,8 @@ procedures_pa:
   filter_type: point_ctrl_manquement
   renderer_type: single
   palette: "#9B59B6"
-  symbol_size_mm: 4.5
-  symbol_shape: circle
+  symbol_size_mm: 2.25
+  symbol_shape: square
   visible: true
 
 points_usagers_agriculteurs:
@@ -148,7 +148,7 @@ points_usagers_agriculteurs:
     END
   categories:
     "Agriculteur": "#F1C40F"
-  symbol_size_mm: 3.8
+  symbol_size_mm: 1.9
   symbol_shape: circle
   visible: true
 
@@ -172,7 +172,7 @@ points_usagers_cibles:
     "Entreprise": "#E74C3C"
     "Acteur sylvicole": "#16A085"
     "Autre": "#95A5A6"
-  symbol_size_mm: 3.8
+  symbol_size_mm: 1.9
   symbol_shape: circle
   visible: true
 
@@ -184,7 +184,7 @@ pochoir:
   classification_mode: quantile
   num_classes: 5
   palette: Blues
-  symbol_size_mm: 4.0
+  symbol_size_mm: 2.0
   symbol_shape: circle
   visible: true
 
@@ -193,6 +193,6 @@ points_default:
   geometry_mode: polygon_fill
   renderer_type: single
   palette: "#003A76"
-  symbol_size_mm: 3.5
+  symbol_size_mm: 1.75
   symbol_shape: circle
   visible: true

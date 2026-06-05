@@ -145,6 +145,13 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--mot-cle",
+        action="append",
+        dest="mots_cles",
+        metavar="MOT_CLE",
+        help="Mot-clé pour filtrer les données via la recherche avancée (répétable).",
+    )
+    parser.add_argument(
         "--list-type-usagers",
         action="store_true",
         help="Afficher les types d'usagers du référentiel (types_usagers.csv) et quitter.",
@@ -248,6 +255,9 @@ def main() -> int:
 
     _check_deps()
 
+    if date_fin and len(date_fin.strip()) == 10:
+        date_fin = f"{date_fin.strip()} 23:59:59"
+
     from bilans.engine.catalogue_profils import resolve_profile_ids
     from bilans.engine.execution_lots_profils import run_profiles_batch
 
@@ -272,6 +282,8 @@ def main() -> int:
         cli_options["diffusion"] = args.diffusion
     if args.brochure:
         cli_options["brochure"] = True
+    if args.mots_cles:
+        cli_options["mots_cles"] = args.mots_cles
 
     return run_profiles_batch(
         profils_resolus,

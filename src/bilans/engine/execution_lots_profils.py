@@ -17,7 +17,7 @@ from bilans.common.reveal_in_file_manager import reveal_path_in_file_manager
 logger = logging.getLogger("bilans.engine")
 
 
-def resolve_profile_output_dir(profil_id: str, *, root: Path | None = None) -> Path:
+def resolve_profile_output_dir(profil_id: str, code: str = "", *, root: Path | None = None) -> Path:
     """
     Dossier ``data/out/<out_subdir>/`` où le moteur écrit pour ce profil (aligné global / thématique).
     """
@@ -37,12 +37,17 @@ def resolve_profile_output_dir(profil_id: str, *, root: Path | None = None) -> P
         else:
             pid = str(profile.get("id", profil_id)).strip() or profil_id
             out_subdir = f"bilan_{pid}"
+            
+    code_norm = str(code).strip()
+    if code_norm:
+        out_subdir = f"{out_subdir}_{code_norm}"
+        
     return get_out_dir(out_subdir)
 
 
-def _list_generated_pdf_files(profil_id: str, started_at_epoch: float) -> list[Path]:
+def _list_generated_pdf_files(profil_id: str, started_at_epoch: float, code: str = "") -> list[Path]:
     """Retourne les PDF générés/écrasés pendant le run du profil."""
-    out_dir = resolve_profile_output_dir(profil_id)
+    out_dir = resolve_profile_output_dir(profil_id, code=code)
     if not out_dir.exists():
         return []
     pdfs: list[Path] = []
@@ -180,6 +185,6 @@ def run_profiles_batch(
         ret = run_profile(pid, date_deb, date_fin, echelle, code, options=cli_options)
         if ret != 0:
             return ret
-        generated_pdfs_last_profile = _list_generated_pdf_files(pid, started_at)
+        generated_pdfs_last_profile = _list_generated_pdf_files(pid, started_at, code=code)
     _open_generated_pdfs(generated_pdfs_last_profile)
     return 0

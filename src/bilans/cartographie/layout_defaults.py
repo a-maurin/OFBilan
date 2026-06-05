@@ -381,6 +381,42 @@ def apply_layout_defaults(
         logger.debug("Aucun template layout pour le profil '%s'.", getattr(prof, "id", "?"))
         return None
 
+    if layout is not None and template.page.width_mm > 0 and template.page.height_mm > 0:
+        try:
+            from qgis.core import QgsLayoutSize, QgsUnitTypes, QgsLayoutPoint
+            page = layout.pageCollection().page(0)
+            if page:
+                original_height = page.pageSize().height()
+                new_height = template.page.height_mm
+                delta_y = new_height - original_height
+                
+                # Si on réduit la hauteur de la page (ex: 210 -> 149), 
+                # on remonte les éléments ancrés en bas (flèche du nord, bandeau)
+                if abs(delta_y) > 0.1:
+                    for item in layout.items():
+                        if item == page:
+                            continue
+                        if not hasattr(item, 'positionWithUnits'):
+                            continue
+                        try:
+                            # Ignorer les objets explicitement gérés par extra_items
+                            item_id = item.id() if hasattr(item, "id") else ""
+                            if item_id and item_id in template.extra_items:
+                                continue
+                                
+                            pos = item.positionWithUnits()
+                            if pos.y() > original_height - 70:
+                                item.attemptMove(QgsLayoutPoint(pos.x(), pos.y() + delta_y, pos.units()))
+                        except Exception:
+                            pass
+
+                page.setPageSize(QgsLayoutSize(template.page.width_mm, template.page.height_mm, QgsUnitTypes.LayoutMillimeters))
+        except Exception as exc:
+            import traceback
+            with open("C:/Users/aguirre.maurin/Documents/GitHub/Bilans_production/scratch/qgis_resize_error.txt", "w") as f:
+                f.write(traceback.format_exc())
+            logger.debug("Redimensionnement page ignoré : %s", exc)
+
     map_item = _find_layout_map(layout)
     if map_item is not None and template.map.width_mm > 0:
         _layout_item_set_rect(map_item, template.map)
@@ -393,6 +429,17 @@ def apply_layout_defaults(
     scale_item = _find_scalebar(layout, map_item)
     if scale_item is not None and template.scalebar.width_mm > 0:
         _layout_item_set_rect(scale_item, template.scalebar)
+
+    if template.logo_bas_droite.skip_if_qgis_picture:
+        logo_item = layout.itemById(template.logo_bas_droite.picture_id)
+        if logo_item is not None:
+            _layout_item_set_rect(logo_item, template.logo_bas_droite)
+            
+    # Application des extra_items explicites (Hybride Avancé)
+    for item_id, rect_cfg in template.extra_items.items():
+        extra_item = layout.itemById(item_id)
+        if extra_item is not None:
+            _layout_item_set_rect(extra_item, rect_cfg)
 
     return template
 

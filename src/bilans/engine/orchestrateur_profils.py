@@ -37,6 +37,7 @@ from bilans.common.chargeurs_donnees import (
     load_pve,
     load_pnf,
     load_tub,
+    load_rech_av,
     load_natinf_ref,
     load_tub_pnf_codes,
     load_communes_noms,
@@ -391,14 +392,18 @@ def _run_global_profile_via_yaml(
         chart_preset = options.get("chart_preset")
     resolved_opts = ask_interactive_options(profile, resolved_opts)
     root = PROJECT_ROOT
-    out_subdir = str(profile.get("out_subdir", f"bilan_{profile.get('id', 'global')}")).strip()
-    if not out_subdir:
-        out_subdir = "bilan_global"
-    out_dir = get_out_dir(out_subdir)
     date_deb_ts = pd.to_datetime(date_deb)
     date_fin_ts = pd.to_datetime(date_fin)
     echelle_norm = str(echelle).strip()
     code_norm = str(code).strip()
+    
+    out_subdir = str(profile.get("out_subdir", f"bilan_{profile.get('id', 'global')}")).strip()
+    if not out_subdir:
+        out_subdir = "bilan_global"
+    if code_norm:
+        out_subdir = f"{out_subdir}_{code_norm}"
+        
+    out_dir = get_out_dir(out_subdir)
 
     print(
         f"Période : {date_deb_ts.date():%d/%m/%Y} au {date_fin_ts.date():%d/%m/%Y} – {echelle_norm} {code_norm}."
@@ -420,6 +425,10 @@ def _run_global_profile_via_yaml(
             date_fin=date_fin_ts,
         )
         pve = load_pve(root, echelle=echelle_norm, code=code_norm, date_deb=date_deb_ts, date_fin=date_fin_ts)
+        
+        mots_cles = resolved_opts.get("mots_cles")
+        if mots_cles:
+            point, pej, pa, pve = _apply_rech_av_filter(point, pej, pa, pve, root, mots_cles)
 
     spatial_log = logging.getLogger("bilans.spatial")
     if not point.empty:
@@ -460,6 +469,7 @@ def _run_global_profile_via_yaml(
         date_deb=date_deb,
         date_fin=date_fin,
         echelle=echelle, code=code,
+        target_dir=out_dir,
     )
 
     from bilans.common.carte_helper import ensure_maps_for_profiles
@@ -467,6 +477,13 @@ def _run_global_profile_via_yaml(
 
     profil_id = str(profile.get("id", "global"))
     map_profiles = resolve_qgis_profile_ids(profile, profil_id, resolved_opts)
+    
+    # Injection des mots-clés dans la définition du profil pour transmission au moteur QGIS
+    mots_cles = resolved_opts.get("mots_cles")
+    if mots_cles:
+        if "filter" not in profile or not isinstance(profile["filter"], dict):
+            profile["filter"] = {}
+        profile["filter"]["keywords"] = mots_cles
 
     if resolved_opts.get("cartes", False) and map_profiles:
         try:
@@ -476,6 +493,7 @@ def _run_global_profile_via_yaml(
                 date_fin=date_fin,
                 echelle=echelle, code=code,
                 bilan_profiles={profil_id: profile},
+                target_dir=out_dir,
             )
         except Exception as e:
             logger = logging.getLogger("bilans.engine")
@@ -488,11 +506,16 @@ def _run_global_profile_via_yaml(
         resolved_opts=resolved_opts,
         echelle=echelle,
         code=code,
+        target_dir=out_dir,
     )
 
     print("Étape 3/3 : génération du PDF (graphiques et mise en page)...")
     with Spinner():
-        output_filename = str(profile.get("output_filename", "")).strip() or None
+        profil_id = str(profile.get("id", "global")).strip()
+        if code_norm:
+            output_filename = f"bilan_{profil_id}_{code_norm}.pdf"
+        else:
+            output_filename = f"bilan_{profil_id}.pdf"
         pdf_kwargs: dict = {
             "profile": profile,
             "date_deb": date_deb_ts,
@@ -546,6 +569,7 @@ def _finalize_cartes_selection(
     date_fin: str | None = None,
     echelle: str | None = None,
     code: str | None = None,
+    target_dir: Path | None = None,
 ) -> dict:
     """Résout la sélection de cartes (catalogue) et tente de générer les PNG manquants."""
     if not resolved_opts.get("cartes", False) or not has_cartography_catalog(profile):
@@ -575,6 +599,7 @@ def _finalize_cartes_selection(
             date_fin=date_fin,
             echelle=echelle, code=code,
             bilan_profiles={bilan_key: profile},
+            target_dir=target_dir,
         )
     return resolved_opts
 
@@ -602,6 +627,7 @@ def prompt_cartography_integration(
     map_id: str | None = None,
     echelle: str | None = None,
     code: str | None = None,
+    target_dir: Path | None = None,
 ) -> None:
     """
     Pause interactive : dossier et noms de fichiers attendus pour les cartes du PDF.
@@ -612,7 +638,7 @@ def prompt_cartography_integration(
     if not resolved_opts.get("cartes", False) or not sys.stdin.isatty():
         return
 
-    cartes_dir = get_cartes_dir()
+    cartes_dir = target_dir if target_dir else get_cartes_dir()
     scope = str(profile.get("presentation_scope", "thematique")).strip() or "thematique"
     pres_cfg = resolve_pdf_presentation_config(
         root, scope=scope, profile_id=profil_id
@@ -1183,8 +1209,58 @@ def _filter_pve(
     keywords = profile["filter"].get("keywords", [])
     if keywords:
         cols = [c for c in ["INF-NATINF", "NATINF", "theme", "THEME"] if c in pve.columns]
-        return _filter_by_keywords(pve, keywords, cols) if cols else pve
     return pve
+
+
+def _apply_rech_av_filter(
+    pt: pd.DataFrame,
+    pej: pd.DataFrame,
+    pa: pd.DataFrame,
+    pve: pd.DataFrame,
+    root: Path,
+    mots_cles: list[str],
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Applique le filtre par mots-clés de rech_av si demandé."""
+    if not mots_cles:
+        return pt, pej, pa, pve
+        
+    df_rech = load_rech_av(root)
+    if df_rech.empty or "num_dossier" not in df_rech.columns or "mots_cles" not in df_rech.columns:
+        return pt.iloc[0:0], pej.iloc[0:0], pa.iloc[0:0], pve.iloc[0:0]
+        
+    mask_rech = pd.Series(False, index=df_rech.index)
+    for mc in mots_cles:
+        mask_rech |= df_rech["mots_cles"].astype(str).str.contains(mc, case=False, na=False)
+        
+    valid_dossiers = set(
+        df_rech.loc[mask_rech, "num_dossier"]
+        .dropna().astype(str)
+        .str.replace(r"\.0$", "", regex=True)
+        .str.strip().unique()
+    )
+    
+    def _filter_by_possible_id_cols(df: pd.DataFrame, valid_ids: set) -> pd.DataFrame:
+        if df.empty:
+            return df
+        possible_cols = [c for c in df.columns if c.lower() in (
+            "nom_dossie", "nom_dossier", "num_dossie", "num_dossier", 
+            "dc_id", "dossier_source", "id_dossier"
+        )]
+        for col in possible_cols:
+            col_ids = df[col].astype(str).str.replace(r"\.0$", "", regex=True).str.strip()
+            if col_ids.isin(valid_ids).any():
+                return df[col_ids.isin(valid_ids)].copy()
+        return df.iloc[0:0].copy()
+
+    pt = _filter_by_possible_id_cols(pt, valid_dossiers)
+    pa = _filter_by_possible_id_cols(pa, valid_dossiers)
+    pej = _filter_by_possible_id_cols(pej, valid_dossiers)
+        
+    if not pve.empty:
+        pve = pve.iloc[0:0].copy()
+        
+    return pt, pej, pa, pve
+
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -2515,10 +2591,12 @@ def _export_csv(
     pve_filtered: pd.DataFrame,
     out_dir: Path,
     profile: dict,
+    code_norm: str,
 ) -> None:
     """Exporte tous les CSV dans le dossier de sortie."""
     profil_id = profile["id"]
-    prefix = profile.get("_export_prefix") or profil_id
+    base_prefix = profile.get("_export_prefix") or profil_id
+    prefix = f"{base_prefix}_{code_norm}" if str(code_norm).strip() else base_prefix
     # Points filtrés
     if not point_filtered.empty:
         cols = [c for c in [
@@ -3109,9 +3187,20 @@ def _generate_pdf(
 
     prepare_pdf_results_sec23_sorting(results)
 
-    safe_name = dept_name.replace(" ", "_").replace("'", "")
+    # Alignement du nom de fichier PDF sur la règle de nommage du répertoire
+    prefix = profile.get("_export_prefix")
+    if not prefix:
+        raw_out = profile.get("out_subdir")
+        prefix = str(raw_out).strip() if raw_out else f"bilan_{profil_id}"
+        
+    code_norm = str(cfg.code).strip()
+    if code_norm:
+        base_name = f"{prefix}_{code_norm}"
+    else:
+        base_name = prefix
+
     pdf_path = apply_diffusion_pdf_suffix(
-        out_dir / f"{export_prefix}_{safe_name}.pdf",
+        out_dir / f"{base_name}.pdf",
         diffusion,
     )
     tables_layout = resolve_tables_layout(presentation_cfg)
@@ -4760,7 +4849,15 @@ def _run_engine_thematic_pipeline(
     profile = load_profile_config(root, profil_id)
     chart_preset = options.pop("chart_preset", None)
     cfg = BilanConfig.from_strings(date_deb, date_fin, echelle=echelle, code=code, root=root)
-    out_dir = cfg.get_out(profile["out_subdir"])
+    
+    out_subdir = str(profile.get("out_subdir", f"bilan_{profil_id}")).strip()
+    if not out_subdir:
+        out_subdir = "bilan_global"
+    code_norm = str(code).strip()
+    if code_norm:
+        out_subdir = f"{out_subdir}_{code_norm}"
+        
+    out_dir = cfg.get_out(out_subdir)
     label = profile["label"]
     sources = profile["sources"]
 
@@ -4883,6 +4980,10 @@ def _run_engine_thematic_pipeline(
             if sources.get("pve", True)
             else pd.DataFrame()
         )
+        
+        mots_cles = resolved_opts.get("mots_cles")
+        if mots_cles:
+            point, pej, pa, pve = _apply_rech_av_filter(point, pej, pa, pve, root, mots_cles)
 
     # ── Filtrage ──
     point_ctrl_perimetre: pd.DataFrame | None = None
@@ -5030,7 +5131,7 @@ def _run_engine_thematic_pipeline(
     with Spinner():
         _export_csv(
             results, point_filtered, pej_filtered, pa_filtered, pve_filtered,
-            out_dir, profile,
+            out_dir, profile, code_norm=str(code).strip(),
         )
 
     # ── Cartographie ──
@@ -5041,6 +5142,7 @@ def _run_engine_thematic_pipeline(
         date_deb=date_deb,
         date_fin=date_fin,
         echelle=echelle, code=code,
+        target_dir=out_dir,
     )
 
     from bilans.common.carte_helper import ensure_maps_for_profiles
@@ -5056,6 +5158,7 @@ def _run_engine_thematic_pipeline(
                 date_fin=date_fin,
                 echelle=echelle, code=code,
                 bilan_profiles={profil_id: profile},
+                target_dir=out_dir,
             )
         except Exception as e:
             logger = logging.getLogger("bilans.engine")
@@ -5069,6 +5172,7 @@ def _run_engine_thematic_pipeline(
         map_id=map_id,
         echelle=echelle,
         code=code,
+        target_dir=out_dir,
     )
 
     # ── PDF ──

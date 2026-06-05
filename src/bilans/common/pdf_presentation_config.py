@@ -935,7 +935,23 @@ def build_title_lines_from_cfg(
         line3 = str(title_cfg.get("line3_fixed", "")).strip()
     else:
         if echelle == "departement":
-            line3 = f"Département de la {perimetre_name_typo}"
+            from bilans.chemins_projet import PROJECT_ROOT
+            import yaml
+            
+            coord = "de la"
+            try:
+                cfg_path = PROJECT_ROOT / "config" / "departements.yaml"
+                if cfg_path.exists():
+                    with cfg_path.open("r", encoding="utf-8") as f:
+                        data = yaml.safe_load(f) or {}
+                        coord_map = data.get("coordination_departement", {})
+                        dept_key = str(perimetre_name_typo).strip()
+                        if dept_key in coord_map:
+                            coord = coord_map[dept_key]
+            except Exception:
+                pass
+            
+            line3 = f"Département {coord} {perimetre_name_typo}"
         elif echelle == "region":
             line3 = f"Région {perimetre_name_typo}"
         else:

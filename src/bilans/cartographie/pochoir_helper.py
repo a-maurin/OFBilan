@@ -100,15 +100,44 @@ def load_department_gdf(
 def department_bounds(
     dept_code: str,
     *,
-    margin_ratio: float = 0.05,
+    margin_top: float = 0.25,
+    margin_bottom: float = 0.10,
+    margin_left: float = 0.05,
+    margin_right: float = 0.45,
     project_root: Optional[Path] = None,
+    **kwargs,
 ) -> tuple[float, float, float, float]:
-    """Emprise (xmin, ymin, xmax, ymax) du département avec marge proportionnelle."""
+    """Emprise (xmin, ymin, xmax, ymax) du département avec marges forcées pour le ratio 1.51187."""
     gdf = load_department_gdf(dept_code, project_root=project_root)
     xmin, ymin, xmax, ymax = gdf.total_bounds
-    dx = max(xmax - xmin, 1.0) * margin_ratio
-    dy = max(ymax - ymin, 1.0) * margin_ratio
-    return (xmin - dx, ymin - dy, xmax + dx, ymax + dy)
+    dx = max(xmax - xmin, 1.0)
+    dy = max(ymax - ymin, 1.0)
+    
+    # La taille de la page QGIS est 210.15 x 139.0 (ratio 1.51187)
+    target_ratio = 210.15 / 139.0
+    
+    # "Safe Zone" : espace visuel garanti sans superposition avec l'interface.
+    # Exprimé en fractions de l'emprise totale de la carte (qui commence SOUS le bandeau haut).
+    pad_top = 0.04     # La carte commence sous le bandeau, petite marge visuelle de 5.5mm
+    pad_bottom = 0.22  # Le bandeau bas empiète sur la carte + 5.5mm de marge visuelle
+    pad_left = 0.04    # Marge de 8.5mm à gauche
+    pad_right = 0.31   # La légende empiète à droite + marge visuelle
+    
+    safe_w_frac = 1.0 - pad_left - pad_right
+    safe_h_frac = 1.0 - pad_top - pad_bottom
+    
+    # 2. Calcul du facteur d'agrandissement pour que la carte touche les limites de cette Safe Zone
+    W = max(dx / safe_w_frac, (dy / safe_h_frac) * target_ratio)
+    H = W / target_ratio
+    
+    # 3. Positionnement absolu pour centrer le département au milieu de la Safe Zone
+    X_min = xmin - W * pad_left - (W * safe_w_frac - dx) / 2.0
+    X_max = X_min + W
+    
+    Y_max = ymax + H * pad_top + (H * safe_h_frac - dy) / 2.0
+    Y_min = Y_max - H
+        
+    return (X_min, Y_min, X_max, Y_max)
 
 
 def write_pochoir_gpkg(
@@ -117,8 +146,15 @@ def write_pochoir_gpkg(
     *,
     project_root: Optional[Path] = None,
 ) -> Path:
-    """Écrit un GeoPackage pochoir pour le département (une entité)."""
+    """Écrit un GeoPackage pochoir (donut) pour le département (une entité)."""
     gdf = load_department_gdf(dept_code, project_root=project_root)
+    
+    # Transformation en véritable polygone pochoir (donut) avec Shapely
+    import shapely.geometry
+    mask_box = shapely.geometry.box(-2000000, 2000000, 4000000, 10000000)
+    donut_geom = mask_box.difference(gdf.geometry.iloc[0])
+    gdf.geometry = [donut_geom]
+    
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     if output_path.exists():

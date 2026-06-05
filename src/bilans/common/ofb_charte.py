@@ -410,7 +410,7 @@ def _get_styles(typography_config: dict | None = None):
             alignment=TA_LEFT,
             spaceBefore=2 * mm,
             spaceAfter=1 * mm,
-            keepWithNext=1,
+            keepWithNext=0,
         ),
         "FigureCaption": ParagraphStyle(
             "OFBFigureCaption",

@@ -29,6 +29,7 @@ from reportlab.platypus import (
     Spacer,
     Table,
     TableStyle,
+    CondPageBreak,
 )
 from reportlab.platypus.tableofcontents import TableOfContents
 from PIL import Image as PILImage
@@ -658,6 +659,9 @@ class PDFReportBuilder:
         append_to_pending: bool = False,
     ) -> None:
         if self._pending_section is not None and not append_to_pending:
+            for item in self._pending_section:
+                if hasattr(item, "keepWithNext"):
+                    item.keepWithNext = 1
             self.story.extend(self._pending_section)
             self._pending_section = None
         if start_on_new_page and self.story:
@@ -782,16 +786,28 @@ class PDFReportBuilder:
         #  2. Si même ce sous-bloc est trop grand, revenir à keepWithNext sur les
         #     paragraphes du préfixe (dernier recours, moins fiable mais sans page vide).
         attach_count = self._leading_title_chunk_len(block)
+        if not keep_together:
+            # Si on ne veut pas keep_together (ex: tableau long), on ne met pas le contenu réel dans le préfixe
+            attach_count = 0
+            while attach_count < len(block) and isinstance(block[attach_count], (Paragraph, Spacer)):
+                attach_count += 1
+                
         prefix = pending + block[:attach_count]
 
-        if prefix and self._should_keep_block_together(prefix):
+        # On vérifie si le préfixe contient du vrai contenu (pas juste Titre + Spacer)
+        has_real_content = any(not isinstance(item, (Paragraph, Spacer)) for item in prefix)
+
+        if keep_together and prefix and has_real_content and self._should_keep_block_together(prefix):
             # Le sous-bloc titre+table tient dans un KeepTogether → cohérence garantie
             self.story.append(KeepTogether(prefix))
         else:
-            # Dernier recours : keepWithNext sur les éléments du préfixe
+            # Dernier recours (ou keep_together=False, ou préfixe vide de vrai contenu) :
+            # CondPageBreak(150) pour garantir le collage titre/contenu sans déclencher
+            # le bug de saut de page de ReportLab sur les grands tableaux.
+            self.story.append(CondPageBreak(150))
             for item in prefix:
-                if isinstance(item, (Paragraph, Spacer)):
-                    item.keepWithNext = 1
+                if hasattr(item, 'keepWithNext'):
+                    item.keepWithNext = 0
             self.story.extend(prefix)
 
         self.story.extend(block[attach_count:])
@@ -940,8 +956,7 @@ class PDFReportBuilder:
         if self._pending_section is not None:
             self._pending_section.extend([para, spacer])
         else:
-            self.story.append(para)
-            self.story.append(spacer)
+            self._pending_section = [para, spacer]
 
     def _build_callout_box_block(
         self,
@@ -1346,7 +1361,15 @@ class PDFReportBuilder:
         if n_rows > 1 and max_cell_chars > 0:
             for row in data_rows[1:]:
                 for cell in row:
-                    if isinstance(cell, str) and len(cell.strip()) > max_cell_chars:
+                    text_len = 0
+                    if isinstance(cell, str):
+                        text_len = len(cell.strip())
+                    elif isinstance(cell, Paragraph):
+                        if hasattr(cell, "getPlainText"):
+                            text_len = len(cell.getPlainText().strip())
+                        else:
+                            text_len = len(getattr(cell, "text", ""))
+                    if text_len > max_cell_chars:
                         long_cell = True
                         break
                 if long_cell:
@@ -1412,14 +1435,19 @@ class PDFReportBuilder:
         block.append(tbl)
         block.append(Spacer(1, float(spacer_after_mm) * mm))
         use_keep = (bool(caption) and keep_caption_with_table) or keep_together
+        if split_by_row:
+            use_keep = False
+            
         if self._pending_section is not None:
             self._append_with_pending(block, keep_together=use_keep)
         elif use_keep and self._should_keep_block_together(block):
             self.story.append(KeepTogether(block))
         else:
-            if use_keep and caption and len(block) > 0 and hasattr(block[0], "keepWithNext"):
-                block[0].keepWithNext = 1
+            if caption and keep_caption_with_table and len(block) > 0:
+                self.story.append(CondPageBreak(150))
             for el in block:
+                if hasattr(el, 'keepWithNext'):
+                    el.keepWithNext = 0
                 self.story.append(el)
 
     def add_table_and_image_keep_together(
@@ -1622,21 +1650,55 @@ class PDFReportBuilder:
         captions: list[str] | None = None,
     ) -> None:
         """
-        Ajoute toutes les cartes PNG : une carte par page, taille maximisée dans la zone utile.
-
-        Le paramètre ``layout`` est conservé pour compatibilité d'appel mais n'est plus utilisé
-        (l'ancien mode deux cartes sur une même page n'est plus proposé pour les PDF standard).
+        Ajoute toutes les cartes PNG en les superposant par lot de 2 maximum par page.
         """
-        del layout  # compatibilité d'API ; brochure ne passe pas par cette méthode.
         existing = [Path(p) for p in paths if p and Path(p).exists()]
         if not existing:
             return
+            
         caps = list(captions) if captions else []
-        for i, path in enumerate(existing):
-            if i > 0:
+        
+        # --- Calcul de la largeur globale pour toutes les cartes ---
+        # On calcule map_cell_w en se basant sur le premier lot pour que toutes les cartes 
+        # (même celles sur les pages suivantes) aient exactement la même taille.
+        eff_avail_h_global = self.avail_h
+        if self._pending_section is not None:
+            pending_h = self._estimate_block_height(self._pending_section)
+            eff_avail_h_global = max(eff_avail_h_global * 0.3, eff_avail_h_global - pending_h - 20)
+
+        first_chunk_ratios = [self._image_aspect_ratio(p) for p in existing[:2]]
+        global_map_cell_w = compute_stacked_maps_width(
+            self.avail_w, eff_avail_h_global, first_chunk_ratios, width_fraction=_MAP_PAGE_WIDTH_FRACTION
+        )
+        
+        # Parcourir les cartes par lots de 2 maximum
+        for chunk_idx in range(0, len(existing), 2):
+            if chunk_idx > 0:
                 self.add_page_break()
-            cap = caps[i] if i < len(caps) else ""
-            self.add_map(path, caption=cap)
+                
+            chunk_paths = existing[chunk_idx:chunk_idx+2]
+            chunk_caps = caps[chunk_idx:chunk_idx+2]
+            
+            map_cell_w = global_map_cell_w
+
+            block: List = []
+            for i, path in enumerate(chunk_paths):
+                holder = self._map_image_holder_table(path, map_cell_w)
+                block.append(holder)
+                cap = chunk_caps[i] if i < len(chunk_caps) else ""
+                if cap:
+                    block.append(Spacer(1, 2 * mm))
+                    block.append(Paragraph(f"<i>{cap}</i>", self.styles["BodySmall"]))
+                if i < len(chunk_paths) - 1:
+                    block.append(Spacer(1, SPACING_M))
+                    
+            block.append(Spacer(1, SPACING_S))
+            
+            if chunk_idx == 0 and self._pending_section is not None:
+                self.story.append(KeepTogether(self._pending_section + block))
+                self._pending_section = None
+            else:
+                self.story.append(KeepTogether(block))
 
     # ------------------------------------------------------------------
     # Text
@@ -1645,7 +1707,13 @@ class PDFReportBuilder:
         para = Paragraph(text, self.styles[style])
         spacer = Spacer(1, SPACING_XXS)
         if self._pending_section is not None:
-            self.story.append(KeepTogether(self._pending_section + [para, spacer]))
+            for item in self._pending_section:
+                if hasattr(item, "keepWithNext"):
+                    item.keepWithNext = 1
+            para.keepWithNext = 1
+            spacer.keepWithNext = 1
+            self.story.extend(self._pending_section)
+            self.story.extend([para, spacer])
             self._pending_section = None
         else:
             self.story.append(para)

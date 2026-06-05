@@ -451,6 +451,38 @@ def load_pa(
     return df
 
 
+def load_rech_av(root: Path) -> pd.DataFrame:
+    """Charge le fichier d'export de recherche avancée pour récupérer les mots-clés."""
+    sources = root / "data" / "sources"
+    try:
+        path = _find_latest_dated_file(sources, "rech_av_", (".csv",))
+        if not path:
+            return pd.DataFrame(columns=["num_dossier", "mots_cles"])
+            
+        try:
+            df = pd.read_csv(path, sep=";", encoding="utf-8-sig", dtype=str)
+        except UnicodeDecodeError:
+            df = pd.read_csv(path, sep=";", encoding="latin-1", dtype=str)
+            
+        import unicodedata
+        def clean_col(c):
+            return unicodedata.normalize('NFKD', str(c)).encode('ASCII', 'ignore').decode('ASCII').lower().strip()
+            
+        df.columns = [clean_col(c) for c in df.columns]
+        
+        col_id = next((c for c in df.columns if "num" in c and "dossier" in c), None)
+        col_mots = next((c for c in df.columns if "mot" in c and "cl" in c), None)
+        
+        if col_id and col_mots:
+            return df[[col_id, col_mots]].rename(columns={
+                col_id: "num_dossier", 
+                col_mots: "mots_cles"
+            })
+    except Exception as e:
+        logger.warning("Lecture de rech_av_*.csv impossible : %s", e)
+    return pd.DataFrame(columns=["num_dossier", "mots_cles"])
+
+
 def _load_pnf_from_127_communes_shp(root: Path) -> Optional[pd.DataFrame]:
     """
     Liste INSEE (+ nom) des communes PNF depuis

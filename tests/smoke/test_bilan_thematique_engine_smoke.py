@@ -87,6 +87,7 @@ def test_run_engine_smoke(monkeypatch, tmp_path: Path) -> None:
             self.echelle = "departement"
             self.code = "21"
             self.dept_code = "21"
+            self.dept_name = "Côte-d'Or"
             self.perimetre_name = "Côte-d'Or"
 
 
