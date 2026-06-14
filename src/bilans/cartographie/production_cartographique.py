@@ -1969,7 +1969,7 @@ def run_export(
             proj = QgsProject.instance()
             available_names = [lyr.name() for lyr in proj.mapLayers().values()]
             legend_labels_map: Dict[str, str] = {}
-            global_sym_src = getattr(CONFIG, "symbology_source", "qgis")
+            global_sym_src = getattr(CONFIG, "symbology_source", "yaml")
             prof_sym_src = getattr(prof, "symbology_source", global_sym_src)
 
             from layer_resolver import should_apply_yaml_symbology
@@ -2387,8 +2387,10 @@ def _draw_legend_on_image(image_path, legend_data):
         start_x = 40
         
     start_y = margin_top
-    if start_y + total_h > img_h:
-        start_y = max(40, img_h - total_h - 40)
+    # Protéger la barre d'échelle en bas à droite (~250px)
+    scalebar_protection = 250
+    if start_y + total_h > img_h - scalebar_protection:
+        start_y = max(100, img_h - total_h - scalebar_protection)
 
     overlay = Image.new('RGBA', img.size, (255, 255, 255, 0))
     overlay_draw = ImageDraw.Draw(overlay)

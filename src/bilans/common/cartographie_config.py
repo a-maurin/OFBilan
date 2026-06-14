@@ -286,6 +286,10 @@ def resolve_map_profiles_for_batch(
     if not opts.get("cartes", False):
         return []
 
+    mode = infer_cartographie_mode(prof, profil_id)
+    if mode == "catalog":
+        return resolve_cartes_selection(prof, opts)
+
     return resolve_qgis_profile_ids(prof, profil_id, opts)
 
 
