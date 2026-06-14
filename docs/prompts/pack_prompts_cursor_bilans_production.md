@@ -478,50 +478,66 @@ Reprendre les etapes 1–3 du Prompt 24 en limitant l'audit, le design et l'impl
 Verification: pytest cible + un smoke sur <profil_id> uniquement.
 ```
 
-### Prompt 25 — Defaults mise en page cartes QGIS (réf. agrainage)
-
-Handoff détaillé : `@tools/prompt/handoff_cartographie_defaults_mise_en_page.md`
+### Prompt 25 — Defaults mise en page cartes QGIS (réf. profil global)
 
 ```text
 Objectif:
-Parametrer par defaut les elements generaux des cartes QGIS (format, DPI, structure de mise en page)
-alignes sur le layout agrainage de reference, et harmoniser les autres layouts du projet bilans_carte.qgz.
+Extraire et paramétrer les éléments généraux des mises en page cartographiques (actuellement hardcodés en Python ou fixés dans le .qgz). Centraliser ces réglages dans une configuration YAML (ex: `layout_defaults.yaml`) et utiliser le layout du profil "global" comme modèle de référence. Tous les autres profils seront harmonisés comme des variations de ce profil global.
+Ce prompt est un modèle : l'utilisateur a conservé ci-dessous UNIQUEMENT les éléments qu'il souhaite modifier.
 
-Contexte — deja livre (ne pas refaire):
-- symbology_source: qgis (symbologies du .qgz conservees)
-- layer_resolver + layers_from_layout: true (decouverte couches depuis layout)
-- chaine bilan → cartes → PDF (cartographie_config, carte_helper, global catalogue)
-- 253 tests verts (dernier run connu)
+[INSTRUCTIONS UTILISATEUR : SUPPRIMEZ LES LIGNES NON DÉSIRÉES ET PRÉCISEZ LES VALEURS CIBLES ENTRE CROCHETS]
 
-Question obligatoire (avant code):
-Périmètre : pilote agrainage seul | tous les layouts .qgz | defaults YAML appliques a l'export ?
+### 1. Format d'export et page
+- Fichiers concernés : `src/bilans/cartographie/config_cartes_model.py`, `src/bilans/cartographie/config_cartes.py`
+- Format d'image (ex: png, jpeg) : [Préciser la valeur cible]
+- Résolution DPI (ex: 300) : [Préciser la valeur cible]
+- Taille de page (ex: A4) : [Préciser la valeur cible]
+- Orientation (ex: landscape) : [Préciser la valeur cible]
 
-Source de verite:
-@tools/prompt/handoff_cartographie_defaults_mise_en_page.md
+### 2. Éléments fixes de la mise en page (Textes et Légende)
+- Fichier concerné : `src/bilans/cartographie/production_cartographique.py`
+- ID de l'item Titre (`layout_title_item_id` actuel : 'titre_principal') : [Modifier si besoin]
+- ID de l'item Sous-titre (`layout_subtitle_item_id` actuel : 'sous_titre') : [Modifier si besoin]
+- Légende : [Préciser si la légende doit être standardisée, repositionnée, etc.]
+
+### 3. Bandeau et Logos (Actuellement hardcodés en Python)
+- Fichier concerné : `src/bilans/cartographie/production_cartographique.py`
+- Bandeau Haut (fonction `_ensure_logo_bandeau`, id `bandeau_logos_ofb`, hauteur `min(25mm, 15% page)`) : [Préciser la nouvelle règle, ex: extraire en YAML, forcer la hauteur à 20mm]
+- Logo OFB Bas Droite (constantes `LOGO_OFB_BAS_DROITE_*`, marges, id `logo_ofb_bas_droite`) : [Préciser la nouvelle règle, ex: extraire en YAML, définir les marges]
+
+### 4. Composants du Layout QGIS de référence (Fichier .qgz)
+- Fichier concerné : `ref/programme/sig/bilans_carte.qgz`
+- Layout de référence (Modèle) : [Préciser le nom exact du layout global dans le .qgz, ex: "Layout_Global"]
+- Composants QGIS (Carte item 65639, Échelle, Flèche Nord) : [Préciser s'il faut ajuster leur taille ou position via script Python (apply_layout_defaults) ou manuellement]
+
+---
+
+Contexte & Contraintes techniques absolues (pour l'agent) :
+1. Ne JAMAIS écraser les symbologies de couches (RuleRenderer QGIS).
+2. L'absence de QGIS sur la machine ne doit générer aucune erreur bloquante.
+3. Rétrocompatibilité : Tout profil ne spécifiant pas de `layout_defaults` doit conserver le comportement actuel.
+4. Les migrations de variables hardcodées (logos, bandeau) vers le YAML ne doivent engendrer aucune modification visuelle sur le layout de référence (tolérance au pixel près).
+5. Ne pas traiter les variations spécifiques induites par les règles de profil (couches métier, symbologies).
+
+Fichiers sources prioritaires à lire AVANT toute modification :
 @ref/programme/sig/bilans_carte.qgz
 @src/bilans/cartographie/production_cartographique.py
 @src/bilans/cartographie/config_cartes_model.py
 @src/bilans/cartographie/param/profils_cartes.yaml
-@src/bilans/cartographie/layer_resolver.py
-@src/bilans/cartographie/layout_layers.py
 
-Reference layout:
-"Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or"
+Étapes de travail exigées (Stop & Go à chaque étape) :
+1) Audit (Lecture seule) : Analysez le code actuel et les fichiers .qgz/.py uniquement pour les éléments sélectionnés ci-dessus. Produisez un récapitulatif strict de ce qui va être modifié (ancien comportement vs nouveau comportement dicté par le YAML). **Attendez la validation de l'utilisateur (Stop & Go)**.
+2) Création du Design : Créez le fichier de configuration YAML (ex: `layout_defaults.yaml`) et mettez à jour `config_cartes_model.py` (Pydantic). Modifiez `export_layout()` dans `production_cartographique.py` pour consommer ces valeurs AVANT l'export d'image. Gérer la rétrocompatibilité. **Attendez la validation (Stop & Go)**.
+3) Implémentation par lots : 
+   - Lot 1: Config + Modèles
+   - Lot 2: Application dans l'export QGIS (`production_cartographique.py`)
+   - Lot 3: Harmonisation des profils existants
+   - Lot 4: Tests et non-régression
 
-Etapes (cf. handoff complet):
-1) Audit sans code : comparer layout agrainage vs chasse / Synthese_activite / carte_brochure
-2) Design : layout_defaults.yaml + LayoutDefaultsConfig + apply_layout_defaults() dans export_layout()
-3) Implementation par lots : config → export → harmonisation profils → non-regression
-
-Contraintes:
-- ne pas ecraser symbologies de couches (RuleRenderer QGIS)
-- ne pas casser layers_from_layout ni symbology_source: qgis
-- QGIS absent → pas d'erreur bloquante sur le pipeline bilan
-- migrer constantes logos hardcodees (LOGO_OFB_*, bandeau) vers YAML sans changer le rendu agrainage
-
-Verification:
-1) python -m pytest -q
-2) smoke : python -m bilans --profil agrainage --cartes --dept-code 21
-3) comparaison visuelle PNG vs export QGIS layout agrainage
+Vérification finale obligatoire :
+1) Lancer `python -m pytest -q` ciblé sur les tests de configuration (ex: `test_cartographie_config.py`).
+2) Lancer un smoke test QGIS : `python -m bilans --profil global --cartes --dept-code 21`
+3) Analyser les logs pour s'assurer de l'absence d'erreurs QGIS.
+4) Effectuer une comparaison visuelle stricte : les PDF et PNG générés doivent respecter la nouvelle configuration sans casser l'existant.
 ```
 

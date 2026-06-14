@@ -192,6 +192,16 @@ class LayoutTitleIdsConfig:
 
 
 @dataclass
+class OutputConfig:
+    """Configuration des fichiers de sortie."""
+
+    format: OutputFormat = "png"
+    dpi: int = 300
+    page_size: str = "A4"
+    orientation: Literal["landscape", "portrait"] = "landscape"
+
+
+@dataclass
 class LayoutDefaultsRootConfig:
     """Racine layout_defaults.yaml."""
 
@@ -200,16 +210,9 @@ class LayoutDefaultsRootConfig:
     auto_template_from_page: bool = True
     layout_title_ids: Dict[str, LayoutTitleIdsConfig] = field(default_factory=dict)
     templates: Dict[str, LayoutTemplateConfig] = field(default_factory=dict)
+    export: OutputConfig = field(default_factory=OutputConfig)
 
 
-@dataclass
-class OutputConfig:
-    """Configuration des fichiers de sortie."""
-
-    format: OutputFormat = "png"
-    dpi: int = 300
-    page_size: str = "A4"
-    orientation: Literal["landscape", "portrait"] = "landscape"
 
 
 @dataclass

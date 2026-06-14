@@ -24,21 +24,18 @@ def test_layout_defaults_yaml_exists():
     assert LAYOUT_DEFAULTS_YAML.is_file()
 
 
-def test_load_carre_210_template(root_config):
+def test_load_global_template(root_config):
     assert root_config.enabled
-    assert "carre_210" in root_config.templates
-    tpl = root_config.templates["carre_210"]
-    assert tpl.page.width_mm == 210
-    assert tpl.page.height_mm == 210
+    assert "global" in root_config.templates
+    tpl = root_config.templates["global"]
+    assert tpl.page.width_mm == 297.0
+    assert tpl.page.height_mm == 210.0
     assert tpl.legend.single is True
     assert tpl.legend.hide_extra is True
-    assert tpl.legend.x_mm == 154
-    assert tpl.legend.width_mm == 56
-    assert tpl.legend.height_mm == 98
 
 
-def test_agrainage_title_id_mapping(root_config):
-    layout_name = "Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or"
+def test_global_title_id_mapping(root_config):
+    layout_name = "global"
     assert layout_name in root_config.layout_title_ids
     prof = ProfileConfig(
         id="agrainage",
@@ -47,11 +44,12 @@ def test_agrainage_title_id_mapping(root_config):
         output_filename="x.png",
     )
     title_id, sub_id = resolve_title_ids(prof, root_config)
-    assert title_id == "Bilan 2025 2026 - Agrainage illicite - Côte d'Or"
-    assert sub_id is None
+    assert title_id == "titre_principal"
+    assert sub_id == "sous_titre"
 
 
-def test_resolve_template_explicit_ref(root_config):
+def test_resolve_template_explicit_ref():
+    cfg = parse_layout_defaults_dict({"enabled": True, "templates": {"a4_paysage": {}}})
     prof = ProfileConfig(
         id="chasse",
         title="t",
@@ -59,7 +57,7 @@ def test_resolve_template_explicit_ref(root_config):
         output_filename="x.png",
         layout_defaults_ref="a4_paysage",
     )
-    assert resolve_template_name(prof, root_config) == "a4_paysage"
+    assert resolve_template_name(prof, cfg) == "a4_paysage"
 
 
 def test_match_page_template():

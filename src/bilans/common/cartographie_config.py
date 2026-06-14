@@ -28,7 +28,7 @@ def parse_cartography_catalog(profile: dict | None) -> list[dict[str, str]]:
         # Fallback heuristique si pas d'ID clair
         pid = "bilan"
         
-    carto = profile.get("cartographie") or {}
+    carto = profile.get("cartographie")
     if not isinstance(carto, dict):
         return []
         

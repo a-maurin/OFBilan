@@ -20,6 +20,7 @@ try:
         LayoutTemplateConfig,
         LayoutTitleIdsConfig,
         ProfileConfig,
+        OutputConfig,
     )
 except ImportError:
     from bilans.cartographie.config_cartes_model import (
@@ -31,6 +32,7 @@ except ImportError:
         LayoutTemplateConfig,
         LayoutTitleIdsConfig,
         ProfileConfig,
+        OutputConfig,
     )
 
 if TYPE_CHECKING:
@@ -132,12 +134,23 @@ def parse_layout_defaults_dict(data: Optional[Dict[str, Any]]) -> LayoutDefaults
             if isinstance(tpl, dict):
                 templates[str(key)] = _template_from_dict(tpl)
 
+    export_cfg = OutputConfig()
+    raw_export = data.get("export")
+    if isinstance(raw_export, dict):
+        export_cfg = OutputConfig(
+            format=str(raw_export.get("format", "png")),
+            dpi=int(raw_export.get("dpi", 300)),
+            page_size=str(raw_export.get("page_size", "A4")),
+            orientation=str(raw_export.get("orientation", "landscape")),
+        )
+
     return LayoutDefaultsRootConfig(
         enabled=bool(data.get("enabled", True)),
         default_template=str(data.get("default_template", "carre_210")),
         auto_template_from_page=bool(data.get("auto_template_from_page", True)),
         layout_title_ids=title_ids,
         templates=templates,
+        export=export_cfg,
     )
 
 

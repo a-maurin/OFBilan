@@ -1322,17 +1322,6 @@ def _get_logo_bandeau_path() -> Optional[Path]:
 # Référence taille / position : docs/usage/README_Production_cartes.md
 # Taille doublée (+100 %), ancrage au bord supérieur gauche (position du coin supérieur gauche fixe).
 LOGO_OFB_HORIZONTAL_FILENAME = "bloc-marque-RF-OFB_horizontal.jpg"
-LOGO_OFB_BAS_DROITE_ID = "logo_ofb_bas_droite"
-# Taille affichée du logo (x2 par rapport à la référence)
-LOGO_OFB_BAS_DROITE_HAUTEUR_MM = 24.0
-LOGO_OFB_BAS_DROITE_LARGEUR_FRACTION = 0.36
-# Position d'ancrage du coin supérieur gauche (référence : logo à 18 % × 12 mm)
-LOGO_OFB_ANCRAGE_LARGEUR_FRACTION = 0.18
-LOGO_OFB_ANCRAGE_HAUTEUR_MM = 12.0
-LOGO_OFB_MARGE_DROITE_MM = 5.0
-LOGO_OFB_MARGE_BAS_MM = 16.0
-# Décalage du point d'ancrage vers la gauche (en mm) ; réduire pour décaler à droite
-LOGO_OFB_DECALAGE_ANCRAGE_GAUCHE_MM = 4.0
 
 
 def _get_logo_ofb_horizontal_path() -> Optional[Path]:
@@ -1372,7 +1361,7 @@ def _ensure_logo_ofb_bas_droite(layout, prof: "ProfileConfig") -> None:
         if apply_existing_qgis_logo_position(layout, logo_cfg):
             return
 
-    picture_id = logo_cfg.picture_id if logo_cfg else LOGO_OFB_BAS_DROITE_ID
+    picture_id = logo_cfg.picture_id if logo_cfg else "logo_ofb_bas_droite"
     picture_item = None
     for item in layout.items():
         if isinstance(item, QgsLayoutItemPicture):
@@ -1406,28 +1395,6 @@ def _ensure_logo_ofb_bas_droite(layout, prof: "ProfileConfig") -> None:
                 height_mm=logo_cfg.height_mm,
             ),
         )
-        return
-
-    layout_size = layout.pageCollection().page(0).pageSize()
-    w_mm = layout_size.width()
-    h_mm = layout_size.height()
-    logo_w = w_mm * LOGO_OFB_BAS_DROITE_LARGEUR_FRACTION
-    logo_h = LOGO_OFB_BAS_DROITE_HAUTEUR_MM
-    try:
-        size_mm = QgsLayoutSize(logo_w, logo_h)
-        if hasattr(picture_item, "attemptResize"):
-            picture_item.attemptResize(size_mm)
-    except Exception as e:
-        logger.debug("Dimensionnement logo bas droite: %s", e)
-    x_pos = w_mm - (w_mm * LOGO_OFB_ANCRAGE_LARGEUR_FRACTION) - LOGO_OFB_MARGE_DROITE_MM - LOGO_OFB_DECALAGE_ANCRAGE_GAUCHE_MM
-    y_pos = h_mm - LOGO_OFB_ANCRAGE_HAUTEUR_MM - LOGO_OFB_MARGE_BAS_MM
-    try:
-        if hasattr(picture_item, "attemptMove"):
-            picture_item.attemptMove(QgsLayoutPoint(x_pos, y_pos))
-        elif hasattr(picture_item, "setPosition"):
-            picture_item.setPosition(QgsLayoutPoint(x_pos, y_pos))
-    except Exception as e:
-        logger.debug("Positionnement logo bas droite: %s", e)
 
 
 def _ensure_logo_bandeau(layout, prof: "ProfileConfig") -> None:
@@ -1465,35 +1432,30 @@ def _ensure_logo_bandeau(layout, prof: "ProfileConfig") -> None:
     else:
         picture_item.setPath(str(logo_path))
     picture_item.setResizeMode(QgsLayoutItemPicture.Zoom)
-    layout_size = layout.pageCollection().page(0).pageSize()
-    w_mm = layout_size.width()
-    h_mm = layout_size.height()
-    if bandeau_cfg is not None:
-        bandeau_h = min(bandeau_cfg.height_mm, h_mm * bandeau_cfg.height_max_fraction)
+    
+    if bandeau_cfg is not None and bandeau_cfg.height_mm > 0:
+        layout_size = layout.pageCollection().page(0).pageSize()
+        w_mm = layout_size.width()
+        bandeau_h = bandeau_cfg.height_mm
         y_pos = bandeau_cfg.y_mm
-    else:
-        bandeau_h = min(25.0, h_mm * 0.15)
-        y_pos = 0.0
-    # Taille : attemptResize(QgsLayoutSize) selon l'API QgsLayoutItem (unité mm par défaut)
-    try:
-        size_mm = QgsLayoutSize(w_mm, bandeau_h)
-        if hasattr(picture_item, "attemptResize"):
-            picture_item.attemptResize(size_mm)
-        else:
-            logger.warning(
-                "QgsLayoutItemPicture: attemptResize non trouvé. Méthodes: %s",
-                [m for m in dir(picture_item) if not m.startswith("_") and "size" in m.lower()],
-            )
-    except Exception as e:
-        logger.exception("Erreur lors du dimensionnement du bandeau logo: %s", e)
-    # Position
-    try:
-        if hasattr(picture_item, "attemptMove"):
-            picture_item.attemptMove(QgsLayoutPoint(0, y_pos))
-        elif hasattr(picture_item, "setPosition"):
-            picture_item.setPosition(QgsLayoutPoint(0, y_pos))
-    except Exception as e:
-        logger.exception("Erreur lors du positionnement du bandeau logo: %s", e)
+        try:
+            size_mm = QgsLayoutSize(w_mm, bandeau_h)
+            if hasattr(picture_item, "attemptResize"):
+                picture_item.attemptResize(size_mm)
+            else:
+                logger.warning(
+                    "QgsLayoutItemPicture: attemptResize non trouvé. Méthodes: %s",
+                    [m for m in dir(picture_item) if not m.startswith("_") and "size" in m.lower()],
+                )
+        except Exception as e:
+            logger.exception("Erreur lors du dimensionnement du bandeau logo: %s", e)
+        try:
+            if hasattr(picture_item, "attemptMove"):
+                picture_item.attemptMove(QgsLayoutPoint(0, y_pos))
+            elif hasattr(picture_item, "setPosition"):
+                picture_item.setPosition(QgsLayoutPoint(0, y_pos))
+        except Exception as e:
+            logger.exception("Erreur lors du positionnement du bandeau logo: %s", e)
 
 
 def export_layout(
