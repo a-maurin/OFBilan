@@ -278,9 +278,10 @@ def analyse_pej_pa_global(
     else:
         pej_dept = pej.copy()
     if "DATE_REF" in pej_dept.columns:
-        pej_dept = pej_dept.sort_values("DATE_REF", ascending=False).drop_duplicates(subset="DC_ID", keep="first").copy()
+        pej_dept = pej_dept.sort_values("DATE_REF", ascending=False)
+        pej_dept = pej_dept[pej_dept["DC_ID"].isna() | ~pej_dept.duplicated(subset=["DC_ID"], keep="first")].copy()
     else:
-        pej_dept = pej_dept.drop_duplicates(subset="DC_ID", keep="first").copy()
+        pej_dept = pej_dept[pej_dept["DC_ID"].isna() | ~pej_dept.duplicated(subset=["DC_ID"], keep="first")].copy()
 
     from bilans.common.chargeurs_donnees import merge_pej_faits_locations
     pej_dept = merge_pej_faits_locations(pej_dept, root, echelle, code)

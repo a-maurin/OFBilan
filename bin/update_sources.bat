@@ -1,6 +1,9 @@
 @echo off
 setlocal
 
+:: Se deplacer a la racine du projet
+cd /d "%~dp0.."
+
 :: Activer l'environnement Python de QGIS
 set "QGIS_PYTHON=C:\Program Files\QGIS 3.44.8\bin\python.exe"
 for %%A in ("%QGIS_PYTHON%") do set "OSGEO4W_BIN=%%~dpA"

@@ -529,7 +529,7 @@ class ConfigCartesDialog(QDialog):
             prof = ProfileConfig(
                 id=profile_id,
                 title=f"Bilan {profile_id}",
-                layout_name="Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or",
+                layout_name="modele_mise_en_page_carto_bilans",
                 output_filename=f"carte_{profile_id}.png",
                 date_deb="2025-01-01",
                 date_fin="2026-02-05",

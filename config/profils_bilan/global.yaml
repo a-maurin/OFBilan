@@ -12,6 +12,9 @@ capabilities:
 
 cartographie:
   catalog:
+    - id: global_domaines
+      label: "Domaines"
+      fichier: carte_global_domaines.png
     - id: global_resultats
       label: "Contrôles"
       fichier: carte_global_resultats.png
@@ -21,9 +24,6 @@ cartographie:
     - id: global_procedures
       label: "Procédures"
       fichier: carte_global_procedures.png
-    - id: global_domaines
-      label: "Domaines"
-      fichier: carte_global_domaines.png
 aggregation:
   adapter: run_profile_aggregations
 pdf:
@@ -46,8 +46,8 @@ options:
     label: "Cartes à intégrer au PDF"
     type: multi_choice
     default:
+      - global_domaines
       - global_resultats
       - global_usagers
       - global_procedures
-      - global_domaines
     ask: true

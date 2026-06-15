@@ -32,17 +32,17 @@ class LayerRoleSpec:
 LAYER_ROLE_SPECS: tuple[LayerRoleSpec, ...] = (
     LayerRoleSpec(
         role="point_controles",
-        patterns=("point_ctrl_*_wgs84", "point_ctrl_*"),
+        patterns=("point_ctrl_*_wgs84", "point_ctrl_*", "point_ctrl"),
         prefer_latest_dated=True,
     ),
     LayerRoleSpec(
         role="pej",
-        patterns=("localisation_infrac_FAITS_*", "localisation_infrac_*"),
+        patterns=("localisation_infrac_FAITS_*", "localisation_infrac_*", "localisation_infrac_FAITS", "localisation_infrac"),
         prefer_latest_dated=True,
     ),
     LayerRoleSpec(
         role="pochoir",
-        patterns=("pochoir_sd*", "pochoir_*"),
+        patterns=("pochoir_sd*", "pochoir_*", "pochoir"),
         prefer_latest_dated=False,
     ),
     LayerRoleSpec(
@@ -50,30 +50,31 @@ LAYER_ROLE_SPECS: tuple[LayerRoleSpec, ...] = (
         patterns=(
             "Zone d'interdiction d'agrainage*",
             "Zone*d'interdiction*d'agrainage*",
+            "Zone d'interdiction d'agrainage",
         ),
         prefer_latest_dated=True,
     ),
     LayerRoleSpec(
         role="zone_infectee",
-        patterns=("Zone Infectee*", "Zone infectée*", "Zone infect*"),
+        patterns=("Zone Infectee*", "Zone infectée*", "Zone infect*", "Zone infectee", "Zone infectée"),
         prefer_latest_dated=True,
     ),
     LayerRoleSpec(
         role="zone_risque",
-        patterns=("Zone a Risque*", "Zone à risque*", "Zone*risque*"),
+        patterns=("Zone a Risque*", "Zone à risque*", "Zone*risque*", "Zone a Risque", "Zone à risque"),
         prefer_latest_dated=True,
     ),
     LayerRoleSpec(
         role="communes_pve",
-        patterns=("communes_france",),
+        patterns=("communes_france", "communes_france_*"),
     ),
     LayerRoleSpec(
         role="pve",
-        patterns=("pve_infractions", "pv_electronique", "communes_france"),
+        patterns=("pve_infractions", "pv_electronique", "communes_france", "pve", "pve_*"),
     ),
     LayerRoleSpec(
         role="pve_agrainage_centroides",
-        patterns=("pve_agrainage_points_centroides", "pve_agrainage*"),
+        patterns=("pve_agrainage_points_centroides", "pve_agrainage*", "pve_agrainage"),
     ),
 )
 

@@ -4,7 +4,7 @@ auto_template_from_page: true
 
 export:
   format: "png"
-  dpi: 300
+  dpi: 150
   page_size: "A4"
   orientation: "landscape"
 

@@ -1,3 +1,4 @@
+symbology_source: "yaml"
 agrainage:
   title: "Bilan agrainage 2025-2026 — Agrainage illicite (NATINF 27742) — Côte-d'Or"
   layout_name: "Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or"
@@ -164,6 +165,8 @@ global_procedures:
   output_filename: "carte_global_procedures.png"
   date_deb: "2025-01-01"
   date_fin: "2026-02-05"
+  natinf_pve: []
+  natinf_pj: []
   title_main: "Procédures judiciaires — Côte-d'Or"
   subtitle: ""
   layout_title_item_id: "titre_principal"
@@ -183,6 +186,19 @@ global_procedures:
       geometry_mode: "polygon_fill"
       renderer_type: "graduated"
       palette: "Oranges"
+    communes_france:
+      layer_name: "communes_france"
+      legend_label: "PVe"
+      geometry_mode: "polygon_fill"
+      renderer_type: "single"
+      palette: "Blues"
+    point_ctrl_20260205_wgs84:
+      layer_name: "point_ctrl_20260205_wgs84"
+      legend_label: "Procédures Administratives (PA)"
+      filter_type: "point_ctrl_manquement"
+      geometry_mode: "polygon_fill"
+      renderer_type: "single"
+      palette: "Reds"
 
 global_usagers:
   title: "Bilan global SD21 — Contrôles par types d’usagers — Côte-d'Or"
@@ -207,8 +223,14 @@ global_usagers:
       filter_type: "point_ctrl_global"
       geometry_mode: "polygon_fill"
       renderer_type: "categorized"
-      field: "CASE\n  WHEN attribute(@feature, 'type_usager') ILIKE '%Particulier%' THEN 'Particulier'\n  WHEN attribute(@feature, 'type_usager') ILIKE '%Agriculteur%' THEN 'Agriculteur'\n  WHEN attribute(@feature, 'type_usager') ILIKE '%Collectiv%' THEN 'Collectivité'\n  WHEN attribute(@feature, 'type_usager') ILIKE '%Entreprise%' THEN 'Entreprise'\n  WHEN attribute(@feature, 'type_usager') ILIKE '%sylvic%' THEN 'Acteurs sylvicoles'\n  WHEN attribute(@feature, 'type_usager') ILIKE '%Autre%' THEN 'Autre'\n  ELSE 'Autre'\nEND\n"
-      palette: "#003A76,#53AB60,#F4A261,#E76F51,#90BF83,#4296CE"
+      field: "CASE\n  WHEN \"type_usager\" ILIKE '%Particulier%' THEN 'Particulier'\n  WHEN \"type_usager\" ILIKE '%Agriculteur%' THEN 'Agriculteur'\n  WHEN \"type_usager\" ILIKE '%Collectiv%' THEN 'Collectivité'\n  WHEN \"type_usager\" ILIKE '%Entreprise%' THEN 'Entreprise'\n  WHEN \"type_usager\" ILIKE '%sylvic%' THEN 'Acteurs sylvicoles'\n  WHEN \"type_usager\" ILIKE '%Autre%' THEN 'Autre'\n  ELSE 'Autre'\nEND\n"
+      categories:
+        "Agriculteur": "#F1C40F"        # Jaune
+        "Collectivité": "#3498DB"       # Bleu
+        "Particulier": "#E67E22"        # Orange
+        "Entreprise": "#2ECC71"         # Vert
+        "Acteurs sylvicoles": "#9B59B6" # Violet
+        "Autre": "#95A5A6"              # Gris
 
 procedures_pve:
   title: "Bilan procédures judiciaires et PVe — Côte-d'Or"
@@ -286,12 +308,7 @@ global_resultats:
   layout_title_item_id: "titre_principal"
   layout_subtitle_item_id: "sous_titre"
   layers:
-    localisation_infrac_FAITS_20260205:
-      layer_name: "localisation_infrac_FAITS_20260205"
-      legend_label: "localisation_infrac_FAITS_20260205"
-      geometry_mode: "polygon_fill"
-      renderer_type: "graduated"
-      palette: "Blues"
+
     pochoir_sd21:
       layer_name: "pochoir_sd21"
       legend_label: "pochoir_sd21"
@@ -305,8 +322,13 @@ global_resultats:
       filter_type: "point_ctrl_global"
       geometry_mode: "polygon_fill"
       renderer_type: "categorized"
-      field: "coalesce(attribute(@feature, 'resultat'), attribute(@feature, 'Resultat'), attribute(@feature, 'resultat_controle'), 'Non renseigné')"
-      palette: "#53AB60,#E76F51,#F4A261,#003A76"
+      field: "coalesce(\"resultat\", \"Resultat\", \"resultat_controle\", 'Non renseigné')"
+      categories:
+        "Conforme": "#53AB60"
+        "Infraction": "#E76F51"
+        "Manquement": "#F4A261"
+        "En attente": "#003A76"
+        "Non renseigné": "#95A5A6"
 
 global_domaines:
   title: "Bilan global — Contrôles par domaines — Côte-d'Or"
@@ -331,8 +353,15 @@ global_domaines:
       filter_type: "point_ctrl_global"
       geometry_mode: "polygon_fill"
       renderer_type: "categorized"
-      field: "coalesce(attribute(@feature, 'domaine'), 'Hors domaine')"
-      palette: "#003A76,#53AB60,#F4A261,#E76F51,#90BF83,#4296CE,#264653,#2A9D8F"
+      field: "coalesce(\"domaine\", 'Hors domaine')"
+      categories:
+        "Assurer la protection des espèces animales et végétales": "#27AE60"              # Vert
+        "Espaces protégés et protection des milieux et du cadre de vie": "#16A085"       # Vert/Teal
+        "Gestion qualitative de la ressource en eau": "#3498DB"                         # Bleu
+        "Préservation des milieux aquatiques et marins": "#2980B9"                      # Bleu plus foncé
+        "Gestion quantitative de l'eau": "#85C1E9"                                      # Bleu clair
+        "Hors domaine": "#95A5A6"                                                       # Gris
+        "Sujets transversaux": "#7F8C8D"                                                # Gris foncé
 
 toutes:
   title: "Bilan global — Toutes les cartes — Côte-d'Or"

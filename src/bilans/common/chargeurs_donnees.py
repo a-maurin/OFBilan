@@ -27,6 +27,62 @@ _INSEE_COL_PRIORITY: Tuple[str, ...] = (
 )
 
 
+def safe_to_datetime(series: pd.Series) -> pd.Series:
+    """
+    Parse les dates de manière sécurisée en gérant le format français (DD/MM/YYYY)
+    et le format ISO (YYYY-MM-DD) pour éviter les inversions jour/mois et les NaT.
+    """
+    if series.empty:
+        return pd.to_datetime(series)
+    s_str = series.astype(str).str.strip()
+    res = pd.Series(pd.NaT, index=series.index)
+    
+    import re
+    iso_pattern = re.compile(r"^\d{4}-\d{2}-\d{2}")
+    fr_pattern = re.compile(r"^\d{2}/\d{2}/\d{4}")
+    
+    # Utilisation de .apply pour contourner l'incompatibilité de pyarrow dans l'environnement QGIS
+    iso_mask = s_str.apply(lambda val: bool(iso_pattern.match(val)) if isinstance(val, str) else False)
+    fr_mask = s_str.apply(lambda val: bool(fr_pattern.match(val)) if isinstance(val, str) else False)
+    
+    # 1. Format ISO (YYYY-MM-DD)
+    if iso_mask.any():
+        years = pd.to_numeric(s_str[iso_mask].str.slice(0, 4), errors="coerce")
+        valid_years = (years >= 1678) & (years <= 2262)
+        actual_iso_mask = iso_mask.copy()
+        actual_iso_mask[iso_mask] = valid_years.fillna(False)
+        if actual_iso_mask.any():
+            res[actual_iso_mask] = pd.to_datetime(
+                s_str[actual_iso_mask].str.slice(0, 10), format="%Y-%m-%d", errors="coerce"
+            )
+        
+    # 2. Format français (DD/MM/YYYY)
+    if fr_mask.any():
+        years = pd.to_numeric(s_str[fr_mask].str.slice(6, 10), errors="coerce")
+        valid_years = (years >= 1678) & (years <= 2262)
+        actual_fr_mask = fr_mask.copy()
+        actual_fr_mask[fr_mask] = valid_years.fillna(False)
+        if actual_fr_mask.any():
+            res[actual_fr_mask] = pd.to_datetime(
+                s_str[actual_fr_mask].str.slice(0, 10), format="%d/%m/%Y", errors="coerce"
+            )
+        
+    # 3. Fallback pour les autres formats/datetimes
+    other_mask = ~(iso_mask | fr_mask) & series.notna()
+    if other_mask.any():
+        try:
+            res[other_mask] = pd.to_datetime(
+                series[other_mask], errors="coerce", format="mixed"
+            )
+        except Exception:
+            for idx, val in series[other_mask].items():
+                try:
+                    res.loc[idx] = pd.to_datetime(val, errors="coerce")
+                except Exception:
+                    res.loc[idx] = pd.NaT
+    return res
+
+
 def _gpkg_engine() -> str:
     """Detect the best available GPKG engine once (pyogrio > fiona)."""
     try:
@@ -236,9 +292,7 @@ def load_point_ctrl(
                 raise KeyError(f"La colonne '{col}' est absente des données point_ctrl_*")
         
         if "date_ctrl" in df.columns:
-            df["date_ctrl"] = pd.to_datetime(
-                df["date_ctrl"], dayfirst=True, errors="coerce", format="mixed"
-            )
+            df["date_ctrl"] = safe_to_datetime(df["date_ctrl"])
 
         # Alias de colonnes : le reste du code travaille avec des noms
         # uniformisés, malgré les variations entre GPKG/SHP et les versions.
@@ -373,10 +427,8 @@ def load_pej(
             if cand in df.columns:
                 df["type_usager"] = df[cand]
                 break
-    df["DATE_CONSTATATION"] = pd.to_datetime(df["DATE_CONSTATATION"], errors="coerce")
-    df["DATE_OUVERTURE_PROCEDURE"] = pd.to_datetime(
-        df["DATE_OUVERTURE_PROCEDURE"], errors="coerce"
-    )
+    df["DATE_CONSTATATION"] = safe_to_datetime(df["DATE_CONSTATATION"])
+    df["DATE_OUVERTURE_PROCEDURE"] = safe_to_datetime(df["DATE_OUVERTURE_PROCEDURE"])
     if "RECAP_DATE_INIT_PJ" not in df.columns:
         if date_deb is not None and date_fin is not None:
             raise KeyError(
@@ -385,7 +437,7 @@ def load_pej(
             )
         df["RECAP_DATE_INIT_PJ"] = pd.NaT
     else:
-        df["RECAP_DATE_INIT_PJ"] = pd.to_datetime(df["RECAP_DATE_INIT_PJ"], errors="coerce")
+        df["RECAP_DATE_INIT_PJ"] = safe_to_datetime(df["RECAP_DATE_INIT_PJ"])
     df["DATE_REF"] = (
         df["DATE_CONSTATATION"]
         .fillna(df["DATE_OUVERTURE_PROCEDURE"])
@@ -406,11 +458,10 @@ def load_pej(
 
     if not df.empty and "DC_ID" in df.columns:
         if "DATE_REF" in df.columns:
-            df = df.sort_values("DATE_REF", ascending=False).drop_duplicates(
-                subset="DC_ID", keep="first"
-            )
+            df = df.sort_values("DATE_REF", ascending=False)
+            df = df[df["DC_ID"].isna() | ~df.duplicated(subset=["DC_ID"], keep="first")]
         else:
-            df = df.drop_duplicates(subset="DC_ID", keep="first")
+            df = df[df["DC_ID"].isna() | ~df.duplicated(subset=["DC_ID"], keep="first")]
 
     return df
 
@@ -441,8 +492,8 @@ def load_pa(
     )
     df = _read_spreadsheet(path)
     df.columns = pd.Index([str(c).strip().upper() for c in df.columns])
-    df["DATE_CONTROLE"] = pd.to_datetime(df["DATE_CONTROLE"], errors="coerce")
-    df["DATE_DOSSIER"] = pd.to_datetime(df["DATE_DOSSIER"], errors="coerce")
+    df["DATE_CONTROLE"] = safe_to_datetime(df["DATE_CONTROLE"])
+    df["DATE_DOSSIER"] = safe_to_datetime(df["DATE_DOSSIER"])
     df["DATE_REF"] = df["DATE_CONTROLE"].fillna(df["DATE_DOSSIER"])
     if date_deb is not None and date_fin is not None:
         deb_ts = pd.to_datetime(date_deb)
@@ -1723,9 +1774,9 @@ def load_pve(
 
     # Date de mise en force (MIF)
     if "INF-DATE-MIF" in df.columns:
-        df["INF-DATE-MIF"] = pd.to_datetime(
-            df["INF-DATE-MIF"], dayfirst=True, errors="coerce"
-        )
+        df["INF-DATE-MIF"] = safe_to_datetime(df["INF-DATE-MIF"])
+    if "INF-DATE-INTG" in df.columns:
+        df["INF-DATE-INTG"] = safe_to_datetime(df["INF-DATE-INTG"])
 
     if echelle is not None and code is not None:
         from bilans.common.utilitaires_metier import get_departements_pour_perimetre
@@ -1733,15 +1784,15 @@ def load_pve(
         dept_col = "INF-DEPART" if "INF-DEPART" in df.columns else "INF-DEPARTEMENT"
         if dept_col in df.columns and dept_codes and "FR" not in dept_codes:
             df = df[df[dept_col].astype(str).str.strip().isin(dept_codes)].copy()
-    if date_deb is not None and date_fin is not None and "INF-DATE-MIF" in df.columns:
+    if date_deb is not None and date_fin is not None and "INF-DATE-INTG" in df.columns:
         n_before_period = len(df)
         deb_ts = pd.to_datetime(date_deb)
         fin_ts = pd.to_datetime(date_fin)
-        df = filtre_periode(df, "INF-DATE-MIF", deb_ts, fin_ts)
+        df = filtre_periode(df, "INF-DATE-INTG", deb_ts, fin_ts)
         n_after_period = len(df)
         if n_before_period > n_after_period:
             logger.info(
-                "PVe : %s ligne(s) retenues sur %s après filtre période INF-DATE-MIF "
+                "PVe : %s ligne(s) retenues sur %s après filtre période INF-DATE-INTG "
                 "(%s → %s) ; %s ligne(s) hors période exclues. "
                 "(Une jointure QGIS sans filtre date sur les mêmes communes PNF peut compter plus de lignes.)",
                 n_after_period,

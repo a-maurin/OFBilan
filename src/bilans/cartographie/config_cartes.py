@@ -27,7 +27,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
     'agrainage': ProfileConfig(
         id='agrainage',
         title="Bilan agrainage 2025-2026 — Agrainage illicite (NATINF 27742) — Côte-d'Or",
-        layout_name="Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or",
+        layout_name="modele_mise_en_page_carto_bilans",
         output_filename='carte_agrainage.png',
         date_deb='2025-01-01',
         date_fin='2026-02-05',
@@ -145,7 +145,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
     'chasse': ProfileConfig(
         id='chasse',
         title="Bilan chasse 2025-2026 — Chasse — Côte-d'Or",
-        layout_name="Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or",
+        layout_name="modele_mise_en_page_carto_bilans",
         output_filename='carte_chasse.png',
         date_deb='2025-09-01',
         date_fin='2026-03-01',
@@ -211,7 +211,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
     'piegeage': ProfileConfig(
         id='piegeage',
         title="Bilan piégeage — Contrôles piégeage — Côte-d'Or",
-        layout_name="Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or",
+        layout_name="modele_mise_en_page_carto_bilans",
         output_filename='carte_piegeage.png',
         date_deb='2025-01-01',
         date_fin='2026-02-05',
@@ -277,7 +277,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
     'global': ProfileConfig(
         id='global',
         title="Bilan global — Contrôles et procédures — Côte-d'Or",
-        layout_name="Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or",
+        layout_name="modele_mise_en_page_carto_bilans",
         output_filename='carte_global.png',
         date_deb='2025-01-01',
         date_fin='2026-02-05',
@@ -330,7 +330,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
     'global_procedures': ProfileConfig(
         id='global_procedures',
         title="Bilan global SD21 — Procédures — Côte-d'Or",
-        layout_name="Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or",
+        layout_name="modele_mise_en_page_carto_bilans",
         output_filename='carte_global_procedures.png',
         date_deb='2025-01-01',
         date_fin='2026-02-05',
@@ -371,7 +371,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
     'global_usagers': ProfileConfig(
         id='global_usagers',
         title="Bilan global SD21 — Contrôles par types d’usagers — Côte-d'Or",
-        layout_name="Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or",
+        layout_name="modele_mise_en_page_carto_bilans",
         output_filename='carte_global_usagers.png',
         date_deb='2025-01-01',
         date_fin='2026-02-05',
@@ -411,7 +411,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
     'procedures_pve': ProfileConfig(
         id='procedures_pve',
         title="Bilan procédures judiciaires et PVe — Côte-d'Or",
-        layout_name="Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or",
+        layout_name="modele_mise_en_page_carto_bilans",
         output_filename='carte_procedures_pve.png',
         date_deb='2025-01-01',
         date_fin='2026-02-05',
@@ -478,7 +478,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
     'global_usagers_agriculteurs': ProfileConfig(
         id='global_usagers_agriculteurs',
         title="Bilan SD21 — Contrôles agriculteurs — Côte-d'Or",
-        layout_name="Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or",
+        layout_name="modele_mise_en_page_carto_bilans",
         output_filename='carte_global_usagers_agriculteurs.png',
         date_deb='2025-01-01',
         date_fin='2026-02-05',
@@ -518,7 +518,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
     'global_resultats': ProfileConfig(
         id='global_resultats',
         title="Bilan SD21 — Résultats des contrôles — Côte-d'Or",
-        layout_name="Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or",
+        layout_name="modele_mise_en_page_carto_bilans",
         output_filename='carte_global_resultats.png',
         date_deb='2025-01-01',
         date_fin='2025-12-31',
@@ -574,7 +574,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
     'global_domaines': ProfileConfig(
         id='global_domaines',
         title="Bilan global — Contrôles par domaines — Côte-d'Or",
-        layout_name="Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or",
+        layout_name="modele_mise_en_page_carto_bilans",
         output_filename='carte_global_domaines.png',
         date_deb='2025-01-01',
         date_fin='2026-02-05',
@@ -614,7 +614,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
     'toutes': ProfileConfig(
         id='toutes',
         title="Bilan global — Toutes les cartes — Côte-d'Or",
-        layout_name="Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or",
+        layout_name="modele_mise_en_page_carto_bilans",
         output_filename='carte_toutes.png',
         date_deb='2025-01-01',
         date_fin='2026-02-05',
@@ -660,6 +660,6 @@ CONFIG = GlobalConfig(
     kit_ofb_path='',
     output_dir='',
     basemap=BasemapConfig(enabled=True),
-    output=OutputConfig(format='png', dpi=300, page_size='A4', orientation='landscape'),
+    output=OutputConfig(format='png', dpi=150, page_size='A4', orientation='landscape'),
     profiles=DEFAULT_PROFILES.copy(),
 )

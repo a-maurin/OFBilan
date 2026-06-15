@@ -219,7 +219,7 @@ def collect_bilan_carto_override(profile: dict | None) -> dict[str, Any]:
 def build_qgis_overrides_from_bilan_profiles(
     bilan_profiles: dict[str, dict] | None,
 ) -> dict[str, dict[str, Any]]:
-    """Mappe identifiant profil QGIS → surcharges (keywords, colonnes)."""
+    """Mappe identifiant profil QGIS → surcharges (keywords, colonnes, natinfs)."""
     if not bilan_profiles:
         return {}
     out: dict[str, dict[str, Any]] = {}
@@ -230,8 +230,23 @@ def build_qgis_overrides_from_bilan_profiles(
         if not qgis_id:
             continue
         override = collect_bilan_carto_override(profile)
+        # Surcharges NATINFs
+        if "natinf_pve" in profile:
+            override["natinf_pve"] = profile["natinf_pve"]
+        if "natinf_pej" in profile:
+            override["natinf_pj"] = profile["natinf_pej"]
+        elif "natinf_pj" in profile:
+            override["natinf_pj"] = profile["natinf_pj"]
+
         if override:
             out[qgis_id] = override
+            # Propagation aux sous-cartes (ex. global_procedures)
+            prefixes = {bilan_id, qgis_id}
+            for pref in prefixes:
+                if not pref:
+                    continue
+                for sub in ("domaines", "resultats", "usagers", "procedures"):
+                    out[f"{pref}_{sub}"] = dict(override)
     return out
 
 

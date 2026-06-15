@@ -131,13 +131,36 @@ def _load_profiles_from_param() -> Optional[tuple[Dict[str, "ProfileConfig"], st
     Charge les profils depuis param/profils_cartes.yaml (et param/symbologies.yaml si présent).
     Retourne (dict id_profil -> ProfileConfig, symbology_source_global) ou None.
     """
-    if not PROFILS_CARTES_YAML.exists():
-        return None
     try:
         import yaml
     except ImportError:
-        logger.warning("PyYAML non installé : param/profils_cartes.yaml ignoré, utilisation de config_cartes.py.")
+        logger.warning("PyYAML non installé : profils_cartes.yaml ignoré, utilisation de config_cartes.py.")
         return None
+
+    # Chargement du socle commun par défaut (contient le bloc default)
+    data_defaults = {}
+    if PROFILS_CARTES_YAML.exists():
+        try:
+            with open(PROFILS_CARTES_YAML, "r", encoding="utf-8") as f:
+                data_defaults = yaml.safe_load(f) or {}
+        except Exception as e:
+            logger.warning("Erreur lecture param/profils_cartes.yaml : %s", e)
+
+    # Chargement de la configuration utilisateur facultative (config/profils_cartes.yaml)
+    user_yaml = PROJECT_ROOT / "config" / "profils_cartes.yaml"
+    data_user = {}
+    if user_yaml.exists():
+        try:
+            with open(user_yaml, "r", encoding="utf-8") as f:
+                data_user = yaml.safe_load(f) or {}
+        except Exception as e:
+            logger.warning("Erreur lecture config/profils_cartes.yaml : %s", e)
+
+    if not data_defaults and not data_user:
+        return None
+
+    # Fusion des dictionnaires
+    data = {**data_defaults, **data_user}
 
     symbologies: Dict[str, Dict[str, Any]] = {}
     if SYMBOLOGIES_YAML.exists():
@@ -146,13 +169,6 @@ def _load_profiles_from_param() -> Optional[tuple[Dict[str, "ProfileConfig"], st
                 symbologies = yaml.safe_load(f) or {}
         except Exception as e:
             logger.warning("Erreur lecture param/symbologies.yaml : %s", e)
-
-    try:
-        with open(PROFILS_CARTES_YAML, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
-    except Exception as e:
-        logger.warning("Erreur lecture param/profils_cartes.yaml : %s", e)
-        return None
 
     default_data = data.get("default") if isinstance(data, dict) else None
     if not default_data:
@@ -179,7 +195,7 @@ def _load_profiles_from_param() -> Optional[tuple[Dict[str, "ProfileConfig"], st
         for k, v in d.items():
             if k != "symbology_ref" and v is not None:
                 base[k] = v
-        base["layer_name"] = d.get("layer_name", "")
+        base["layer_name"] = d.get("layer_name", layer_name)
         legend = base.get("legend_label", layer_name)
         filter_type = base.get("filter_type", "")
         if filter_type not in valid_filter_types:
@@ -277,6 +293,33 @@ def _load_profiles_from_param() -> Optional[tuple[Dict[str, "ProfileConfig"], st
         titre_bilan = str(pdata.get("titre_bilan", pid))
         layout_name = str(carto_cfg.get("layout_name", titre_bilan))
 
+        # Convert values to list of ints
+        def _to_int_list(val) -> Optional[List[int]]:
+            if val is None:
+                return None
+            if isinstance(val, (list, tuple)):
+                out = []
+                for x in val:
+                    try:
+                        out.append(int(x))
+                    except (ValueError, TypeError):
+                        pass
+                return out
+            if isinstance(val, (int, float)):
+                return [int(val)]
+            if isinstance(val, str):
+                out = []
+                for x in val.split(","):
+                    try:
+                        out.append(int(x.strip()))
+                    except (ValueError, TypeError):
+                        pass
+                return out
+            return None
+
+        n_pve = _to_int_list(pdata.get("natinf_pve"))
+        n_pj = _to_int_list(pdata.get("natinf_pj") or pdata.get("natinf_pej"))
+
         result[pid] = ProfileConfig(
             id=pid,
             title=titre_bilan,
@@ -299,6 +342,48 @@ def _load_profiles_from_param() -> Optional[tuple[Dict[str, "ProfileConfig"], st
             cartes_definitions=cartes_definitions,
             pochoir=pochoir,
             couches_vecteurs_extra=couches_extra,
+            natinf_pve=n_pve,
+            natinf_pj=n_pj,
+        )
+
+
+    # Chargement des profils définis explicitement dans les YAML (config/profils_cartes.yaml)
+    _RESERVED_KEYS = {"symbology_source", "layers_from_layout", "extra_texts", "default"}
+    for yaml_pid, yaml_pdata in data.items():
+        if yaml_pid in _RESERVED_KEYS or not isinstance(yaml_pdata, dict) or "layers" not in yaml_pdata:
+            continue
+        if yaml_pid in result:
+            continue  # Profil bilan déjà chargé, ne pas écraser
+
+        yaml_layers: Dict[str, LayerSymbologyConfig] = {}
+        for lname, lval in yaml_pdata.get("layers", {}).items():
+            if isinstance(lval, dict):
+                yaml_layers[lname] = _layer_config_from_dict(lname, lval, symbologies)
+            else:
+                yaml_layers[lname] = LayerSymbologyConfig(layer_name=lname, legend_label=lname)
+
+        yaml_sym_src = str(yaml_pdata.get("symbology_source", global_symbology_source)).strip().lower()
+        if yaml_sym_src not in ("qgis", "yaml"):
+            yaml_sym_src = global_symbology_source
+
+        n_pve = _to_int_list(yaml_pdata.get("natinf_pve"))
+        n_pj = _to_int_list(yaml_pdata.get("natinf_pj") or yaml_pdata.get("natinf_pej"))
+
+        result[yaml_pid] = ProfileConfig(
+            id=yaml_pid,
+            title=str(yaml_pdata.get("title", yaml_pid)),
+            layout_name=str(yaml_pdata.get("layout_name", "")),
+            output_filename=str(yaml_pdata.get("output_filename", f"carte_{yaml_pid}.png")),
+            date_deb=str(yaml_pdata.get("date_deb", "2025-01-01")),
+            date_fin=str(yaml_pdata.get("date_fin", "2026-02-05")),
+            layers=yaml_layers,
+            title_main=str(yaml_pdata.get("title_main", "")),
+            subtitle=str(yaml_pdata.get("subtitle", "")),
+            layout_title_item_id=str(yaml_pdata.get("layout_title_item_id", "titre_principal")),
+            layout_subtitle_item_id=str(yaml_pdata.get("layout_subtitle_item_id", "sous_titre")),
+            symbology_source=yaml_sym_src,
+            natinf_pve=n_pve,
+            natinf_pj=n_pj,
         )
 
     logger.info("Profils cartographiques fusionnés : %s", list(result.keys()))
@@ -442,18 +527,26 @@ def resolve_layers_for_config(
         # Override data source if an automatic GPKG export exists for this profile (Lot 3 - Filtrage Spatial)
         if layer and profil_prefix and layer_role != "pochoir" and layer_role != "contexte":
             from bilans.chemins_projet import PROJECT_ROOT
+            from layer_resolver import infer_layer_role
             carto_dir = PROJECT_ROOT / "data" / "sources" / "sig" / "CARTO"
+            role = layer_role or infer_layer_role(layer_key, layer.name())
             
             gpkg_path = None
-            if "pve" in layer_key.lower():
+            if "pve" in layer_key.lower() or (role and "pve" in role.lower()):
                 gpkg_path = carto_dir / f"pve_{profil_prefix}_export_automatique.gpkg"
-            elif "controle" in layer_key.lower() or "ctrl" in layer_key.lower() or "donnees" in layer_key.lower():
+            elif "controle" in layer_key.lower() or "ctrl" in layer_key.lower() or "donnees" in layer_key.lower() or (role and "controle" in role.lower()):
                 gpkg_path = carto_dir / f"controles_{profil_prefix}_export_automatique.gpkg"
+            elif role == "pej":
+                from bilans.common.chargeurs_donnees import get_points_infrac_pj_path
+                gpkg_path = get_points_infrac_pj_path(PROJECT_ROOT)
                 
             if gpkg_path and gpkg_path.exists():
-                uri = f"{gpkg_path}|layername={gpkg_path.stem}"
+                if gpkg_path.suffix.lower() == ".gpkg":
+                    uri = f"{gpkg_path}|layername={gpkg_path.stem}"
+                else:
+                    uri = str(gpkg_path)
                 layer.setDataSource(uri, layer.name(), "ogr")
-                logger.info("Source de données '%s' substituée par l'export spatial : %s", layer.name(), gpkg_path.name)
+                logger.info("Source de données '%s' substituée par : %s", layer.name(), gpkg_path.name)
         
         results.append((layer, resolved_name, source))
 
@@ -488,12 +581,19 @@ def _clone_pochoir_renderer_from_template():
 
 
 def apply_pochoir_inverted_symbology(layer) -> None:
-    """Symbologie masque blanc hors département (polygon normal car géométrie donut)."""
+    """Symbologie masque blanc hors département (polygone inversé)."""
+    renderer = _clone_pochoir_renderer_from_template()
+    if renderer is not None:
+        layer.setRenderer(renderer)
+        layer.triggerRepaint()
+        return
+
+    from qgis.core import QgsFillSymbol, QgsSingleSymbolRenderer, QgsInvertedPolygonRenderer
     fill_sym = QgsFillSymbol.createSimple(
         {"color": "255,255,255,255", "outline_color": "35,35,35", "outline_width": "0.26"}
     )
-    from qgis.core import QgsSingleSymbolRenderer
-    layer.setRenderer(QgsSingleSymbolRenderer(fill_sym))
+    inner = QgsSingleSymbolRenderer(fill_sym)
+    layer.setRenderer(QgsInvertedPolygonRenderer(inner))
     layer.triggerRepaint()
 
 
@@ -543,13 +643,18 @@ def apply_map_extent_for_department(layout, dept_code: str, *, margin_ratio: flo
     """Ajuste l'emprise des QgsLayoutItemMap sur le département sélectionné."""
     if not HAS_QGIS or not dept_code:
         return False
-    from bilans.cartographie.pochoir_helper import department_bounds
+    from bilans.cartographie.pochoir_helper import load_department_gdf
     from qgis.core import QgsRectangle
 
     try:
-        xmin, ymin, xmax, ymax = department_bounds(
-            dept_code, margin_ratio=margin_ratio, project_root=PROJECT_ROOT
-        )
+        gdf = load_department_gdf(dept_code, project_root=PROJECT_ROOT)
+        xmin, ymin, xmax, ymax = gdf.total_bounds
+        dx = xmax - xmin
+        dy = ymax - ymin
+        xmin -= dx * margin_ratio
+        xmax += dx * margin_ratio
+        ymin -= dy * margin_ratio
+        ymax += dy * margin_ratio
     except (FileNotFoundError, ValueError) as exc:
         logger.warning("Emprise carte non ajustée (département %s) : %s", dept_code, exc)
         return False
@@ -567,9 +672,9 @@ def apply_map_extent_for_department(layout, dept_code: str, *, margin_ratio: flo
             if crs_src != crs_map:
                 transform = QgsCoordinateTransform(crs_src, crs_map, QgsProject.instance())
                 rect_transformed = transform.transformBoundingBox(rect)
-                item.setExtent(rect_transformed)
+                item.zoomToExtent(rect_transformed)
             else:
-                item.setExtent(rect)
+                item.zoomToExtent(rect)
             updated = True
     if updated:
         logger.info("Emprise carte ajustée au département %s", dept_code)
@@ -928,6 +1033,28 @@ def apply_layer_symbology(layer, config: "LayerSymbologyConfig", geometry_mode_o
 
         renderer = QgsCategorizedSymbolRenderer(config.field, qgs_categories)
         layer.setRenderer(renderer)
+        if "resultat" in config.field.lower():
+            try:
+                from qgis.core import QgsFeatureRequest
+                expr_str = f"CASE WHEN lower({config.field}) = 'conforme' THEN 0 ELSE 1 END"
+                clause = QgsFeatureRequest.OrderByClause(expr_str, True)
+                layer.setOrderBy(QgsFeatureRequest.OrderBy([clause]))
+                layer.setUsingOrderBy(True)
+                logger.info("Tri de rendu appliqué pour la couche '%s' (Conforme dessous)", layer.name())
+            except Exception as e:
+                logger.warning("Impossible d'appliquer le tri de rendu pour '%s' : %s", layer.name(), e)
+    else:
+        if config.renderer_type in ("graduated", "categorized") and not config.field:
+            logger.warning(
+                "Rendu '%s' demandé pour la couche '%s' mais le paramètre 'field' est manquant ou vide. "
+                "Fallback sur un rendu à symbole unique (single).",
+                config.renderer_type,
+                layer.name(),
+            )
+            from dataclasses import replace
+            fallback_cfg = replace(config, renderer_type="single")
+            apply_layer_symbology(layer, fallback_cfg, geometry_mode_override)
+            return
 
     layer.triggerRepaint()
 
@@ -947,15 +1074,19 @@ def _build_date_condition(fields, field_name: str, date_deb: str, date_fin: str)
     idx = fields.indexFromName(field_name)
     if idx >= 0 and fields.at(idx).type() in (14, 15):
         return f'"{field_name}" >= \'{date_deb}\' AND "{field_name}" <= \'{date_fin}\''
-    # Fallback to string DD/MM/YYYY
-    deb_ymd = date_deb.replace("-", "")
-    fin_ymd = date_fin.replace("-", "")
+    
+    # Text format: handle both YYYY-MM-DD and DD/MM/YYYY using CASE WHEN
     return (
-        f'(substr("{field_name}", 7, 4) || substr("{field_name}", 4, 2) || substr("{field_name}", 1, 2)) >= \'{deb_ymd}\' AND '
-        f'(substr("{field_name}", 7, 4) || substr("{field_name}", 4, 2) || substr("{field_name}", 1, 2)) <= \'{fin_ymd}\''
+        f'(CASE '
+        f'  WHEN "{field_name}" LIKE \'%/%\' THEN '
+        f'    substr("{field_name}", 7, 4) || \'-\' || substr("{field_name}", 4, 2) || \'-\' || substr("{field_name}", 1, 2) '
+        f'  ELSE '
+        f'    substr("{field_name}", 1, 10) '
+        f'END) BETWEEN \'{date_deb}\' AND \'{date_fin}\''
     )
 
-def _build_pve_expression(fields, date_deb: str, date_fin: str, config) -> Optional[str]:
+
+def _build_pve_expression(fields, date_deb: str, date_fin: str, config, profile=None) -> Optional[str]:
     field_names = {f.name() for f in fields}
 
     # Résolution des noms de champs (support préfixe PVe_ ou classique INF-)
@@ -972,31 +1103,51 @@ def _build_pve_expression(fields, date_deb: str, date_fin: str, config) -> Optio
     if not natinf_col or not date_col or not depart_col:
         return None
 
-    natinf_values = getattr(config, "natinf_pve", [27742])
-    natinf_list = ", ".join(str(x) for x in natinf_values)
+    natinf_values = None
+    if profile and getattr(profile, "natinf_pve", None) is not None:
+        natinf_values = profile.natinf_pve
+    else:
+        natinf_values = getattr(config, "natinf_pve", [27742])
+
     depart = getattr(config, "departement_code", "21")
 
     # INSEE_DEP est un entier (21) ou une chaîne ("21") — les deux cas
     if depart_col == "INSEE_DEP":
         depart_cond = f'"{depart_col}" IN ({depart!r}, {int(depart)})'
     else:
-        depart_cond = f'"{depart_col}" = {depart!r}'
+        depart_cond = f'lower("{depart_col}") = {depart.lower()!r}'
 
     date_cond = _build_date_condition(fields, date_col, date_deb, date_fin)
+    
+    if not natinf_values:
+        # Pas de filtre NATINF pour ce profil
+        return f"{depart_cond} AND {date_cond}"
+
+    natinf_list = ", ".join(str(x) for x in natinf_values)
     return f'"{natinf_col}" IN ({natinf_list}) AND {depart_cond} AND {date_cond}'
 
 
-def _build_pj_expression(fields, date_deb: str, date_fin: str, config) -> Optional[str]:
+def _build_pj_expression(fields, date_deb: str, date_fin: str, config, profile=None) -> Optional[str]:
     field_names = {f.name() for f in fields}
     required = {"entite", "natinf", "date_saisine"}
     if not required.issubset(field_names):
         return None
 
-    natinf_values = getattr(config, "natinf_pj", [27742, 25001])
-    natinf_list = ", ".join(str(x) for x in natinf_values)
+    natinf_values = None
+    if profile and getattr(profile, "natinf_pj", None) is not None:
+        natinf_values = profile.natinf_pj
+    else:
+        natinf_values = getattr(config, "natinf_pj", [27742, 25001])
+
     depart = getattr(config, "departement_code", "21")
     date_cond = _build_date_condition(fields, "date_saisine", date_deb, date_fin)
-    return f"\"entite\" = 'SD{depart}' AND \"natinf\" IN ({natinf_list}) AND {date_cond}"
+
+    if not natinf_values:
+        # Pas de filtre NATINF
+        return f"lower(\"entite\") = 'sd{depart.lower()}' AND {date_cond}"
+
+    natinf_list = ", ".join(str(x) for x in natinf_values)
+    return f"lower(\"entite\") = 'sd{depart.lower()}' AND \"natinf\" IN ({natinf_list}) AND {date_cond}"
 
 
 def _build_point_ctrl_agrainage_expression(fields, date_deb: str, date_fin: str, config) -> Optional[str]:
@@ -1015,8 +1166,8 @@ def _build_point_ctrl_agrainage_expression(fields, date_deb: str, date_fin: str,
     date_cond = _build_date_condition(fields, "date_ctrl", date_deb, date_fin)
     dept_cond = _depart_attr_condition("num_depart", depart)
     return (
-        f'"{nom_col}" LIKE \'%agrain%\' AND '
-        f'{dept_cond} AND "resultat" = \'Conforme\' AND '
+        f'lower("{nom_col}") LIKE \'%agrain%\' AND '
+        f'{dept_cond} AND lower("resultat") = \'conforme\' AND '
         f'{date_cond}'
     )
 
@@ -1030,12 +1181,12 @@ def _build_point_ctrl_chasse_expression(fields, date_deb: str, date_fin: str, co
     depart = getattr(config, "departement_code", "21")
     date_cond = _build_date_condition(fields, "date_ctrl", date_deb, date_fin)
     expr = (
-        f'{_depart_attr_condition("num_depart", depart)} AND "resultat" = \'Conforme\' AND '
+        f'{_depart_attr_condition("num_depart", depart)} AND lower("resultat") = \'conforme\' AND '
         f'{date_cond}'
     )
     if "theme" in field_names:
-        theme_val = getattr(config, "chasse_theme_value", "Chasse")
-        expr = f'"theme" = {repr(theme_val)} AND ' + expr
+        theme_val = str(getattr(config, "chasse_theme_value", "Chasse")).lower()
+        expr = f'lower("theme") = {repr(theme_val)} AND ' + expr
     return expr
 
 
@@ -1085,15 +1236,15 @@ def _build_point_ctrl_theme_expression(
         return None
 
     depart = getattr(config, "departement_code", "21")
-    label_esc = (theme_label or "").replace("'", "''")
+    label_esc = (theme_label or "").replace("'", "''").lower()
 
     like_parts = []
     if theme_col and label_esc:
-        like_parts.append(f'"{theme_col}" LIKE \'%{label_esc}%\'')
+        like_parts.append(f'lower("{theme_col}") LIKE \'%{label_esc}%\'')
     if type_col and label_esc:
-        like_parts.append(f'"{type_col}" LIKE \'%{label_esc}%\'')
+        like_parts.append(f'lower("{type_col}") LIKE \'%{label_esc}%\'')
     if nom_col and label_esc:
-        like_parts.append(f'"{nom_col}" LIKE \'%{label_esc}%\'')
+        like_parts.append(f'lower("{nom_col}") LIKE \'%{label_esc}%\'')
     if not like_parts:
         return None
     text_cond = "(" + " OR ".join(like_parts) + ")"
@@ -1136,9 +1287,9 @@ def _build_point_ctrl_keywords_expression(
 
     like_parts: list[str] = []
     for kw in keywords:
-        kw_esc = str(kw).replace("'", "''")
+        kw_esc = str(kw).replace("'", "''").lower()
         for col in resolved_cols:
-            like_parts.append(f'"{col}" LIKE \'%{kw_esc}%\'')
+            like_parts.append(f'lower("{col}") LIKE \'%{kw_esc}%\'')
     if not like_parts:
         return None
     text_cond = "(" + " OR ".join(like_parts) + ")"
@@ -1167,13 +1318,13 @@ def _build_point_ctrl_piegeage_expression(fields, date_deb: str, date_fin: str, 
 
     like_parts = []
     for kw in keywords:
-        kw_esc = kw.replace("'", "''")
+        kw_esc = kw.replace("'", "''").lower()
         if nom_col:
-            like_parts.append(f'"{nom_col}" LIKE \'%{kw_esc}%\'')
+            like_parts.append(f'lower("{nom_col}") LIKE \'%{kw_esc}%\'')
         if theme_col:
-            like_parts.append(f'"{theme_col}" LIKE \'%{kw_esc}%\'')
+            like_parts.append(f'lower("{theme_col}") LIKE \'%{kw_esc}%\'')
         if type_col:
-            like_parts.append(f'"{type_col}" LIKE \'%{kw_esc}%\'')
+            like_parts.append(f'lower("{type_col}") LIKE \'%{kw_esc}%\'')
     if not like_parts:
         return None
     text_cond = "(" + " OR ".join(like_parts) + ")"
@@ -1202,9 +1353,9 @@ def apply_date_filter(
     expr: Optional[str] = None
 
     if filter_type == "pve":
-        expr = _build_pve_expression(layer.fields(), date_deb, date_fin, use_config)
+        expr = _build_pve_expression(layer.fields(), date_deb, date_fin, use_config, profile=profile)
     elif filter_type == "pj":
-        expr = _build_pj_expression(layer.fields(), date_deb, date_fin, use_config)
+        expr = _build_pj_expression(layer.fields(), date_deb, date_fin, use_config, profile=profile)
     elif filter_type == "point_ctrl_agrainage":
         expr = _build_point_ctrl_agrainage_expression(layer.fields(), date_deb, date_fin, use_config)
     elif filter_type == "point_ctrl_chasse":
@@ -1471,30 +1622,53 @@ def export_layout(
     from config_cartes import ProfileConfig, CONFIG
 
     proj = QgsProject.instance()
-    manager = proj.layoutManager()
-    layout = manager.layoutByName(prof.layout_name)
-
-    if not layout:
-        layouts = manager.printLayouts()
-        if layouts:
-            fallback_layout = next((l for l in layouts if l.name() == "Synthese_activité"), layouts[0])
-            logger.info("Layout '%s' introuvable. Utilisation du layout fallback: '%s'", prof.layout_name, fallback_layout.name())
-            layout = fallback_layout
+    from bilans.common.utilitaires_metier import get_dept_name
+    dept_name = get_dept_name(dept_code) if dept_code else ""
+    
+    base_title = getattr(prof, "title_main", "") or prof.title
+    if " - " in base_title:
+        base_title = base_title.split(" - ")[0]
+    elif " — " in base_title:
+        base_title = base_title.split(" — ")[0]
+        
+    periode = ""
+    if hasattr(prof, "date_deb") and hasattr(prof, "date_fin") and prof.date_deb and prof.date_fin:
+        clean_date_deb = prof.date_deb.split(" ")[0]
+        clean_date_fin = prof.date_fin.split(" ")[0]
+        if clean_date_deb.endswith("-01-01") and clean_date_fin.endswith("-12-31") and clean_date_deb[:4] == clean_date_fin[:4]:
+            periode = f"Année {clean_date_deb[:4]}"
         else:
-            logger.error("Layout '%s' introuvable dans le projet et aucun autre layout disponible.", prof.layout_name)
+            periode = f"Du {clean_date_deb} au {clean_date_fin}"
+
+    title_text = f"{base_title} — {dept_name} — {periode}"
+
+    # Injection du Layout Dynamique (Lot 1)
+    manager = proj.layoutManager()
+    if not getattr(prof, "layers_from_layout", False):
+        from layout_dynamique import build_dynamic_layout
+        layout = build_dynamic_layout(prof, proj, title_text)
+        is_dynamic = True
+        logger.info("Layout généré 100%% dynamiquement pour le profil '%s'.", prof.id)
+    else:
+        is_dynamic = False
+        layout = manager.layoutByName(prof.layout_name)
+        if not layout:
+            logger.error("Layout '%s' introuvable dans le projet et fallback désactivé.", prof.layout_name)
             return False
 
     from layout_defaults import apply_layout_defaults, load_layout_defaults, resolve_title_ids
 
     layout_defaults_root = load_layout_defaults()
-    try:
-        apply_layout_defaults(layout, prof, root=layout_defaults_root)
-    except Exception as e:
-        logger.exception("Mise en page layout_defaults (export continué): %s", e)
+    if not is_dynamic:
+        try:
+            apply_layout_defaults(layout, prof, root=layout_defaults_root)
+        except Exception as e:
+            logger.exception("Mise en page layout_defaults (export continué): %s", e)
 
-    title_text = getattr(prof, "title_main", "") or prof.title
-    subtitle_text = getattr(prof, "subtitle", "") or f"Période du {prof.date_deb} au {prof.date_fin}"
+    subtitle_text = ""
     title_id, subtitle_id = resolve_title_ids(prof, layout_defaults_root)
+
+    from qgis.core import QgsLayoutItemScaleBar, QgsUnitTypes
 
     for item in layout.items():
         if isinstance(item, QgsLayoutItemMap):
@@ -1518,10 +1692,22 @@ def export_layout(
                 
             is_title = item_id == title_id or any(k in current_text for k in known_titles) or "titre" in item_id.lower()
             
-            if is_title:
-                item.setText(title_text)
-            elif subtitle_id and item_id == subtitle_id:
-                item.setText(subtitle_text)
+            if is_title or (subtitle_id and item_id == subtitle_id):
+                if is_title:
+                    item.setText(title_text)
+                else:
+                    item.setText(subtitle_text)
+                try:
+                    from qgis.PyQt.QtGui import QFont, QColor
+                    # Application de la charte OFB
+                    font_size = 16 if is_title else 12
+                    font = QFont("Marianne", font_size, QFont.Bold if is_title else QFont.Normal)
+                    if hasattr(item, "setFont"):
+                        item.setFont(font)
+                    if hasattr(item, "setFontColor"):
+                        item.setFontColor(QColor("#FFFFFF"))
+                except Exception:
+                    pass
                 
             # Textes additionnels dynamiques (Hybride Avancé)
             if item_id and hasattr(prof, "extra_texts") and item_id in prof.extra_texts:
@@ -1546,6 +1732,12 @@ def export_layout(
                 except Exception as e:
                     logger.warning("Erreur formatage texte dynamique pour '%s': %s", item_id, e)
                     item.setText(template_str)
+        elif isinstance(item, QgsLayoutItemScaleBar):
+            item.setUnits(QgsUnitTypes.DistanceKilometers)
+            item.setNumberOfSegmentsLeft(0)
+            item.setNumberOfSegments(2)
+            item.setUnitsPerSegment(10.0)
+            item.update()
         elif isinstance(item, QgsLayoutItemLegend):
             # Supprimer la légende native QGIS car nous la générons avec Pillow post-export
             layout.removeLayoutItem(item)
@@ -1640,7 +1832,7 @@ def run_interactive_wizard(profile_ids: List[str]) -> None:
             prof = ProfileConfig(
                 id=pid,
                 title=f"Bilan {pid}",
-                layout_name="Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or",
+                layout_name="modele_mise_en_page_carto_bilans",
                 output_filename=f"carte_{pid}.png",
                 layers={},
             )
@@ -1768,20 +1960,24 @@ def _save_config_to_file(cfg: "GlobalConfig") -> None:
 
 
 def _apply_qgis_override_to_profile(prof: "ProfileConfig", override: dict) -> "ProfileConfig":
-    """Applique mots-clés bilan sur un profil QGIS (filtre point_ctrl_keywords)."""
+    """Applique mots-clés et NATINFs sur un profil QGIS (filtres point_ctrl_keywords et natinfs)."""
     if not override or not prof:
         return prof
     from dataclasses import replace
 
     keywords = override.get("keywords")
     columns = override.get("keyword_columns")
+    natinf_pve = override.get("natinf_pve")
+    natinf_pj = override.get("natinf_pj")
     updates: dict = {}
     if keywords:
         updates["keywords"] = [str(k).strip() for k in keywords if str(k).strip()]
     if columns:
         updates["keyword_columns"] = [str(c).strip() for c in columns if str(c).strip()]
-    if not updates:
-        return prof
+    if natinf_pve is not None:
+        updates["natinf_pve"] = natinf_pve
+    if natinf_pj is not None:
+        updates["natinf_pj"] = natinf_pj
 
     prof = replace(prof, **updates)
     new_layers: dict = {}
@@ -1827,6 +2023,26 @@ def run_export(
         effective_dept,
         display_path,
     )
+    if not HAS_QGIS:
+        logger.info("QGIS non disponible, basculement vers le générateur Matplotlib.")
+        from generateur_matplotlib import exporter_carte_matplotlib
+        
+        env_out_dir = os.getenv("CARTO_OUTPUT_DIR")
+        out_dir = Path(env_out_dir) if env_out_dir else (Path(CONFIG.output_dir) if CONFIG.output_dir else OUT_DIR_CARTES)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        
+        for pid in profile_ids:
+            prof = CONFIG.profiles.get(pid)
+            if not prof: continue
+            out_path = out_dir / getattr(prof, "output_filename", f"carte_{pid}.png")
+            try:
+                exporter_carte_matplotlib(prof, out_path, effective_dept, [], PROJECT_ROOT)
+                from bilans.cartographie.pochoir_helper import write_map_dept_marker
+                write_map_dept_marker(out_path, effective_dept)
+            except Exception as e:
+                logger.error(f"Erreur avec le generateur matplotlib pour {pid} : {e}")
+        return
+
     if not load_project(project_path):
         raise RuntimeError(f"Impossible de charger le projet QGIS : {project_path}")
 
@@ -2011,7 +2227,10 @@ def run_export(
                     if lcfg.legend_label:
                         legend_labels_map[resolved_name] = lcfg.legend_label
 
-                    if should_apply_yaml_symbology(
+                    is_pochoir = "pochoir" in lcfg.layer_name.lower() or "pochoir" in resolved_name.lower()
+                    if is_pochoir:
+                        apply_pochoir_inverted_symbology(layer)
+                    elif should_apply_yaml_symbology(
                         getattr(lcfg, "symbology_source", None),
                         prof_sym_src,
                         global_sym_src,
@@ -2026,6 +2245,22 @@ def run_export(
                         lcfg.filter_type = infer_filter_type_for_layer(resolved_name, pid, prof)
 
                     apply_date_filter(layer, lcfg, prof.date_deb, prof.date_fin, config=carto_config, profile=prof)
+
+                    # Log et alerte sur le nombre d'entités après filtrage
+                    try:
+                        f_count = layer.featureCount()
+                        logger.info("    -> Couche '%s' : %d entité(s) après filtrage", resolved_name, f_count)
+                        if f_count == 0 and getattr(lcfg, "layer_role", None) != "pochoir" and getattr(lcfg, "layer_role", None) != "contexte":
+                            logger.warning(
+                                "    ⚠️ [VIDE] La couche '%s' ne contient AUCUNE entité avec les filtres actuels "
+                                "(département=%s, période=%s à %s) !",
+                                resolved_name,
+                                effective_dept,
+                                prof.date_deb,
+                                prof.date_fin,
+                            )
+                    except Exception as exc:
+                        logger.debug("Impossible d'obtenir le nombre d'entités pour '%s': %s", resolved_name, exc)
 
                     # Extraction pour la légende PIL
                     legend_info = _extract_legend_info(layer, lcfg)
@@ -2056,10 +2291,12 @@ def run_export(
             if exported and png_path.exists():
                 # Dessiner la légende avec Pillow par-dessus l'export
                 try:
-                    _draw_legend_on_image(out_path, legend_data)
-                    logger.info("  Légende dessinée sur %s", out_path.name)
+                    if not legend_data:
+                        logger.warning("  Aucune donnée de légende à dessiner pour %s", png_path.name)
+                    _draw_legend_on_image(png_path, legend_data)
+                    logger.info("  Légende dessinée sur %s", png_path.name)
                 except Exception as e:
-                    logger.error("  Erreur de dessin de légende sur %s : %s", out_path.name, e)
+                    logger.error("  Erreur de dessin de légende sur %s : %s", png_path.name, e)
 
                 # Marqueur département indépendant de la légende (requis hors SD21 legacy)
                 from bilans.cartographie.pochoir_helper import (
@@ -2240,7 +2477,7 @@ def main() -> None:
 
 def _extract_legend_info(layer, lcfg):
     """Extrait les informations de légende (titre, items) depuis le QgsVectorLayer."""
-    if "pochoir" in lcfg.layer_name.lower() or "pochoir" in layer.name().lower():
+    if "pochoir" in lcfg.layer_name.lower() or "pochoir" in layer.name().lower() or "contexte" == getattr(lcfg, "layer_role", ""):
         return None
         
     title = lcfg.legend_label or lcfg.layer_name
@@ -2259,24 +2496,108 @@ def _extract_legend_info(layer, lcfg):
             renderer = embedded
             rtype = renderer.type()
 
+    # Extraction des valeurs réelles pour filtrer les catégories vides
+    present_values = set()
+    features_exist = False
+    
+    class_field = None
+    if hasattr(renderer, "classAttribute") and callable(renderer.classAttribute):
+        class_field = renderer.classAttribute()
+    if not class_field:
+        class_field = getattr(lcfg, "field", None)
+    if class_field and not isinstance(class_field, str):
+        class_field = str(class_field)
+    
+    if rtype in ("categorizedSymbol", "graduatedSymbol"):
+        field_idx = layer.fields().indexFromName(class_field) if class_field else -1
+        from qgis.core import QgsExpression, QgsExpressionContext, QgsExpressionContextUtils
+        expr = QgsExpression(class_field) if (class_field and field_idx < 0) else None
+        context = QgsExpressionContext()
+        if expr:
+            context.appendScopes(QgsExpressionContextUtils.globalProjectLayerScopes(layer))
+            context.appendScope(QgsExpressionContextUtils.layerScope(layer))
+            
+        for feature in layer.getFeatures():
+            features_exist = True
+            if field_idx >= 0:
+                val = feature.attribute(field_idx)
+            elif expr:
+                context.setFeature(feature)
+                val = expr.evaluate(context)
+            else:
+                val = None
+            if val is not None:
+                present_values.add(val)
+
     if rtype == "singleSymbol":
+        from qgis.core import QgsFeatureRequest
+        has_any = False
+        for _ in layer.getFeatures(QgsFeatureRequest().setLimit(1)):
+            has_any = True
+            break
+        if not has_any:
+            return None
         color = renderer.symbol().color().name() if renderer.symbol() else "#000000"
         items.append({"label": title, "color": color})
         title = None
     elif rtype == "categorizedSymbol":
+        present_str_values = {str(v).lower() for v in present_values}
         for cat in renderer.categories():
             val = cat.value()
             if val == "" or val is None: continue
+            if str(val).lower() not in present_str_values: continue
             color = cat.symbol().color().name() if cat.symbol() else "#000000"
             label = cat.label() or str(val)
             items.append({"label": label, "color": color})
     elif rtype == "graduatedSymbol":
+        present_numeric_values = []
+        for v in present_values:
+            try:
+                present_numeric_values.append(float(v))
+            except (ValueError, TypeError):
+                pass
         for range_ in renderer.ranges():
+            has_features = False
+            for v in present_numeric_values:
+                if range_.lowerValue() <= v <= range_.upperValue():
+                    has_features = True
+                    break
+            if not has_features:
+                continue
             color = range_.symbol().color().name() if range_.symbol() else "#000000"
             label = range_.label()
             items.append({"label": label, "color": color})
+    elif rtype == "RuleRenderer" or rtype == "ruleRenderer":
+        root_rule = renderer.rootRule()
+        if root_rule:
+            matching_rules = set()
+            from qgis.core import QgsExpressionContext, QgsExpressionContextUtils
+            context = QgsExpressionContext()
+            context.appendScopes(QgsExpressionContextUtils.globalProjectLayerScopes(layer))
+            
+            for feature in layer.getFeatures():
+                context.setFeature(feature)
+                for rule in root_rule.children():
+                    if rule.active() and rule.symbol():
+                        expr = rule.filter()
+                        if not expr or expr.evaluate(context):
+                            matching_rules.add(rule.label())
+            
+            for rule in root_rule.children():
+                if not rule.symbol(): continue
+                label = rule.label()
+                if not label or label.strip() == "": continue
+                if label not in matching_rules: continue
+                
+                label_lower = label.lower()
+                if "agri" in label_lower or "sécheresse" in label_lower or "secheresse" in label_lower:
+                    continue
+                    
+                color = rule.symbol().color().name()
+                items.append({"label": label, "color": color})
             
     if not items:
+        logger.warning("Aucun item de légende extrait pour la couche '%s' (rtype=%s)", title or lcfg.layer_name, rtype)
         return None
         
     return {"title": title, "items": items}
@@ -2307,7 +2628,7 @@ def _draw_legend_on_image(image_path, legend_data):
     section_spacing = 20
 
     try:
-        font_title = ImageFont.truetype("arialbd.ttf", 34)
+        font_title = ImageFont.truetype("arialbd.ttf", 35)
         font_text = ImageFont.truetype("arial.ttf", 28)
     except IOError:
         font_title = ImageFont.load_default()

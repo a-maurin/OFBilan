@@ -174,19 +174,12 @@ def write_pochoir_gpkg(
     pochoir_id: str = "departement",
     project_root: Optional[Path] = None,
 ) -> Path:
-    """Écrit un GeoPackage pochoir (donut) pour l'emprise demandée."""
+    """Écrit un GeoPackage pochoir (polygone standard) pour l'emprise demandée."""
     gdf = load_pochoir_gdf(pochoir_id, dept_code, project_root=project_root)
-    
-    # Transformation en véritable polygone pochoir (donut) avec Shapely
-    import shapely.geometry
-    mask_box = shapely.geometry.box(-2000000, 2000000, 4000000, 10000000)
     
     if len(gdf) > 1:
         gdf = gdf.dissolve()
         
-    donut_geom = mask_box.difference(gdf.geometry.iloc[0])
-    gdf.geometry = [donut_geom]
-    
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     if output_path.exists():

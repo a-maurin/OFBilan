@@ -294,3 +294,102 @@ def test_enrich_pve_positions_from_pnf_commune_centroids_joins_insee(
     assert float(out.loc[0, "inf_gps_lat"]) == 47.32
     assert pd.isna(out.loc[1, "x"])
 
+
+def test_date_parsing_dayfirst_in_loaders(monkeypatch, tmp_path: Path) -> None:
+    """Vérifie que les dates avec jour en premier (DD/MM/YYYY) et au format ISO (YYYY-MM-DD) sont correctement lues."""
+    import bilans.common.chargeurs_donnees as loaders
+
+    pej_dir = tmp_path / "data" / "sources"
+    pej_dir.mkdir(parents=True)
+    (pej_dir / "suivi_procedure_enq_judiciaire_20260423.ods").write_bytes(b"")
+    (pej_dir / "suivi_procedure_administrative_20260206.ods").write_bytes(b"")
+    (pej_dir / "Stats_PVe_OFB_20260602.ods").write_bytes(b"")
+
+    df_pej_raw = pd.DataFrame([
+        {
+            "DC_ID": "OF001",
+            "DATE_CONSTATATION": "13/05/2025",
+            "DATE_OUVERTURE_PROCEDURE": "14/05/2025",
+            "RECAP_DATE_INIT_PJ": "15/05/2025",
+            "ENTITE_ORIGINE_PROCEDURE": "SD21"
+        },
+        {
+            "DC_ID": "OF002",
+            "DATE_CONSTATATION": "2025-05-13 00:00:00",
+            "DATE_OUVERTURE_PROCEDURE": "2025-05-14",
+            "RECAP_DATE_INIT_PJ": "2025-05-15",
+            "ENTITE_ORIGINE_PROCEDURE": "SD21"
+        }
+    ])
+
+    df_pa_raw = pd.DataFrame([
+        {
+            "DATE_CONTROLE": "13/05/2025",
+            "DATE_DOSSIER": "14/05/2025"
+        },
+        {
+            "DATE_CONTROLE": "2025-05-13",
+            "DATE_DOSSIER": "2025-05-14"
+        }
+    ])
+
+    df_pve_raw = pd.DataFrame([
+        {
+            "INF-ID": "1",
+            "INF-DATE-MIF": "2024-05-15",
+            "INF-DATE-INTG": "15/05/2025",
+            "INF-DEPART": "21"
+        },
+        {
+            "INF-ID": "2",
+            "INF-DATE-MIF": "15/05/2025",
+            "INF-DATE-INTG": "2024-05-15",
+            "INF-DEPART": "21"
+        }
+    ])
+
+    def fake_read_spreadsheet(path, **kwargs):
+        name = Path(path).name
+        if "enq_judiciaire" in name:
+            return df_pej_raw
+        elif "administrative" in name:
+            return df_pa_raw
+        elif "Stats_PVe_OFB" in name:
+            return df_pve_raw
+        return pd.DataFrame()
+
+    monkeypatch.setattr(loaders, "_read_spreadsheet", fake_read_spreadsheet)
+
+    pej_df = loaders.load_pej(tmp_path, echelle="departement", code="21", date_deb="2025-01-01", date_fin="2025-12-31")
+    assert len(pej_df) == 2
+    for i in (0, 1):
+        assert pej_df.loc[i, "DATE_CONSTATATION"] == pd.Timestamp("2025-05-13")
+        assert pej_df.loc[i, "DATE_OUVERTURE_PROCEDURE"] == pd.Timestamp("2025-05-14")
+        assert pej_df.loc[i, "RECAP_DATE_INIT_PJ"] == pd.Timestamp("2025-05-15")
+
+    pa_df = loaders.load_pa(tmp_path, echelle="departement", code="21", date_deb="2025-01-01", date_fin="2025-12-31")
+    assert len(pa_df) == 2
+    for i in (0, 1):
+        assert pa_df.loc[i, "DATE_CONTROLE"] == pd.Timestamp("2025-05-13")
+        assert pa_df.loc[i, "DATE_DOSSIER"] == pd.Timestamp("2025-05-14")
+
+    pve_df = loaders.load_pve(tmp_path, echelle="departement", code="21", date_deb="2025-01-01", date_fin="2025-12-31")
+    assert len(pve_df) == 1
+    assert pve_df.iloc[0]["INF-ID"] == "1"
+
+
+def test_safe_to_datetime_with_nan() -> None:
+    """Vérifie que safe_to_datetime gère les valeurs non-string (float, None, NaN) et hors limites sans crash."""
+    import bilans.common.chargeurs_donnees as loaders
+    s = pd.Series(["2025-01-01", "0202-03-15", None, pd.NA, float("nan"), "15/05/0202", "15/05/2025"])
+    res = loaders.safe_to_datetime(s)
+    assert res.iloc[0] == pd.Timestamp("2025-01-01")
+    assert pd.isna(res.iloc[1])
+    assert pd.isna(res.iloc[2])
+    assert pd.isna(res.iloc[3])
+    assert pd.isna(res.iloc[4])
+    assert pd.isna(res.iloc[5])
+    assert res.iloc[6] == pd.Timestamp("2025-05-15")
+
+
+

@@ -278,8 +278,8 @@ def render_sec22(ctx: PdfContext) -> None:
     if ctx.agg_domaine is not None and not ctx.agg_domaine.empty:
         df_dom = ctx.agg_domaine.copy()
         df_dom["domaine"] = df_dom["domaine"].astype(str)
-    if ctx.pej_dom is not None and not ctx.pej_dom.empty:
-        pej_dom_clean = ctx.pej_dom.copy()
+    if pej_dom is not None and not pej_dom.empty:
+        pej_dom_clean = pej_dom.copy()
         if "DOMAINE" in pej_dom_clean.columns:
             pej_dom_clean = pej_dom_clean.rename(columns={"DOMAINE": "domaine"})
         pej_dom_clean["domaine"] = pej_dom_clean["domaine"].astype(str)
@@ -287,14 +287,14 @@ def render_sec22(ctx: PdfContext) -> None:
             df_dom = pej_dom_clean
             df_dom["nb"] = 0
         else:
-            df_dom = pd.merge(df_dom, pej_dom_clean[["domaine", "ctx.nb_pej"]], on="domaine", how="outer")
+            df_dom = pd.merge(df_dom, pej_dom_clean[["domaine", "nb_pej"]], on="domaine", how="outer")
             df_dom["nb"] = df_dom["nb"].fillna(0)
             
     if not df_dom.empty:
-        if "ctx.nb_pej" not in df_dom.columns:
-            df_dom["ctx.nb_pej"] = 0
-        df_dom["ctx.nb_pej"] = df_dom["ctx.nb_pej"].fillna(0)
-        df_dom["total_act"] = df_dom["nb"] + df_dom["ctx.nb_pej"]
+        if "nb_pej" not in df_dom.columns:
+            df_dom["nb_pej"] = 0
+        df_dom["nb_pej"] = df_dom["nb_pej"].fillna(0)
+        df_dom["total_act"] = df_dom["nb"] + df_dom["nb_pej"]
         df_dom = df_dom.sort_values(by="total_act", ascending=False)
         
         tbl = [["Domaine", "Opérations", "Localisations", "PEJ"]]
@@ -304,7 +304,7 @@ def render_sec22(ctx: PdfContext) -> None:
                 nb_ops_str = str(int(nb_ops_val)) if pd.notna(nb_ops_val) else "0"
             except (ValueError, TypeError):
                 nb_ops_str = "0"
-            tbl.append([str(row["domaine"]), nb_ops_str, str(int(row["nb"])), str(int(row["ctx.nb_pej"]))])
+            tbl.append([str(row["domaine"]), nb_ops_str, str(int(row["nb"])), str(int(row["nb_pej"]))])
         ctx.builder.add_table(
             tbl,
             caption="Répartition de l'activité par domaines (contrôles + PEJ)",

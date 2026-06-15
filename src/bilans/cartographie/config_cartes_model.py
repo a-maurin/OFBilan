@@ -119,6 +119,8 @@ class ProfileConfig:
     # Mots-clés bilan (filtre point_ctrl_keywords), alignés sur filter.keywords du profil YAML
     keywords: Optional[List[str]] = None
     keyword_columns: Optional[List[str]] = None
+    natinf_pve: Optional[List[int]] = None
+    natinf_pj: Optional[List[int]] = None
     # Source de symbologie par défaut pour les couches du profil (surchargeable par couche)
     symbology_source: SymbologySource = "qgis"
     # True = lister les couches depuis le layout QGIS (YAML layers = surcharges filtres/légende)
@@ -196,7 +198,7 @@ class OutputConfig:
     """Configuration des fichiers de sortie."""
 
     format: OutputFormat = "png"
-    dpi: int = 300
+    dpi: int = 150
     page_size: str = "A4"
     orientation: Literal["landscape", "portrait"] = "landscape"
 
