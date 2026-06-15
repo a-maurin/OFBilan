@@ -69,6 +69,7 @@ Thumbs.db
 
 # Dossiers de données brutes / locales (non versionnées)
 data/sources/
+data/generateur_de_cartes backup/
 ref/programme/sig/**
 !ref/programme/README.md
 ref/programme/modele_ofb/**
