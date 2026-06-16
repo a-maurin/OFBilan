@@ -2647,6 +2647,8 @@ def _draw_legend_on_image(image_path, legend_data):
         font_title = ImageFont.load_default()
         font_text = ImageFont.load_default()
 
+    import textwrap
+
     max_w = 0
     total_h = padding * 2
     
@@ -2662,12 +2664,16 @@ def _draw_legend_on_image(image_path, legend_data):
         
         for item in group.get("items", []):
             label = item["label"]
-            if hasattr(font_text, "getbbox"):
-                w = font_text.getbbox(label)[2] - font_text.getbbox(label)[0]
-            else:
-                w = font_text.getsize(label)[0]
-            max_w = max(max_w, rect_size + 15 + w)
-            total_h += line_spacing
+            lines = textwrap.wrap(label, width=30) if len(label) > 30 else [label]
+            max_item_w = 0
+            for line in lines:
+                if hasattr(font_text, "getbbox"):
+                    w = font_text.getbbox(line)[2] - font_text.getbbox(line)[0]
+                else:
+                    w = font_text.getsize(line)[0]
+                max_item_w = max(max_item_w, w)
+            max_w = max(max_w, rect_size + 15 + max_item_w)
+            total_h += line_spacing + (len(lines) - 1) * 35
             
         total_h += section_spacing
         
@@ -2719,10 +2725,12 @@ def _draw_legend_on_image(image_path, legend_data):
             
         for item in group.get("items", []):
             rgb = hex_to_rgb(item["color"])
+            lines = textwrap.wrap(item["label"], width=30) if len(item["label"]) > 30 else [item["label"]]
             box_coords = [start_x + padding, cur_y, start_x + padding + rect_size, cur_y + rect_size]
             overlay_draw.rectangle(box_coords, fill=rgb, outline=(0, 0, 0, 255), width=1)
-            overlay_draw.text((start_x + padding + rect_size + 15, cur_y - 2), item["label"], font=font_text, fill=(0, 0, 0, 255))
-            cur_y += line_spacing
+            for j, line in enumerate(lines):
+                overlay_draw.text((start_x + padding + rect_size + 15, cur_y - 2 + j * 35), line, font=font_text, fill=(0, 0, 0, 255))
+            cur_y += line_spacing + (len(lines) - 1) * 35
             
         cur_y += section_spacing
 
