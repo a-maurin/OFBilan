@@ -506,7 +506,10 @@ def resolve_layers_for_config(
     from layer_resolver import resolve_layer_names
 
     names = available_names if available_names is not None else get_project_layer_names()
+    from layer_resolver import infer_layer_role
     layer_role = getattr(lcfg, "layer_role", None)
+    effective_role = layer_role or infer_layer_role(layer_key, lcfg.layer_name)
+
     resolved_infos = resolve_layer_names(
         configured_name=lcfg.layer_name,
         layer_role=layer_role,
@@ -552,7 +555,7 @@ def resolve_layers_for_config(
 
     if (
         dept_code
-        and layer_role == "pochoir"
+        and effective_role == "pochoir"
         and (not results or not results[0][0])
     ):
         pochoir_id = "departement"
@@ -617,10 +620,10 @@ def ensure_pochoir_layer_in_project(dept_code: str, pochoir_id: str = "departeme
     existing = get_layer_by_name(layer_name)
     cache_dir = OUT_DIR_CARTES / ".pochoir_cache"
     
-    # Cache path can just be based on the layer name
     gpkg_path = cache_dir / f"{layer_name}.gpkg"
     
-    write_pochoir_gpkg(dept_code, gpkg_path, pochoir_id=pochoir_id, project_root=PROJECT_ROOT)
+    if not existing or not gpkg_path.exists():
+        write_pochoir_gpkg(dept_code, gpkg_path, pochoir_id=pochoir_id, project_root=PROJECT_ROOT)
 
     uri = f"{gpkg_path}|layername={layer_name}"
     if existing is not None:
@@ -879,32 +882,8 @@ def apply_layer_symbology(layer, config: "LayerSymbologyConfig", geometry_mode_o
                 "outline_color": "128,17,25" if config.symbol_shape == "diamond" else "35,35,35",
             })
             marker.setOutputUnit(Qgis.RenderUnit.Millimeters)
-            
             single_renderer = QgsSingleSymbolRenderer(marker)
-            
-            cluster_marker = QgsMarkerSymbol.createSimple({
-                "name": config.symbol_shape,
-                "color": color.name(),
-                "size": str(config.symbol_size_mm),
-                "outline_color": "128,17,25" if config.symbol_shape == "diamond" else "35,35,35",
-            })
-            cluster_marker.setOutputUnit(Qgis.RenderUnit.Millimeters)
-            cluster_marker.setDataDefinedSize(QgsProperty.fromExpression("scale_linear(@cluster_size, 1, 20, 2, 7.5)"))
-            
-            font_marker = QgsFontMarkerSymbolLayer()
-            font_marker.setFontFamily("sans-serif")
-            font_marker.setColor(QColor("black"))
-            font_marker.setSize(3)
-            font_marker.setSizeUnit(Qgis.RenderUnit.Millimeters)
-            font_marker.setDataDefinedProperty(QgsSymbolLayer.PropertyCharacter, QgsProperty.fromExpression("to_string(@cluster_size)"))
-            
-            cluster_marker.appendSymbolLayer(font_marker)
-            
-            cluster_renderer = QgsPointClusterRenderer()
-            cluster_renderer.setEmbeddedRenderer(single_renderer)
-            cluster_renderer.setClusterSymbol(cluster_marker)
-            
-            layer.setRenderer(cluster_renderer)
+            layer.setRenderer(single_renderer)
 
     elif config.renderer_type == "graduated" and config.field:
         if is_polygon and geom_mode == "polygon_centroid":
@@ -933,11 +912,12 @@ def apply_layer_symbology(layer, config: "LayerSymbologyConfig", geometry_mode_o
         else:
             mode = QgsGraduatedSymbolRenderer.EqualInterval
 
-        renderer = QgsGraduatedSymbolRenderer.createRenderer(
-            layer, config.field, config.num_classes, mode, base_symbol
-        )
         style = QgsStyle.defaultStyle()
         color_ramp = style.colorRamp(config.palette) if style.colorRamp(config.palette) else style.colorRamp("Blues")
+
+        renderer = QgsGraduatedSymbolRenderer.createRenderer(
+            layer, config.field, getattr(config, "num_classes", 5), mode, base_symbol, color_ramp
+        )
         if color_ramp:
             renderer.setSourceColorRamp(color_ramp)
         layer.setRenderer(renderer)
@@ -2234,8 +2214,51 @@ def run_export(
                 for layer, resolved_name, resolve_source in resolved_infos:
                     if not layer or not resolved_name or not layer.isValid():
                         continue
-                    
                     layers_to_render.append(layer)
+
+                    is_pnf = resolved_name in ("Coeur_data_gouv_PNForets", "AOA_2021_PNForet_21")
+                    if is_pnf and str(effective_dept) not in ("21", "52"):
+                        layers_to_render.remove(layer)
+                        continue
+
+                    if is_pnf:
+                        try:
+                            pochoir_layer, _ = ensure_pochoir_layer_in_project(effective_dept, "departement")
+                            if pochoir_layer:
+                                pochoir_geom = None
+                                for f in pochoir_layer.getFeatures():
+                                    if not pochoir_geom:
+                                        pochoir_geom = f.geometry()
+                                    else:
+                                        pochoir_geom = pochoir_geom.combine(f.geometry())
+                                
+                                if pochoir_geom:
+                                    geom_type_map = {0: "Point", 1: "LineString", 2: "Polygon"}
+                                    g_type = geom_type_map.get(layer.geometryType(), "Point")
+                                    crs_str = layer.crs().authid()
+                                    clipped = QgsVectorLayer(f"{g_type}?crs={crs_str}", layer.name(), "memory")
+                                    pr = clipped.dataProvider()
+                                    pr.addAttributes(layer.fields())
+                                    clipped.updateFields()
+                                    
+                                    feats = []
+                                    req = QgsFeatureRequest().setFilterRect(pochoir_geom.boundingBox())
+                                    for f in layer.getFeatures(req):
+                                        geom = f.geometry()
+                                        if geom and geom.intersects(pochoir_geom):
+                                            f_out = QgsFeature(f)
+                                            if not geom.within(pochoir_geom):
+                                                f_out.setGeometry(geom.intersection(pochoir_geom))
+                                            feats.append(f_out)
+                                    
+                                    pr.addFeatures(feats)
+                                    clipped.updateExtents()
+                                    clipped.setRenderer(layer.renderer().clone())
+                                    layers_to_render[-1] = clipped
+                                    layer = clipped
+                                    logger.info("  → Couche '%s' tronquée par le pochoir départemental", resolved_name)
+                        except Exception as e:
+                            logger.error("  → Erreur lors du clipping de '%s' : %s", resolved_name, e)
 
                     if resolve_source != "exact":
                         logger.info(

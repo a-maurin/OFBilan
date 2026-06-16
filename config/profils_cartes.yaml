@@ -244,21 +244,25 @@ global_procedures:
       legend_label: "Procédures judiciaires (FAITS)"
       filter_type: "pj"
       geometry_mode: "polygon_fill"
+      renderer_type: "single"
+      symbol_shape: "diamond"
+      color_rgb: [52, 152, 219]
+    pve_communes:
+      layer_name: "pve_communes"
+      legend_label: "PVe"
+      geometry_mode: "polygon_centroid"
       renderer_type: "graduated"
       palette: "Oranges"
-    communes_france:
-      layer_name: "communes_france"
-      legend_label: "PVe"
-      geometry_mode: "polygon_fill"
-      renderer_type: "single"
-      palette: "Blues"
+      symbol_shape: "triangle"
+      field: "nb_pve"
     point_ctrl_20260205_wgs84:
       layer_name: "point_ctrl_20260205_wgs84"
       legend_label: "Procédures Administratives (PA)"
-      filter_type: "point_ctrl_manquement"
+      filter_type: "point_ctrl_pa"
       geometry_mode: "polygon_fill"
       renderer_type: "single"
-      palette: "Reds"
+      symbol_shape: "circle"
+      color_rgb: [155, 89, 182]
 
 global_usagers:
   title: "Bilan global SD21 — Contrôles par types d’usagers — Côte-d'Or"
@@ -466,7 +470,6 @@ global_domaines:
       legend_label: "Périmètre SD21"
       geometry_mode: "polygon_fill"
       renderer_type: "graduated"
-      palette: "Blues"
     point_ctrl_20260205_wgs84:
       layer_name: "point_ctrl_20260205_wgs84"
       legend_label: "Contrôles par domaine"

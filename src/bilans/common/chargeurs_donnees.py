@@ -2128,3 +2128,40 @@ def load_pj_with_geometry(
     if "dossier" in merged.columns:
         merged = merged.drop(columns=["dossier"])
     return gpd.GeoDataFrame(merged, geometry="geometry", crs=pts_pj.crs)
+
+
+def prepare_pve_communes_gpkg(root: Path) -> Path:
+    """Prépare la couche géospatiale des PVe par commune et l'exporte en GPKG."""
+    sources = root / "data" / "sources"
+    candidates = list(sources.glob("Stats_PVe_OFB au *.xlsx"))
+    if not candidates:
+        raise FileNotFoundError("Aucun fichier Stats_PVe_OFB au *.xlsx trouvé dans data/sources")
+    pve_path = sorted(candidates)[-1]
+    
+    # Lecture Excel
+    df_pve = pd.read_excel(pve_path, dtype=str)
+    insee_col = next((c for c in df_pve.columns if "insee" in str(c).lower()), None)
+    if not insee_col:
+        # Fallback si le nom est complexe
+        insee_col = next((c for c in df_pve.columns if "code" in str(c).lower()), df_pve.columns[0])
+        
+    df_pve["insee_clean"] = df_pve[insee_col].astype(str).str.zfill(5)
+    counts = df_pve.groupby("insee_clean").size().reset_index(name="nb_pve")
+    
+    # Jointure avec communes
+    communes_shp = ref_programme(root) / "sig" / "communes_21" / "communes.shp"
+    gdf_com = gpd.read_file(communes_shp)
+    com_insee_col = next((c for c in gdf_com.columns if "insee" in str(c).lower()), "INSEE_COM")
+    
+    gdf_pve = gdf_com.merge(counts, left_on=com_insee_col, right_on="insee_clean", how="inner")
+    
+    out_dir = root / "data" / "out" / "couches_sig"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / "pve_communes.gpkg"
+    
+    if out_path.exists():
+        out_path.unlink()
+        
+    gdf_pve.to_file(out_path, driver="GPKG", layer="pve_communes")
+    return out_path
+
