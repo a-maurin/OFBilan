@@ -51,3 +51,20 @@ def test_depart_attr_condition_int_compat() -> None:
 
     assert _depart_attr_condition("num_depart", "89") == '"num_depart" IN (\'89\', 89)'
     assert _depart_attr_condition("num_depart", "2A") == '"num_depart" = \'2A\''
+
+
+def test_resolve_map_title_custom_title_main() -> None:
+    from bilans.cartographie.production_cartographique import resolve_map_title
+    from bilans.cartographie.config_cartes_model import ProfileConfig
+
+    prof = ProfileConfig(
+        id="demo",
+        title="Bilan demo — Côte-d'Or",
+        title_main="Contrôles — résultats — Côte-d'Or",
+        date_deb="2025-01-01",
+        date_fin="2025-12-31"
+    )
+    # Le title_main personnalisé ne doit pas être tronqué par le split
+    res = resolve_map_title(prof, "21")
+    assert "Contrôles — résultats — Côte-d'Or" in res
+

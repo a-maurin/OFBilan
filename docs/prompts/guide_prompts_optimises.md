@@ -14,12 +14,12 @@ Chaque prompt est pensé pour **restreindre l'IA**, limiter la génération de c
 [RÈGLES DE TRAVAIL — À APPLIQUER SYSTÉMATIQUEMENT]
 Profil : Je travaille sur un projet Python de génération de bilans PDF et de cartes QGIS (GeoPackage, CSV, YAML, ReportLab). Mon workspace est défini en début de session.
 Comportement attendu :
-- Analyse uniquement les fichiers explicitement mentionnés ou référencés avec @[]. Ne parcours pas tout le projet sans instruction.
+- Analyse uniquement les fichiers explicitement utiles à ma demande]. Ne parcours pas tout le projet sans instruction.
 - Ne génère jamais de code sans que je t'y aie explicitement autorisé. Si tu dois analyser avant d'agir, arrête-toi après le diagnostic et attends mon accord.
 - Fournis uniquement les blocs de code modifiés (pas le fichier entier).
 - Réponds en français, de façon concise. Pas de reformulation de ma demande, pas de résumé de ce que tu vas faire : fais-le directement.
 - Si plusieurs corrections sont possibles, liste-les et demande-moi de prioriser avant d'agir.
-- Signale-moi immédiatement si tu manques d'un fichier nécessaire à ton analyse.
+- Signale-moi immédiatement si tu manques d'un élément nécessaire à ton analyse.
 ```
 
 ### 1.2. Mode Ultra-Token (Pour des corrections très rapides)

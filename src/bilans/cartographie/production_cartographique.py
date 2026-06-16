@@ -1609,6 +1609,37 @@ def _ensure_logo_bandeau(layout, prof: "ProfileConfig") -> None:
             logger.exception("Erreur lors du positionnement du bandeau logo: %s", e)
 
 
+def resolve_map_title(prof: "ProfileConfig", dept_code: Optional[str] = None) -> str:
+    """Résout le titre de la carte en gérant le département et la période de manière sécurisée."""
+    from bilans.common.utilitaires_metier import get_dept_name
+    dept_name = get_dept_name(dept_code) if dept_code else ""
+    
+    base_title = getattr(prof, "title_main", "") or ""
+    if not base_title:
+        base_title = getattr(prof, "title", "") or ""
+        if " - " in base_title:
+            base_title = base_title.split(" - ")[0]
+        elif " — " in base_title:
+            base_title = base_title.split(" — ")[0]
+            
+    periode = ""
+    if hasattr(prof, "date_deb") and hasattr(prof, "date_fin") and prof.date_deb and prof.date_fin:
+        clean_date_deb = str(prof.date_deb).split(" ")[0]
+        clean_date_fin = str(prof.date_fin).split(" ")[0]
+        if clean_date_deb.endswith("-01-01") and clean_date_fin.endswith("-12-31") and clean_date_deb[:4] == clean_date_fin[:4]:
+            periode = f"Année {clean_date_deb[:4]}"
+        else:
+            periode = f"Du {clean_date_deb} au {clean_date_fin}"
+
+    parts = [base_title]
+    if dept_name:
+        parts.append(dept_name)
+    if periode:
+        parts.append(periode)
+        
+    return " — ".join(parts)
+
+
 def export_layout(
     prof: "ProfileConfig",
     output_path: Path,
@@ -1622,25 +1653,7 @@ def export_layout(
     from config_cartes import ProfileConfig, CONFIG
 
     proj = QgsProject.instance()
-    from bilans.common.utilitaires_metier import get_dept_name
-    dept_name = get_dept_name(dept_code) if dept_code else ""
-    
-    base_title = getattr(prof, "title_main", "") or prof.title
-    if " - " in base_title:
-        base_title = base_title.split(" - ")[0]
-    elif " — " in base_title:
-        base_title = base_title.split(" — ")[0]
-        
-    periode = ""
-    if hasattr(prof, "date_deb") and hasattr(prof, "date_fin") and prof.date_deb and prof.date_fin:
-        clean_date_deb = prof.date_deb.split(" ")[0]
-        clean_date_fin = prof.date_fin.split(" ")[0]
-        if clean_date_deb.endswith("-01-01") and clean_date_fin.endswith("-12-31") and clean_date_deb[:4] == clean_date_fin[:4]:
-            periode = f"Année {clean_date_deb[:4]}"
-        else:
-            periode = f"Du {clean_date_deb} au {clean_date_fin}"
-
-    title_text = f"{base_title} — {dept_name} — {periode}"
+    title_text = resolve_map_title(prof, dept_code)
 
     # Injection du Layout Dynamique (Lot 1)
     manager = proj.layoutManager()
@@ -2661,19 +2674,26 @@ def _draw_legend_on_image(image_path, legend_data):
     total_h -= section_spacing
     total_w = max_w + padding * 2
 
-    margin_right = 60
-    margin_top = 300  # Sous le bandeau bleu et les titres
     img_w, img_h = img.size
+
+    # La carte prend 232mm sur 297mm de largeur totale
+    # La colonne de droite commence à img_w * (232 / 297)
+    col_start = int(img_w * (232 / 297))
+    col_center = col_start + (img_w - col_start) // 2
     
-    start_x = img_w - total_w - margin_right
-    if start_x < 0:
-        start_x = 40
-        
+    # Centrer la légende sur cet axe et s'assurer qu'elle ne dépasse pas le bord droit
+    start_x = col_center - (total_w // 2)
+    right_margin = 30
+    if start_x + total_w > img_w - right_margin:
+        start_x = img_w - total_w - right_margin
+    
+    # Marge haute sous le bandeau bleu du haut (10mm)
+    margin_top = int(img_h * (20 / 210))  # environ 20mm pour laisser de la place
     start_y = margin_top
-    # Protéger la barre d'échelle en bas à droite (~250px)
-    scalebar_protection = 250
-    if start_y + total_h > img_h - scalebar_protection:
-        start_y = max(100, img_h - total_h - scalebar_protection)
+    
+    # Si la légende descend trop bas (sous le logo)
+    if start_y + total_h > img_h - int(img_h * (30 / 210)):
+        start_y = max(margin_top, img_h - total_h - int(img_h * (30 / 210)))
 
     overlay = Image.new('RGBA', img.size, (255, 255, 255, 0))
     overlay_draw = ImageDraw.Draw(overlay)

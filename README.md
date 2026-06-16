@@ -1,125 +1,76 @@
-# Bilans Production
+# Bilans Production 📊
 
-Application de génération de bilans PDF d’activité à partir de données OSCEAN et PVe.
+Application de génération de bilans PDF d'activité à partir de données OSCEAN et PVe de l'Office Français de la Biodiversité (OFB).
 
-## Finalité
+## Fonctionnalités Clés
 
-Le programme produit deux types de livrables :
+- **Bilan Global** : Vision départementale consolidée de l'activité sur une période donnée.
+- **Bilans Thématiques** : Bilans spécialisés et modulables (ex. chasse, agrainage, types d'usagers, synthèse d'activité PA PJ, etc).
+- **Rendu PDF & Graphiques** : Mise en page dynamique respectant la charte graphique de l'OFB.
+- **Cartographie QGIS Automatisée & Pilotée par YAML** : 
+  - Génération automatique des cartes thématiques intégrées au PDF. Par défaut : contrôles par domaines, résultats des contrôles, contrôles par type d'usager, procédures (PA? PEJ, PVe).
+  - Configuration complète de la cartographie (requêtes spatiales, couches géographiques, emprise, styles de légendes) centralisée dans les profils YAML (`profils_cartes.yaml` et `config/profils_bilan/`).
+  - Résolution dynamique des couches cartographiques via `layer_resolver.py` et interface graphique de paramétrage.
+  - **Mécanisme de repli (Fallback)** : L'absence de QGIS ou d'images PNG générées ne bloque jamais la production finale du bilan PDF.
+- **Pilotage par YAML** : Paramétrage complet des pipelines de données, des filtres d'agrégation et de la structure des sections PDF via des profils YAML réutilisables, évitant tout code en dur.
 
-- un **bilan global** : une vision consolidée d’un département sur une période donnée ;
-- des **bilans thématiques** : des bilans spécialisés, selon des profils métier paramétrables.
+## Prérequis et Installation
 
-## Prérequis
-
-- Python 3.10 ou supérieur ;
-- les dépendances Python du projet ;
-- QGIS uniquement si vous générez les cartes.
-
-Installation :
+- Python 3.10+
+- QGIS (facultatif, requis uniquement pour générer les cartes cartographiques)
 
 ```bash
+# Installation en mode éditable
 pip install -e .
-```
 
-Pour le développement et les tests :
-
-```bash
+# Installation avec dépendances de développement et tests
 pip install -e .[dev]
 ```
 
-Après installation, la commande console `bilans` est équivalente à `python -m bilans`.
+Une fois installé, la commande `bilans` est disponible (raccourci pour `python -m bilans`).
 
 ## Exécution
 
-**Rupture CLI :** l’option `--mode` n’est plus utilisée ; utilisez `--profil` (dont `global`). Voir `docs/migration/cli_moteur_unique.md`.
-La compatibilité multi-profils (batch/combine), l’adapter d’agrégation et l’adapter de rendu PDF sont pilotés par les profils YAML.
-Si aucun `--profil` n’est fourni, la CLI propose une sélection interactive.
-
-Point d’entrée principal :
+L'exécution est pilotée par les profils de configuration. Si aucun profil n'est passé en paramètre, un menu interactif s'affiche.
 
 ```bash
-python -m bilans
+# Lister les profils thématiques disponibles
+bilans --list-themes
+
+# Générer le bilan global
+bilans --profil global --date-deb 2025-01-01 --date-fin 2025-12-31 --dept-code 21
+
+# Générer des bilans thématiques spécifiques
+bilans --profil chasse --profil agrainage --date-deb 2025-01-01 --date-fin 2025-12-31 --dept-code 21
+
+# Bilan d'un type d'usager spécifique sans génération de cartes
+bilans --profil types_usager_cible --date-deb 2025-01-01 --date-fin 2026-03-31 --dept-code 21 --type-usager 2 --no-cartes
 ```
 
-Exemples de commandes :
+### Scripts de Lancement rapides
+Des scripts prêts à l'emploi sont disponibles dans le dossier `scripts/` pour Windows (`.bat`) et Linux (`.sh`) :
+- `lancer_bilans` / `lancer_bilans_qgis` : Exécute la génération de bilans et cartes.
+- `generer_cartes` / `parametrer_cartes` : Gestion de la cartographie.
 
-```bash
-# Lister les profils disponibles
-python -m bilans --list-themes
+## 🧪 Tests et Qualité
 
-# Bilan global
-python -m bilans --profil global --date-deb 2025-01-01 --date-fin 2025-12-31 --dept-code 21
-
-# Un ou plusieurs bilans thématiques
-python -m bilans --profil chasse --profil agrainage --date-deb 2025-01-01 --date-fin 2025-12-31 --dept-code 21
-
-# Bilan types d'usagers ciblé (ex. agriculteurs = n°2 dans --list-type-usagers)
-python -m bilans --list-type-usagers
-python -m bilans --profil types_usager_cible --date-deb 2025-01-01 --date-fin 2026-03-31 --dept-code 21 --type-usager 2 --no-cartes
-```
-
-Scripts de lancement :
-
-- Windows : `scripts/windows/lancer_bilans.bat`, `scripts/windows/lancer_bilans_qgis.bat` (bilans + cartes via Python QGIS), `scripts/windows/generer_cartes.bat`, `scripts/windows/parametrer_cartes.bat`
-- Linux : `scripts/linux/lancer_bilans.sh`, `scripts/linux/generer_cartes.sh`, `scripts/linux/parametrer_cartes.sh`
-
-## Tests et CI
-
-Vérification locale (identique à la CI GitHub, voir `.github/workflows/tests.yml`) :
-
+Pour lancer la suite de tests unitaires et de non-régression (smoke tests) :
 ```bash
 python -m pytest -q
 ```
+*Note : Sous Windows, vous pouvez également exécuter `.\scripts\verify.ps1` et sous Linux `./scripts/verify.sh`.*
 
-Sous Windows : `.\scripts\verify.ps1` — sous Linux : `./scripts/verify.sh` (même commande `pytest`).
+## Structure du Projet
 
-Les tests couvrent `tests/unit/` et `tests/smoke/` (`testpaths` dans `pyproject.toml`). Ils doivent rester hermétiques (pas de dépendance à `data/sources/`).
+- `src/bilans/` : Code source de l'application (calculs, PDF, CLI, cartographie).
+- `config/` : Profils YAML de configuration et charte graphique.
+- `data/` : Dossiers des sources d'entrée (`sources/`) et des fichiers générés (`out/`).
+- `docs/` : Documentations d'architecture, schémas de données et guides de migration.
+- `ref/` : Référentiels géographiques et administratifs.
+- `tests/` : Tests unitaires et smoke tests hermétiques.
 
-Fixtures PDF (ordre des sections / sommaire) : `tests/fixtures/pdf_toc/README.md`.
+## ✉️ Contact
 
-## Données attendues
-
-Le programme lit les fichiers d’entrée dans `data/sources/`.
-
-Jeux de données principaux :
-
-- points de contrôle OSCEAN : `data/sources/sig/points_de_ctrl_OSCEAN_*/`
-- procédures judiciaires : `data/sources/suivi_procedure_enq_judiciaire_*.ods`
-- procédures administratives : `data/sources/suivi_procedure_administrative_*.ods`
-- PVe : `data/sources/Stats_PVe_OFB*`
-- faits PJ géolocalisés : `data/sources/sig/points_infractions_pj/localisation_infrac_FAITS_*`
-
-## Sorties
-
-Les résultats sont écrits dans `data/out/` :
-
-- `data/out/bilan_global/` : PDF et exports du bilan global ;
-- `data/out/bilan_<profil>/` : PDF et exports associés à chaque profil thématique ;
-- `data/out/generateur_de_cartes/` : sorties intermédiaires de la génération cartographique.
-
-## Organisation du dépôt
-
-- `src/bilans/` : code applicatif principal ;
-- `config/` : configuration de pilotage (profils, présentation PDF, graphiques) — voir `config/README.md` ;
-- `config/profils_bilan/_defaults.yaml` : socle YAML commun (pipeline, adapters agrégation/PDF, capacités par défaut) fusionné avec chaque profil ;
-- `ref/programme/` : référentiels lus par l’application ; `ref/hors_programme/` : archives hors runtime — voir `ref/README.md` ;
-- `scripts/` : lanceurs Windows/Linux, vérification tests (`verify.ps1` / `verify.sh`) et arborescence `ref/` (`verify_ref_layout.*`) ;
-- `data/` : données d’entrée locales et sorties générées ;
-- `docs/` : documentation d’architecture, d’usage et de migration ;
-- `tests/` : tests unitaires et tests smoke.
-
-## Références
-
-- Description des sources : `docs/architecture/README_sources.md`
-- Organisation détaillée : `docs/architecture/ORGANISATION_PROJET.md`
-- Migration CLI (`--profil`) : `docs/migration/cli_moteur_unique.md`
-- Vérification arborescence `ref/` : `scripts/verify_ref_layout.ps1` ou `python scripts/verify_ref_layout.py`
-- Schéma des données : `docs/architecture/data_schema.md`
-- Licence : Apache License 2.0 (`LICENSE`)
-
-## Contact
-
-- Auteur : Aguirre Maurin
-- Service : OFB, SD Côte-d'Or
-- Courriel : [aguirre.maurin@ofb.gouv.fr](mailto:aguirre.maurin@ofb.gouv.fr)
-
+- **Auteur** : Aguirre Maurin
+- **Service** : OFB, Service Départemental de la Côte-d'Or
+- **Courriel** : [aguirre.maurin@ofb.gouv.fr](mailto:aguirre.maurin@ofb.gouv.fr)
