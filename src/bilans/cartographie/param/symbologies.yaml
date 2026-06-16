@@ -112,6 +112,7 @@ points_global_domaines:
 # PEJ = Procédures Judiciaires → Bleu
 procedures_pj:
   legend_label: "Procédures Judiciaires (PEJ)"
+  filter_type: pj
   renderer_type: single
   palette: "#3498DB"
   symbol_size_mm: 2.25
@@ -121,6 +122,7 @@ procedures_pj:
 # PVe = Procès-Verbaux électroniques → Orange
 procedures_pve:
   legend_label: "Procès-Verbaux (PVe)"
+  filter_type: pve
   renderer_type: single
   palette: "#E67E22"
   symbol_size_mm: 2.25

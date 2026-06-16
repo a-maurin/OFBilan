@@ -17,7 +17,7 @@ default:
           symbology_ref: pochoir
         point_controles:
           layer_role: point_controles
-          symbology_ref: points_domaines
+          symbology_ref: points_global_domaines
 
     usagers:
       suffixe_nom: "_usagers"
@@ -28,7 +28,7 @@ default:
           symbology_ref: pochoir
         point_controles:
           layer_role: point_controles
-          symbology_ref: points_usagers
+          symbology_ref: points_global_usagers
 
     resultats:
       suffixe_nom: "_resultats"
@@ -39,7 +39,7 @@ default:
           symbology_ref: pochoir
         point_controles:
           layer_role: point_controles
-          symbology_ref: points_resultats
+          symbology_ref: points_global_resultats
 
     procedures:
       suffixe_nom: "_procedures"
@@ -50,7 +50,10 @@ default:
           symbology_ref: pochoir
         pej:
           layer_role: pej
-          symbology_ref: points_pej
+          symbology_ref: procedures_pj
         pve:
           layer_role: pve
-          symbology_ref: points_pve
+          symbology_ref: procedures_pve
+        pa:
+          layer_role: point_controles
+          symbology_ref: procedures_pa

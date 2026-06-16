@@ -461,6 +461,76 @@ def _run_global_profile_via_yaml(
             date_fin=date_fin_ts,
         )
 
+    # Export GeoPackage local au pipeline global (Lot 3 - Filtrage Spatial)
+    try:
+        import geopandas as gpd
+        gpkg_logger = logging.getLogger(__name__)
+        
+        prefix = f"{profile.get('id', 'global')}_{code_norm}"
+        carto_dir = root / "data" / "sources" / "sig" / "CARTO"
+        carto_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 1. GPKG pour point_ctrl
+        if not point.empty:
+            df_pts = point.copy()
+            if "x" in df_pts.columns and "y" in df_pts.columns:
+                df_pts["_lon"] = pd.to_numeric(df_pts["x"], errors="coerce")
+                df_pts["_lat"] = pd.to_numeric(df_pts["y"], errors="coerce")
+                mask_geo = df_pts["_lon"].notna() & df_pts["_lat"].notna()
+                if mask_geo.any():
+                    gdf_pts = gpd.GeoDataFrame(
+                        df_pts[mask_geo],
+                        geometry=gpd.points_from_xy(df_pts.loc[mask_geo, "_lon"], df_pts.loc[mask_geo, "_lat"]),
+                        crs="EPSG:4326"
+                    ).to_crs("EPSG:2154")
+                    for col in gdf_pts.select_dtypes(include=['datetime64[ns, UTC]', 'datetime64[ns]', 'datetime64']).columns:
+                        gdf_pts[col] = gdf_pts[col].astype(str)
+                    gpkg_path_pts = carto_dir / f"controles_{prefix}_export_automatique.gpkg"
+                    gdf_pts.to_file(gpkg_path_pts, driver="GPKG")
+                    gpkg_logger.info(f"Couche géographique Contrôles générée pour QGIS : {gpkg_path_pts} ({mask_geo.sum()} points)")
+        
+        # 2. GPKG pour PVe
+        if not pve.empty:
+            df_geo = pve.copy()
+            if "inf_gps_long" in df_geo.columns and "inf_gps_lat" in df_geo.columns:
+                df_geo["_lon"] = pd.to_numeric(df_geo["inf_gps_long"], errors="coerce")
+                df_geo["_lat"] = pd.to_numeric(df_geo["inf_gps_lat"], errors="coerce")
+                
+                missing = df_geo["_lon"].isna() | df_geo["_lat"].isna() | (df_geo["_lon"] == 0) | (df_geo["_lat"] == 0)
+                if missing.any():
+                    communes_shp = root / "ref" / "programme" / "sig" / "communes_21" / "communes.shp"
+                    if communes_shp.exists():
+                        try:
+                            coms = gpd.read_file(communes_shp)
+                            if coms.crs is None or coms.crs.to_epsg() != 4326:
+                                coms = coms.to_crs("EPSG:4326")
+                            if "long_centr" in coms.columns and "lat_centro" in coms.columns:
+                                dict_x = coms.set_index("INSEE_COM")["long_centr"].astype(float).to_dict()
+                                dict_y = coms.set_index("INSEE_COM")["lat_centro"].astype(float).to_dict()
+                            else:
+                                dict_x = pd.Series(coms.geometry.centroid.x.values, index=coms.INSEE_COM).to_dict()
+                                dict_y = pd.Series(coms.geometry.centroid.y.values, index=coms.INSEE_COM).to_dict()
+                            df_geo["insee_str"] = df_geo.get("INF-INSEE", pd.Series(dtype=str)).astype(str).str.zfill(5)
+                            df_geo.loc[missing, "_lon"] = df_geo.loc[missing, "insee_str"].map(dict_x)
+                            df_geo.loc[missing, "_lat"] = df_geo.loc[missing, "insee_str"].map(dict_y)
+                        except Exception as e_geom:
+                            gpkg_logger.warning(f"Impossible de centrer les PVe orphelins : {e_geom}")
+                
+                mask_geo = df_geo["_lon"].notna() & df_geo["_lat"].notna() & (df_geo["_lon"] != 0) & (df_geo["_lat"] != 0)
+                if mask_geo.any():
+                    gdf = gpd.GeoDataFrame(
+                        df_geo[mask_geo],
+                        geometry=gpd.points_from_xy(df_geo.loc[mask_geo, "_lon"], df_geo.loc[mask_geo, "_lat"]),
+                        crs="EPSG:4326"
+                    ).to_crs("EPSG:2154")
+                    for col in gdf.select_dtypes(include=['datetime64[ns, UTC]', 'datetime64[ns]', 'datetime64']).columns:
+                        gdf[col] = gdf[col].astype(str)
+                    gpkg_path = carto_dir / f"pve_{prefix}_export_automatique.gpkg"
+                    gdf.to_file(gpkg_path, driver="GPKG")
+                    gpkg_logger.info(f"Couche géographique PVe générée pour QGIS : {gpkg_path} ({mask_geo.sum()} points)")
+    except Exception as e:
+        logging.getLogger(__name__).warning(f"Impossible d'exporter les couches QGIS (global) : {e}")
+
     # ── Cartographie ──
     resolved_opts = _finalize_cartes_selection(
         profile,

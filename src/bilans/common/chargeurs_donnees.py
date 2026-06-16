@@ -1921,7 +1921,7 @@ def merge_pej_faits_locations(
     )
     keep_cols = [doss_col, xcol, ycol] + ([commune_col] if commune_col else [])
     loc = gdf[keep_cols].copy()
-    loc["_doss"] = loc[doss_col].astype(str).astype(object).str.strip().str.replace(r"\.0$", "", regex=True)
+    loc["_doss"] = loc[doss_col].astype(str).astype(object).str.strip().apply(lambda val: re.sub(r"\.0$", "", str(val)) if pd.notna(val) else "")
     loc = loc.drop_duplicates(subset="_doss", keep="first")
     rename_map = {xcol: "x_faits", ycol: "y_faits"}
     if commune_col is not None:
@@ -1929,7 +1929,7 @@ def merge_pej_faits_locations(
     loc = loc.rename(columns=rename_map).drop(columns=[doss_col], errors="ignore")
 
     out = pej.copy()
-    out["_dc"] = out["DC_ID"].astype(str).astype(object).str.strip().str.replace(r"\.0$", "", regex=True)
+    out["_dc"] = out["DC_ID"].astype(str).astype(object).str.strip().apply(lambda val: re.sub(r"\.0$", "", str(val)) if pd.notna(val) else "")
     out = out.merge(loc, left_on="_dc", right_on="_doss", how="left")
     out = out.drop(columns=["_dc", "_doss"], errors="ignore")
     # Expose un nom de commune exploitable pour les tableaux PDF quand l'ODS ne le fournit pas.
@@ -1951,13 +1951,13 @@ def merge_pej_faits_locations(
             
             if not oscean_gdf.empty and "dc_id" in oscean_gdf.columns and "nom_commun" in oscean_gdf.columns:
                 oscean_dc = oscean_gdf[["dc_id", "nom_commun"]].dropna(subset=["nom_commun"]).copy()
-                oscean_dc["dc_id"] = oscean_dc["dc_id"].astype(str).str.replace(r"\.0$", "", regex=True)
+                oscean_dc["dc_id"] = oscean_dc["dc_id"].astype(str).apply(lambda val: re.sub(r"\.0$", "", str(val)) if pd.notna(val) else "")
                 oscean_dc = oscean_dc.drop_duplicates(subset=["dc_id"])
                 
                 oscean_num = pd.DataFrame()
                 if "code_pej" in oscean_gdf.columns:
                     oscean_num = oscean_gdf[["code_pej", "nom_commun"]].dropna(subset=["nom_commun"]).copy()
-                    oscean_num["code_pej"] = oscean_num["code_pej"].astype(str).str.replace(r"\.0$", "", regex=True)
+                    oscean_num["code_pej"] = oscean_num["code_pej"].astype(str).apply(lambda val: re.sub(r"\.0$", "", str(val)) if pd.notna(val) else "")
                     oscean_num = oscean_num.drop_duplicates(subset=["code_pej"])
                 
                 def _recover_commune(row):

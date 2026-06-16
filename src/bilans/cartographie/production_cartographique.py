@@ -535,14 +535,29 @@ def resolve_layers_for_config(
             role = layer_role or infer_layer_role(layer_key, layer.name())
             
             gpkg_path = None
-            if "pve" in layer_key.lower() or (role and "pve" in role.lower()):
-                gpkg_path = carto_dir / f"pve_{profil_prefix}_export_automatique.gpkg"
-            elif "controle" in layer_key.lower() or "ctrl" in layer_key.lower() or "donnees" in layer_key.lower() or (role and "controle" in role.lower()):
-                gpkg_path = carto_dir / f"controles_{profil_prefix}_export_automatique.gpkg"
-            elif role == "pej":
+            if role == "pej":
                 from bilans.common.chargeurs_donnees import get_points_infrac_pj_path
                 gpkg_path = get_points_infrac_pj_path(PROJECT_ROOT)
+            else:
+                is_pve = "pve" in layer_key.lower() or (role and "pve" in role.lower())
+                is_ctrl = "controle" in layer_key.lower() or "ctrl" in layer_key.lower() or "donnees" in layer_key.lower() or (role and "controle" in role.lower())
                 
+                if is_pve or is_ctrl:
+                    prefix_type = "pve" if is_pve else "controles"
+                    # Essayer plusieurs niveaux de préfixes (spécifique -> intermédiaire -> racine)
+                    prefixes_candidats = [profil_prefix]
+                    parts = profil_prefix.split('_') if profil_prefix else []
+                    if len(parts) >= 3:
+                        prefixes_candidats.append(f"{parts[0]}_{parts[-1]}")
+                    if len(parts) >= 2:
+                        prefixes_candidats.append(parts[0])
+                    
+                    for pref in prefixes_candidats:
+                        path_cand = carto_dir / f"{prefix_type}_{pref}_export_automatique.gpkg"
+                        if path_cand.exists():
+                            gpkg_path = path_cand
+                            break
+
             if gpkg_path and gpkg_path.exists():
                 if gpkg_path.suffix.lower() == ".gpkg":
                     uri = f"{gpkg_path}|layername={gpkg_path.stem}"
@@ -850,9 +865,15 @@ def apply_layer_symbology(layer, config: "LayerSymbologyConfig", geometry_mode_o
 
     is_polygon = geom_type == QgsWkbTypes.PolygonGeometry if geom_type is not None else False
 
-    if config.renderer_type == "single":
+    actual_renderer = config.renderer_type
+    if actual_renderer in ("graduated", "categorized") and not config.field:
+        actual_renderer = "single"
+
+    if actual_renderer == "single":
         if config.color_rgb:
             color = QColor(*config.color_rgb)
+        elif config.palette and config.palette.startswith("#"):
+            color = QColor(config.palette)
         else:
             color = QColor(100, 100, 100)
 
@@ -885,7 +906,7 @@ def apply_layer_symbology(layer, config: "LayerSymbologyConfig", geometry_mode_o
             single_renderer = QgsSingleSymbolRenderer(marker)
             layer.setRenderer(single_renderer)
 
-    elif config.renderer_type == "graduated" and config.field:
+    elif actual_renderer == "graduated" and config.field:
         if is_polygon and geom_mode == "polygon_centroid":
             base_symbol = QgsFillSymbol()
             while base_symbol.symbolLayerCount() > 0:
@@ -922,7 +943,7 @@ def apply_layer_symbology(layer, config: "LayerSymbologyConfig", geometry_mode_o
             renderer.setSourceColorRamp(color_ramp)
         layer.setRenderer(renderer)
 
-    elif config.renderer_type == "categorized" and config.field:
+    elif actual_renderer == "categorized" and config.field:
         # Palette cyclique ou générée
         palette_colors: list[str] = []
         if isinstance(config.palette, str) and "#" in config.palette:
@@ -1050,11 +1071,6 @@ def _depart_attr_condition(field_name: str, depart: str) -> str:
 
 
 def _build_date_condition(fields, field_name: str, date_deb: str, date_fin: str) -> str:
-    # 14 = QVariant.Date, 15 = QVariant.DateTime
-    idx = fields.indexFromName(field_name)
-    if idx >= 0 and fields.at(idx).type() in (14, 15):
-        return f'"{field_name}" >= \'{date_deb}\' AND "{field_name}" <= \'{date_fin}\''
-    
     # Text format: handle both YYYY-MM-DD and DD/MM/YYYY using CASE WHEN
     return (
         f'(CASE '
@@ -1084,7 +1100,9 @@ def _build_pve_expression(fields, date_deb: str, date_fin: str, config, profile=
         return None
 
     natinf_values = None
-    if profile and getattr(profile, "natinf_pve", None) is not None:
+    if profile and getattr(profile, "id", None) and (profile.id == "global" or profile.id.startswith("global_")):
+        natinf_values = None
+    elif profile and getattr(profile, "natinf_pve", None) is not None:
         natinf_values = profile.natinf_pve
     else:
         natinf_values = getattr(config, "natinf_pve", [27742])
@@ -1114,7 +1132,9 @@ def _build_pj_expression(fields, date_deb: str, date_fin: str, config, profile=N
         return None
 
     natinf_values = None
-    if profile and getattr(profile, "natinf_pj", None) is not None:
+    if profile and getattr(profile, "id", None) and (profile.id == "global" or profile.id.startswith("global_")):
+        natinf_values = None
+    elif profile and getattr(profile, "natinf_pj", None) is not None:
         natinf_values = profile.natinf_pj
     else:
         natinf_values = getattr(config, "natinf_pj", [27742, 25001])
@@ -2184,8 +2204,11 @@ def run_export(
             legend_data = []
 
             # Collecte explicite des couches à rendre dans la carte
+            # QgsLayoutItemMap.setLayers dessine le premier élément de la liste au-dessus (TOP).
+            # Le YAML listant les polygones (fond) avant les points (premier plan), 
+            # il faut inverser l'ordre pour que les points ne soient pas masqués.
             layers_to_render = []
-            for lname, lcfg in layers_to_process.items():
+            for lname, lcfg in reversed(list(layers_to_process.items())):
                 # Construction du prefix identique à celui de l'orchestrateur
                 base_prefix = getattr(prof, "_export_prefix", None) or prof.id
                 profil_prefix = f"{base_prefix}_{effective_dept}" if str(effective_dept).strip() else base_prefix
@@ -2593,7 +2616,8 @@ def _extract_legend_info(layer, lcfg):
         if not has_any:
             return None
         color = renderer.symbol().color().name() if renderer.symbol() else "#000000"
-        items.append({"label": title, "color": color})
+        shape = getattr(lcfg, "symbol_shape", "square") or "square"
+        items.append({"label": title, "color": color, "shape": shape})
         title = None
     elif rtype == "categorizedSymbol":
         present_str_values = {str(v).lower() for v in present_values}
@@ -2611,6 +2635,7 @@ def _extract_legend_info(layer, lcfg):
                 present_numeric_values.append(float(v))
             except (ValueError, TypeError):
                 pass
+        seen_labels = set()
         for range_ in renderer.ranges():
             has_features = False
             for v in present_numeric_values:
@@ -2620,7 +2645,16 @@ def _extract_legend_info(layer, lcfg):
             if not has_features:
                 continue
             color = range_.symbol().color().name() if range_.symbol() else "#000000"
-            label = range_.label()
+            lower = range_.lowerValue()
+            upper = range_.upperValue()
+            if lower.is_integer() and upper.is_integer():
+                low_int, upp_int = int(lower), int(upper)
+                label = f"{low_int}" if low_int == upp_int else f"{low_int} - {upp_int}"
+            else:
+                label = f"{lower:.2f} - {upper:.2f}".replace('.', ',') if f"{lower:.2f}" != f"{upper:.2f}" else f"{lower:.2f}".replace('.', ',')
+            if label in seen_labels:
+                continue
+            seen_labels.add(label)
             items.append({"label": label, "color": color})
     elif rtype == "RuleRenderer" or rtype == "ruleRenderer":
         root_rule = renderer.rootRule()
@@ -2767,9 +2801,23 @@ def _draw_legend_on_image(image_path, legend_data):
             
         for item in group.get("items", []):
             rgb = hex_to_rgb(item["color"])
+            shape = item.get("shape", "square")
             lines = textwrap.wrap(item["label"], width=30) if len(item["label"]) > 30 else [item["label"]]
             box_coords = [start_x + padding, cur_y, start_x + padding + rect_size, cur_y + rect_size]
-            overlay_draw.rectangle(box_coords, fill=rgb, outline=(0, 0, 0, 255), width=1)
+            
+            if shape == "circle":
+                overlay_draw.ellipse(box_coords, fill=rgb, outline=(0, 0, 0, 255), width=1)
+            elif shape == "diamond":
+                mx = start_x + padding + rect_size / 2
+                my = cur_y + rect_size / 2
+                overlay_draw.polygon([
+                    (mx, cur_y),
+                    (start_x + padding + rect_size, my),
+                    (mx, cur_y + rect_size),
+                    (start_x + padding, my)
+                ], fill=rgb, outline=(0, 0, 0, 255))
+            else:
+                overlay_draw.rectangle(box_coords, fill=rgb, outline=(0, 0, 0, 255), width=1)
             for j, line in enumerate(lines):
                 overlay_draw.text((start_x + padding + rect_size + 15, cur_y - 2 + j * 35), line, font=font_text, fill=(0, 0, 0, 255))
             cur_y += line_spacing + (len(lines) - 1) * 35
