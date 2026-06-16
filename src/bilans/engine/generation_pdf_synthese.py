@@ -428,8 +428,8 @@ def _generate_synthese_pdf(
     charte_cfg = resolve_charte_config(presentation_cfg)
     title_page_cfg = resolve_title_page_config(_ROOT, scope=scope, profile_id=profil_id)
     
-    from reportlab.lib.pagesizes import A4, landscape
-    pagesize = landscape(A4) if cfg.echelle == "region" else A4
+    from reportlab.lib.pagesizes import A4
+    pagesize = A4
     
     builder = PDFReportBuilder(
         pdf_path=pdf_path,

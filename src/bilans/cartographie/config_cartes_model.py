@@ -38,6 +38,7 @@ FilterType = Literal[
     "point_ctrl_manquement",
     "point_ctrl_theme",
     "point_ctrl_keywords",
+    "point_ctrl_pa",
     "",
 ]
 

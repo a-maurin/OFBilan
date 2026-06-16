@@ -24,13 +24,6 @@ def test_is_filled_procedure_code_ignore_nan() -> None:
     assert is_filled_procedure_code("SD21-2025-PA-0011")
 
 
-def test_resultat_induit_pa_sous_chaine() -> None:
-    assert resultat_induit_pa("Manquement")
-    assert resultat_induit_pa("manquement")
-    assert resultat_induit_pa("Manquement et infraction")
-    assert not resultat_induit_pa("Infraction")
-    assert not resultat_induit_pa("Conforme")
-
 
 def test_build_tab_resultats_inclut_en_attente() -> None:
     point = pd.DataFrame(
@@ -44,13 +37,13 @@ def test_build_tab_resultats_inclut_en_attente() -> None:
     assert abs(float(tab["taux"].sum()) - 1.0) < 1e-9
 
 
-def test_agg_procedures_pa_depuis_resultat_manquement() -> None:
+def test_agg_procedures_pa_depuis_code_pa() -> None:
     df = pd.DataFrame(
         {
             "type_usager": ["Agriculteur 1", "Agriculteur 1", "Agriculteur 1"],
             "domaine": ["Dom A", "Dom A", "Dom B"],
             "code_pej": [np.nan, np.nan, "PEJ-001"],
-            "resultat": ["Conforme", "Manquement et infraction", "Conforme"],
+            "code_pa": [np.nan, "PA-001", np.nan],
         }
     )
     out = agg_procedures_par_type_usager_domaine(df)
@@ -70,7 +63,7 @@ def test_count_pa_induites_et_lignes_synthetiques() -> None:
             "date_ctrl": pd.to_datetime(["2025-01-01", "2025-02-01", "2025-03-01"]),
             "domaine": ["Dom A", "Dom A", "Dom B"],
             "theme": ["Th A", "Th B", "Th C"],
-            "resultat": ["Conforme", "Manquement", "Infraction"],
+            "code_pa": [np.nan, "PA-1", np.nan],
             "code_pej": ["PEJ-1", np.nan, np.nan],
             "dc_id": ["dc1", "dc2", "dc3"],
         }
@@ -86,3 +79,4 @@ def test_count_pa_induites_et_lignes_synthetiques() -> None:
     dossiers = agg_procedures_dossiers_par_domaine(pej, pa_lignes)
     assert int(dossiers["nb_pej"].sum()) == 2
     assert int(dossiers["nb_pa"].sum()) == 1
+

@@ -311,8 +311,10 @@ def generate_maps(
     If QGIS is not available, returns empty list (avertissement journalisé).
     """
     carto_dept = _resolve_carto_dept(echelle, code, dept_code)
-    date_deb_eff = date_deb or "2025-01-01"
-    date_fin_eff = date_fin or "2026-02-05"
+    from datetime import datetime
+    curr_year = datetime.now().year
+    date_deb_eff = date_deb or f"{curr_year}-01-01"
+    date_fin_eff = date_fin or datetime.now().strftime("%Y-%m-%d")
 
     if qgis_available():
         try:

@@ -10,6 +10,18 @@ agrainage:
   layout_title_item_id: "titre_principal"
   layout_subtitle_item_id: "sous_titre"
   layers:
+    Coeur_data_gouv_PNForets:
+      layer_name: "Coeur_data_gouv_PNForets"
+      legend_label: "Cœur de Parc National"
+      symbology_source: "qgis"
+      geometry_mode: "polygon_fill"
+      renderer_type: "single"
+    AOA_2021_PNForet_21:
+      layer_name: "AOA_2021_PNForet_21"
+      legend_label: "AOA Parc National"
+      symbology_source: "qgis"
+      geometry_mode: "polygon_fill"
+      renderer_type: "single"
     Zone d'interdiction d'agrainage:
       layer_name: "Zone d'interdiction d'agrainage"
       legend_label: "Zone d'interdiction d'agrainage"
@@ -64,6 +76,18 @@ chasse:
   layout_title_item_id: "titre_principal"
   layout_subtitle_item_id: "sous_titre"
   layers:
+    Coeur_data_gouv_PNForets:
+      layer_name: "Coeur_data_gouv_PNForets"
+      legend_label: "Cœur de Parc National"
+      symbology_source: "qgis"
+      geometry_mode: "polygon_fill"
+      renderer_type: "single"
+    AOA_2021_PNForet_21:
+      layer_name: "AOA_2021_PNForet_21"
+      legend_label: "AOA Parc National"
+      symbology_source: "qgis"
+      geometry_mode: "polygon_fill"
+      renderer_type: "single"
     localisation_infrac_FAITS_20260205:
       layer_name: "localisation_infrac_FAITS_20260205"
       legend_label: "localisation_infrac_FAITS_20260205"
@@ -100,6 +124,18 @@ piegeage:
   layout_title_item_id: "titre_principal"
   layout_subtitle_item_id: "sous_titre"
   layers:
+    Coeur_data_gouv_PNForets:
+      layer_name: "Coeur_data_gouv_PNForets"
+      legend_label: "Cœur de Parc National"
+      symbology_source: "qgis"
+      geometry_mode: "polygon_fill"
+      renderer_type: "single"
+    AOA_2021_PNForet_21:
+      layer_name: "AOA_2021_PNForet_21"
+      legend_label: "AOA Parc National"
+      symbology_source: "qgis"
+      geometry_mode: "polygon_fill"
+      renderer_type: "single"
     localisation_infrac_FAITS_20260205:
       layer_name: "localisation_infrac_FAITS_20260205"
       legend_label: "Infractions PJ"
@@ -138,6 +174,18 @@ global:
   layout_title_item_id: "titre_principal"
   layout_subtitle_item_id: "sous_titre"
   layers:
+    Coeur_data_gouv_PNForets:
+      layer_name: "Coeur_data_gouv_PNForets"
+      legend_label: "Cœur de Parc National"
+      symbology_source: "qgis"
+      geometry_mode: "polygon_fill"
+      renderer_type: "single"
+    AOA_2021_PNForet_21:
+      layer_name: "AOA_2021_PNForet_21"
+      legend_label: "AOA Parc National"
+      symbology_source: "qgis"
+      geometry_mode: "polygon_fill"
+      renderer_type: "single"
     pochoir_sd21:
       layer_name: "pochoir_sd21"
       legend_label: "Périmètre SD21"
@@ -172,6 +220,18 @@ global_procedures:
   layout_title_item_id: "titre_principal"
   layout_subtitle_item_id: "sous_titre"
   layers:
+    Coeur_data_gouv_PNForets:
+      layer_name: "Coeur_data_gouv_PNForets"
+      legend_label: "Cœur de Parc National"
+      symbology_source: "qgis"
+      geometry_mode: "polygon_fill"
+      renderer_type: "single"
+    AOA_2021_PNForet_21:
+      layer_name: "AOA_2021_PNForet_21"
+      legend_label: "AOA Parc National"
+      symbology_source: "qgis"
+      geometry_mode: "polygon_fill"
+      renderer_type: "single"
     pochoir_sd21:
       layer_name: "pochoir_sd21"
       legend_label: "Périmètre SD21"
@@ -211,6 +271,18 @@ global_usagers:
   layout_title_item_id: "titre_principal"
   layout_subtitle_item_id: "sous_titre"
   layers:
+    Coeur_data_gouv_PNForets:
+      layer_name: "Coeur_data_gouv_PNForets"
+      legend_label: "Cœur de Parc National"
+      symbology_source: "qgis"
+      geometry_mode: "polygon_fill"
+      renderer_type: "single"
+    AOA_2021_PNForet_21:
+      layer_name: "AOA_2021_PNForet_21"
+      legend_label: "AOA Parc National"
+      symbology_source: "qgis"
+      geometry_mode: "polygon_fill"
+      renderer_type: "single"
     pochoir_sd21:
       layer_name: "pochoir_sd21"
       legend_label: "Périmètre SD21"
@@ -243,6 +315,18 @@ procedures_pve:
   layout_title_item_id: "titre_principal"
   layout_subtitle_item_id: "sous_titre"
   layers:
+    Coeur_data_gouv_PNForets:
+      layer_name: "Coeur_data_gouv_PNForets"
+      legend_label: "Cœur de Parc National"
+      symbology_source: "qgis"
+      geometry_mode: "polygon_fill"
+      renderer_type: "single"
+    AOA_2021_PNForet_21:
+      layer_name: "AOA_2021_PNForet_21"
+      legend_label: "AOA Parc National"
+      symbology_source: "qgis"
+      geometry_mode: "polygon_fill"
+      renderer_type: "single"
     pochoir_sd21:
       layer_name: "pochoir_sd21"
       legend_label: "Périmètre SD21"
@@ -282,6 +366,18 @@ global_usagers_agriculteurs:
   layout_title_item_id: "titre_principal"
   layout_subtitle_item_id: "sous_titre"
   layers:
+    Coeur_data_gouv_PNForets:
+      layer_name: "Coeur_data_gouv_PNForets"
+      legend_label: "Cœur de Parc National"
+      symbology_source: "qgis"
+      geometry_mode: "polygon_fill"
+      renderer_type: "single"
+    AOA_2021_PNForet_21:
+      layer_name: "AOA_2021_PNForet_21"
+      legend_label: "AOA Parc National"
+      symbology_source: "qgis"
+      geometry_mode: "polygon_fill"
+      renderer_type: "single"
     pochoir_sd21:
       layer_name: "pochoir_sd21"
       legend_label: "Périmètre SD21"
@@ -308,6 +404,18 @@ global_resultats:
   layout_title_item_id: "titre_principal"
   layout_subtitle_item_id: "sous_titre"
   layers:
+    Coeur_data_gouv_PNForets:
+      layer_name: "Coeur_data_gouv_PNForets"
+      legend_label: "Cœur de Parc National"
+      symbology_source: "qgis"
+      geometry_mode: "polygon_fill"
+      renderer_type: "single"
+    AOA_2021_PNForet_21:
+      layer_name: "AOA_2021_PNForet_21"
+      legend_label: "AOA Parc National"
+      symbology_source: "qgis"
+      geometry_mode: "polygon_fill"
+      renderer_type: "single"
 
     pochoir_sd21:
       layer_name: "pochoir_sd21"
@@ -341,6 +449,18 @@ global_domaines:
   layout_title_item_id: "titre_principal"
   layout_subtitle_item_id: "sous_titre"
   layers:
+    Coeur_data_gouv_PNForets:
+      layer_name: "Coeur_data_gouv_PNForets"
+      legend_label: "Cœur de Parc National"
+      symbology_source: "qgis"
+      geometry_mode: "polygon_fill"
+      renderer_type: "single"
+    AOA_2021_PNForet_21:
+      layer_name: "AOA_2021_PNForet_21"
+      legend_label: "AOA Parc National"
+      symbology_source: "qgis"
+      geometry_mode: "polygon_fill"
+      renderer_type: "single"
     pochoir_sd21:
       layer_name: "pochoir_sd21"
       legend_label: "Périmètre SD21"
@@ -374,6 +494,18 @@ toutes:
   layout_title_item_id: "titre_principal"
   layout_subtitle_item_id: "sous_titre"
   layers:
+    Coeur_data_gouv_PNForets:
+      layer_name: "Coeur_data_gouv_PNForets"
+      legend_label: "Cœur de Parc National"
+      symbology_source: "qgis"
+      geometry_mode: "polygon_fill"
+      renderer_type: "single"
+    AOA_2021_PNForet_21:
+      layer_name: "AOA_2021_PNForet_21"
+      legend_label: "AOA Parc National"
+      symbology_source: "qgis"
+      geometry_mode: "polygon_fill"
+      renderer_type: "single"
     pochoir_sd21:
       layer_name: "pochoir_sd21"
       legend_label: "Périmètre SD21"

@@ -13,10 +13,15 @@ echo ================================
 echo   Generer des cartes - Periode libre
 echo ================================
 echo.
-set /p DATE_DEB=Date de debut (YYYY-MM-DD) ^> 
-set /p DATE_FIN=Date de fin   (YYYY-MM-DD) ^> 
-set /p DEPT=Code departement [21] ^> 
+for /f "usebackq delims=" %%T in (`powershell -NoProfile -Command "(Get-Date).ToString('yyyy-MM-dd')"`) do set "DATE_FIN_DEFAULT=%%T"
+for /f "usebackq delims=" %%T in (`powershell -NoProfile -Command "$y=(Get-Date).Year; '{0}-01-01' -f $y"`) do set "DATE_DEB_DEFAULT=%%T"
 
+set /p "DATE_DEB=Date de debut (YYYY-MM-DD) [!DATE_DEB_DEFAULT!] > "
+set /p "DATE_FIN=Date de fin   (YYYY-MM-DD) [!DATE_FIN_DEFAULT!] > "
+set /p "DEPT=Code departement [21] > "
+
+if "!DATE_DEB!"=="" set "DATE_DEB=!DATE_DEB_DEFAULT!"
+if "!DATE_FIN!"=="" set "DATE_FIN=!DATE_FIN_DEFAULT!"
 if "!DEPT!"=="" set "DEPT=21"
 
 echo.

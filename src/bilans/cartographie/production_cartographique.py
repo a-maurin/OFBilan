@@ -1218,6 +1218,23 @@ def _build_point_ctrl_manquement_expression(fields, date_deb: str, date_fin: str
     )
 
 
+def _build_point_ctrl_pa_expression(fields, date_deb: str, date_fin: str, config) -> Optional[str]:
+    """Filtre points de contrôle pour PA : contrôles dont le champ code_pa est non nul."""
+    field_names = {f.name() for f in fields}
+    required = {"date_ctrl", "num_depart", "code_pa"}
+    if not required.issubset(field_names):
+        return None
+
+    depart = getattr(config, "departement_code", "21")
+    date_cond = _build_date_condition(fields, "date_ctrl", date_deb, date_fin)
+    return (
+        f'{_depart_attr_condition("num_depart", depart)} AND '
+        f'("code_pa" IS NOT NULL AND "code_pa" != \'\') AND '
+        f'{date_cond}'
+    )
+
+
+
 def _build_point_ctrl_theme_expression(
     fields, date_deb: str, date_fin: str, config, theme_label: str
 ) -> Optional[str]:
@@ -1366,6 +1383,8 @@ def apply_date_filter(
         expr = _build_point_ctrl_global_expression(layer.fields(), date_deb, date_fin, use_config)
     elif filter_type == "point_ctrl_manquement":
         expr = _build_point_ctrl_manquement_expression(layer.fields(), date_deb, date_fin, use_config)
+    elif filter_type == "point_ctrl_pa":
+        expr = _build_point_ctrl_pa_expression(layer.fields(), date_deb, date_fin, use_config)
     elif filter_type == "point_ctrl_theme" and profile and getattr(profile, "theme_id", None):
         try:
             themes = _load_ref_themes_ctrl_safe(PROJECT_ROOT)

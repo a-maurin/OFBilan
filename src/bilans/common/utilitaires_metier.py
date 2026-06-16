@@ -963,10 +963,10 @@ def mask_resultat_induit_pa(resultat: pd.Series) -> pd.Series:
 
 
 def filter_points_induisant_pa(point: pd.DataFrame) -> pd.DataFrame:
-    """Contrôles dont le résultat induit une procédure administrative."""
-    if point is None or point.empty or "resultat" not in point.columns:
+    """Contrôles dont le champ code_pa est renseigné (valeur non nulle/non vide)."""
+    if point is None or point.empty or "code_pa" not in point.columns:
         return point.iloc[0:0].copy() if point is not None and not point.empty else pd.DataFrame()
-    return point.loc[mask_resultat_induit_pa(point["resultat"])].copy()
+    return point.loc[point["code_pa"].map(is_filled_procedure_code)].copy()
 
 
 def count_pa_induites_par_controles(
@@ -974,13 +974,13 @@ def count_pa_induites_par_controles(
     *,
     mask: pd.Series | None = None,
 ) -> int:
-    """Nombre de PA = contrôles dont le résultat contient « manquement »."""
-    if point is None or point.empty or "resultat" not in point.columns:
+    """Nombre de PA = contrôles dont le champ code_pa est renseigné."""
+    if point is None or point.empty or "code_pa" not in point.columns:
         return 0
     sub = point.loc[mask] if mask is not None else point
     if sub.empty:
         return 0
-    return int(mask_resultat_induit_pa(sub["resultat"]).sum())
+    return int(sub["code_pa"].map(is_filled_procedure_code).sum())
 
 
 def points_as_pa_lignes(point: pd.DataFrame) -> pd.DataFrame:
@@ -1045,14 +1045,10 @@ def agg_procedures_par_type_usager_domaine(
         )
 
     counts: dict[tuple[str, str], dict[str, int]] = {}
-    use_resultat_pa = "resultat" in df.columns
     for _, row in df.iterrows():
         dom = str(row.get(col_domaine, "Hors domaine") or "Hors domaine")
         has_pej = is_filled_procedure_code(row.get(col_code_pej))
-        if use_resultat_pa:
-            has_pa = resultat_induit_pa(row.get("resultat"))
-        else:
-            has_pa = is_filled_procedure_code(row.get(col_code_pa))
+        has_pa = is_filled_procedure_code(row.get(col_code_pa))
         has_pve = False  # nécessite les données PVe jointes ; 0 par défaut
 
         toks = _parse_type_usager_tokens(row.get(source_champ))
@@ -1112,14 +1108,10 @@ def agg_procedures_par_type_usager_theme(
         )
 
     counts: dict[tuple[str, str], dict[str, int]] = {}
-    use_resultat_pa = "resultat" in df.columns
     for _, row in df.iterrows():
         theme = str(row.get(col_theme, "Hors thème") or "Hors thème")
         has_pej = is_filled_procedure_code(row.get(col_code_pej))
-        if use_resultat_pa:
-            has_pa = resultat_induit_pa(row.get("resultat"))
-        else:
-            has_pa = is_filled_procedure_code(row.get(col_code_pa))
+        has_pa = is_filled_procedure_code(row.get(col_code_pa))
         has_pve = False
 
         toks = _parse_type_usager_tokens(row.get(source_champ))
@@ -1171,7 +1163,7 @@ def count_procedures_liees_controle_sur_points(
     Compte les procédures liées aux contrôles sur la période.
 
     - PEJ : champ ``code_pej`` renseigné sur le point.
-    - PA : contrôle dont le résultat contient « manquement » (insensible à la casse).
+    - PA : champ ``code_pa`` renseigné sur le point.
     """
     if point is None or point.empty:
         return 0, 0
