@@ -58,6 +58,7 @@ def test_procedures_usager_par_theme_sans_type_usager_dans_pa_ods() -> None:
             "theme": ["Thème A"],
             "type_usager": ["Agriculteur 1"],
             "resultat": ["Manquement"],
+            "code_pa": ["PA1"],
         }
     )
     pej = pd.DataFrame(
@@ -205,6 +206,7 @@ def test_procedures_par_theme_pa_uniquement_depuis_controles() -> None:
             "theme": ["Thème A", "Thème A"],
             "type_usager": ["Particulier 1", "Particulier 1"],
             "resultat": ["Manquement", "Manquement"],
+            "code_pa": ["PA1", "PA2"],
         }
     )
     pa_ods = pd.DataFrame(

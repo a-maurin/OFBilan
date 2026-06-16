@@ -15,6 +15,7 @@ def test_pa_par_domaine_depuis_controles_manquement(tmp_path: Path) -> None:
             "dc_id": ["dc1", "dc2", "dc3"],
             "date_ctrl": pd.to_datetime(["2025-01-01", "2025-02-01", "2025-03-01"]),
             "resultat": ["Manquement", "Manquement et infraction", "Conforme"],
+            "code_pa": ["PA1", "PA2", None],
             "domaine": ["Eau", "Faune", "Flore"],
             "theme": ["Th1", "Th2", "Th3"],
         }

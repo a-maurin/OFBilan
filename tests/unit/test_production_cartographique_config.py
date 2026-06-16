@@ -60,6 +60,8 @@ def test_resolve_map_title_custom_title_main() -> None:
     prof = ProfileConfig(
         id="demo",
         title="Bilan demo — Côte-d'Or",
+        layout_name="mock",
+        output_filename="mock.png",
         title_main="Contrôles — résultats — Côte-d'Or",
         date_deb="2025-01-01",
         date_fin="2025-12-31"
