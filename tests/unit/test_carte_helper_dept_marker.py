@@ -29,7 +29,7 @@ def test_ensure_maps_rejects_stale_dept21_for_dept89(monkeypatch, caplog, tmp_pa
     monkeypatch.setattr(carte_helper, "qgis_available", lambda: False)
     monkeypatch.setattr(carte_helper, "generate_maps", lambda *a, **k: [])
     monkeypatch.setattr(
-        "bilans.cartographie.pochoir_helper.warn_if_unknown_carto_dept",
+        "ofbilan.cartographie.pochoir_helper.warn_if_unknown_carto_dept",
         lambda _c: True,
     )
 
@@ -55,7 +55,7 @@ def test_generate_maps_only_returns_valid_dept(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(carte_helper, "qgis_available", lambda: True)
     monkeypatch.setattr(carte_helper, "get_qgis_app", lambda: object())
     monkeypatch.setattr(
-        "bilans.cartographie.production_cartographique.run_export",
+        "ofbilan.cartographie.production_cartographique.run_export",
         lambda *a, **k: None,
     )
 
@@ -80,11 +80,11 @@ def test_generate_maps_logs_exception_traceback(monkeypatch, caplog, tmp_path) -
     monkeypatch.setattr(carte_helper, "qgis_available", lambda: True)
     monkeypatch.setattr(carte_helper, "get_qgis_app", lambda: object())
     monkeypatch.setattr(
-        "bilans.cartographie.production_cartographique.run_export",
+        "ofbilan.cartographie.production_cartographique.run_export",
         _boom,
     )
     monkeypatch.setattr(
-        "bilans.cartographie.pochoir_helper.warn_if_unknown_carto_dept",
+        "ofbilan.cartographie.pochoir_helper.warn_if_unknown_carto_dept",
         lambda _c: True,
     )
 

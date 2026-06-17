@@ -97,11 +97,11 @@ def test_run_profiles_batch_combine_uses_data_out_dir(tmp_path: Path, monkeypatc
     monkeypatch.setattr(runner, "run_profile", _fake_run_profile)
     monkeypatch.setattr(carte_helper, "ensure_maps_for_profiles", lambda *a, **k: None)
     monkeypatch.setattr(
-        "bilans.engine.execution_lots_profils.get_out_dir", lambda subdir: tmp_path / "data" / "out" / subdir
+        "ofbilan.engine.execution_lots_profils.get_out_dir", lambda subdir: tmp_path / "data" / "out" / subdir
     )
     revealed: list[object] = []
     monkeypatch.setattr(
-        "bilans.engine.execution_lots_profils.reveal_path_in_file_manager",
+        "ofbilan.engine.execution_lots_profils.reveal_path_in_file_manager",
         lambda p: revealed.append(p),
     )
 
@@ -139,11 +139,11 @@ def test_run_profiles_batch_sequential_reveals_last_output(tmp_path: Path, monke
     monkeypatch.setattr(runner, "run_profile", _fake_run_profile)
     monkeypatch.setattr(carte_helper, "ensure_maps_for_profiles", lambda *a, **k: None)
     monkeypatch.setattr(
-        "bilans.engine.execution_lots_profils.get_out_dir", lambda subdir: tmp_path / "data" / "out" / subdir
+        "ofbilan.engine.execution_lots_profils.get_out_dir", lambda subdir: tmp_path / "data" / "out" / subdir
     )
     revealed: list[object] = []
     monkeypatch.setattr(
-        "bilans.engine.execution_lots_profils.reveal_path_in_file_manager",
+        "ofbilan.engine.execution_lots_profils.reveal_path_in_file_manager",
         lambda p: revealed.append(p),
     )
 
@@ -195,11 +195,11 @@ def test_run_profiles_batch_opens_all_generated_pdfs_for_last_profile(
     monkeypatch.setattr(runner, "run_profile", _fake_run_profile)
     monkeypatch.setattr(carte_helper, "ensure_maps_for_profiles", lambda *a, **k: None)
     monkeypatch.setattr(
-        "bilans.engine.execution_lots_profils.get_out_dir", lambda subdir: tmp_path / "data" / "out" / subdir
+        "ofbilan.engine.execution_lots_profils.get_out_dir", lambda subdir: tmp_path / "data" / "out" / subdir
     )
     revealed: list[Path] = []
     monkeypatch.setattr(
-        "bilans.engine.execution_lots_profils.reveal_path_in_file_manager",
+        "ofbilan.engine.execution_lots_profils.reveal_path_in_file_manager",
         lambda p: revealed.append(Path(p)),
     )
 

@@ -46,8 +46,8 @@ def test_infer_filter_type_agrainage():
     assert infer_filter_type_for_layer("localisation_infrac_FAITS_20260505", "global") == "pj"
 
 
-def test_parse_layer_tree_group_agrainage(qgs_text):
-    layers = parse_qgs_layer_tree_group(qgs_text, "agrainage")
+def test_parse_layer_tree_group_controles(qgs_text):
+    layers = parse_qgs_layer_tree_group(qgs_text, "Contrôles")
     assert any("point_ctrl" in n for n in layers)
     assert all(not is_basemap_layer(n) for n in layers)
 

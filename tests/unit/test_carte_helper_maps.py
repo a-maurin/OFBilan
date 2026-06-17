@@ -17,7 +17,7 @@ def test_resolve_deux_cartes_par_convention(tmp_path: Path, monkeypatch) -> None
     (cartes / "carte_demo.png").write_bytes(b"x")
     (cartes / "carte_demo_2.png").write_bytes(b"y")
 
-    monkeypatch.setattr("bilans.common.carte_helper.get_cartes_dir", lambda: cartes)
+    monkeypatch.setattr("ofbilan.common.carte_helper.get_cartes_dir", lambda: cartes)
 
     paths = resolve_profile_map_paths("demo")
     assert len(paths) == 2
@@ -30,7 +30,7 @@ def test_resolve_une_seule_carte_si_pas_de_seconde(tmp_path: Path, monkeypatch) 
     cartes.mkdir()
     (cartes / "carte_demo.png").write_bytes(b"x")
 
-    monkeypatch.setattr("bilans.common.carte_helper.get_cartes_dir", lambda: cartes)
+    monkeypatch.setattr("ofbilan.common.carte_helper.get_cartes_dir", lambda: cartes)
 
     paths = resolve_profile_map_paths("demo")
     assert len(paths) == 1
@@ -42,7 +42,7 @@ def test_profils_yaml_cartographie_prioritaire(tmp_path: Path, monkeypatch) -> N
     (cartes / "carte_x_contexte.png").write_bytes(b"a")
     (cartes / "carte_x_synthese.png").write_bytes(b"b")
 
-    monkeypatch.setattr("bilans.common.carte_helper.get_cartes_dir", lambda: cartes)
+    monkeypatch.setattr("ofbilan.common.carte_helper.get_cartes_dir", lambda: cartes)
 
     profile = {
         "cartographie": {

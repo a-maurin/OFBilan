@@ -41,7 +41,7 @@ def test_load_point_ctrl_missing_required_columns(monkeypatch, tmp_path: Path) -
         )
         return gpd.GeoDataFrame(df)
 
-    monkeypatch.setattr("bilans.common.chargeurs_donnees.gpd.read_file", fake_read_file)
+    monkeypatch.setattr("ofbilan.common.chargeurs_donnees.gpd.read_file", fake_read_file)
 
     # Appel : on s'attend à une KeyError pour date_ctrl manquant.
     with pytest.raises(KeyError):
@@ -94,7 +94,7 @@ def test_enrich_with_commune_from_geometry_adds_insee_and_name(monkeypatch, tmp_
     def fake_read_file(*args: Any, **kwargs: Any) -> gpd.GeoDataFrame:
         return communes
 
-    monkeypatch.setattr("bilans.common.chargeurs_donnees.gpd.read_file", fake_read_file)
+    monkeypatch.setattr("ofbilan.common.chargeurs_donnees.gpd.read_file", fake_read_file)
 
     out = loaders.enrich_with_commune_from_geometry(point, root)
 
@@ -135,7 +135,7 @@ def test_ensure_insee_from_communes_shp_builds_from_xy(monkeypatch, tmp_path: Pa
     def fake_read_file(*args: Any, **kwargs: Any) -> gpd.GeoDataFrame:
         return communes
 
-    monkeypatch.setattr("bilans.common.chargeurs_donnees.gpd.read_file", fake_read_file)
+    monkeypatch.setattr("ofbilan.common.chargeurs_donnees.gpd.read_file", fake_read_file)
 
     df = pd.DataFrame({"dc_id": ["a"], "x": [5.04], "y": [47.32]})
     out = loaders.ensure_insee_from_communes_shp(df, root, context="test")
@@ -165,7 +165,7 @@ def test_ensure_insee_from_communes_shp_builds_from_xy_faits(monkeypatch, tmp_pa
     def fake_read_file(*args: Any, **kwargs: Any) -> gpd.GeoDataFrame:
         return communes
 
-    monkeypatch.setattr("bilans.common.chargeurs_donnees.gpd.read_file", fake_read_file)
+    monkeypatch.setattr("ofbilan.common.chargeurs_donnees.gpd.read_file", fake_read_file)
 
     df = pd.DataFrame(
         {
@@ -208,7 +208,7 @@ def test_enrich_pej_commune_from_faits_coordinates_fills_nom_com(
     def fake_read_file(*args: Any, **kwargs: Any) -> gpd.GeoDataFrame:
         return communes
 
-    monkeypatch.setattr("bilans.common.chargeurs_donnees.gpd.read_file", fake_read_file)
+    monkeypatch.setattr("ofbilan.common.chargeurs_donnees.gpd.read_file", fake_read_file)
 
     pej = pd.DataFrame({"DC_ID": ["OF001"], "NOM_COM": [""], "x_faits": [5.04], "y_faits": [47.32]})
     out = loaders.enrich_pej_commune_from_faits_coordinates(pej, root, log=None)
@@ -276,7 +276,7 @@ def test_enrich_pve_positions_from_pnf_commune_centroids_joins_insee(
             crs="EPSG:4326",
         )
 
-    monkeypatch.setattr("bilans.common.chargeurs_donnees.gpd.read_file", fake_read_file)
+    monkeypatch.setattr("ofbilan.common.chargeurs_donnees.gpd.read_file", fake_read_file)
 
     # Colonnes GPS en chaînes (comme read_excel dtype=str) : doit accepter des floats centroïde.
     df = pd.DataFrame(
