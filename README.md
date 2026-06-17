@@ -1,4 +1,4 @@
-# Bilans Production 📊
+# OFBilan 📊
 
 Application de génération de bilans PDF d'activité à partir de données OSCEAN et PVe de l'Office Français de la Biodiversité (OFB).
 
