@@ -5,10 +5,10 @@ Application de génération de bilans PDF d'activité à partir de données OSCE
 ## Fonctionnalités Clés
 
 - **Bilan Global** : Vision départementale consolidée de l'activité sur une période donnée.
-- **Bilans Thématiques** : Bilans spécialisés et modulables (ex. chasse, agrainage, types d'usagers, synthèse d'activité PA PJ, etc).
+- **Bilans Thématiques** : Bilans spécialisés et modulables (ex. chasse, agrainage, types d'usagers, synthèse d'activité PA, PJ, etc).
 - **Rendu PDF & Graphiques** : Mise en page dynamique respectant la charte graphique de l'OFB.
 - **Cartographie QGIS Automatisée & Pilotée par YAML** : 
-  - Génération automatique des cartes thématiques intégrées au PDF. Par défaut : contrôles par domaines, résultats des contrôles, contrôles par type d'usager, procédures (PA? PEJ, PVe).
+  - Génération automatique des cartes thématiques intégrées au PDF. Par défaut : contrôles par domaines, résultats des contrôles, contrôles par type d'usager, procédures (PA, PEJ, PVe).
   - Configuration complète de la cartographie (requêtes spatiales, couches géographiques, emprise, styles de légendes) centralisée dans les profils YAML (`profils_cartes.yaml` et `config/profils_bilan/`).
   - Résolution dynamique des couches cartographiques via `layer_resolver.py` et interface graphique de paramétrage.
   - **Mécanisme de repli (Fallback)** : L'absence de QGIS ou d'images PNG générées ne bloque jamais la production finale du bilan PDF.
