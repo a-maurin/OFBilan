@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from bilans.common.utilitaires_metier import (
+from ofbilan.common.utilitaires_metier import (
     agg_controles_par_type_usager_domaine,
     agg_controles_par_type_usager_theme,
     agg_effectifs_usagers,

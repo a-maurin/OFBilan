@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from bilans.common import prompt_periode as pp
+from ofbilan.common import prompt_periode as pp
 
 
 def test_default_date_deb_is_first_day_of_current_year() -> None:

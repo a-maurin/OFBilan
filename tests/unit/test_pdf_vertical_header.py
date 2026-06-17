@@ -2,11 +2,11 @@
 
 from reportlab.platypus import Paragraph
 
-from bilans.common.pdf_usagers_domaine_table import (
+from ofbilan.common.pdf_usagers_domaine_table import (
     resolve_usagers_x_domaine_header_layout,
     usagers_x_domaine_col_widths,
 )
-from bilans.common.pdf_utils import VerticalText, _CELL_HEADER, ofb_table_wide
+from ofbilan.common.pdf_utils import VerticalText, _CELL_HEADER, ofb_table_wide
 
 
 def test_vertical_text_wrap_height_not_capped_by_small_avail_height() -> None:

@@ -64,8 +64,8 @@ def main(argv: list[str] | None = None) -> int:
     root: Path = args.root.resolve()
     sys.path.insert(0, str(root / "src"))
 
-    from bilans.common.chargeurs_donnees import load_pve
-    from bilans.engine.orchestrateur_profils import (
+    from ofbilan.common.chargeurs_donnees import load_pve
+    from ofbilan.engine.orchestrateur_profils import (
         _apply_restrict_geo_pnf,
         _filter_pve,
         load_profile_config,
@@ -104,7 +104,7 @@ def main(argv: list[str] | None = None) -> int:
 
     restrict = str(profile.get("restrict_geo") or "").strip().lower()
     if restrict == "pnf":
-        log = logging.getLogger("bilans.audit_pve")
+        log = logging.getLogger("ofbilan.audit_pve")
         log.setLevel(logging.WARNING)
         empty = pd.DataFrame()
         _, _, _, pve_f = _apply_restrict_geo_pnf(empty, empty, empty, pve_f, root, log)

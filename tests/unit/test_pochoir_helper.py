@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from bilans.cartographie.layer_resolver import resolve_layer_name
-from bilans.cartographie.pochoir_helper import (
+from ofbilan.cartographie.layer_resolver import resolve_layer_name
+from ofbilan.cartographie.pochoir_helper import (
     adapt_text_for_department,
     department_bounds,
     get_departements_admin_shp,
@@ -15,7 +15,7 @@ from bilans.cartographie.pochoir_helper import (
     warn_if_unknown_carto_dept,
     write_map_dept_marker,
 )
-from bilans.chemins_projet import PROJECT_ROOT
+from ofbilan.chemins_projet import PROJECT_ROOT
 
 ADMIN_SHP = PROJECT_ROOT / "ref/programme/sig/limites_admin_dep/DEPARTEMENT_ADMIN_Express_200207.shp"
 

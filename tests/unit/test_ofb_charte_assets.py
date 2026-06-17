@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from bilans.common.ofb_charte import (
+from ofbilan.common.ofb_charte import (
     CHARTE_ASSET_DEFAULT_FILES,
     IMG_BACKGROUND,
     IMG_BANNER,

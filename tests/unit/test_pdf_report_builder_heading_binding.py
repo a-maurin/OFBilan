@@ -7,7 +7,7 @@ from pathlib import Path
 from PIL import Image
 from reportlab.platypus import KeepTogether
 
-from bilans.common.pdf_report_builder import PDFReportBuilder
+from ofbilan.common.pdf_report_builder import PDFReportBuilder
 
 
 def _make_png(path: Path) -> Path:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from bilans.common.utilitaires_metier import (
+from ofbilan.common.utilitaires_metier import (
     agg_procedures_dossiers_par_domaine,
     agg_procedures_par_type_usager_domaine,
     build_tab_resultats,

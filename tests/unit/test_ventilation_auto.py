@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pandas as pd
 
-from bilans.engine import orchestrateur_profils as op
-from bilans.engine.generation_pdf_profil import resolve_ventilation_mode_global
-from bilans.engine.ventilation_temporelle import (
+from ofbilan.engine import orchestrateur_profils as op
+from ofbilan.engine.generation_pdf_profil import resolve_ventilation_mode_global
+from ofbilan.engine.ventilation_temporelle import (
     VENTILATION_JOURS_DEUX_ANS,
     VENTILATION_JOURS_SIX_MOIS,
     VENTILATION_JOURS_UN_AN,

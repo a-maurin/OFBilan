@@ -6,8 +6,8 @@ from pathlib import Path
 
 from reportlab.lib.units import mm
 
-from bilans.common.ofb_charte import IMG_FILIGRANE
-from bilans.common.pdf_report_builder import PDFReportBuilder
+from ofbilan.common.ofb_charte import IMG_FILIGRANE
+from ofbilan.common.pdf_report_builder import PDFReportBuilder
 
 
 def test_title_page_builds_with_charte_config(tmp_path: Path) -> None:

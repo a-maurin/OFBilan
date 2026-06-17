@@ -6,13 +6,13 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from bilans.common.pdf_presentation_config import (
+from ofbilan.common.pdf_presentation_config import (
     normalize_section_id,
     resolve_pdf_presentation_config,
     resolve_sec2_render_order,
     resolve_sections_for_toc,
 )
-from bilans.common.pdf_toc_inspection import (
+from ofbilan.common.pdf_toc_inspection import (
     assert_section_headings_order,
     extract_pdf_section_headings,
 )
@@ -84,8 +84,8 @@ def test_section_id_alias_maps_to_canonical() -> None:
 
 
 def test_agrainage_pdf_section_headings_order(tmp_path: Path, monkeypatch) -> None:
-    from bilans.common.bilan_config import BilanConfig
-    from bilans.engine import orchestrateur_profils as orch
+    from ofbilan.common.bilan_config import BilanConfig
+    from ofbilan.engine import orchestrateur_profils as orch
 
     profile = {
         "id": "agrainage",
@@ -169,8 +169,8 @@ def test_chasse_yaml_usagers_before_procedures() -> None:
 
 
 def test_chasse_pdf_section_headings_order(tmp_path: Path, monkeypatch) -> None:
-    from bilans.common.bilan_config import BilanConfig
-    from bilans.engine import orchestrateur_profils as orch
+    from ofbilan.common.bilan_config import BilanConfig
+    from ofbilan.engine import orchestrateur_profils as orch
 
     profile = {
         "id": "chasse",

@@ -1,5 +1,5 @@
 """Tests pour l'affichage des pourcentages entiers (somme 100 % sur les répartitions)."""
-from bilans.common.percent_format import (
+from ofbilan.common.percent_format import (
     format_pct_int_from_rate,
     int_percents_largest_remainder,
     tab_counts_to_pct_strings,

@@ -4,8 +4,8 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from bilans.cartographie.pochoir_helper import write_map_dept_marker
-from bilans.common import carte_helper
+from ofbilan.cartographie.pochoir_helper import write_map_dept_marker
+from ofbilan.common import carte_helper
 
 
 def _global_profile() -> dict:

@@ -103,7 +103,7 @@ def test_run_global_smoke(monkeypatch, tmp_path: Path) -> None:
     L'objectif est uniquement de vérifier que la fonction s'exécute sans erreur
     sur un jeu minimal, sans dépendre des fichiers sources réels.
     """
-    import bilans.engine.orchestrateur_profils as engine
+    import ofbilan.engine.orchestrateur_profils as engine
     pdf_mod = __import__("bilans.engine.generation_pdf_profil", fromlist=["_dummy"])
 
     # Chargeurs minimaux : renvoient de petits DataFrame ou des DataFrame vides.

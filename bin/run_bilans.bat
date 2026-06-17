@@ -21,5 +21,5 @@ set "PROJECT_ROOT=%~dp0..\"
 set "PYTHONPATH=%PROJECT_ROOT%src;!OSGEO4W_ROOT!\apps\!QGIS_APPS_DIR!\python;!PYTHONPATH!"
 
 echo Running Python with faulthandler...
-"!QGIS_PYTHON!" -X faulthandler -m bilans --profil global --cartes --date-deb 2025-01-01 --date-fin 2025-12-31 --dept-code 21
+"!QGIS_PYTHON!" -X faulthandler -m ofbilan --profil global --cartes --date-deb 2025-01-01 --date-fin 2025-12-31 --dept-code 21
 echo Exit code: !ERRORLEVEL!

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from bilans.engine.agregations_profil import _resultats_par_domaine_pour_pdf
+from ofbilan.engine.agregations_profil import _resultats_par_domaine_pour_pdf
 
 
 def test_resultats_par_domaine_conforme_nc_attente() -> None:

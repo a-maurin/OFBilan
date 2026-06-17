@@ -7,9 +7,9 @@ import pandas as pd
 import pytest
 from matplotlib.axes import Axes
 
-from bilans.chemins_projet import PROJECT_ROOT
-from bilans.common.chart_display_config import compute_pdf_ratios, load_chart_display_config
-from bilans.common.ofb_charte import COLOR_CHART_AUTRE_RESULTAT
+from ofbilan.chemins_projet import PROJECT_ROOT
+from ofbilan.common.chart_display_config import compute_pdf_ratios, load_chart_display_config
+from ofbilan.common.ofb_charte import COLOR_CHART_AUTRE_RESULTAT
 
 
 def test_compute_pdf_ratios_includes_thematique_sec21_sec22_mults() -> None:
@@ -52,7 +52,7 @@ def test_chart_bar_horizontal_stacked_en_attente_color(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """La série « En attente » doit utiliser le gris foncé charte (avant heuristique infraction)."""
-    from bilans.common import rendus_graphiques as rg
+    from ofbilan.common import rendus_graphiques as rg
 
     barh_colors: list = []
     orig_barh = Axes.barh

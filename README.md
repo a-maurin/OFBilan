@@ -27,7 +27,7 @@ pip install -e .
 pip install -e .[dev]
 ```
 
-Une fois installé, la commande `bilans` est disponible (raccourci pour `python -m bilans`).
+Une fois installé, la commande `bilans` est disponible (raccourci pour `python -m ofbilan`).
 
 ## Exécution
 
@@ -35,16 +35,16 @@ L'exécution est pilotée par les profils de configuration. Si aucun profil n'es
 
 ```bash
 # Lister les profils thématiques disponibles
-bilans --list-themes
+ofbilan --list-themes
 
 # Générer le bilan global
-bilans --profil global --date-deb 2025-01-01 --date-fin 2025-12-31 --dept-code 21
+ofbilan --profil global --date-deb 2025-01-01 --date-fin 2025-12-31 --dept-code 21
 
 # Générer des bilans thématiques spécifiques
-bilans --profil chasse --profil agrainage --date-deb 2025-01-01 --date-fin 2025-12-31 --dept-code 21
+ofbilan --profil chasse --profil agrainage --date-deb 2025-01-01 --date-fin 2025-12-31 --dept-code 21
 
 # Bilan d'un type d'usager spécifique sans génération de cartes
-bilans --profil types_usager_cible --date-deb 2025-01-01 --date-fin 2026-03-31 --dept-code 21 --type-usager 2 --no-cartes
+ofbilan --profil types_usager_cible --date-deb 2025-01-01 --date-fin 2026-03-31 --dept-code 21 --type-usager 2 --no-cartes
 ```
 
 ### Scripts de Lancement rapides
@@ -62,7 +62,7 @@ python -m pytest -q
 
 ## Structure du Projet
 
-- `src/bilans/` : Code source de l'application (calculs, PDF, CLI, cartographie).
+- `src/ofbilan/` : Code source de l'application (calculs, PDF, CLI, cartographie).
 - `config/` : Profils YAML de configuration et charte graphique.
 - `data/` : Dossiers des sources d'entrée (`sources/`) et des fichiers générés (`out/`).
 - `docs/` : Documentations d'architecture, schémas de données et guides de migration.

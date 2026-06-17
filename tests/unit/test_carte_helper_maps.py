@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from bilans.common.carte_helper import (
+from ofbilan.common.carte_helper import (
     expected_map_filenames,
     resolve_map_layout,
     resolve_profile_map_paths,

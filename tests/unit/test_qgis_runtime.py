@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from bilans.cartographie import qgis_runtime
+from ofbilan.cartographie import qgis_runtime
 
 
 def test_find_qgis_python_from_path_file(tmp_path: Path, monkeypatch) -> None:

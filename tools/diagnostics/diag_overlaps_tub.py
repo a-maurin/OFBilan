@@ -5,7 +5,7 @@ import sys
 
 # Charger les codes INSEE de la zone TUB
 sys.path.append(r'c:\Users\aguirre.maurin\Documents\GitHub\Bilans_production\src')
-from bilans.engine.orchestrateur_profils import load_tub_pnf_codes
+from ofbilan.engine.orchestrateur_profils import load_tub_pnf_codes
 tub_codes, _ = load_tub_pnf_codes(Path(r'c:\Users\aguirre.maurin\Documents\GitHub\Bilans_production'))
 
 path = r'c:\Users\aguirre.maurin\Documents\GitHub\Bilans_production\data\sources\sig\CARTO\pve_infractions.gpkg'

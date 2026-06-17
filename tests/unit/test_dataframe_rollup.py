@@ -1,6 +1,6 @@
 import pandas as pd
 
-from bilans.common.dataframe_rollup import rollup_small_categories
+from ofbilan.common.dataframe_rollup import rollup_small_categories
 
 
 def test_rollup_small_categories_groups_small_rows() -> None:

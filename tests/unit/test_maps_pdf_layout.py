@@ -5,8 +5,8 @@ from __future__ import annotations
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 
-from bilans.common.ofb_charte import MARGIN_BOTTOM, MARGIN_LEFT, MARGIN_RIGHT, MARGIN_TOP
-from bilans.common.pdf_report_builder import (
+from ofbilan.common.ofb_charte import MARGIN_BOTTOM, MARGIN_LEFT, MARGIN_RIGHT, MARGIN_TOP
+from ofbilan.common.pdf_report_builder import (
     _MAP_PAGE_WIDTH_FRACTION,
     compute_stacked_maps_width,
 )

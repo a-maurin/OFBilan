@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from bilans.cartographie.config_cartes_model import ProfileConfig
-from bilans.cartographie.layout_defaults import (
+from ofbilan.cartographie.config_cartes_model import ProfileConfig
+from ofbilan.cartographie.layout_defaults import (
     LAYOUT_DEFAULTS_YAML,
     load_layout_defaults,
     parse_layout_defaults_dict,

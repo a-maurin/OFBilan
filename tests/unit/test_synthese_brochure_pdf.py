@@ -48,7 +48,7 @@ def _pdf_section_lines(path: Path, start_marker: str, end_marker: str) -> list[s
 @pytest.mark.skipif(not OUT_DIR.is_dir(), reason="Données de sortie synthèse absentes")
 @pytest.mark.parametrize("cartes", [False, True])
 def test_brochure_pdf_has_two_pages(cartes: bool) -> None:
-    from bilans.engine.generation_pdf_synthese_brochure import generate_synthese_brochure_pdf_report
+    from ofbilan.engine.generation_pdf_synthese_brochure import generate_synthese_brochure_pdf_report
 
     generate_synthese_brochure_pdf_report(
         OUT_DIR,
@@ -67,7 +67,7 @@ def test_brochure_pdf_has_two_pages(cartes: bool) -> None:
 
 @pytest.mark.skipif(not OUT_DIR.is_dir(), reason="Données de sortie synthèse absentes")
 def test_generate_synthese_profile_outputs_detailed_and_brochure_with_same_period() -> None:
-    from bilans.engine.generation_pdf_synthese import generate_synthese_pdf_report
+    from ofbilan.engine.generation_pdf_synthese import generate_synthese_pdf_report
 
     generate_synthese_pdf_report(
         OUT_DIR,
@@ -98,7 +98,7 @@ def test_generate_synthese_profile_outputs_detailed_and_brochure_with_same_perio
 
 @pytest.mark.skipif(not OUT_DIR.is_dir(), reason="Données de sortie synthèse absentes")
 def test_detailed_pdf_section_3_1_keeps_low_share_themes() -> None:
-    from bilans.engine.generation_pdf_synthese import generate_synthese_pdf_report
+    from ofbilan.engine.generation_pdf_synthese import generate_synthese_pdf_report
 
     generate_synthese_pdf_report(
         OUT_DIR,
@@ -130,7 +130,7 @@ def test_detailed_pdf_section_3_1_keeps_low_share_themes() -> None:
 
 @pytest.mark.skipif(not OUT_DIR.is_dir(), reason="Données de sortie synthèse absentes")
 def test_detailed_pdf_section_3_1_keeps_entreprise_title_with_table() -> None:
-    from bilans.engine.generation_pdf_synthese import generate_synthese_pdf_report
+    from ofbilan.engine.generation_pdf_synthese import generate_synthese_pdf_report
 
     generate_synthese_pdf_report(
         OUT_DIR,
@@ -156,7 +156,7 @@ def test_detailed_pdf_section_3_1_keeps_entreprise_title_with_table() -> None:
 
 @pytest.mark.skipif(not OUT_DIR.is_dir(), reason="Données de sortie synthèse absentes")
 def test_detailed_pdf_highlights_control_definition_and_section_2_reminder() -> None:
-    from bilans.engine.generation_pdf_synthese import generate_synthese_pdf_report
+    from ofbilan.engine.generation_pdf_synthese import generate_synthese_pdf_report
 
     generate_synthese_pdf_report(
         OUT_DIR,

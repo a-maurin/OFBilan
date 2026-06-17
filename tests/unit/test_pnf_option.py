@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from bilans.chemins_projet import PROJECT_ROOT
-from bilans.engine.orchestrateur_profils import load_profile_config, resolve_options
+from ofbilan.chemins_projet import PROJECT_ROOT
+from ofbilan.engine.orchestrateur_profils import load_profile_config, resolve_options
 
 
 def test_types_usager_cible_pnf_desactive_par_defaut() -> None:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from bilans.engine.synthese_aggregations import (
+from ofbilan.engine.synthese_aggregations import (
     activite_par_type_usager,
     activite_police_par_theme,
     activite_usager_par_theme,
@@ -12,7 +12,7 @@ from bilans.engine.synthese_aggregations import (
     pej_hors_fiche_controle,
     procedures_par_theme,
 )
-from bilans.common.utilitaires_metier import (
+from ofbilan.common.utilitaires_metier import (
     agg_effectifs_usagers_par_theme,
     agg_resultat_counts_par_type_usager,
     agg_resultat_effectifs_par_type_usager,
@@ -70,7 +70,7 @@ def test_procedures_usager_par_theme_sans_type_usager_dans_pa_ods() -> None:
         }
     )
     pa = pd.DataFrame({"DC_ID": ["PA-1"], "ENTITE_ORIGINE_PROCEDURE": ["SD21"], "THEME": ["Thème A"]})
-    from bilans.engine.synthese_aggregations import procedures_usager_par_theme
+    from ofbilan.engine.synthese_aggregations import procedures_usager_par_theme
 
     out = procedures_usager_par_theme(pej, pa, point, "departement", "21")
     assert not out.empty

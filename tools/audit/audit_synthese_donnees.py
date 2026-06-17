@@ -9,12 +9,12 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from bilans.common.utilitaires_metier import (  # noqa: E402
+from ofbilan.common.utilitaires_metier import (  # noqa: E402
     agg_effectifs_usagers,
     agg_procedures_dossiers_par_theme,
 )
-from bilans.engine.agregations_profil import analyse_controles_global, analyse_pej_pa_global  # noqa: E402
-from bilans.engine.synthese_aggregations import (  # noqa: E402
+from ofbilan.engine.agregations_profil import analyse_controles_global, analyse_pej_pa_global  # noqa: E402
+from ofbilan.engine.synthese_aggregations import (  # noqa: E402
     activite_par_type_usager,
     activite_police_par_theme,
     activite_usager_par_theme,
@@ -31,7 +31,7 @@ DATE_FIN = "2025-12-31"
 
 
 def _load_sources():
-    from bilans.common.chargeurs_donnees import load_pa, load_pej, load_point_ctrl, load_pve
+    from ofbilan.common.chargeurs_donnees import load_pa, load_pej, load_point_ctrl, load_pve
 
     point = load_point_ctrl(ROOT, dept_code=DEPT, date_deb=DATE_DEB, date_fin=DATE_FIN)
     pej = load_pej(ROOT, dept_code=DEPT, date_deb=DATE_DEB, date_fin=DATE_FIN)
@@ -148,7 +148,7 @@ def main() -> int:
 
     # --- Double comptage PA § 2.3 ---
     print("\n--- PA § 2.3 (manquements + ODS) ---")
-    from bilans.common.utilitaires_metier import count_pa_induites_par_controles, points_as_pa_lignes
+    from ofbilan.common.utilitaires_metier import count_pa_induites_par_controles, points_as_pa_lignes
 
     nb_pa_manq = count_pa_induites_par_controles(point)
     s23_pa = int(proc_theme["nb_pa"].sum()) if not proc_theme.empty and "nb_pa" in proc_theme.columns else 0

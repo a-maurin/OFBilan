@@ -1,7 +1,7 @@
 """Résolution PNG catalogue global."""
 from pathlib import Path
 
-from bilans.common.carte_helper import resolve_map_png_path
+from ofbilan.common.carte_helper import resolve_map_png_path
 
 
 def test_resolve_map_png_from_catalog(tmp_path: Path, monkeypatch) -> None:

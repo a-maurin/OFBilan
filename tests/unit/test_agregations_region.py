@@ -1,9 +1,9 @@
 import pandas as pd
 from pathlib import Path
-from bilans.engine.agregations_region import analyse_region_par_departement
+from ofbilan.engine.agregations_region import analyse_region_par_departement
 
 def test_analyse_region_par_departement(tmp_path, monkeypatch):
-    import bilans.engine.agregations_region as mod
+    import ofbilan.engine.agregations_region as mod
     
     # Mock config to test with Region BFC (27)
     monkeypatch.setattr(mod, "get_departements_pour_perimetre", lambda e, c: ["21", "25"] if e == "region" and c == "27" else [])

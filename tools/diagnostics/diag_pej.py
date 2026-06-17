@@ -1,7 +1,7 @@
 import pandas as pd
 from pathlib import Path
-from bilans.common.chargeurs_donnees import load_pej, load_point_ctrl
-from bilans.engine.orchestrateur_profils import _filter_pej, load_tub_pnf_codes, _apply_restrict_geo_tub, ensure_insee_from_communes_shp, coalesced_insee_series, _filter_tub
+from ofbilan.common.chargeurs_donnees import load_pej, load_point_ctrl
+from ofbilan.engine.orchestrateur_profils import _filter_pej, load_tub_pnf_codes, _apply_restrict_geo_tub, ensure_insee_from_communes_shp, coalesced_insee_series, _filter_tub
 import yaml
 import logging
 import sys

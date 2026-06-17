@@ -7,13 +7,13 @@ PROJECT_ROOT = Path("c:/Users/aguirre.maurin/Documents/GitHub/Bilans_production"
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from bilans.common.chargeurs_donnees import (
+from ofbilan.common.chargeurs_donnees import (
     load_point_ctrl,
     load_tub_pnf_codes,
     ensure_insee_from_communes_shp,
     pnf_sig_union_membership_mask
 )
-from bilans.engine.orchestrateur_profils import _mask_insee_in_pnf_codes
+from ofbilan.engine.orchestrateur_profils import _mask_insee_in_pnf_codes
 
 def main():
     logging.basicConfig(level=logging.INFO)
@@ -55,7 +55,7 @@ def main():
     # Analyze the ones that are ONLY INSEE
     # Check coeur vs AOA
     import geopandas as gpd
-    from bilans.common.chargeurs_donnees import load_pnf_coeur_gdf, load_pnf_aoa_gdf
+    from ofbilan.common.chargeurs_donnees import load_pnf_coeur_gdf, load_pnf_aoa_gdf
     
     coeur = load_pnf_coeur_gdf(PROJECT_ROOT)
     aoa = load_pnf_aoa_gdf(PROJECT_ROOT)

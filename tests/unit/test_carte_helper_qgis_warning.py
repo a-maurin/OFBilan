@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 
-from bilans.common import carte_helper
+from ofbilan.common import carte_helper
 
 
 def test_generate_maps_warns_when_qgis_unavailable(monkeypatch, caplog) -> None:

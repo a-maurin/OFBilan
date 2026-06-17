@@ -1,7 +1,7 @@
 import pandas as pd
 from pathlib import Path
-from bilans.common.chargeurs_donnees import load_pve, load_point_ctrl
-from bilans.engine.orchestrateur_profils import _filter_pve, load_tub_pnf_codes, _apply_restrict_geo_tub
+from ofbilan.common.chargeurs_donnees import load_pve, load_point_ctrl
+from ofbilan.engine.orchestrateur_profils import _filter_pve, load_tub_pnf_codes, _apply_restrict_geo_tub
 import yaml
 import logging
 

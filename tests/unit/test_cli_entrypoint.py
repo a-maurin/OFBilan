@@ -4,7 +4,7 @@ import sys
 
 
 def test_bilans_cli_list_themes(monkeypatch, capsys) -> None:
-    import bilans.point_entree_cli as cli
+    import ofbilan.point_entree_cli as cli
 
     monkeypatch.setattr(sys, "argv", ["bilans", "--list-themes"])
     monkeypatch.setattr(cli, "_list_themes", lambda: ["demo_a", "demo_b"])
@@ -15,7 +15,7 @@ def test_bilans_cli_list_themes(monkeypatch, capsys) -> None:
 
 
 def test_bilans_cli_interactive_profile_prompt(monkeypatch) -> None:
-    import bilans.point_entree_cli as cli
+    import ofbilan.point_entree_cli as cli
 
     captured: dict[str, object] = {}
 
@@ -55,7 +55,7 @@ def test_bilans_cli_interactive_profile_prompt(monkeypatch) -> None:
 
 
 def test_bilans_cli_delegates_profile_compatibility_to_engine(monkeypatch) -> None:
-    import bilans.point_entree_cli as cli
+    import ofbilan.point_entree_cli as cli
 
     captured: dict[str, object] = {}
     monkeypatch.setattr(
@@ -75,7 +75,7 @@ def test_bilans_cli_delegates_profile_compatibility_to_engine(monkeypatch) -> No
 
 
 def test_bilans_cli_type_usager_and_cartes_options(monkeypatch) -> None:
-    import bilans.point_entree_cli as cli
+    import ofbilan.point_entree_cli as cli
 
     captured: dict[str, object] = {}
     monkeypatch.setattr(
@@ -138,7 +138,7 @@ def test_bilans_cli_type_usager_and_cartes_options(monkeypatch) -> None:
 
 
 def test_bilans_cli_brochure_option(monkeypatch) -> None:
-    import bilans.point_entree_cli as cli
+    import ofbilan.point_entree_cli as cli
 
     captured: dict[str, object] = {}
     monkeypatch.setattr(
@@ -183,7 +183,7 @@ def test_bilans_cli_brochure_option(monkeypatch) -> None:
 
 
 def test_list_type_usagers(monkeypatch, capsys) -> None:
-    import bilans.point_entree_cli as cli
+    import ofbilan.point_entree_cli as cli
 
     monkeypatch.setattr(sys, "argv", ["bilans", "--list-type-usagers"])
     monkeypatch.setattr(

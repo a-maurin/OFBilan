@@ -2,8 +2,8 @@ import sys
 from pathlib import Path
 sys.path.insert(0, 'src')
 import pandas as pd
-from bilans.common.chargeurs_donnees import load_pve, load_pej
-from bilans.engine.agregations_profil import _build_global_proc_detail
+from ofbilan.common.chargeurs_donnees import load_pve, load_pej
+from ofbilan.engine.agregations_profil import _build_global_proc_detail
 
 root = Path('.')
 pve = load_pve(root)

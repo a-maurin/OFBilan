@@ -2,8 +2,8 @@ import sys
 from pathlib import Path
 sys.path.insert(0, 'src')
 import pandas as pd
-from bilans.common.chargeurs_donnees import load_pej, load_point_ctrl, merge_pej_faits_locations
-from bilans.engine.agregations_profil import _build_global_proc_detail
+from ofbilan.common.chargeurs_donnees import load_pej, load_point_ctrl, merge_pej_faits_locations
+from ofbilan.engine.agregations_profil import _build_global_proc_detail
 
 root = Path('.')
 point = load_point_ctrl(root)

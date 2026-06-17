@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from bilans.common.cartographie_config import (
+from ofbilan.common.cartographie_config import (
     collect_bilan_carto_override,
     default_cartes_selection,
     expected_map_filenames_for_selection,
@@ -90,7 +90,7 @@ def test_resolve_selected_map_paths_order(tmp_path: Path, monkeypatch) -> None:
 def test_resolve_selected_map_paths_rejects_wrong_dept(tmp_path: Path, monkeypatch, caplog) -> None:
     import logging
 
-    from bilans.cartographie.pochoir_helper import write_map_dept_marker
+    from ofbilan.cartographie.pochoir_helper import write_map_dept_marker
 
     cartes = tmp_path / "cartes"
     cartes.mkdir()
@@ -111,7 +111,7 @@ def test_resolve_selected_map_paths_rejects_wrong_dept(tmp_path: Path, monkeypat
 
 
 def test_resolve_selected_map_paths_accepts_matching_dept(tmp_path: Path, monkeypatch) -> None:
-    from bilans.cartographie.pochoir_helper import write_map_dept_marker
+    from ofbilan.cartographie.pochoir_helper import write_map_dept_marker
 
     cartes = tmp_path / "cartes"
     cartes.mkdir()

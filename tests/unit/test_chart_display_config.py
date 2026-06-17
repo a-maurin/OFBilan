@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from bilans.chemins_projet import PROJECT_ROOT
-from bilans.common.chart_display_config import (
+from ofbilan.chemins_projet import PROJECT_ROOT
+from ofbilan.common.chart_display_config import (
     DEFAULT_CHART_DISPLAY_CONFIG,
     clamp_uniform_pie_ratio,
     compute_pdf_ratios,

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from bilans.common.utilitaires_metier import (
+from ofbilan.common.utilitaires_metier import (
     ZONE_KEY_DEPARTEMENT,
     ZONE_LABEL_DEPARTEMENT_HORS,
     _zone_count,

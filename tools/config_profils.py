@@ -50,7 +50,7 @@ def lister_profils(directory: Path) -> list[tuple[str, Path, str]]:
         return profils
 
     try:
-        from bilans.engine.catalogue_profils import list_profiles
+        from ofbilan.engine.catalogue_profils import list_profiles
 
         profile_ids = list_profiles()
     except Exception:

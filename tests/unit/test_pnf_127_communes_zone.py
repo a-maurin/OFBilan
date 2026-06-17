@@ -8,7 +8,7 @@ import geopandas as gpd
 import pandas as pd
 from shapely.geometry import Point
 
-from bilans.common import chargeurs_donnees as loaders
+from ofbilan.common import chargeurs_donnees as loaders
 
 
 def test_pnf_zone_from_coeur_oui_non() -> None:

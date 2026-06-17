@@ -2,7 +2,7 @@ import pandas as pd
 import pytest
 
 def test_load_pej_preserves_multiple_nans(monkeypatch, tmp_path):
-    from bilans.common import chargeurs_donnees
+    from ofbilan.common import chargeurs_donnees
     
     # Jeu de données simulé : 1 procédure avec ID, 2 sans ID de liaison (NaN/None)
     mock_df = pd.DataFrame({

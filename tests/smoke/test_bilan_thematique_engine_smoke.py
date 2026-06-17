@@ -28,7 +28,7 @@ def test_run_engine_smoke(monkeypatch, tmp_path: Path) -> None:
     Ce test ne vérifie pas le contenu des résultats, seulement que le moteur
     peut s'exécuter sur un profil simple sans dépendre des sources réelles.
     """
-    import bilans.engine.orchestrateur_profils as engine
+    import ofbilan.engine.orchestrateur_profils as engine
 
     # Profils : on force un profil minimal en surchargeant load_profile_config.
     def _dummy_profile(root: Path, profil_id: str) -> dict:
@@ -107,7 +107,7 @@ def test_run_engine_smoke(monkeypatch, tmp_path: Path) -> None:
 
 def test_run_engine_global_pipeline_smoke(monkeypatch, tmp_path: Path) -> None:
     """Test de fumée explicite du pipeline global via run_engine('global')."""
-    import bilans.engine.orchestrateur_profils as engine
+    import ofbilan.engine.orchestrateur_profils as engine
     core_mod = __import__("bilans.engine.agregations_profil", fromlist=["_dummy"])
     pdf_mod = __import__("bilans.engine.generation_pdf_profil", fromlist=["_dummy"])
 
@@ -147,7 +147,7 @@ def test_restrict_geo_pnf_pa_uses_manquement_controls(monkeypatch) -> None:
     Vérifie la règle métier PA : sous restriction PNF, seuls les DC_ID des
     contrôles en Manquement sont conservés pour les PA.
     """
-    import bilans.engine.orchestrateur_profils as engine
+    import ofbilan.engine.orchestrateur_profils as engine
 
     point = pd.DataFrame(
         [
@@ -178,7 +178,7 @@ def test_restrict_geo_pnf_sig_mask_or_insee(monkeypatch) -> None:
     Si l'INSEE n'est pas dans le référentiel tabulaire PNF mais que le masque
     SIG indique une localisation dans le parc, les lignes doivent être conservées.
     """
-    import bilans.engine.orchestrateur_profils as engine
+    import ofbilan.engine.orchestrateur_profils as engine
 
     point = pd.DataFrame(
         [

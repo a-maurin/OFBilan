@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from bilans.common.pdf_presentation_config import (
+from ofbilan.common.pdf_presentation_config import (
     INTERNAL_DIFFUSION_TITLE_NOTICE,
     apply_diffusion_pdf_suffix,
     build_title_lines_from_cfg,
@@ -31,7 +31,7 @@ from bilans.common.pdf_presentation_config import (
     resolve_title_page_config,
     should_show_placeholder,
 )
-from bilans.common.pdf_usagers_domaine_table import build_usagers_x_domaine_pdf_rows
+from ofbilan.common.pdf_usagers_domaine_table import build_usagers_x_domaine_pdf_rows
 
 
 def _write_yaml(root: Path, content: str) -> None:
@@ -438,7 +438,7 @@ def test_thematique_default_sections_usagers_before_procedures() -> None:
 
 
 def test_resolve_sec34_render_order_defaults_usagers_before_procedures() -> None:
-    from bilans.common.pdf_presentation_config import resolve_sec34_render_order
+    from ofbilan.common.pdf_presentation_config import resolve_sec34_render_order
 
     assert resolve_sec34_render_order({}) == ["sec4", "sec3"]
     assert resolve_sec34_render_order(
@@ -506,7 +506,7 @@ scopes:
 
 
 def test_summarize_procedures_par_type_usager() -> None:
-    from bilans.common.pdf_shared_sections import summarize_procedures_par_type_usager
+    from ofbilan.common.pdf_shared_sections import summarize_procedures_par_type_usager
 
     df = pd.DataFrame(
         [
