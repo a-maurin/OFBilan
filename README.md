@@ -1,3 +1,5 @@
+<img width="300" height="300" alt="logo_ofbilan_charte_1781727864459" src="https://github.com/user-attachments/assets/3bc88b1c-e18b-457e-9d4d-34add819a2cb" />
+
 # OFBilan 📊
 
 Application de génération de bilans PDF d'activité à partir de données OSCEAN et PVe de l'Office Français de la Biodiversité (OFB).
