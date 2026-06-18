@@ -227,7 +227,7 @@ class BasemapConfig:
 
 @dataclass
 class PerimetreConfig:
-    echelle: Literal["departement", "region", "national"] = "departement"
+    echelle: Literal["departement", "region", "bmi", "national"] = "departement"
     code: str = "21"
 
 

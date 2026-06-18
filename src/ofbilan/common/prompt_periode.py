@@ -83,13 +83,13 @@ def ask_periode_perimetre(
             return val
 
     def _validate_echelle(s: str) -> bool:
-        return s in ["departement", "region", "national"]
+        return s in ["departement", "region", "bmi", "national"]
 
     print("Période et périmètre géographique d'analyse (Entrée = valeur par défaut)")
     print("-" * 50)
     date_deb = _prompt("Date de début (YYYY-MM-DD)", date_deb_default, _validate_date)
     date_fin = _prompt("Date de fin (YYYY-MM-DD)", date_fin_default, _validate_date)
-    echelle = _prompt("Échelle (departement, region, national)", echelle_default, _validate_echelle)
+    echelle = _prompt("Échelle (departement, region, bmi, national)", echelle_default, _validate_echelle)
     code = "FR"
     if echelle != "national":
         code = _prompt("Code (ex: 21 pour département, 27 pour région BFC)", code_default)

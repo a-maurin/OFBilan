@@ -3,7 +3,7 @@ from pathlib import Path
 from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre
 
 def analyse_region_par_departement(point: pd.DataFrame, pa: pd.DataFrame, pej: pd.DataFrame, pve: pd.DataFrame, echelle: str, code: str, out_dir: Path) -> None:
-    if str(echelle).strip().lower() != "region":
+    if str(echelle).strip().lower() not in ("region", "bmi"):
         return
         
     dept_codes = get_departements_pour_perimetre(echelle, code)

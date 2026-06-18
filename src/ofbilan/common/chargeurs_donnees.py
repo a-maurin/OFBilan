@@ -371,11 +371,17 @@ def load_point_ctrl(
         raise KeyError("La colonne 'date_ctrl' est absente des données point_ctrl_*")
 
     # Filtrage optionnel par périmètre et période
-    if echelle is not None and code is not None and "num_depart" in df_all.columns:
-        from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre
-        dept_codes = get_departements_pour_perimetre(echelle, code)
-        if dept_codes and "FR" not in dept_codes:
-            df_all = df_all[df_all["num_depart"].astype(str).str.strip().isin(dept_codes)].copy()
+    if echelle is not None and code is not None:
+        from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre, get_bmi_filters
+        echelle_norm = str(echelle).strip().lower()
+        if echelle_norm == "bmi" and "entit_ctrl" in df_all.columns:
+            bmi_filters = get_bmi_filters(code)
+            entit_ctrl_val = str(bmi_filters.get("entit_ctrl", code)).upper()
+            df_all = df_all[df_all["entit_ctrl"].astype(str).str.upper().str.contains(entit_ctrl_val, case=True, na=False, regex=False)].copy()
+        elif echelle_norm != "bmi" and "num_depart" in df_all.columns:
+            dept_codes = get_departements_pour_perimetre(echelle, code)
+            if dept_codes and "FR" not in dept_codes:
+                df_all = df_all[df_all["num_depart"].astype(str).str.strip().isin(dept_codes)].copy()
     if date_deb is not None and date_fin is not None:
         try:
             deb_ts = pd.to_datetime(date_deb)
@@ -449,11 +455,16 @@ def load_pej(
         df = filtre_periode(df, "DATE_REF", deb_ts, fin_ts)
 
     if echelle is not None and code is not None:
-        from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre
-        dept_codes = get_departements_pour_perimetre(echelle, code)
-        if dept_codes and "FR" not in dept_codes:
-            entity_sds = [f"SD{d}" for d in dept_codes]
-            if "ENTITE_ORIGINE_PROCEDURE" in df.columns:
+        from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre, get_bmi_filters
+        echelle_norm = str(echelle).strip().lower()
+        if echelle_norm == "bmi" and "ENTITE_ORIGINE_PROCEDURE" in df.columns:
+            bmi_filters = get_bmi_filters(code)
+            entite_pej_val = str(bmi_filters.get("entite_pej", code)).upper()
+            df = df[df["ENTITE_ORIGINE_PROCEDURE"].astype(str).str.upper().str.contains(entite_pej_val, case=True, na=False, regex=False)].copy()
+        elif echelle_norm != "bmi" and "ENTITE_ORIGINE_PROCEDURE" in df.columns:
+            dept_codes = get_departements_pour_perimetre(echelle, code)
+            if dept_codes and "FR" not in dept_codes:
+                entity_sds = [f"SD{d}" for d in dept_codes]
                 df = df[df["ENTITE_ORIGINE_PROCEDURE"].astype(str).str.strip().isin(entity_sds)].copy()
 
     if not df.empty and "DC_ID" in df.columns:
@@ -1779,11 +1790,17 @@ def load_pve(
         df["INF-DATE-INTG"] = safe_to_datetime(df["INF-DATE-INTG"])
 
     if echelle is not None and code is not None:
-        from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre
-        dept_codes = get_departements_pour_perimetre(echelle, code)
-        dept_col = "INF-DEPART" if "INF-DEPART" in df.columns else "INF-DEPARTEMENT"
-        if dept_col in df.columns and dept_codes and "FR" not in dept_codes:
-            df = df[df[dept_col].astype(str).str.strip().isin(dept_codes)].copy()
+        from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre, get_bmi_filters
+        echelle_norm = str(echelle).strip().lower()
+        if echelle_norm == "bmi" and "nom_site" in df.columns:
+            bmi_filters = get_bmi_filters(code)
+            nom_site_val = str(bmi_filters.get("nom_site_pve", "BMI")).upper()
+            df = df[df["nom_site"].astype(str).str.upper().str.contains(nom_site_val, case=True, na=False, regex=False)].copy()
+        elif echelle_norm != "bmi":
+            dept_codes = get_departements_pour_perimetre(echelle, code)
+            dept_col = "INF-DEPART" if "INF-DEPART" in df.columns else "INF-DEPARTEMENT"
+            if dept_col in df.columns and dept_codes and "FR" not in dept_codes:
+                df = df[df[dept_col].astype(str).str.strip().isin(dept_codes)].copy()
     if date_deb is not None and date_fin is not None and "INF-DATE-INTG" in df.columns:
         n_before_period = len(df)
         deb_ts = pd.to_datetime(date_deb)

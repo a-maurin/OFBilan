@@ -119,7 +119,7 @@ def main() -> int:
     )
     parser.add_argument("--date-deb", type=str, default=None, help="Date début (YYYY-MM-DD).")
     parser.add_argument("--date-fin", type=str, default=None, help="Date fin (YYYY-MM-DD).")
-    parser.add_argument("--echelle", choices=["departement", "region", "national"], default=None, help="Échelle spatiale (departement, region, national).")
+    parser.add_argument("--echelle", choices=["departement", "region", "bmi", "national"], default=None, help="Échelle spatiale (departement, region, bmi, national).")
     parser.add_argument("--code", type=str, default=None, help="Code géographique (ex. 21, 27).")
     parser.add_argument(
         "--dept-code",

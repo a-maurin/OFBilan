@@ -12,6 +12,7 @@ import pandas as pd
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _TYPES_USAGERS_PATH = _PROJECT_ROOT / "ref" / "programme" / "tables_reference" / "types_usagers.csv"
 _REGIONS_YAML_PATH = _PROJECT_ROOT / "config" / "regions_referentiel.yaml"
+_BMI_YAML_PATH = _PROJECT_ROOT / "config" / "referentiel_bmi.yaml"
 logger = logging.getLogger(__name__)
 
 
@@ -22,12 +23,24 @@ def _load_regions_config() -> dict:
     with open(_REGIONS_YAML_PATH, "r", encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
 
+@functools.lru_cache(maxsize=1)
+def _load_bmi_config() -> dict:
+    if not _BMI_YAML_PATH.exists():
+        return {}
+    with open(_BMI_YAML_PATH, "r", encoding="utf-8") as f:
+        return yaml.safe_load(f) or {}
+
+def get_bmi_filters(code: str) -> dict:
+    """Retourne les paramètres de filtrage pour une BMI donnée."""
+    cfg = _load_bmi_config()
+    return cfg.get("BMI_CONFIG", {}).get(code, {})
+
 
 def get_departements_pour_perimetre(echelle: str, code: str) -> list[str]:
     """
     Renvoie la liste des codes départements correspondant au périmètre.
-    echelle: "departement", "region", ou "national"
-    code: ex: "21", "27", "FR"
+    echelle: "departement", "region", "national", ou "bmi"
+    code: ex: "21", "27", "FR", "BMI-NEC"
     """
     echelle_norm = str(echelle).strip().lower()
     code_norm = str(code).strip()
@@ -37,6 +50,9 @@ def get_departements_pour_perimetre(echelle: str, code: str) -> list[str]:
         cfg = _load_regions_config()
         region_deps = cfg.get("REGION_DEPARTEMENTS", {})
         return list(region_deps.get(code_norm, []))
+    if echelle_norm == "bmi":
+        filters = get_bmi_filters(code_norm)
+        return list(filters.get("departements", []))
     if echelle_norm == "national":
         return ["FR"]
     return []
@@ -56,6 +72,8 @@ def get_perimetre_name(echelle: str, code: str) -> str:
         return get_dept_name(code_norm)
     if echelle_norm == "region":
         return get_region_name(code_norm)
+    if echelle_norm == "bmi":
+        return code_norm
     if echelle_norm == "national":
         return "France"
     return f"{echelle_norm} {code_norm}"

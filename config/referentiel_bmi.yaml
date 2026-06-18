@@ -1,0 +1,46 @@
+# Référentiel des Brigades Mobiles d'Intervention (BMI)
+# Ce fichier centralise le rattachement géographique (départements du pochoir) 
+# et les chaînes de filtrage à rechercher dans les différentes sources de données.
+
+BMI_CONFIG:
+  "BMI-NEC":
+    departements: ["08", "10", "67", "68", "52", "51", "54", "55", "57", "88", "21", "25", "70", "39", "58", "71", "90", "89", "18", "28", "36", "37", "41", "45", "75", "77", "78", "91", "92", "93", "94", "95"]
+    entit_ctrl: "BMI-NEC"
+    entite_pej: "BMI-NEC"
+    nom_site_pve: "BMI Pôle Nord Est Centre"
+    
+  "BMI-SO":
+    departements: ["16", "17", "19", "23", "79", "24", "33", "40", "47", "64", "86", "87", "09", "12", "31", "32", "46", "81", "82"]
+    entit_ctrl: "BMI-SO"
+    entite_pej: "BMI-SO"
+    nom_site_pve: "BMI Pôle Sud Ouest"
+    
+  "BMI-SE":
+    departements: ["01", "03", "07", "15", "26", "43", "74", "38", "42", "69M", "63", "69", "73", "04", "05", "06", "13", "83", "84", "11", "30", "34", "48", "66", "2A", "2B"]
+    entit_ctrl: "BMI-SE"
+    entite_pej: "BMI-SE"
+    nom_site_pve: "BMI - Pole Sud-Est"
+    
+  "BMI-NO":
+    departements: ["22", "29", "35", "56", "02", "59", "60", "62", "80", "14", "27", "50", "61", "76", "44", "49", "53", "72", "85"]
+    entit_ctrl: "BMI-NO"
+    entite_pej: "BMI-NO"
+    nom_site_pve: "BMI Pôle Nord Ouest"
+    
+  "BMI-IFE":
+    departements: [] # À compléter par l'utilisateur
+    entit_ctrl: "BMI-IFE"
+    entite_pej: "BMI-IFE"
+    nom_site_pve: "BMI-IFE" # À vérifier/ajuster si différent
+    
+  "BMI-IFO":
+    departements: [] # À compléter par l'utilisateur
+    entit_ctrl: "BMI-IFO"
+    entite_pej: "BMI-IFO"
+    nom_site_pve: "BMI-IFO" # À vérifier/ajuster si différent
+    
+  "BMI-TIP":
+    departements: [] # À compléter par l'utilisateur
+    entit_ctrl: "BMI-TIP"
+    entite_pej: "BMI-TIP"
+    nom_site_pve: "BMI-TIP" # À vérifier/ajuster si différent

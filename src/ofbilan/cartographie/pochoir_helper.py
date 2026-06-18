@@ -73,24 +73,32 @@ def load_department_gdf(
 ) -> gpd.GeoDataFrame:
     """
     Extrait le polygone du département cible depuis DEPARTEMENT_ADMIN_Express_200207.shp.
+    Gère également la fusion des départements si le code correspond à une BMI.
     """
     shp = get_departements_admin_shp(project_root)
     gdf = _load_all_departements(str(shp.resolve()))
-    mask = _match_insee_dep(gdf[_INSEE_DEP_COL], dept_code)
+    
+    # Gestion BMI
+    from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre
+    target_depts = get_departements_pour_perimetre("bmi", dept_code) if dept_code.startswith("BMI") else [normalize_dept_code(dept_code)]
+    
+    mask = gdf[_INSEE_DEP_COL].astype(str).str.strip().str.upper().isin(target_depts)
     subset = gdf.loc[mask].copy()
     if subset.empty:
         raise ValueError(
-            f"Département {normalize_dept_code(dept_code)!r} introuvable dans {shp.name}"
+            f"Département(s) {target_depts} introuvable(s) dans {shp.name}"
         )
     if len(subset) > 1:
-        subset = subset.dissolve(by=_INSEE_DEP_COL)
-    nom_col = "NOM_DEP" if "NOM_DEP" in subset.columns else None
-    nom = str(subset.iloc[0][nom_col]) if nom_col else ""
+        subset = subset.dissolve()
+        
+    nom = f"Zone {dept_code}" if len(target_depts) > 1 else str(subset.iloc[0].get("NOM_DEP", ""))
+    insee = dept_code if len(target_depts) > 1 else normalize_dept_code(dept_code)
+    
     out = gpd.GeoDataFrame(
         {
-            "id": [f"DEPARTEM_{normalize_dept_code(dept_code)}"],
+            "id": [f"DEPARTEM_{insee}"],
             "nom": [nom],
-            "insee_dep": [normalize_dept_code(dept_code)],
+            "insee_dep": [insee],
             "insee_reg": [str(subset.iloc[0].get("INSEE_REG", ""))],
         },
         geometry=subset.geometry.values,
