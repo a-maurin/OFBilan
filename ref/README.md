@@ -1,6 +1,6 @@
 # Référentiels (`ref/`)
 
-Ce dossier est scindé en deux parties pour distinguer ce que lit **`python -m bilans`** (et la cartographie associée) du reste.
+Ce dossier est scindé en deux parties pour distinguer ce que lit **`python -m ofbilan`** (et la cartographie associée) du reste.
 
 ## `ref/programme/`
 

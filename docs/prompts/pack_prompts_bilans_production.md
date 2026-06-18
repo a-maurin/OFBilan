@@ -6,7 +6,7 @@
 Contexte projet:
 - Repo: Bilans_production
 - Architecture cible: src/bilans/** + config/profils_bilan/** + tests/**
-- CLI officielle: python -m bilans --profil ...
+- CLI officielle: python -m ofbilan --profil ...
 - Interdit: chemins legacy scripts/** sauf si je le demande explicitement
 
 Regles d'execution:
@@ -452,7 +452,7 @@ Contraintes strictes:
 Verification (obligatoire avant « termine »):
 1) python -m pytest -q tests/unit/test_carte_helper_maps.py tests/unit/test_maps_pdf_layout.py
 2) Smoke cible :
-   python -m bilans --profil <profil_id> --date-deb YYYY-MM-DD --date-fin YYYY-MM-DD --dept-code XX
+   python -m ofbilan --profil <profil_id> --date-deb YYYY-MM-DD --date-fin YYYY-MM-DD --dept-code XX
    avec et sans --cartes si pertinent.
 3) Checklist manuelle :
    - PNG au bon nom dans data/out/generateur_de_cartes/

@@ -2148,9 +2148,11 @@ def prepare_pve_communes_gpkg(root: Path) -> Path:
     df_pve["insee_clean"] = df_pve[insee_col].astype(str).str.zfill(5)
     counts = df_pve.groupby("insee_clean").size().reset_index(name="nb_pve")
     
-    # Jointure avec communes
+    # Jointure avec communes (sur centroïdes)
     communes_shp = ref_programme(root) / "sig" / "communes_21" / "communes.shp"
     gdf_com = gpd.read_file(communes_shp)
+    gdf_com["geometry"] = gdf_com.geometry.centroid
+    
     com_insee_col = next((c for c in gdf_com.columns if "insee" in str(c).lower()), "INSEE_COM")
     
     gdf_pve = gdf_com.merge(counts, left_on=com_insee_col, right_on="insee_clean", how="inner")

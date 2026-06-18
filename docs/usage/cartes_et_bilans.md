@@ -2,7 +2,7 @@
 
 Les bilans PDF intègrent des cartes PNG stockées dans `data/out/generateur_de_cartes/`.
 
-Entrée officielle : `python -m bilans --profil <id> [--cartes] [--no-cartes]`.
+Entrée officielle : `python -m ofbilan --profil <id> [--cartes] [--no-cartes]`.
 
 ### Nom des fichiers
 
@@ -38,11 +38,11 @@ Mode explicite via `cartographie.mode` dans le YAML profil ; sinon inféré depu
 
 ```bash
 # Global : sous-ensemble de cartes
-python -m bilans --profil global --cartes --carte global --carte global_domaines
-python -m bilans --profil global --cartes --carte all
+python -m ofbilan --profil global --cartes --carte global --carte global_domaines
+python -m ofbilan --profil global --cartes --carte all
 
 # Désactiver les cartes
-python -m bilans --profil chasse --no-cartes
+python -m ofbilan --profil chasse --no-cartes
 ```
 
 ### Fichiers de référence
@@ -60,11 +60,11 @@ python -m bilans --profil chasse --no-cartes
 
 ### Génération adaptative (pochoir, emprise, titres par département)
 
-La cartographie **dynamique** (pochoir depuis `ref/programme/sig/limites_admin_dep/DEPARTEMENT_ADMIN_Express_200207.shp`, zoom sur le département, titres adaptés) nécessite **PyQGIS** (`import qgis.core`). Le Python « classique » de `python -m bilans` ne le fournit en général pas → message du type *« QGIS non disponible »*.
+La cartographie **dynamique** (pochoir depuis `ref/programme/sig/limites_admin_dep/DEPARTEMENT_ADMIN_Express_200207.shp`, zoom sur le département, titres adaptés) nécessite **PyQGIS** (`import qgis.core`). Le Python « classique » de `python -m ofbilan` ne le fournit en général pas → message du type *« QGIS non disponible »*.
 
-#### Génération automatique depuis `python -m bilans` (sans PyQGIS in-process)
+#### Génération automatique depuis `python -m ofbilan` (sans PyQGIS in-process)
 
-Si QGIS est installé mais que `python -m bilans` affiche encore un avertissement PyQGIS, le moteur tente un **export en sous-processus** via `lancer_production_cartographique.bat` (variable `BILANS_CARTO_HEADLESS=1`). Les 4 cartes du catalogue global sont générées en un seul appel si la sélection les inclut toutes.
+Si QGIS est installé mais que `python -m ofbilan` affiche encore un avertissement PyQGIS, le moteur tente un **export en sous-processus** via `lancer_production_cartographique.bat` (variable `BILANS_CARTO_HEADLESS=1`). Les 4 cartes du catalogue global sont générées en un seul appel si la sélection les inclut toutes.
 
 Sinon, utiliser explicitement :
 
@@ -87,7 +87,7 @@ scripts\windows\lancer_bilans_qgis.bat --profil global --cartes --echelle depart
    ```
    Ce script utilise le Python QGIS/OSGeo4W (même logique que `lancer_production_cartographique.bat`).
 
-   **Sans argument**, le script configure uniquement l'environnement QGIS puis délègue toute la saisie à `python -m bilans` (profils, période, échelle, cartes) — pas de double invite batch/CLI.
+   **Sans argument**, le script configure uniquement l'environnement QGIS puis délègue toute la saisie à `python -m ofbilan` (profils, période, échelle, cartes) — pas de double invite batch/CLI.
 
 #### Windows — pré-générer les PNG puis bilan classique
 
@@ -99,7 +99,7 @@ scripts\windows\lancer_bilans_qgis.bat --profil global --cartes --echelle depart
 2. Vérifier `data/out/generateur_de_cartes/` : PNG + marqueur `carte_<nom>.XX.dept` (ex. `carte_global.25.dept`).
 3. Lancer le bilan avec le Python habituel :
    ```bat
-   python -m bilans --profil global --cartes --echelle departement --code 25 --date-deb 2025-01-01 --date-fin 2025-12-31
+   python -m ofbilan --profil global --cartes --echelle departement --code 25 --date-deb 2025-01-01 --date-fin 2025-12-31
    ```
 
 #### Vérifier que PyQGIS est détecté

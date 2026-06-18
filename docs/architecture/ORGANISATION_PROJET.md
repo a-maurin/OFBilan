@@ -25,10 +25,10 @@ Wrappers maintenus :
 
 ## CLI et packaging (phase 2)
 
-- Entree CLI officielle : `python -m bilans`
+- Entree CLI officielle : `python -m ofbilan`
 - Entree script console (apres installation) : `bilans`
 - Fichier de packaging : `pyproject.toml`
-- Pas de point d'entree legacy conserve : la CLI officielle est `python -m bilans`.
+- Pas de point d'entree legacy conserve : la CLI officielle est `python -m ofbilan`.
 - Tests : `pip install -e .[dev]` puis `python -m pytest -q` (ou `scripts/verify.ps1` / `scripts/verify.sh`) ; CI `.github/workflows/tests.yml`.
 
 ## Rationalisation config/ref (phase 3)

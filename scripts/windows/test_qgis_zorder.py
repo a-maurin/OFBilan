@@ -3,8 +3,8 @@ import os
 from pathlib import Path
 
 # Setup paths
-SCRIPT_DIR = Path(r"c:\Users\aguirre.maurin\Documents\GitHub\Bilans_production\src\bilans\cartographie")
-PROJECT_ROOT = Path(r"c:\Users\aguirre.maurin\Documents\GitHub\Bilans_production")
+SCRIPT_DIR = Path(r"c:\Users\aguirre.maurin\Documents\GitHub\OFBilan\src\ofbilan\cartographie")
+PROJECT_ROOT = Path(r"c:\Users\aguirre.maurin\Documents\GitHub\OFBilan")
 sys.path.insert(0, str(SCRIPT_DIR))
 sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -14,7 +14,7 @@ app = QgsApplication([], False)
 app.initQgis()
 
 try:
-    from bilans.cartographie.production_cartographique import get_effective_config, resolve_layers_for_config, resolve_profile_layers
+    from ofbilan.cartographie.production_cartographique import get_effective_config, resolve_layers_for_config, resolve_profile_layers
     CONFIG = get_effective_config()
     project_path = CONFIG.project_qgis_path
     print(f"Project QGIS path: {project_path}")
@@ -60,8 +60,8 @@ try:
                     print(f"     Geometry type: {layer.geometryType()}")
                     print(f"     Feature count: {layer.featureCount()}")
                     # Apply filter
-                    from bilans.cartographie.production_cartographique import apply_date_filter
-                    from bilans.cartographie.production_cartographique import _ConfigDeptOverride
+                    from ofbilan.cartographie.production_cartographique import apply_date_filter
+                    from ofbilan.cartographie.production_cartographique import _ConfigDeptOverride
                     carto_config = _ConfigDeptOverride(CONFIG, dept_code)
                     apply_date_filter(layer, lcfg, prof.date_deb, prof.date_fin, config=carto_config, profile=prof)
                     print(f"     Subset string applied: {layer.subsetString()}")

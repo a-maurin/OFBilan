@@ -12,7 +12,7 @@ Contexte projet — Bilans_production
 
 Repo : Bilans_production
 Langue réponses : français, concis, technique.
-CLI officielle : python -m bilans --profil <id> [--cartes] [--no-cartes] [--carte <map_id>|all]
+CLI officielle : python -m ofbilan --profil <id> [--cartes] [--no-cartes] [--carte <map_id>|all]
 Prérequis : Python ≥ 3.10, pip install -e .
 Ne pas versionner : data/out/, __pycache__/, .pytest_cache/, PNG debug à la racine.
 
@@ -215,7 +215,7 @@ Lot 3 — Harmonisation profils / layouts
 
 Lot 4 — Non-régression
 - tests unitaires layout defaults
-- smoke : python -m bilans --profil agrainage --cartes --date-deb 2025-01-01 --date-fin 2025-12-31 --dept-code 21
+- smoke : python -m ofbilan --profil agrainage --cartes --date-deb 2025-01-01 --date-fin 2025-12-31 --dept-code 21
 - comparaison visuelle PNG vs export manuel QGIS layout agrainage
 
 
@@ -237,8 +237,8 @@ Vérification obligatoire avant « terminé »
 2) tests ciblés :
    pytest tests/unit/test_layout_layers.py tests/unit/test_layer_resolver.py tests/unit/test_cartographie_config.py -q
 3) Si QGIS dispo :
-   python -m bilans --profil agrainage --cartes --dept-code 21
-   python -m bilans --profil chasse --cartes --dept-code 21
+   python -m ofbilan --profil agrainage --cartes --dept-code 21
+   python -m ofbilan --profil chasse --cartes --dept-code 21
 4) Checklist :
    - PNG dans data/out/generateur_de_cartes/
    - structure visuelle alignée agrainage (titres, légende, logos, échelle)

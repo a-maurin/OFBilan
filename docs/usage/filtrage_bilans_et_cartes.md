@@ -36,7 +36,7 @@ Période et département : toujours appliqués via `date_deb`, `date_fin`, `dept
 
 ### Alignement automatique (Lot 2)
 
-Lors d'un run `python -m bilans --cartes` :
+Lors d'un run `python -m ofbilan --cartes` :
 
 1. `resolve_qgis_profile_ids` détermine les profils QGIS à générer.
 2. `collect_bilan_carto_override` extrait `filter.keywords` et `filter.columns` du YAML bilan.
@@ -60,7 +60,7 @@ QGIS indisponible : pas d'erreur ; fallback PDF avec noms de fichiers attendus.
 Pour un profil `<id>` et une période donnée :
 
 1. Noter le nombre de contrôles agrégés (CSV ou PDF sec. 2).
-2. Générer la carte : `python -m bilans --profil <id> --cartes ...`
+2. Générer la carte : `python -m ofbilan --profil <id> --cartes ...`
 3. Vérifier `data/out/generateur_de_cartes/carte_<id>.png` (ou fichiers catalogue global).
 4. Contrôler visuellement que les points cartographiés correspondent au périmètre attendu.
 

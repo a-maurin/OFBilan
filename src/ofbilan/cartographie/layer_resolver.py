@@ -204,7 +204,7 @@ def resolve_layer_names(
         if candidates:
             spec = _ROLE_BY_NAME[role]
             
-            if role == "point_controles" and spec.prefer_latest_dated and date_deb and date_fin:
+            if spec.prefer_latest_dated and date_deb and date_fin:
                 try:
                     y_start = int(date_deb.split('-')[0])
                     y_end = int(date_fin.split('-')[0])

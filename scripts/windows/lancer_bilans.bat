@@ -5,7 +5,7 @@ set "PYTHONPATH=%CD%\src;%PYTHONPATH%"
 
 REM Si des arguments CLI sont fournis, mode non interactif direct.
 if not "%~1"=="" (
-  python -m bilans %*
+  python -m ofbilan %*
   exit /b %errorlevel%
 )
 
@@ -62,20 +62,20 @@ goto choix_menu
 
 :global
 echo === Bilan global ===
-python -m bilans --profil global --date-deb "!DATE_DEB!" --date-fin "!DATE_FIN!" --dept-code "!DEPT!"
+python -m ofbilan --profil global --date-deb "!DATE_DEB!" --date-fin "!DATE_FIN!" --dept-code "!DEPT!"
 goto fin
 
 :thematiques
 echo.
 echo Profils disponibles :
-python -m bilans --list-themes
+python -m ofbilan --list-themes
 echo.
 set /p PROFILS=Profil(s) a lancer (numero(s) ou id, separes par des espaces) [2 3] ^> 
 if "!PROFILS!"=="" set "PROFILS=2 3"
 set "ARGS="
 for %%p in (!PROFILS!) do set "ARGS=!ARGS! --profil %%p"
 echo === Bilans thematiques ===
-python -m bilans !ARGS! --date-deb "!DATE_DEB!" --date-fin "!DATE_FIN!" --dept-code "!DEPT!"
+python -m ofbilan !ARGS! --date-deb "!DATE_DEB!" --date-fin "!DATE_FIN!" --dept-code "!DEPT!"
 
 :fin
 echo.

@@ -9,16 +9,16 @@
 
 ```bash
 # Lister les profils (numérotation pour saisie interactive)
-python -m bilans --list-themes
+python -m ofbilan --list-themes
 
 # Bilan global
-python -m bilans --profil global --date-deb 2025-01-01 --date-fin 2025-12-31 --dept-code 21
+python -m ofbilan --profil global --date-deb 2025-01-01 --date-fin 2025-12-31 --dept-code 21
 
 # Un ou plusieurs bilans thématiques
-python -m bilans --profil chasse --profil agrainage --date-deb 2025-01-01 --date-fin 2025-12-31 --dept-code 21
+python -m ofbilan --profil chasse --profil agrainage --date-deb 2025-01-01 --date-fin 2025-12-31 --dept-code 21
 
 # Plusieurs profils avec récapitulatif combiné (si autorisé par leurs capacités)
-python -m bilans --profil chasse --profil agrainage --combine --date-deb ... --date-fin ... --dept-code 21
+python -m ofbilan --profil chasse --profil agrainage --combine --date-deb ... --date-fin ... --dept-code 21
 ```
 
 Règles d'usage :
@@ -29,9 +29,9 @@ Règles d'usage :
 
 ## Points d’entrée historiques
 
-- **`python -m bilans`** reste l’entrée officielle.
-- **`bilans.bilan_global`** : package historique retiré ; utiliser `python -m bilans --profil global`.
-- **`bilans.bilan_thematique.run_bilan_thematique`** : point d’entrée retiré ; utiliser `python -m bilans`.
+- **`python -m ofbilan`** reste l’entrée officielle.
+- **`bilans.bilan_global`** : package historique retiré ; utiliser `python -m ofbilan --profil global`.
+- **`bilans.bilan_thematique.run_bilan_thematique`** : point d’entrée retiré ; utiliser `python -m ofbilan`.
 
 ## Fichiers de configuration
 
