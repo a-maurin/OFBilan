@@ -274,7 +274,10 @@ def analyse_pej_pa_global(
     dept_codes = get_departements_pour_perimetre(echelle, code)
     sd_list = [f"SD{c}" for c in dept_codes] if dept_codes and "FR" not in dept_codes else []
     if "ENTITE_ORIGINE_PROCEDURE" in pej.columns:
-        pej_dept = pej[pej["ENTITE_ORIGINE_PROCEDURE"].astype(str).str.strip().isin(sd_list)].copy() if sd_list else pej.copy()
+        if echelle.lower() == "bmi":
+            pej_dept = pej.copy()
+        else:
+            pej_dept = pej[pej["ENTITE_ORIGINE_PROCEDURE"].astype(str).str.strip().isin(sd_list)].copy() if sd_list else pej.copy()
     else:
         pej_dept = pej.copy()
     if "DATE_REF" in pej_dept.columns:

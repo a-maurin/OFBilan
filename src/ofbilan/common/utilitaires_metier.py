@@ -85,6 +85,8 @@ def resolve_carto_dept_code(echelle: str, code: str, *, default: str = "21") -> 
     code_norm = str(code).strip()
     if echelle_norm == "departement":
         return code_norm or default
+    if echelle_norm == "bmi":
+        return code_norm
     dept_codes = get_departements_pour_perimetre(echelle_norm, code_norm)
     if dept_codes and dept_codes[0] != "FR":
         return dept_codes[0]

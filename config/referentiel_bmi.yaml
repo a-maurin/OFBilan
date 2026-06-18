@@ -10,7 +10,7 @@ BMI_CONFIG:
     nom_site_pve: "BMI Pôle Nord Est Centre"
     
   "BMI-SO":
-    departements: ["16", "17", "19", "23", "79", "24", "33", "40", "47", "64", "86", "87", "09", "12", "31", "32", "46", "81", "82"]
+    departements: ["16", "17", "19", "23", "79", "24", "33", "40", "47", "64", "65", "86", "87", "09", "12", "31", "32", "46", "81", "82"]
     entit_ctrl: "BMI-SO"
     entite_pej: "BMI-SO"
     nom_site_pve: "BMI Pôle Sud Ouest"
