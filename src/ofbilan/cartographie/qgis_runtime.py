@@ -98,6 +98,7 @@ def run_cartography_export_subprocess(
     date_fin: str,
     dept_code: str,
     target_dir: Optional[Path] = None,
+    diffusion: str = "interne",
 ) -> bool:
     """
     Lance l'export QGIS via le lanceur Windows (environnement OSGeo4W) ou Python QGIS direct.
@@ -124,6 +125,8 @@ def run_cartography_export_subprocess(
             date_fin,
             "--dept-code",
             dept_code,
+            "--diffusion",
+            diffusion,
         ]
         logger.info(
             "Génération cartes via QGIS (sous-processus) : profils=%s dept=%s",
@@ -177,6 +180,8 @@ def run_cartography_export_subprocess(
         date_fin,
         "--dept-code",
         dept_code,
+        "--diffusion",
+        diffusion,
     ]
     logger.info("Génération cartes via %s (profils=%s)", qgis_python.name, profiles_arg)
     try:

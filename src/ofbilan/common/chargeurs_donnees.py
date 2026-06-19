@@ -1916,6 +1916,10 @@ def merge_pej_faits_locations(
     dept_codes = get_departements_pour_perimetre(echelle, code)
     if dept_codes and "FR" not in dept_codes:
         sd_list = [f"SD{d}" for d in dept_codes]
+        if str(echelle).strip().lower() == "bmi":
+            from ofbilan.common.utilitaires_metier import get_bmi_filters
+            bmi_filters = get_bmi_filters(code)
+            sd_list.append(str(bmi_filters.get("entite_pej", code)).upper())
         gdf = gdf[gdf[ent_col].astype(str).str.strip().isin(sd_list)].copy()
         if gdf.empty:
             lg.info("Couche FAITS : aucune entité pour ce périmètre — pas de localisations jointes.")
@@ -2073,6 +2077,10 @@ def load_points_infrac_pj(
         target_depts = get_departements_pour_perimetre(echelle, code)
         if target_depts and "FR" not in target_depts:
             entite_list = [f"SD{d}" for d in target_depts]
+            if str(echelle).strip().lower() == "bmi":
+                from ofbilan.common.utilitaires_metier import get_bmi_filters
+                bmi_filters = get_bmi_filters(code)
+                entite_list.append(str(bmi_filters.get("entite_pej", code)).upper())
             entite_clause = "entite IN ('" + "', '".join(entite_list) + "')"
         else:
             entite_clause = "1=1"
@@ -2082,6 +2090,11 @@ def load_points_infrac_pj(
         gdf = gpd.read_file(path)
         gdf["natinf"] = pd.to_numeric(gdf["natinf"], errors="coerce")
         if target_depts and "FR" not in target_depts:
+            entite_list = [f"SD{d}" for d in target_depts]
+            if str(echelle).strip().lower() == "bmi":
+                from ofbilan.common.utilitaires_metier import get_bmi_filters
+                bmi_filters = get_bmi_filters(code)
+                entite_list.append(str(bmi_filters.get("entite_pej", code)).upper())
             mask = (gdf["entite"].isin(entite_list)) & (gdf["natinf"].isin(natinf_vals))
         else:
             mask = gdf["natinf"].isin(natinf_vals)

@@ -49,10 +49,11 @@ def _pej_perimetre(pej: pd.DataFrame, echelle: str, code: str) -> pd.DataFrame:
         return pd.DataFrame()
     out = pej.copy()
     if "ENTITE_ORIGINE_PROCEDURE" in out.columns:
-        dept_codes = get_departements_pour_perimetre(echelle, code)
-        if dept_codes and "FR" not in dept_codes:
-            sd_list = [f"SD{d}" for d in dept_codes]
-            out = out[out["ENTITE_ORIGINE_PROCEDURE"].astype(str).str.strip().isin(sd_list)].copy()
+        if str(echelle).strip().lower() != "bmi":
+            dept_codes = get_departements_pour_perimetre(echelle, code)
+            if dept_codes and "FR" not in dept_codes:
+                sd_list = [f"SD{d}" for d in dept_codes]
+                out = out[out["ENTITE_ORIGINE_PROCEDURE"].astype(str).str.strip().isin(sd_list)].copy()
     if out.empty or "DC_ID" not in out.columns:
         return out
     if "DATE_REF" in out.columns:

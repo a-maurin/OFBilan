@@ -437,15 +437,18 @@ def get_effective_config():
     return CONFIG
 
 
-class _ConfigDeptOverride:
-    """Wrapper autour de CONFIG pour surcharger uniquement departement_code (export cartes)."""
-    def __init__(self, base_config, departement_code_override: str):
+class _ConfigExportOverride:
+    """Wrapper autour de CONFIG pour surcharger departement_code et diffusion (export cartes)."""
+    def __init__(self, base_config, departement_code_override: str, diffusion: str = "interne"):
         self._base = base_config
         self._dept = departement_code_override
+        self._diffusion = diffusion
 
     def __getattr__(self, name: str):
         if name == "departement_code":
             return self._dept
+        if name == "diffusion":
+            return self._diffusion
         return getattr(self._base, name)
 
 
@@ -856,7 +859,7 @@ def get_numeric_fields(layer) -> List[str]:
     ]
 
 
-def apply_layer_symbology(layer, config: "LayerSymbologyConfig", geometry_mode_override: Optional[str] = None) -> None:
+def apply_layer_symbology(layer, config: "LayerSymbologyConfig", geometry_mode_override: Optional[str] = None, diffusion: str = "interne") -> None:
     """Applique la symbologie définie dans config à la couche."""
     from config_cartes import LayerSymbologyConfig
 
@@ -921,8 +924,16 @@ def apply_layer_symbology(layer, config: "LayerSymbologyConfig", geometry_mode_o
             centroid_layer = QgsCentroidFillSymbolLayer.create({})
             centroid_layer.setSubSymbol(marker_sym)
             base_symbol.appendSymbolLayer(centroid_layer)
-        else:
+        elif is_polygon and geom_mode == "polygon_fill":
             base_symbol = QgsFillSymbol.createSimple({"color": "31,120,180", "outline_color": "35,35,35"})
+        else:
+            base_symbol = QgsMarkerSymbol.createSimple({
+                "name": config.symbol_shape,
+                "color": "31,120,180",
+                "size": str(config.symbol_size_mm),
+                "outline_color": "35,35,35",
+            })
+            base_symbol.setOutputUnit(Qgis.RenderUnit.Millimeters)
 
         if config.classification_mode == "quantile":
             mode = QgsGraduatedSymbolRenderer.Quantile
@@ -990,6 +1001,10 @@ def apply_layer_symbology(layer, config: "LayerSymbologyConfig", geometry_mode_o
         else:
             values = [str(v) for v in values]
 
+        if str(diffusion).strip().lower() == "externe":
+            excluded = {"non renseigné", "en attente"}
+            values = [v for v in values if str(v).strip().lower() not in excluded]
+
         # Si le nombre de valeurs dépasse la palette fournie, on génère une palette dynamique (hue spread)
         def _get_color_for_idx(idx: int, total: int) -> QColor:
             if idx < len(palette_colors):
@@ -1054,8 +1069,22 @@ def apply_layer_symbology(layer, config: "LayerSymbologyConfig", geometry_mode_o
             )
             from dataclasses import replace
             fallback_cfg = replace(config, renderer_type="single")
-            apply_layer_symbology(layer, fallback_cfg, geometry_mode_override)
+            apply_layer_symbology(layer, fallback_cfg, geometry_mode_override, diffusion=diffusion)
             return
+
+    # Forcer la forme du patch de légende pour qu'il corresponde au marqueur
+    try:
+        from qgis.core import QgsLegendPatchShape, QgsGeometry, QgsPointXY
+        patch_shape = None
+        if not is_polygon or geom_mode == "polygon_centroid":
+            geom = QgsGeometry.fromPointXY(QgsPointXY(0, 0))
+            patch_shape = QgsLegendPatchShape(geom, False)
+        
+        if patch_shape and hasattr(layer, "legend") and layer.legend():
+            if hasattr(layer.legend(), "setLegendPatchShape"):
+                layer.legend().setLegendPatchShape(patch_shape)
+    except Exception as e:
+        logger.debug("Impossible de forcer le patch de légende : %s", e)
 
     layer.triggerRepaint()
 
@@ -1139,15 +1168,27 @@ def _build_pj_expression(fields, date_deb: str, date_fin: str, config, profile=N
     else:
         natinf_values = getattr(config, "natinf_pj", [27742, 25001])
 
-    depart = getattr(config, "departement_code", "21")
+    depart = str(getattr(config, "departement_code", "21")).strip()
     date_cond = _build_date_condition(fields, "date_saisine", date_deb, date_fin)
 
+    entite_list = []
+    if depart.lower().startswith("bmi"):
+        from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre, get_bmi_filters
+        dept_codes = get_departements_pour_perimetre("bmi", depart)
+        if dept_codes and "FR" not in dept_codes:
+            entite_list = [f"sd{d.lower()}" for d in dept_codes]
+        bmi_filters = get_bmi_filters(depart)
+        entite_list.append(str(bmi_filters.get("entite_pej", depart)).lower())
+    else:
+        entite_list.append(f"sd{depart.lower()}")
+
+    entite_cond = "lower(\"entite\") IN ('" + "', '".join(entite_list) + "')"
+
     if not natinf_values:
-        # Pas de filtre NATINF
-        return f"lower(\"entite\") = 'sd{depart.lower()}' AND {date_cond}"
+        return f"{entite_cond} AND {date_cond}"
 
     natinf_list = ", ".join(str(x) for x in natinf_values)
-    return f"lower(\"entite\") = 'sd{depart.lower()}' AND \"natinf\" IN ({natinf_list}) AND {date_cond}"
+    return f"{entite_cond} AND \"natinf\" IN ({natinf_list}) AND {date_cond}"
 
 
 def _build_point_ctrl_agrainage_expression(fields, date_deb: str, date_fin: str, config) -> Optional[str]:
@@ -1198,8 +1239,13 @@ def _build_point_ctrl_global_expression(fields, date_deb: str, date_fin: str, co
         return None
 
     depart = getattr(config, "departement_code", "21")
+    diffusion = getattr(config, "diffusion", "interne")
     date_cond = _build_date_condition(fields, "date_ctrl", date_deb, date_fin)
-    return f'{_depart_attr_condition("num_depart", depart)} AND {date_cond}'
+    
+    expr = f'{_depart_attr_condition("num_depart", depart)} AND {date_cond}'
+    if str(diffusion).strip().lower() == "externe":
+        expr += " AND lower(coalesce(\"resultat\", \"Resultat\", \"resultat_controle\", '')) IN ('conforme', 'manquement', 'infraction', 'manquement et infraction')"
+    return expr
 
 
 def _build_point_ctrl_manquement_expression(fields, date_deb: str, date_fin: str, config) -> Optional[str]:
@@ -2034,6 +2080,7 @@ def run_export(
     dept_code: Optional[str] = None,
     *,
     qgis_overrides: Optional[Dict[str, dict]] = None,
+    diffusion: str = "interne",
 ) -> None:
     """Génère les cartes en mode non interactif à partir de la config."""
     CONFIG = get_effective_config()
@@ -2089,7 +2136,7 @@ def run_export(
     dpi = CONFIG.output.dpi
     fmt = CONFIG.output.format
 
-    carto_config = _ConfigDeptOverride(CONFIG, effective_dept)
+    carto_config = _ConfigExportOverride(CONFIG, effective_dept, diffusion)
     exported_paths: list[Path] = []
 
     # Alias ref_themes_ctrl → config cartes : types_usager = global_usagers
@@ -2313,7 +2360,7 @@ def run_export(
                         prof_sym_src,
                         global_sym_src,
                     ):
-                        apply_layer_symbology(layer, lcfg)
+                        apply_layer_symbology(layer, lcfg, diffusion=getattr(carto_config, "diffusion", "interne"))
                     else:
                         logger.debug("  Symbologie QGIS conservée pour '%s'", resolved_name)
 
@@ -2474,6 +2521,12 @@ def main() -> None:
         default=None,
         help="Code département (ex: 21). Surcharge la config pour cet export.",
     )
+    parser.add_argument(
+        "--diffusion",
+        type=str,
+        default="interne",
+        help="Niveau de diffusion (interne, externe).",
+    )
     args = parser.parse_args()
 
     if args.gui:
@@ -2545,6 +2598,7 @@ def main() -> None:
                 date_deb=override_date_deb,
                 date_fin=override_date_fin,
                 dept_code=override_dept_code,
+                diffusion=args.diffusion,
             )
     except Exception as e:
         logger.exception("Erreur lors de la génération des cartes: %s", e)
@@ -2607,6 +2661,10 @@ def _extract_legend_info(layer, lcfg):
             if val is not None:
                 present_values.add(val)
 
+    base_shape = getattr(lcfg, "symbol_shape", "square") or "square"
+    if layer.geometryType() == 2 and getattr(lcfg, "geometry_mode", "") == "polygon_fill":
+        base_shape = "square"
+
     if rtype == "singleSymbol":
         from qgis.core import QgsFeatureRequest
         has_any = False
@@ -2616,8 +2674,7 @@ def _extract_legend_info(layer, lcfg):
         if not has_any:
             return None
         color = renderer.symbol().color().name() if renderer.symbol() else "#000000"
-        shape = getattr(lcfg, "symbol_shape", "square") or "square"
-        items.append({"label": title, "color": color, "shape": shape})
+        items.append({"label": title, "color": color, "shape": base_shape})
         title = None
     elif rtype == "categorizedSymbol":
         present_str_values = {str(v).lower() for v in present_values}
@@ -2627,7 +2684,7 @@ def _extract_legend_info(layer, lcfg):
             if str(val).lower() not in present_str_values: continue
             color = cat.symbol().color().name() if cat.symbol() else "#000000"
             label = cat.label() or str(val)
-            items.append({"label": label, "color": color})
+            items.append({"label": label, "color": color, "shape": base_shape})
     elif rtype == "graduatedSymbol":
         present_numeric_values = []
         for v in present_values:
@@ -2655,7 +2712,7 @@ def _extract_legend_info(layer, lcfg):
             if label in seen_labels:
                 continue
             seen_labels.add(label)
-            items.append({"label": label, "color": color})
+            items.append({"label": label, "color": color, "shape": base_shape})
     elif rtype == "RuleRenderer" or rtype == "ruleRenderer":
         root_rule = renderer.rootRule()
         if root_rule:
@@ -2683,7 +2740,7 @@ def _extract_legend_info(layer, lcfg):
                     continue
                     
                 color = rule.symbol().color().name()
-                items.append({"label": label, "color": color})
+                items.append({"label": label, "color": color, "shape": base_shape})
             
     if not items:
         logger.warning("Aucun item de légende extrait pour la couche '%s' (rtype=%s)", title or lcfg.layer_name, rtype)
@@ -2815,6 +2872,13 @@ def _draw_legend_on_image(image_path, legend_data):
                     (start_x + padding + rect_size, my),
                     (mx, cur_y + rect_size),
                     (start_x + padding, my)
+                ], fill=rgb, outline=(0, 0, 0, 255))
+            elif shape == "triangle":
+                mx = start_x + padding + rect_size / 2
+                overlay_draw.polygon([
+                    (mx, cur_y),
+                    (start_x + padding + rect_size, cur_y + rect_size),
+                    (start_x + padding, cur_y + rect_size)
                 ], fill=rgb, outline=(0, 0, 0, 255))
             else:
                 overlay_draw.rectangle(box_coords, fill=rgb, outline=(0, 0, 0, 255), width=1)

@@ -310,7 +310,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
     ),
             'localisation_infrac_FAITS_20260205': LayerSymbologyConfig(
         layer_name='localisation_infrac_FAITS_20260205',
-        legend_label='Procédures judiciaires (FAITS)',
+        legend_label="Procédure d'enquête judiciaire",
         filter_type='pj',
         geometry_mode='polygon_fill',
         renderer_type='graduated',
@@ -351,7 +351,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
             'localisation_infrac': LayerSymbologyConfig(
                 layer_name='localisation_infrac',
                 layer_role='pej',
-                legend_label='Procédures judiciaires (FAITS)',
+                legend_label="Procédure d'enquête judiciaire",
                 filter_type='pj',
                 geometry_mode='polygon_fill',
                 renderer_type='graduated',
@@ -431,7 +431,7 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
     ),
             'localisation_infrac_FAITS_20260205': LayerSymbologyConfig(
         layer_name='localisation_infrac_FAITS_20260205',
-        legend_label='Procédures judiciaires (FAITS)',
+        legend_label="Procédure d'enquête judiciaire",
         filter_type='pj',
         geometry_mode='polygon_fill',
         renderer_type='single',
@@ -444,17 +444,18 @@ DEFAULT_PROFILES: Dict[str, ProfileConfig] = {
     ),
             'communes_france': LayerSymbologyConfig(
         layer_name='communes_france',
-        legend_label='PVe',
+        legend_label='Procès verbal électronique',
         filter_type='',
-        symbology_source='qgis',
-        geometry_mode='polygon_fill',
+        symbology_source='yaml',
+        geometry_mode='polygon_centroid',
         renderer_type='single',
         field='',
         classification_mode='quantile',
         num_classes=5,
-        palette='Blues',
-        symbol_size_mm=2.0,
-        symbol_shape='circle'
+        palette='Oranges',
+        color_rgb=(255, 128, 0),
+        symbol_size_mm=3.0,
+        symbol_shape='triangle'
     ),
             'point_ctrl_20260205_wgs84': LayerSymbologyConfig(
         layer_name='point_ctrl_20260205_wgs84',

@@ -124,8 +124,8 @@ def render_sec22res(ctx: PdfContext) -> None:
     res_par_dom = _load_csv_opt(ctx.out_dir, "controles_global_resultats_par_domaine.csv")
     ctx.split_by_row = bool(tables_layout.get("ctx.split_by_row"))
 
-    def _mk_centered_image(chart_path: Path, width_ratio: float) -> RLImage:
-        w = ctx.avail_w * width_ratio
+    def _mk_centered_image(chart_path: Path, width_ratio: float):
+        w = ctx.builder.avail_w * width_ratio
         try:
             with PILImage.open(str(chart_path)) as im:
                 width_px, height_px = im.size
@@ -134,7 +134,13 @@ def render_sec22res(ctx: PdfContext) -> None:
             ratio = 0.45
         img = RLImage(str(chart_path), width=w, height=w * ratio)
         img.hAlign = "CENTER"
-        return img
+        
+        ctx.builder._figure_counter += 1
+        fig_text = f"Figure {ctx.builder._figure_counter}"
+        fig_para = Paragraph(fig_text, ctx.builder.styles.get("FigureCaption", ctx.builder.styles["BodySmall"]))
+        
+        from reportlab.platypus import KeepTogether
+        return KeepTogether([img, fig_para])
 
     block: list = []
     pie_res: dict[str, int] | None = None

@@ -82,16 +82,50 @@ def ask_periode_perimetre(
                 continue
             return val
 
-    def _validate_echelle(s: str) -> bool:
-        return s in ["departement", "region", "bmi", "national"]
-
     print("Période et périmètre géographique d'analyse (Entrée = valeur par défaut)")
     print("-" * 50)
     date_deb = _prompt("Date de début (YYYY-MM-DD)", date_deb_default, _validate_date)
     date_fin = _prompt("Date de fin (YYYY-MM-DD)", date_fin_default, _validate_date)
-    echelle = _prompt("Échelle (departement, region, bmi, national)", echelle_default, _validate_echelle)
+    
+    echelle_choices = [
+        ("departement", "Département"),
+        ("region", "Région"),
+        ("bmi", "Façade maritime (BMI)"),
+        ("national", "National"),
+    ]
+    echelle = ask_choice_list("Échelle spatiale", echelle_choices, echelle_default)
+    
     code = "FR"
     if echelle != "national":
         code = _prompt("Code (ex: 21 pour département, 27 pour région BFC)", code_default)
     print()
     return (date_deb, date_fin, echelle, code)
+
+
+def ask_choice_list(label: str, choices: list[Tuple[str, str]], default_val: str | None = None) -> str:
+    """Affiche une liste de choix numérotés et retourne la valeur sélectionnée."""
+    if not _is_interactive():
+        return default_val or (choices[0][0] if choices else "")
+
+    print(f"{label} :")
+    default_idx = None
+    for i, (val, desc) in enumerate(choices, 1):
+        if val == default_val:
+            default_idx = i
+        print(f"  [{i}] {desc}")
+    
+    hint = f" [{default_idx}]" if default_idx else ""
+    while True:
+        try:
+            raw = input(f"Votre choix (numéro){hint} : ").strip()
+        except EOFError:
+            raw = ""
+        
+        if not raw and default_idx is not None:
+            return default_val
+            
+        if raw.isdigit():
+            idx = int(raw)
+            if 1 <= idx <= len(choices):
+                return choices[idx - 1][0]
+        print("Saisie invalide, veuillez entrer le numéro correspondant.")

@@ -305,6 +305,7 @@ def generate_maps(
     dept_code: Optional[str] = None,
     bilan_profiles: dict[str, dict] | None = None,
     target_dir: Path | None = None,
+    diffusion: str = "interne",
 ) -> List[Path]:
     """
     Try to generate maps via QGIS. Returns list of generated map paths.
@@ -339,6 +340,7 @@ def generate_maps(
                 date_fin=date_fin_eff,
                 dept_code=carto_dept,
                 qgis_overrides=qgis_overrides,
+                diffusion=diffusion,
             )
             if target_dir and "CARTO_OUTPUT_DIR" in os.environ:
                 del os.environ["CARTO_OUTPUT_DIR"]
@@ -361,6 +363,7 @@ def generate_maps(
             date_fin=date_fin_eff,
             dept_code=carto_dept,
             target_dir=target_dir,
+            diffusion=diffusion,
         )
         if not ok:
             _warn_qgis_unavailable_for_cartes(carto_dept, subprocess_failed=True)
@@ -413,6 +416,7 @@ def ensure_maps_for_profiles(
     dept_code: Optional[str] = None,
     bilan_profiles: dict[str, dict] | None = None,
     target_dir: Path | None = None,
+    diffusion: str = "interne",
 ) -> List[Path]:
     """
     Ensure that maps exist for a list of cartographic profiles.
@@ -474,6 +478,7 @@ def ensure_maps_for_profiles(
             dept_code=dept_code,
             bilan_profiles=bilan_profiles,
             target_dir=target_dir,
+            diffusion=diffusion,
         )
 
     # Retourne l'ensemble des cartes trouvées / générées, sans doublons

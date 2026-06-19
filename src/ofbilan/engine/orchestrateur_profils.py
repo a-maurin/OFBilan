@@ -564,6 +564,7 @@ def _run_global_profile_via_yaml(
                 echelle=echelle, code=code,
                 bilan_profiles={profil_id: profile},
                 target_dir=out_dir,
+                diffusion=str(resolved_opts.get("diffusion", "interne")),
             )
         except Exception as e:
             logger = logging.getLogger("ofbilan.engine")
@@ -670,6 +671,7 @@ def _finalize_cartes_selection(
             echelle=echelle, code=code,
             bilan_profiles={bilan_key: profile},
             target_dir=target_dir,
+            diffusion=str(resolved_opts.get("diffusion", "interne")),
         )
     return resolved_opts
 
@@ -845,6 +847,7 @@ def resolve_options(profile: dict, cli_opts: dict | None = None) -> dict:
 
 def ask_interactive_options(profile: dict, current_opts: dict) -> dict:
     """Pose des questions interactives pour les options marquées ask: true."""
+    from ofbilan.common.prompt_periode import ask_choice_list
     options_config = profile.get("options", {})
     result = dict(current_opts)
 
@@ -864,17 +867,22 @@ def ask_interactive_options(profile: dict, current_opts: dict) -> dict:
     for key, cfg in askable:
         label = cfg.get("label", key)
         default = cfg.get("default", False)
-        default_hint = "O/n" if default else "o/N"
-        try:
-            answer = input(f"  {label} ? ({default_hint}) : ").strip().lower()
-        except (EOFError, KeyboardInterrupt):
-            answer = ""
-        if answer == "":
-            result[key] = default
-        elif answer in ("o", "oui", "y", "yes"):
-            result[key] = True
+        
+        # Option de type booléen
+        if isinstance(default, bool):
+            choices = [(True, "Oui"), (False, "Non")]
+            result[key] = ask_choice_list(label, choices, default_val=default)
         else:
-            result[key] = False
+            # Fallback pour d'autres types potentiels
+            default_hint = f" [{default}]" if default else ""
+            try:
+                answer = input(f"  {label} ?{default_hint} : ").strip()
+            except (EOFError, KeyboardInterrupt):
+                answer = ""
+            if answer == "":
+                result[key] = default
+            else:
+                result[key] = answer
 
     return result
 
@@ -5265,6 +5273,7 @@ def _run_engine_thematic_pipeline(
                 echelle=echelle, code=code,
                 bilan_profiles={profil_id: profile},
                 target_dir=out_dir,
+                diffusion=str(resolved_opts.get("diffusion", "interne")),
             )
         except Exception as e:
             logger = logging.getLogger("ofbilan.engine")

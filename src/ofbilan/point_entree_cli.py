@@ -262,9 +262,20 @@ def main() -> int:
     from ofbilan.engine.execution_lots_profils import run_profiles_batch
 
     profils_resolus = resolve_profile_ids(profils_raw)
+    from ofbilan.common.prompt_periode import ask_choice_list, _is_interactive
+
     cli_options: dict = {}
-    if args.preset:
-        cli_options["chart_preset"] = args.preset
+    
+    preset = args.preset
+    if not preset and _is_interactive():
+        preset = ask_choice_list(
+            "Preset de la taille des graphiques",
+            [("compact", "Compact"), ("standard", "Standard"), ("large", "Large")],
+            "standard"
+        )
+    if preset:
+        cli_options["chart_preset"] = preset
+
     if args.type_usager:
         try:
             cli_options["type_usager_target"] = _resolve_type_usager_targets(args.type_usager)
@@ -272,16 +283,41 @@ def main() -> int:
             logger.error("%s", e)
             print(e, file=sys.stderr)
             return 1
-    if args.cartes is not None:
-        cli_options["cartes"] = args.cartes
+
+    cartes = args.cartes
+    if cartes is None and _is_interactive():
+        cartes_rep = ask_choice_list("Génération des cartes", [(True, "Oui"), (False, "Non")], True)
+        cartes = bool(cartes_rep)
+    if cartes is not None:
+        cli_options["cartes"] = cartes
+
     if args.cartes_profil:
         cli_options["cartes_profil"] = args.cartes_profil
-    if args.pnf is not None:
-        cli_options["pnf"] = args.pnf
-    if args.diffusion is not None:
-        cli_options["diffusion"] = args.diffusion
-    if args.brochure:
+
+    pnf = args.pnf
+    if pnf is None and _is_interactive():
+        pnf_rep = ask_choice_list("Analyse PNF (cœur / hors-cœur)", [(True, "Oui"), (False, "Non")], False)
+        pnf = bool(pnf_rep)
+    if pnf is not None:
+        cli_options["pnf"] = pnf
+
+    diffusion = args.diffusion
+    if not diffusion and _is_interactive():
+        diffusion = ask_choice_list(
+            "Périmètre de diffusion",
+            [("interne", "Interne"), ("externe", "Externe")],
+            "interne"
+        )
+    if diffusion:
+        cli_options["diffusion"] = diffusion
+
+    brochure = args.brochure
+    if not brochure and _is_interactive():
+        brochure_rep = ask_choice_list("Activation du mode brochure", [(True, "Oui"), (False, "Non")], False)
+        brochure = bool(brochure_rep)
+    if brochure:
         cli_options["brochure"] = True
+
     if args.mots_cles:
         cli_options["mots_cles"] = args.mots_cles
 

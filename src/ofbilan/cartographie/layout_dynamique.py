@@ -80,8 +80,13 @@ def build_dynamic_layout(prof, proj: QgsProject, title_text: str) -> QgsPrintLay
     scalebar.setLinkedMap(map_item)
     scalebar.setUnits(QgsUnitTypes.DistanceKilometers)
     scalebar.setNumberOfSegmentsLeft(0)
-    scalebar.setNumberOfSegments(2)
-    scalebar.setUnitsPerSegment(10.0)
+    try:
+        from qgis.core import QgsScaleBarSettings
+        scalebar.setSegmentSizeMode(QgsScaleBarSettings.SegmentSizeFitWidth)
+        scalebar.setMinimumBarWidth(30)
+        scalebar.setMaximumBarWidth(80)
+    except Exception:
+        scalebar.applyDefaultSize()
     scalebar.setStyle('Double Box')
     
     scale_font = QFont("Arial", 12)
