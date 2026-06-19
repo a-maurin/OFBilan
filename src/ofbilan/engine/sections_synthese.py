@@ -11,9 +11,16 @@ from ofbilan.common.pdf_table_sort import (
     PDF_LABEL_CTRL_LOCATIONS_SHORT,
     PDF_LABEL_NON_CONFORME_LOCATIONS,
     PDF_LABEL_PEJ_COUNT,
+    pdf_metric_caption,
+    sort_dataframe_desc as _sort_desc,
 )
 from ofbilan.common.percent_format import format_pct_int_from_rate
-from ofbilan.engine.pdf_utils import nb_non_conformes_brut, truncate_with_dash
+from ofbilan.engine.pdf_utils import (
+    nb_non_conformes_brut,
+    truncate_with_dash,
+    pct_table_cell as _pct_table_cell,
+    truncate_with_dash as _truncate_with_dash,
+)
 from ofbilan.common.rendus_graphiques import (
     chart_bar_stacked, chart_line_evolution, chart_pie, chart_stackplot_resultats_domaine,
     chart_bar_horizontal_stacked
@@ -23,19 +30,27 @@ from ofbilan.engine.generation_pdf_synthese import (
     _nb_non_conformes_brut, _build_synthese_key_figure_rows, _rollup_small_categories,
     _wrap_table_label, _resultats_controles_pie_data, _pie_data_controles_par_type_usager,
     _display_type_usager, _chart_pie_compact_legend_kw, _format_pve_natinf_label,
-    _build_pve_natinf_table_rows, _KEY_FIGURES_GRAIN_NOTE, _SEC3_1_TABLE_NOTE
+    _build_pve_natinf_table_rows, _KEY_FIGURES_GRAIN_NOTE, _SEC3_1_TABLE_NOTE,
+    _build_rows_resultats_controles_pdf, _build_usager_theme_table_rows
 )
-from ofbilan.common.pdf_blocks import _mk_centered_image, pdf_metric_caption, ofb_table
 from xml.sax.saxutils import escape
+from ofbilan.common.pdf_shared_sections import (
+    build_sec6_methodology_html,
+    build_sec6_methodology_context,
+    load_glossary_config,
+    build_filtered_glossary_rows,
+)
+
+_ROOT = Path(__file__).resolve().parents[3]
 
 def render_sec1(ctx: PdfContext) -> None:
     ctx.builder.add_section("sec1", "1. Chiffres clés")
-    nb_nc= _nb_non_conformes_brut(ctx.tab_resultats) if ctx.nb_localisations > 0 else 0
+    nb_nc = _nb_non_conformes_brut(ctx.tab_resultats) if ctx.nb_localisations > 0 else 0
     kf_rows = _build_synthese_key_figure_rows(
         nb_effectifs=ctx.nb_effectifs,
-        nb_operations_controle=ctx.nb_operations_controle,
+        nb_operations_controle=ctx.nb_ops,
         nb_localisations=ctx.nb_localisations,
-        nb_nc=ctx.nb_nc,
+        nb_nc=nb_nc,
         nb_pej=ctx.nb_pej,
         nb_pa=ctx.nb_pa,
         nb_pve=ctx.nb_pve,
@@ -74,9 +89,9 @@ def render_sec1(ctx: PdfContext) -> None:
         other_label="Autres thèmes de contrôle",
         value_col="nb_total",
         min_pct=0.01,
-        sum_cols=["ctx.nb_localisations", "nb_pej_hors_controle", "nb_total"],
+        sum_cols=["nb_localisations", "nb_pej_hors_controle", "nb_total"],
     )
-    act_theme_total= (
+    act_theme_total = (
         int(ctx.act_theme["nb_total"].astype(float).sum())
         if ctx.act_theme is not None and not ctx.act_theme.empty
         else 0
@@ -85,11 +100,11 @@ def render_sec1(ctx: PdfContext) -> None:
         tbl = [["Thème", "Contrôles PA", "PEJ hors contrôle PA", "Total"]]
         for _, row in act_theme_display.iterrows():
             nb_row = int(row["nb_total"])
-            pct = format_pct_int_from_rate(nb_row / ctx.act_theme_total) if ctx.act_theme_total > 0 else "n.d."
+            pct = format_pct_int_from_rate(nb_row / act_theme_total) if act_theme_total > 0 else "n.d."
             tbl.append(
                 [
                     _wrap_table_label(row["theme"]),
-                    str(int(row.get("ctx.nb_localisations", 0))),
+                    str(int(row.get("nb_localisations", 0))),
                     str(int(row.get("nb_pej_hors_controle", 0))),
                     f"{nb_row} ({pct})",
                 ]
@@ -111,8 +126,8 @@ def render_sec1(ctx: PdfContext) -> None:
         level=2,
         toc_level=1,
     )
-    if tab_res_ctrl is not None and not tab_res_ctrl.empty:
-        tbl_pdf = _build_rows_resultats_controles_pdf(tab_res_ctrl)
+    if ctx.tab_resultats_controles is not None and not ctx.tab_resultats_controles.empty:
+        tbl_pdf = _build_rows_resultats_controles_pdf(ctx.tab_resultats_controles)
         pie_data = _resultats_controles_pie_data(ctx.tab_resultats)
         pie_path = None
         if pie_data:
@@ -141,14 +156,14 @@ def render_sec1(ctx: PdfContext) -> None:
         "des contrôles réalisés sur la période et les saisines PEJ ouvertes hors activité de "
         "contrôle."
     )
-    if proc_theme is not None and not proc_theme.empty:
+    if ctx.act_proc is not None and not ctx.act_proc.empty:
         tbl = [["Thème", "PEJ", "PA"]]
-        for _, row in proc_theme.head(25).iterrows():
+        for _, row in ctx.act_proc.head(25).iterrows():
             tbl.append(
                 [
                     _wrap_table_label(row["theme"]),
-                    str(int(row.get("ctx.nb_pej", 0))),
-                    str(int(row.get("ctx.nb_pa", 0))),
+                    str(int(row.get("nb_pej", 0))),
+                    str(int(row.get("nb_pa", 0))),
                 ]
             )
         ctx.builder.add_table(
@@ -180,6 +195,9 @@ def render_sec3(ctx: PdfContext) -> None:
         "Pour la partie procédurale (§ 3.3) : une procédure ne comporte qu'un seul type d'usager."
     )
 
+    act_par_type = _sort_desc(_load_csv_opt(ctx.out_dir, "synthese_activite_par_type_usager.csv"), ["nb_total"])
+    act_ut = _sort_desc(_load_csv_opt(ctx.out_dir, "synthese_activite_usager_theme.csv"), ["nb_total"])
+    
     pie_data = _pie_data_controles_par_type_usager(act_par_type)
     if pie_data:
         pie_path = chart_pie(
@@ -322,12 +340,13 @@ def render_sec3(ctx: PdfContext) -> None:
 
 def render_sec33(ctx: PdfContext) -> None:
     ctx.builder.add_section("sec3_3", "3.3. Activité procédurale par type d'usager", level=2, toc_level=1)
+    proc_ut = _load_csv_opt(ctx.out_dir, "synthese_procedures_usager_theme.csv")
     if proc_ut is not None and not proc_ut.empty:
         types = proc_ut["type_usager"].dropna().astype(str).unique().tolist()
         first = True
         for tu in types:
             sub = proc_ut[proc_ut["type_usager"].astype(str) == tu].copy()
-            sub = sub.sort_values(["ctx.nb_pej", "ctx.nb_pa"], ascending=False, kind="stable")
+            sub = sub.sort_values(["nb_pej", "nb_pa"], ascending=False, kind="stable")
             if sub.empty:
                 continue
             if not first:
@@ -338,8 +357,8 @@ def render_sec33(ctx: PdfContext) -> None:
                 tbl.append(
                     [
                         str(row["theme"])[:40],
-                        str(int(row.get("ctx.nb_pej", 0))),
-                        str(int(row.get("ctx.nb_pa", 0))),
+                        str(int(row.get("nb_pej", 0))),
+                        str(int(row.get("nb_pa", 0))),
                     ]
                 )
             ctx.builder.add_table(
@@ -406,17 +425,10 @@ def render_sec4(ctx: PdfContext) -> None:
 def render_sec5(ctx: PdfContext) -> None:
     ctx.builder.add_section("sec5", "5. Cartographie")
     if ctx.cartes:
-        map_id= str(ctx.profile.get("_map_id") or profil_id)
-        map_paths = resolve_profile_map_paths(ctx.map_id, profile=ctx.profile, presentation_cfg=ctx.presentation_cfg)
-        map_layout = resolve_map_layout(profile=ctx.profile, presentation_cfg=ctx.presentation_cfg)
-        if map_paths:
-            ctx.builder.add_maps(map_paths, layout=map_layout)
+        if ctx.global_map_paths:
+            ctx.builder.add_maps(ctx.global_map_paths, layout=ctx.global_map_layout)
         elif ctx.show_placeholder:
-            expected = expected_map_filenames(ctx.map_id, profile=ctx.profile, presentation_cfg=ctx.presentation_cfg)
-            files_hint = ", ".join(f"<b>{n}</b>" for n in expected) or f"<b>carte_{ctx.map_id}.png</b>"
-            ctx.builder.add_paragraph(
-                f"<i>Carte(s) non disponible(s). Déposez {files_hint} dans le dossier des ctx.cartes.</i>"
-            )
+            ctx.builder.add_paragraph("<i>Carte(s) non disponible(s).</i>")
     elif ctx.show_placeholder:
         ctx.builder.add_paragraph("<i>Cartographie désactivée pour ce bilan.</i>")
 
@@ -429,10 +441,10 @@ def render_sec6(ctx: PdfContext) -> None:
         effective_cfg=ctx.presentation_cfg,
         context=build_sec6_methodology_context(
             period_str=f"du {ctx.date_deb.date():%d/%m/%Y} au {ctx.date_fin.date():%d/%m/%Y}",
-            dept_name=f"de la {ctx.dept_name_typo}",
-            dept_code=str(ctx.dept_code),
-            profile_label=profile_label or "Synthèse PA / PJ",
-            profile_id=profil_id,
+            perimetre_name=f"de la {ctx.dept_name_typo}",
+            perimetre_code=str(ctx.dept_code),
+            profile_label=ctx.profile.get("label", "Synthèse PA / PJ"),
+            profile_id=ctx.profile.get("id", "synthese_activite_PA_PJ"),
             diffusion=ctx.diffusion,
             nb_localisations=ctx.nb_localisations,
             nb_pej=ctx.nb_pej,

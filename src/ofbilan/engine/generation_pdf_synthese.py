@@ -353,6 +353,10 @@ def _generate_synthese_pdf(
     ref_pie_w = ref_pie["width_ratio"]
     ref_pie_fs = ref_pie["figure_scale"]
     ref_pie_legend_fs = ref_pie["legend_fontsize"]
+    chart_bar_w = chart_ratios["chart_base"]
+    legend_fontsize = float(chart_ratios.get("legend_fontsize", 8.0))
+    legend_ncol_max = int(chart_ratios.get("legend_ncol_max", 4.0))
+    figure_scale = float(chart_ratios.get("figure_scale", 1.0))
 
     cfg = BilanConfig.from_strings(
         str(date_deb.date()),
@@ -386,9 +390,14 @@ def _generate_synthese_pdf(
     pej_resume = _load_csv_opt(out_dir, "pej_global_resume.csv")
     pa_resume = _load_csv_opt(out_dir, "pa_global_resume.csv")
     pve_resume = _load_csv_opt(out_dir, "pve_global_resume.csv")
+    pve_natinf = _sort_desc(_load_csv_opt(out_dir, "pve_global_par_natinf.csv"), ["nb"])
+    agg_domaine = _load_csv_opt(out_dir, "controles_global_par_domaine.csv")
+    cross_usager_dom = _load_csv_opt(out_dir, "controles_global_usager_par_domaine.csv")
+    usagers_resume = _load_csv_opt(out_dir, "controles_global_usagers_resume.csv")
 
     nb_localisations = int(resume.iloc[0]["nb_localisations"]) if resume is not None and not resume.empty else 0
     nb_operations_controle = int(resume.iloc[0]["nb_operations_controle"]) if resume is not None and not resume.empty and "nb_operations_controle" in resume.columns else 0
+    nb_ops = nb_operations_controle
     nb_pej = int(pej_resume.iloc[0]["nb_pej_global"]) if pej_resume is not None and not pej_resume.empty else 0
     nb_pa = int(pa_resume.iloc[0]["nb_pa_global"]) if pa_resume is not None and not pa_resume.empty else 0
     nb_pve = int(pve_resume.iloc[0]["nb_pve_global"]) if pve_resume is not None and not pve_resume.empty else 0
@@ -426,6 +435,22 @@ def _generate_synthese_pdf(
     pdf_name = output_filename or f"{profil_id}_{safe_name}.pdf"
     pdf_path = apply_diffusion_pdf_suffix(out_dir / pdf_name, diffusion)
     charte_cfg = resolve_charte_config(presentation_cfg)
+    
+    from ofbilan.common.pdf_presentation_config import resolve_tables_layout
+    tables_layout = resolve_tables_layout(presentation_cfg)
+    
+    map_captions: list[str] = []
+    if cartes:
+        from ofbilan.common.carte_helper import resolve_profile_map_paths, resolve_map_layout
+        map_id = str(profile.get("_map_id") or "global").strip() or "global"
+        global_map_paths = resolve_profile_map_paths(
+            map_id, profile=profile, presentation_cfg=presentation_cfg, target_dir=out_dir
+        )
+        global_map_layout = resolve_map_layout(profile=profile, presentation_cfg=presentation_cfg)
+    else:
+        map_id = str(profile.get("_map_id") or "global").strip() or "global"
+        global_map_paths = []
+        global_map_layout = "vertical"
     title_page_cfg = resolve_title_page_config(_ROOT, scope=scope, profile_id=profil_id)
     
     from reportlab.lib.pagesizes import A4
@@ -466,16 +491,15 @@ def _generate_synthese_pdf(
 
     from ofbilan.engine.pdf_context import PdfContext
     from ofbilan.engine.sections_synthese import (
-        render_sec1, render_sec22, render_sec23, render_sec3, render_sec31,
-        render_sec32, render_sec33, render_sec4, render_sec5, render_sec6
+        render_sec1, render_sec3, render_sec33, render_sec4, render_sec5, render_sec6
     )
     from ofbilan.engine.registre_sections_pdf import SectionRegistry
     
     ctx = PdfContext(
         builder=builder,
-        profile={},
-        presentation_cfg={},
-        behavior_cfg={},
+        profile=profile,
+        presentation_cfg=presentation_cfg,
+        behavior_cfg=behavior_cfg,
         show_placeholder=show_placeholder,
         date_deb=date_deb,
         date_fin=date_fin,
@@ -499,15 +523,14 @@ def _generate_synthese_pdf(
         nb_localisations=nb_localisations,
         nb_ops=nb_ops,
         nb_effectifs=nb_effectifs,
-        nb_operations_controle=nb_operations_controle,
         nb_pej=nb_pej,
         nb_pa=nb_pa,
         nb_pve=nb_pve,
         tab_resultats=tab_resultats,
-        tab_resultats_controles=tab_resultats_controles,
+        tab_resultats_controles=tab_res_ctrl,
         agg_domaine=agg_domaine,
         act_theme=act_theme,
-        act_proc=act_proc,
+        act_proc=proc_theme,
         pve_natinf=pve_natinf,
         pej_top=None,
         agg_usager=None,
@@ -523,11 +546,7 @@ def _generate_synthese_pdf(
 
     registry = SectionRegistry()
     registry.register("sec1", render_sec1)
-    registry.register("sec2_2", render_sec22)
-    registry.register("sec2_3", render_sec23)
     registry.register("sec3", render_sec3)
-    registry.register("sec3_1", render_sec31)
-    registry.register("sec3_2", render_sec32)
     registry.register("sec3_3", render_sec33)
     registry.register("sec4", render_sec4)
     registry.register("sec5", render_sec5)

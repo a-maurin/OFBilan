@@ -814,12 +814,11 @@ def _generate_synthese_brochure_pdf(
     map_paths: list[Path] = []
     if cartes:
         map_id = str(profile.get("_map_id") or profil_id)
-        map_paths = [
-            Path(p) for p in resolve_profile_map_paths(
-                map_id, profile=profile, presentation_cfg=presentation_cfg
-            )
-            if p and Path(p).exists()
-        ][:2]
+        c_proc = out_dir / f"carte_{map_id}_procedures.png"
+        c_res = out_dir / f"carte_{map_id}_resultats.png"
+        for p in (c_res, c_proc):
+            if p.exists():
+                map_paths.append(p)
     has_maps = bool(map_paths)
 
     base_name = output_filename or f"{profil_id}.pdf"

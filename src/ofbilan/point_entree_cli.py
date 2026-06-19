@@ -194,11 +194,13 @@ def main() -> int:
     )
     parser.add_argument(
         "--brochure",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
+        default=None,
         help=(
             "Option conservée pour compatibilité. Le profil synthese_activite_PA_PJ génère "
             "désormais systématiquement le PDF détaillé et la brochure "
-            "(*_brochure_ext.pdf ou *_brochure_int.pdf) à chaque exécution."
+            "(*_brochure_ext.pdf ou *_brochure_int.pdf) à chaque exécution. "
+            "--no-brochure permet de désactiver la question interactive."
         ),
     )
     args = parser.parse_args()
@@ -312,7 +314,7 @@ def main() -> int:
         cli_options["diffusion"] = diffusion
 
     brochure = args.brochure
-    if not brochure and _is_interactive():
+    if brochure is None and _is_interactive():
         brochure_rep = ask_choice_list("Activation du mode brochure", [(True, "Oui"), (False, "Non")], False)
         brochure = bool(brochure_rep)
     if brochure:
