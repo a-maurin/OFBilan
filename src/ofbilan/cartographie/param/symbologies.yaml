@@ -17,7 +17,7 @@ points_agrainage:
   filter_type: point_ctrl_agrainage
   renderer_type: single
   palette: "#C0392B"
-  symbol_size_mm: 1.9
+  symbol_size_mm: 2.4
   symbol_shape: circle
   visible: true
 
@@ -25,7 +25,7 @@ points_chasse:
   filter_type: point_ctrl_chasse
   renderer_type: single
   palette: "#2C3E50"
-  symbol_size_mm: 1.9
+  symbol_size_mm: 2.4
   symbol_shape: circle
   visible: true
 
@@ -33,7 +33,7 @@ points_piegeage:
   filter_type: point_ctrl_piegeage
   renderer_type: single
   palette: "#8E44AD"
-  symbol_size_mm: 1.9
+  symbol_size_mm: 2.4
   symbol_shape: circle
   visible: true
 
@@ -41,7 +41,7 @@ points_global:
   filter_type: point_ctrl_global
   renderer_type: single
   palette: "#003A76"
-  symbol_size_mm: 1.9
+  symbol_size_mm: 2.4
   symbol_shape: circle
   visible: true
 
@@ -65,7 +65,7 @@ points_global_resultats:
     "Infraction et manquement": "#E67E22"
     "Conforme": "#2ECC71"
     "Autre": "#95A5A6"
-  symbol_size_mm: 1.9
+  symbol_size_mm: 2.4
   symbol_shape: circle
   visible: true
 
@@ -91,7 +91,7 @@ points_global_usagers:
     "Entreprise": "#E74C3C"
     "Acteur sylvicole": "#16A085"
     "Autre": "#95A5A6"
-  symbol_size_mm: 1.9
+  symbol_size_mm: 2.4
   symbol_shape: circle
   visible: true
 
@@ -100,10 +100,10 @@ points_global_domaines:
   legend_label: "Domaines de contrôle"
   filter_type: point_ctrl_global
   renderer_type: categorized
-  field: 'coalesce("domaine", ''Hors domaine'')'
+  field: 'coalesce(attribute(@feature, ''domaine''), ''Hors domaine'')'
   # Palette multi-couleurs distinctives, assignées cycliquement par domaine rencontré
   palette: "#003A76,#E74C3C,#F1C40F,#27AE60,#8E44AD,#E67E22,#16A085,#2C3E50,#C0392B,#1ABC9C"
-  symbol_size_mm: 1.9
+  symbol_size_mm: 2.4
   symbol_shape: circle
   visible: true
 
@@ -150,7 +150,7 @@ points_usagers_agriculteurs:
     END
   categories:
     "Agriculteur": "#F1C40F"
-  symbol_size_mm: 1.9
+  symbol_size_mm: 2.4
   symbol_shape: circle
   visible: true
 
@@ -174,7 +174,7 @@ points_usagers_cibles:
     "Entreprise": "#E74C3C"
     "Acteur sylvicole": "#16A085"
     "Autre": "#95A5A6"
-  symbol_size_mm: 1.9
+  symbol_size_mm: 2.4
   symbol_shape: circle
   visible: true
 

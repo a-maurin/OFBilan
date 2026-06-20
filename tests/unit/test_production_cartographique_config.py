@@ -38,10 +38,10 @@ def test_get_effective_config_with_yaml_profiles() -> None:
 
 
 def test_config_dept_override() -> None:
-    from ofbilan.cartographie.production_cartographique import _ConfigDeptOverride
+    from ofbilan.cartographie.production_cartographique import _ConfigExportOverride
 
     base = GlobalConfig(departement_code="21")
-    wrapped = _ConfigDeptOverride(base, "89")
+    wrapped = _ConfigExportOverride(base, "89")
     assert wrapped.departement_code == "89"
     assert wrapped.project_qgis_path == base.project_qgis_path
 
