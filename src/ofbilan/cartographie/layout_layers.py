@@ -90,7 +90,7 @@ def infer_filter_type_for_layer(
         return "point_ctrl_global"
 
     if role == "pej":
-        if pid in ("procedures_pve", "synthese_activite_pa_pj_2", "global", "piegeage"):
+        if pid in ("procedures_pve", "global", "piegeage") or "synthese_activite_pa_pj" in pid:
             return "pj"
         return ""
 

@@ -21,6 +21,7 @@ from ofbilan.engine.pdf_utils import (
     pct_table_cell as _pct_table_cell,
     truncate_with_dash as _truncate_with_dash,
 )
+from ofbilan.common.pdf_utils import truncate_text_to_width
 from ofbilan.common.rendus_graphiques import (
     chart_bar_stacked, chart_line_evolution, chart_pie, chart_stackplot_resultats_domaine,
     chart_bar_horizontal_stacked
@@ -179,8 +180,8 @@ def render_sec1(ctx: PdfContext) -> None:
     # ── 3. Activité par type d'usager ──
 
 
-def render_sec3(ctx: PdfContext) -> None:
-    ctx.builder.add_section("sec3", "3. Activité de police par type d'usager")
+def render_sec4_usagers(ctx: PdfContext) -> None:
+    ctx.builder.add_section("sec4", "3. Activité de police par type d'usager")
     ctx.builder.append_pending_paragraph(
         "⚠️ <i>Note importante : Le décompte des effectifs selon le type d'usager suit des règles spécifiques qui sont détaillées dans la notice méthodologique.</i>",
     )
@@ -219,7 +220,7 @@ def render_sec3(ctx: PdfContext) -> None:
         )
 
     ctx.builder.add_section(
-        "sec3_1",
+        "sec4_1",
         "3.1. Thème de contrôle par type d'usager",
         level=2,
         toc_level=1,
@@ -268,7 +269,7 @@ def render_sec3(ctx: PdfContext) -> None:
         ctx.builder.add_keep_together_block([])
 
     ctx.builder.add_section(
-        "sec3_2",
+        "sec4_2",
         "3.2. Résultat des contrôles par type d'usager",
         level=2,
         toc_level=1,
@@ -338,8 +339,8 @@ def render_sec3(ctx: PdfContext) -> None:
 
 
 
-def render_sec33(ctx: PdfContext) -> None:
-    ctx.builder.add_section("sec3_3", "3.3. Activité procédurale par type d'usager", level=2, toc_level=1)
+def render_sec43(ctx: PdfContext) -> None:
+    ctx.builder.add_section("sec43", "3.3. Activité procédurale par type d'usager", level=2, toc_level=1)
     proc_ut = _load_csv_opt(ctx.out_dir, "synthese_procedures_usager_theme.csv")
     if proc_ut is not None and not proc_ut.empty:
         types = proc_ut["type_usager"].dropna().astype(str).unique().tolist()
@@ -376,8 +377,86 @@ def render_sec33(ctx: PdfContext) -> None:
     # ── 4. PVe (source OFB, hors périmètre type d'usager OSCEAN) ──
 
 
-def render_sec4(ctx: PdfContext) -> None:
-    ctx.builder.add_section("sec4", "4. Procès-verbaux électroniques (PVe)")
+def render_sec3_procedures(ctx: PdfContext) -> None:
+    ctx.builder.add_section("sec3", "4. Procédures (PEJ, PA, PVe)")
+    ctx.builder.add_paragraph(
+        f"Sur la période : {ctx.nb_pej} procédure(s) d'enquête judiciaire (PEJ), "
+        f"{ctx.nb_pa} procédure(s) administrative(s) (PA), {ctx.nb_pve} procès-verbal(aux) électronique(s) (PVe)."
+    )
+
+    ctx.builder.add_section("sec32", "4.1. Procédures d'enquête judiciaire (PEJ)", level=2, toc_level=1)
+    pej_top = _load_csv_opt(ctx.out_dir, "pej_global_par_natinf.csv")
+    if pej_top is not None and not pej_top.empty:
+        pej_top = _sort_desc(pej_top, ["nb"])
+        from ofbilan.common.chargeurs_donnees import load_natinf_ref
+        natinf_ref = load_natinf_ref(_ROOT)
+        top_df = pej_top.copy()
+        if "numero_natinf" not in top_df.columns:
+            top_df["numero_natinf"] = top_df["natinf"].astype(str).str.extract(r"(\d+)", expand=False)
+        if not natinf_ref.empty and "libelle_natinf" not in top_df.columns:
+            top_df = top_df.merge(natinf_ref, on="numero_natinf", how="left")
+
+        natinf_label_w = ctx.avail_w * 0.60
+        tbl = [["Nature d'infraction (NATINF)", "Nombre PEJ"]]
+        for _, row in top_df.head(15).iterrows():
+            libelle = row.get("libelle_natinf") or row.get("LIBELLE_NATINF") or ""
+            code = str(row.get("numero_natinf") or row.get("natinf") or "").strip()
+            if libelle:
+                nature = f"{code} – {libelle}" if code else libelle
+            else:
+                nature = code or "-"
+            tbl.append(
+                [
+                    truncate_text_to_width(str(nature), natinf_label_w),
+                    str(int(row["nb"])),
+                ]
+            )
+        ctx.builder.add_table(
+            tbl,
+            caption="Analyse des NATINF relevées (PEJ)",
+            col_widths=[ctx.avail_w * 0.85, ctx.avail_w * 0.15],
+            col_aligns=["LEFT", "RIGHT"],
+        )
+
+    pej_theme = _load_csv_opt(ctx.out_dir, "synthese_procedures_par_theme.csv")
+    if pej_theme is not None and not pej_theme.empty:
+        pej_theme = _sort_desc(pej_theme, ["nb_pej"])
+        tbl = [["Thème", "Nombre PEJ"]]
+        has_data = False
+        for _, row in pej_theme.head(15).iterrows():
+            if int(row.get("nb_pej", 0)) > 0:
+                has_data = True
+                tbl.append([str(row["theme"]), str(int(row["nb_pej"]))])
+        if has_data:
+            ctx.builder.add_table(
+                tbl,
+                caption="PEJ par thème",
+                col_widths=[ctx.avail_w * 0.60, ctx.avail_w * 0.40],
+                col_aligns=["LEFT", "RIGHT"],
+            )
+    if ctx.nb_pej == 0:
+        ctx.builder.add_paragraph("Aucune procédure d'enquête judiciaire sur la période.")
+
+    ctx.builder.add_section("sec33", "4.2. Procédures administratives (PA)", level=2, toc_level=1)
+    if pej_theme is not None and not pej_theme.empty:
+        pa_theme = _sort_desc(pej_theme, ["nb_pa"])
+        tbl = [["Thème", "Nombre PA"]]
+        has_data = False
+        for _, row in pa_theme.head(15).iterrows():
+            if int(row.get("nb_pa", 0)) > 0:
+                has_data = True
+                tbl.append([str(row["theme"]), str(int(row["nb_pa"]))])
+        if has_data:
+            ctx.builder.add_table(
+                tbl,
+                caption="PA par thème",
+                col_widths=[ctx.avail_w * 0.60, ctx.avail_w * 0.40],
+                col_aligns=["LEFT", "RIGHT"],
+            )
+    if ctx.nb_pa == 0:
+        ctx.builder.add_paragraph("Aucune procédure administrative sur la période.")
+
+    ctx.builder.add_section("sec31", "4.3. Procès-verbaux électroniques (PVe)", level=2, toc_level=1)
     ctx.builder.add_paragraph(
         "Les procès-verbaux électroniques (PVe) proviennent du fichier national OFB "
         "(<i>Stats_PVe_OFB</i>). Ils recensent des infractions constatées et intégrées sur la "
@@ -386,15 +465,15 @@ def render_sec4(ctx: PdfContext) -> None:
         "contrôle OSCEAN ni ventilés par type d'usager : cette section les présente "
         "selon leur propre nomenclature (NATINF et classe d'infraction)."
     )
-    pve_natinf= _sort_desc(_load_csv_opt(ctx.out_dir, "pve_global_par_natinf.csv"), ["nb"])
+    pve_natinf = _sort_desc(_load_csv_opt(ctx.out_dir, "pve_global_par_natinf.csv"), ["nb"])
     pve_classe = _sort_desc(_load_csv_opt(ctx.out_dir, "synthese_pve_par_classe.csv"), ["nb"])
 
     if ctx.nb_pve > 0:
-        if ctx.pve_natinf is not None and not ctx.pve_natinf.empty:
+        if pve_natinf is not None and not pve_natinf.empty:
             natinf_label_w = ctx.avail_w * 0.72
             ctx.builder.add_table(
                 _build_pve_natinf_table_rows(
-                    ctx.pve_natinf,
+                    pve_natinf,
                     label_col_width_pt=natinf_label_w,
                 ),
                 caption=pdf_metric_caption("Principales natures d'infraction (NATINF)", "proc"),
@@ -423,7 +502,7 @@ def render_sec4(ctx: PdfContext) -> None:
 
 
 def render_sec5(ctx: PdfContext) -> None:
-    ctx.builder.add_section("sec5", "5. Cartographie")
+    ctx.builder.add_section("sec5map", "5. Cartographie")
     if ctx.cartes:
         if ctx.global_map_paths:
             ctx.builder.add_maps(ctx.global_map_paths, layout=ctx.global_map_layout)

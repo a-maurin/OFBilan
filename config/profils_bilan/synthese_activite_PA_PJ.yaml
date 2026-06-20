@@ -47,8 +47,10 @@ cartographie:
     - synthese_activite_PA_PJ
     - synthese_activite_PA_PJ_2
   fichiers:
-    - carte_synthese_activite_PA_PJ.png
-    - carte_synthese_activite_PA_PJ_2.png
+    - carte_synthese_activite_PA_PJ_domaines.png
+    - carte_synthese_activite_PA_PJ_usagers.png
+    - carte_synthese_activite_PA_PJ_resultats.png
+    - carte_synthese_activite_PA_PJ_procedures.png
   disposition: verticale
 
 options:

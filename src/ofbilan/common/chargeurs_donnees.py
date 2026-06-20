@@ -313,12 +313,22 @@ def load_point_ctrl(
         if "type_action" in df.columns and "type_actio" not in df.columns:
             df["type_actio"] = df["type_action"]
 
-        # Variantes du champ résultat
-        if "resultat" not in df.columns:
-            if "Résultat" in df.columns:
-                df["resultat"] = df["Résultat"]
-            elif "RESULTAT" in df.columns:
-                df["resultat"] = df["RESULTAT"]
+        # Normalisation robuste (insensible à la casse) des colonnes clés
+        # On renomme au lieu de dupliquer pour éviter les conflits SQLite/QGIS
+        new_cols = {}
+        for col in df.columns:
+            col_upper = str(col).upper()
+            if col_upper == "DOMAINE" and col != "domaine" and "domaine" not in df.columns:
+                new_cols[col] = "domaine"
+            elif col_upper == "THEME" and col != "theme" and "theme" not in df.columns:
+                new_cols[col] = "theme"
+            elif col_upper in ("RESULTAT", "RÉSULTAT") and col != "resultat" and "resultat" not in df.columns:
+                new_cols[col] = "resultat"
+            elif col_upper == "RESULTAT_CONTROLE" and col != "resultat_controle" and "resultat_controle" not in df.columns:
+                new_cols[col] = "resultat_controle"
+        
+        if new_cols:
+            df.rename(columns=new_cols, inplace=True)
 
         # Nom de commune : harmoniser vers nom_commun
         if "nom_commune" in df.columns and "nom_commun" not in df.columns:

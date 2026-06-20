@@ -57,3 +57,4 @@ default:
         pa:
           layer_role: point_controles
           symbology_ref: procedures_pa
+          filter_type: point_ctrl_pa

@@ -413,12 +413,12 @@ def _generate_synthese_pdf(
         ("sec2_1", "2.1. Activité de police par thème du plan de contrôle"),
         ("sec2_2", "2.2. Résultat des contrôles au titre de la police administrative"),
         ("sec2_3", "2.3. Activité procédurale"),
-        ("sec3", "3. Activité de police par type d'usager"),
-        ("sec3_1", "3.1. Thème de contrôle par type d'usager"),
-        ("sec3_2", "3.2. Résultat des contrôles par type d'usager"),
-        ("sec3_3", "3.3. Activité procédurale par type d'usager"),
-        ("sec4", "4. Procès-verbaux électroniques (PVe)"),
-        ("sec5", "5. Cartographie"),
+        ("sec4", "3. Activité de police par type d'usager"),
+        ("sec4_1", "3.1. Thème de contrôle par type d'usager"),
+        ("sec4_2", "3.2. Résultat des contrôles par type d'usager"),
+        ("sec43", "3.3. Activité procédurale par type d'usager"),
+        ("sec3", "4. Procédures (PEJ, PA, PVe)"),
+        ("sec5map", "5. Cartographie"),
         ("sec6", "6. Annexes"),
     ]
     from ofbilan.common.pdf_presentation_config import resolve_sections_for_toc
@@ -491,7 +491,7 @@ def _generate_synthese_pdf(
 
     from ofbilan.engine.pdf_context import PdfContext
     from ofbilan.engine.sections_synthese import (
-        render_sec1, render_sec3, render_sec33, render_sec4, render_sec5, render_sec6
+        render_sec1, render_sec4_usagers, render_sec43, render_sec3_procedures, render_sec5, render_sec6
     )
     from ofbilan.engine.registre_sections_pdf import SectionRegistry
     
@@ -546,19 +546,19 @@ def _generate_synthese_pdf(
 
     registry = SectionRegistry()
     registry.register("sec1", render_sec1)
-    registry.register("sec3", render_sec3)
-    registry.register("sec3_3", render_sec33)
-    registry.register("sec4", render_sec4)
-    registry.register("sec5", render_sec5)
+    registry.register("sec4", render_sec4_usagers)
+    registry.register("sec43", render_sec43)
+    registry.register("sec3", render_sec3_procedures)
+    registry.register("sec5map", render_sec5)
     registry.register("sec6", render_sec6)
     
     from ofbilan.engine.sections_region import render_sec_region_detail
     registry.register("secregion", render_sec_region_detail)
     if cfg.echelle == "region":
-        # Inject just before sec5 (cartographie) or sec6
+        # Inject just before sec5map (cartographie) or sec6
         insert_idx = len(sections_toc)
         for i, (sid, _) in enumerate(sections_toc):
-            if sid in ("sec5", "sec6"):
+            if sid in ("sec5map", "sec6"):
                 insert_idx = i
                 break
         sections_toc.insert(insert_idx, ("secregion", "Détail par département"))

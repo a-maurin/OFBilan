@@ -980,6 +980,8 @@ def apply_layer_symbology(layer, config: "LayerSymbologyConfig", geometry_mode_o
                 expr = QgsExpression(config.field)
                 ctx = QgsExpressionContext()
                 ctx.appendScopes(QgsExpressionContextUtils.globalProjectLayerScopes(layer))
+                ctx.setFields(layer.fields())
+                expr.prepare(ctx)
                 vals = set()
                 req = QgsFeatureRequest()
                 for i, f in enumerate(layer.getFeatures(req)):
@@ -2156,7 +2158,7 @@ def run_export(
         carte_filtre = None
         if not prof:
             for base_pid, base_prof in CONFIG.profiles.items():
-                if pid.startswith(f"{base_pid}_"):
+                if pid.lower().startswith(f"{base_pid.lower()}_"):
                     sub_id = pid[len(base_pid)+1:]
                     # Vérifier si sub_id est une carte active ou dans les définitions par défaut
                     cartes_possibles = getattr(base_prof, 'cartes_actives', []) or ["domaines", "usagers", "resultats", "procedures"]
@@ -2647,7 +2649,8 @@ def _extract_legend_info(layer, lcfg):
         context = QgsExpressionContext()
         if expr:
             context.appendScopes(QgsExpressionContextUtils.globalProjectLayerScopes(layer))
-            context.appendScope(QgsExpressionContextUtils.layerScope(layer))
+            context.setFields(layer.fields())
+            expr.prepare(context)
             
         for feature in layer.getFeatures():
             features_exist = True
@@ -2720,6 +2723,7 @@ def _extract_legend_info(layer, lcfg):
             from qgis.core import QgsExpressionContext, QgsExpressionContextUtils
             context = QgsExpressionContext()
             context.appendScopes(QgsExpressionContextUtils.globalProjectLayerScopes(layer))
+            context.setFields(layer.fields())
             
             for feature in layer.getFeatures():
                 context.setFeature(feature)
