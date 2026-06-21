@@ -452,6 +452,10 @@ class _ConfigExportOverride:
         return getattr(self._base, name)
 
 
+_ConfigDeptOverride = _ConfigExportOverride
+
+
+
 def init_qgis_headless() -> None:
     """Initialise QGIS en mode headless (sans interface graphique)."""
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -976,10 +980,11 @@ def apply_layer_symbology(layer, config: "LayerSymbologyConfig", geometry_mode_o
                 values = []
         else:
             try:
-                from qgis.core import QgsExpression, QgsExpressionContext, QgsExpressionContextUtils
+                from qgis.core import QgsExpression, QgsExpressionContext, QgsExpressionContextUtils, QgsFeatureRequest
                 expr = QgsExpression(config.field)
                 ctx = QgsExpressionContext()
-                ctx.appendScopes(QgsExpressionContextUtils.globalProjectLayerScopes(layer))
+                for scope in QgsExpressionContextUtils.globalProjectLayerScopes(layer):
+                    ctx.appendScope(scope)
                 ctx.setFields(layer.fields())
                 expr.prepare(ctx)
                 vals = set()
@@ -2648,7 +2653,8 @@ def _extract_legend_info(layer, lcfg):
         expr = QgsExpression(class_field) if (class_field and field_idx < 0) else None
         context = QgsExpressionContext()
         if expr:
-            context.appendScopes(QgsExpressionContextUtils.globalProjectLayerScopes(layer))
+            for scope in QgsExpressionContextUtils.globalProjectLayerScopes(layer):
+                context.appendScope(scope)
             context.setFields(layer.fields())
             expr.prepare(context)
             
@@ -2722,7 +2728,8 @@ def _extract_legend_info(layer, lcfg):
             matching_rules = set()
             from qgis.core import QgsExpressionContext, QgsExpressionContextUtils
             context = QgsExpressionContext()
-            context.appendScopes(QgsExpressionContextUtils.globalProjectLayerScopes(layer))
+            for scope in QgsExpressionContextUtils.globalProjectLayerScopes(layer):
+                context.appendScope(scope)
             context.setFields(layer.fields())
             
             for feature in layer.getFeatures():

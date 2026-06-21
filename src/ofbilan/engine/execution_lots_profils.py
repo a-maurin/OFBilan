@@ -96,7 +96,7 @@ def run_profile(
     options = options or {}
     from ofbilan.engine.orchestrateur_profils import run_engine
 
-    return run_engine(profil_id, date_deb, date_fin, echelle, code, options=dict(options))
+    return run_engine(profil_id, date_deb, date_fin, echelle, code, options=options)
 
 
 def run_profiles_batch(

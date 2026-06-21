@@ -173,6 +173,11 @@ def main() -> int:
         help="Intégrer les cartes dans le PDF (--no-cartes pour désactiver, sans question interactive).",
     )
     parser.add_argument(
+        "--cartes-seules",
+        action="store_true",
+        help="Générer uniquement les cartes du profil cartographique et quitter avant la génération du PDF.",
+    )
+    parser.add_argument(
         "--pnf",
         action=argparse.BooleanOptionalAction,
         default=None,
@@ -257,6 +262,10 @@ def main() -> int:
 
     _check_deps()
 
+    codes_list = [c.strip() for c in code.replace(",", " ").split() if c.strip()]
+    if not codes_list:
+        codes_list = ["21"]
+
     if date_fin and len(date_fin.strip()) == 10:
         date_fin = f"{date_fin.strip()} 23:59:59"
 
@@ -287,6 +296,10 @@ def main() -> int:
             return 1
 
     cartes = args.cartes
+    if args.cartes_seules:
+        cartes = True
+        cli_options["cartes_seules"] = True
+
     if cartes is None and _is_interactive():
         cartes_rep = ask_choice_list("Génération des cartes", [(True, "Oui"), (False, "Non")], True)
         cartes = bool(cartes_rep)
@@ -323,15 +336,21 @@ def main() -> int:
     if args.mots_cles:
         cli_options["mots_cles"] = args.mots_cles
 
-    return run_profiles_batch(
-        profils_resolus,
-        date_deb,
-        date_fin,
-        echelle,
-        code,
-        combine=args.combine,
-        cli_options=cli_options or None,
-    )
+    exit_code = 0
+    for current_code in codes_list:
+        ret = run_profiles_batch(
+            profils_resolus,
+            date_deb,
+            date_fin,
+            echelle,
+            current_code,
+            combine=args.combine,
+            cli_options=cli_options,
+        )
+        if ret != 0:
+            if exit_code == 0:
+                exit_code = ret
+    return exit_code
 
 
 if __name__ == "__main__":

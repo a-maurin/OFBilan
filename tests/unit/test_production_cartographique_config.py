@@ -70,3 +70,4 @@ def test_resolve_map_title_custom_title_main() -> None:
     res = resolve_map_title(prof, "21")
     assert "Contrôles — résultats — Côte-d'Or" in res
 
+

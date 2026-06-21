@@ -584,6 +584,10 @@ def _run_global_profile_via_yaml(
         target_dir=out_dir,
     )
 
+    if resolved_opts.get("cartes_seules"):
+        print("Option --cartes-seules active : arrêt avant la génération du PDF.")
+        return 0
+
     print("Étape 3/3 : génération du PDF (graphiques et mise en page)...")
     with Spinner():
         profil_id = str(profile.get("id", "global")).strip()
@@ -662,6 +666,8 @@ def _finalize_cartes_selection(
         and sys.stdin.isatty()
     ):
         selection = ask_cartes_selection(profile, selection)
+        if cli_options is not None:
+            cli_options["cartes_selection"] = selection
 
     profile["_cartes_selection"] = selection
     resolved_opts["cartes_selection"] = selection
@@ -5297,6 +5303,10 @@ def _run_engine_thematic_pipeline(
         code=code,
         target_dir=out_dir,
     )
+
+    if resolved_opts.get("cartes_seules"):
+        print("  Option --cartes-seules active : arrêt avant la génération du PDF.")
+        return 0
 
     # ── PDF ──
     print("  Génération du PDF...")

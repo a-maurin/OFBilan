@@ -50,7 +50,7 @@ def test_bilans_cli_interactive_profile_prompt(monkeypatch) -> None:
         "departement",
         "21",
         False,
-        None,
+        {},
     )
 
 
@@ -193,3 +193,102 @@ def test_list_type_usagers(monkeypatch, capsys) -> None:
     )
     assert cli.main() == 0
     assert "1. Agriculteur" in capsys.readouterr().out
+
+
+def test_bilans_cli_multi_codes(monkeypatch) -> None:
+    import ofbilan.point_entree_cli as cli
+
+    captured_codes = []
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "bilans",
+            "--profil",
+            "global",
+            "--date-deb",
+            "2025-01-01",
+            "--date-fin",
+            "2025-12-31",
+            "--code",
+            "21, 25",
+        ],
+    )
+    monkeypatch.setattr(cli, "_check_deps", lambda: None)
+    monkeypatch.setattr(
+        "ofbilan.engine.catalogue_profils.resolve_profile_ids",
+        lambda ids: ids,
+    )
+
+    def _fake_run_batch(
+        profils: list[str],
+        date_deb: str,
+        date_fin: str,
+        echelle: str,
+        code: str,
+        *,
+        combine: bool = False,
+        cli_options: dict | None = None,
+    ) -> int:
+        captured_codes.append(code)
+        return 0
+
+    monkeypatch.setattr(
+        "ofbilan.engine.execution_lots_profils.run_profiles_batch",
+        _fake_run_batch,
+    )
+
+    assert cli.main() == 0
+    assert captured_codes == ["21", "25"]
+
+
+def test_bilans_cli_multi_codes_shares_options(monkeypatch) -> None:
+    import ofbilan.point_entree_cli as cli
+
+    captured_opts_list = []
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "bilans",
+            "--profil",
+            "global",
+            "--date-deb",
+            "2025-01-01",
+            "--date-fin",
+            "2025-12-31",
+            "--code",
+            "21, 25",
+        ],
+    )
+    monkeypatch.setattr(cli, "_check_deps", lambda: None)
+    monkeypatch.setattr(
+        "ofbilan.engine.catalogue_profils.resolve_profile_ids",
+        lambda ids: ids,
+    )
+
+    def _fake_run_batch(
+        profils: list[str],
+        date_deb: str,
+        date_fin: str,
+        echelle: str,
+        code: str,
+        *,
+        combine: bool = False,
+        cli_options: dict | None = None,
+    ) -> int:
+        captured_opts_list.append(cli_options)
+        if cli_options is not None:
+            cli_options["cartes_selection"] = ["carte_1"]
+        return 0
+
+    monkeypatch.setattr(
+        "ofbilan.engine.execution_lots_profils.run_profiles_batch",
+        _fake_run_batch,
+    )
+
+    assert cli.main() == 0
+    assert len(captured_opts_list) == 2
+    assert captured_opts_list[0]["cartes_selection"] == ["carte_1"]
+    assert captured_opts_list[1]["cartes_selection"] == ["carte_1"]
+

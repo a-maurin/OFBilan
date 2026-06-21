@@ -100,7 +100,7 @@ points_global_domaines:
   legend_label: "Domaines de contrôle"
   filter_type: point_ctrl_global
   renderer_type: categorized
-  field: 'coalesce(attribute(@feature, ''domaine''), ''Hors domaine'')'
+  field: coalesce("domaine", 'Hors domaine')
   # Palette multi-couleurs distinctives, assignées cycliquement par domaine rencontré
   palette: "#003A76,#E74C3C,#F1C40F,#27AE60,#8E44AD,#E67E22,#16A085,#2C3E50,#C0392B,#1ABC9C"
   symbol_size_mm: 2.4
