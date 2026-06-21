@@ -485,6 +485,10 @@ def _run_global_profile_via_yaml(
                     ).to_crs("EPSG:2154")
                     for col in gdf_pts.select_dtypes(include=['datetime64[ns, UTC]', 'datetime64[ns]', 'datetime64']).columns:
                         gdf_pts[col] = gdf_pts[col].astype(str)
+                    if "domaine" not in gdf_pts.columns:
+                        gdf_pts["domaine"] = "Hors domaine"
+                    else:
+                        gdf_pts["domaine"] = gdf_pts["domaine"].fillna("Hors domaine")
                     gpkg_path_pts = carto_dir / f"controles_{prefix}_export_automatique.gpkg"
                     gdf_pts.to_file(gpkg_path_pts, driver="GPKG")
                     gpkg_logger.info(f"Couche géographique Contrôles générée pour QGIS : {gpkg_path_pts} ({mask_geo.sum()} points)")
@@ -2713,6 +2717,10 @@ def _export_csv(
                     
                     for col in gdf_pts.select_dtypes(include=['datetime64[ns, UTC]', 'datetime64[ns]', 'datetime64']).columns:
                         gdf_pts[col] = gdf_pts[col].astype(str)
+                    if "domaine" not in gdf_pts.columns:
+                        gdf_pts["domaine"] = "Hors domaine"
+                    else:
+                        gdf_pts["domaine"] = gdf_pts["domaine"].fillna("Hors domaine")
                         
                     root = Path(__file__).resolve().parent.parent.parent.parent
                     carto_dir = root / "data" / "sources" / "sig" / "CARTO"
