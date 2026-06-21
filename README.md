@@ -54,7 +54,7 @@ Des scripts prêts à l'emploi sont disponibles dans le dossier `scripts/` pour 
 - `lancer_bilans` / `lancer_bilans_qgis` : Exécute la génération de bilans et cartes.
 - `generer_cartes` / `parametrer_cartes` : Gestion de la cartographie.
 
-## 🧪 Tests et Qualité
+## Tests et Qualité
 
 Pour lancer la suite de tests unitaires et de non-régression (smoke tests) :
 ```bash
@@ -71,7 +71,7 @@ python -m pytest -q
 - `ref/` : Référentiels géographiques et administratifs.
 - `tests/` : Tests unitaires et smoke tests hermétiques.
 
-## ✉️ Contact
+## Contact
 
 - **Auteur** : Aguirre Maurin
 - **Service** : OFB, Service Départemental de la Côte-d'Or
