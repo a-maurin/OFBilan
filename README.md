@@ -1,4 +1,4 @@
-![OFBilan Banner](ref/programme/logos/bandeau_ofbilan.png)
+![OFBilan Banner](ref/programme/logos/bandeau_ofbilan.svg)
 
 # OFBilan 
 
