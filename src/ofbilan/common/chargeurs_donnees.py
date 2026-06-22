@@ -27,6 +27,74 @@ _INSEE_COL_PRIORITY: Tuple[str, ...] = (
 )
 
 
+_SESSION_CACHE = {
+    "active": False,
+    "point_ctrl": None,
+    "pej": None,
+    "pa": None,
+    "pve": None,
+}
+
+
+def init_session_cache(
+    root: Path,
+    echelle: str,
+    codes: list[str],
+    date_deb: Optional[Union[str, pd.Timestamp]] = None,
+    date_fin: Optional[Union[str, pd.Timestamp]] = None,
+) -> None:
+    """Charge en mémoire toutes les données pour les départements concernés et active le cache."""
+    global _SESSION_CACHE
+    _SESSION_CACHE["active"] = False  # Désactiver temporairement pour forcer la lecture réelle
+    
+    codes_str = ",".join(codes)
+    logger.info("Pré-chargement des données pour la session globale (codes: %s)...", codes_str)
+    
+    try:
+        _SESSION_CACHE["point_ctrl"] = load_point_ctrl(
+            root, echelle=echelle, code=codes_str, date_deb=date_deb, date_fin=date_fin
+        )
+    except Exception as e:
+        logger.warning("Impossible de pré-charger point_ctrl : %s", e)
+        _SESSION_CACHE["point_ctrl"] = pd.DataFrame()
+
+    try:
+        _SESSION_CACHE["pej"] = load_pej(
+            root, echelle=echelle, code=codes_str, date_deb=date_deb, date_fin=date_fin
+        )
+    except Exception as e:
+        logger.warning("Impossible de pré-charger pej : %s", e)
+        _SESSION_CACHE["pej"] = pd.DataFrame()
+
+    try:
+        _SESSION_CACHE["pa"] = load_pa(
+            root, echelle=echelle, code=codes_str, date_deb=date_deb, date_fin=date_fin
+        )
+    except Exception as e:
+        logger.warning("Impossible de pré-charger pa : %s", e)
+        _SESSION_CACHE["pa"] = pd.DataFrame()
+
+    try:
+        _SESSION_CACHE["pve"] = load_pve(
+            root, echelle=echelle, code=codes_str, date_deb=date_deb, date_fin=date_fin
+        )
+    except Exception as e:
+        logger.warning("Impossible de pré-charger pve : %s", e)
+        _SESSION_CACHE["pve"] = pd.DataFrame()
+
+    _SESSION_CACHE["active"] = True
+
+
+def clear_session_cache() -> None:
+    """Vide et désactive le cache global de session."""
+    global _SESSION_CACHE
+    _SESSION_CACHE["active"] = False
+    _SESSION_CACHE["point_ctrl"] = None
+    _SESSION_CACHE["pej"] = None
+    _SESSION_CACHE["pa"] = None
+    _SESSION_CACHE["pve"] = None
+
+
 def safe_to_datetime(series: pd.Series) -> pd.Series:
     """
     Parse les dates de manière sécurisée en gérant le format français (DD/MM/YYYY)
@@ -170,6 +238,29 @@ def load_point_ctrl(
     recouvrant la période sont chargées et les lignes sont filtrées par
     département et période (accélère l'analyse sur sources nationales).
     """
+    global _SESSION_CACHE
+    if _SESSION_CACHE["active"] and _SESSION_CACHE["point_ctrl"] is not None:
+        df_all = _SESSION_CACHE["point_ctrl"].copy()
+        if echelle is not None and code is not None:
+            from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre, get_bmi_filters
+            echelle_norm = str(echelle).strip().lower()
+            if echelle_norm == "bmi" and "entit_ctrl" in df_all.columns:
+                bmi_filters = get_bmi_filters(code)
+                entit_ctrl_val = str(bmi_filters.get("entit_ctrl", code)).upper()
+                df_all = df_all[df_all["entit_ctrl"].astype(str).str.upper().str.contains(entit_ctrl_val, case=True, na=False, regex=False)].copy()
+            elif echelle_norm != "bmi" and "num_depart" in df_all.columns:
+                dept_codes = get_departements_pour_perimetre(echelle, code)
+                if dept_codes and "FR" not in dept_codes:
+                    df_all = df_all[df_all["num_depart"].astype(str).str.strip().isin(dept_codes)].copy()
+        if date_deb is not None and date_fin is not None:
+            try:
+                deb_ts = pd.to_datetime(date_deb)
+                fin_ts = pd.to_datetime(date_fin)
+            except ValueError as e:
+                raise ValueError(f"Format de date invalide : {e}")
+            df_all = filtre_periode(df_all, "date_ctrl", deb_ts, fin_ts)
+        return df_all
+
     sources_sig = root / "data" / "sources" / "sig"
     if not sources_sig.exists():
         raise FileNotFoundError(
@@ -426,6 +517,33 @@ def load_pej(
     ``merge_pej_faits_locations`` sur la couche ``localisation_infrac_FAITS_*``.
     Voir ref/README_sources.md § 2.2.
     """
+    global _SESSION_CACHE
+    if _SESSION_CACHE["active"] and _SESSION_CACHE["pej"] is not None:
+        df = _SESSION_CACHE["pej"].copy()
+        if date_deb is not None and date_fin is not None:
+            deb_ts = pd.to_datetime(date_deb)
+            fin_ts = pd.to_datetime(date_fin)
+            df = filtre_periode(df, "DATE_REF", deb_ts, fin_ts)
+        if echelle is not None and code is not None:
+            from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre, get_bmi_filters
+            echelle_norm = str(echelle).strip().lower()
+            if echelle_norm == "bmi" and "ENTITE_ORIGINE_PROCEDURE" in df.columns:
+                bmi_filters = get_bmi_filters(code)
+                entite_pej_val = str(bmi_filters.get("entite_pej", code)).upper()
+                df = df[df["ENTITE_ORIGINE_PROCEDURE"].astype(str).str.upper().str.contains(entite_pej_val, case=True, na=False, regex=False)].copy()
+            elif echelle_norm != "bmi" and "ENTITE_ORIGINE_PROCEDURE" in df.columns:
+                dept_codes = get_departements_pour_perimetre(echelle, code)
+                if dept_codes and "FR" not in dept_codes:
+                    entity_sds = [f"SD{d}" for d in dept_codes]
+                    df = df[df["ENTITE_ORIGINE_PROCEDURE"].astype(str).str.strip().isin(entity_sds)].copy()
+        if not df.empty and "DC_ID" in df.columns:
+            if "DATE_REF" in df.columns:
+                df = df.sort_values("DATE_REF", ascending=False)
+                df = df[df["DC_ID"].isna() | ~df.duplicated(subset=["DC_ID"], keep="first")]
+            else:
+                df = df[df["DC_ID"].isna() | ~df.duplicated(subset=["DC_ID"], keep="first")]
+        return df
+
     sources = root / "data" / "sources"
     prefix = "suivi_procedure_enq_judiciaire_"
     path = _find_latest_dated_file(sources, prefix, (".ods",))
@@ -507,6 +625,15 @@ def load_pa(
     des PA alignés sur les contrôles dont resultat == « Manquement »
     (voir ref/README_sources.md § 2.5bis).
     """
+    global _SESSION_CACHE
+    if _SESSION_CACHE["active"] and _SESSION_CACHE["pa"] is not None:
+        df = _SESSION_CACHE["pa"].copy()
+        if date_deb is not None and date_fin is not None:
+            deb_ts = pd.to_datetime(date_deb)
+            fin_ts = pd.to_datetime(date_fin)
+            df = filtre_periode(df, "DATE_REF", deb_ts, fin_ts)
+        return df
+
     sources = root / "data" / "sources"
     path = _find_latest_dated_file(
         sources, "suivi_procedure_administrative_", (".ods",)
@@ -1754,6 +1881,27 @@ def load_pve(
     simple jointure spatiale (ex. QGIS Excel × centroïdes PNF sans critère de date) : seules
     les infractions dont la date de mise en force tombe dans l'intervalle du bilan sont comptées.
     """
+    global _SESSION_CACHE
+    if _SESSION_CACHE["active"] and _SESSION_CACHE["pve"] is not None:
+        df = _SESSION_CACHE["pve"].copy()
+        if echelle is not None and code is not None:
+            from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre, get_bmi_filters
+            echelle_norm = str(echelle).strip().lower()
+            if echelle_norm == "bmi" and "nom_site" in df.columns:
+                bmi_filters = get_bmi_filters(code)
+                nom_site_val = str(bmi_filters.get("nom_site_pve", "BMI")).upper()
+                df = df[df["nom_site"].astype(str).str.upper().str.contains(nom_site_val, case=True, na=False, regex=False)].copy()
+            elif echelle_norm != "bmi":
+                dept_codes = get_departements_pour_perimetre(echelle, code)
+                dept_col = "INF-DEPART" if "INF-DEPART" in df.columns else "INF-DEPARTEMENT"
+                if dept_col in df.columns and dept_codes and "FR" not in dept_codes:
+                    df = df[df[dept_col].astype(str).str.strip().isin(dept_codes)].copy()
+        if date_deb is not None and date_fin is not None and "INF-DATE-INTG" in df.columns:
+            deb_ts = pd.to_datetime(date_deb)
+            fin_ts = pd.to_datetime(date_fin)
+            df = filtre_periode(df, "INF-DATE-INTG", deb_ts, fin_ts)
+        return df
+
     sources = root / "data" / "sources"
     if not sources.exists():
         raise FileNotFoundError(f"Le dossier sources n'existe pas : {sources}")

@@ -344,7 +344,10 @@ def main() -> int:
     if args.mots_cles:
         cli_options["mots_cles"] = args.mots_cles
 
+    from ofbilan.common.chargeurs_donnees import init_session_cache, clear_session_cache
+
     exit_code = 0
+    init_session_cache(PROJECT_ROOT, echelle, codes_list, date_deb, date_fin)
     try:
         for current_code in codes_list:
             ret = run_profiles_batch(
@@ -369,6 +372,8 @@ def main() -> int:
         else:
             print("Relancer la commande avec l'option --debug pour obtenir plus de détails.", file=sys.stderr)
         return 1
+    finally:
+        clear_session_cache()
     return exit_code
 
 

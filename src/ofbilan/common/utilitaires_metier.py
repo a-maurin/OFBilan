@@ -45,7 +45,7 @@ def get_departements_pour_perimetre(echelle: str, code: str) -> list[str]:
     echelle_norm = str(echelle).strip().lower()
     code_norm = str(code).strip()
     if echelle_norm == "departement":
-        return [code_norm] if code_norm else []
+        return [c.strip() for c in code_norm.replace(",", " ").split() if c.strip()]
     if echelle_norm == "region":
         cfg = _load_regions_config()
         region_deps = cfg.get("REGION_DEPARTEMENTS", {})
