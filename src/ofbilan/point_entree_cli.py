@@ -94,7 +94,6 @@ def _ask_profils_interactive() -> list[str]:
 
 
 def main() -> int:
-    configure_logging()
     logger = logging.getLogger("ofbilan")
 
     parser = argparse.ArgumentParser(
@@ -204,11 +203,20 @@ def main() -> int:
         help=(
             "Option conservée pour compatibilité. Le profil synthese_activite_PA_PJ génère "
             "désormais systématiquement le PDF détaillé et la brochure "
-            "(*_brochure_ext.pdf ou *_brochure_int.pdf) à chaque exécution. "
+            "(*_brochure_ext.pdf or *_brochure_int.pdf) à chaque exécution. "
             "--no-brochure permet de désactiver la question interactive."
         ),
     )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Afficher tous les messages de débogage techniques sur la console.",
+    )
     args = parser.parse_args()
+
+    # Configuration du logging selon l'option --debug
+    console_level = logging.DEBUG if args.debug else logging.WARNING
+    configure_logging(console_level)
 
     if args.list_type_usagers:
         labels = _load_type_usager_labels()
@@ -337,19 +345,30 @@ def main() -> int:
         cli_options["mots_cles"] = args.mots_cles
 
     exit_code = 0
-    for current_code in codes_list:
-        ret = run_profiles_batch(
-            profils_resolus,
-            date_deb,
-            date_fin,
-            echelle,
-            current_code,
-            combine=args.combine,
-            cli_options=cli_options,
-        )
-        if ret != 0:
-            if exit_code == 0:
-                exit_code = ret
+    try:
+        for current_code in codes_list:
+            ret = run_profiles_batch(
+                profils_resolus,
+                date_deb,
+                date_fin,
+                echelle,
+                current_code,
+                combine=args.combine,
+                cli_options=cli_options,
+            )
+            if ret != 0:
+                if exit_code == 0:
+                    exit_code = ret
+    except Exception as e:
+        logger.exception("Erreur critique survenue lors de l'exécution : %s", e)
+        print(f"\nErreur : Une erreur critique est survenue lors de la génération : {e}", file=sys.stderr)
+        
+        has_file_handler = any(isinstance(h, logging.FileHandler) for h in logger.handlers)
+        if has_file_handler:
+            print("Veuillez consulter le fichier 'debug_run.log' dans le dossier de sortie pour plus de détails.", file=sys.stderr)
+        else:
+            print("Relancer la commande avec l'option --debug pour obtenir plus de détails.", file=sys.stderr)
+        return 1
     return exit_code
 
 

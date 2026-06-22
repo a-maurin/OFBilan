@@ -165,11 +165,19 @@ def load_pochoir_gdf(
     
     if pochoir_id in ("zone_a_risque", "zone_tub", "pochoir_zone_a_risque"):
         root = project_root or PROJECT_ROOT
-        return load_zone_tub_gdf(root)
+        gdf = load_zone_tub_gdf(root)
+        dep_gdf = load_department_gdf(dept_code, project_root=project_root)
+        if not gdf.empty and not dep_gdf.empty:
+            gdf = gpd.clip(gdf.to_crs(dep_gdf.crs), dep_gdf)
+        return gdf
         
     if pochoir_id in ("aoa", "pnf", "pochoir_aoa"):
         root = project_root or PROJECT_ROOT
-        return load_pnf_aoa_gdf(root)
+        gdf = load_pnf_aoa_gdf(root)
+        dep_gdf = load_department_gdf(dept_code, project_root=project_root)
+        if not gdf.empty and not dep_gdf.empty:
+            gdf = gpd.clip(gdf.to_crs(dep_gdf.crs), dep_gdf)
+        return gdf
         
     logger.warning("Pochoir_id inconnu '%s', fallback sur département %s", pochoir_id, dept_code)
     return load_department_gdf(dept_code, project_root=project_root)
@@ -193,9 +201,11 @@ def write_pochoir_gpkg(
     if output_path.exists():
         output_path.unlink()
     
-    layer_n = pochoir_id if pochoir_id.startswith("pochoir_") else f"pochoir_{pochoir_id}"
     if pochoir_id in ("departement", "aucun"):
         layer_n = pochoir_layer_name(dept_code)
+    else:
+        norm_id = pochoir_id.replace("pochoir_", "", 1) if pochoir_id.startswith("pochoir_") else pochoir_id
+        layer_n = f"pochoir_{norm_id}_sd{normalize_dept_code(dept_code)}"
         
     gdf.to_file(output_path, driver="GPKG", layer=layer_n)
     return output_path

@@ -292,3 +292,22 @@ def test_bilans_cli_multi_codes_shares_options(monkeypatch) -> None:
     assert captured_opts_list[0]["cartes_selection"] == ["carte_1"]
     assert captured_opts_list[1]["cartes_selection"] == ["carte_1"]
 
+
+def test_bilans_cli_debug_option(monkeypatch) -> None:
+    import ofbilan.point_entree_cli as cli
+    import logging
+
+    captured_level = []
+    
+    # Mock configure_logging pour intercepter le niveau passé
+    def _fake_configure_logging(level):
+        captured_level.append(level)
+        
+    monkeypatch.setattr(cli, "configure_logging", _fake_configure_logging)
+    monkeypatch.setattr(sys, "argv", ["bilans", "--list-themes", "--debug"])
+    monkeypatch.setattr(cli, "_list_themes", lambda: ["demo_a"])
+    
+    assert cli.main() == 0
+    assert captured_level == [logging.DEBUG]
+
+

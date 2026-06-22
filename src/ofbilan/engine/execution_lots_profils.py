@@ -141,12 +141,12 @@ def run_profiles_batch(
                 file=sys.stderr,
             )
             return 1
-        print(f"Bilan combiné : {', '.join(profils)}")
+        print(f"\nDémarrage du bilan combiné : {', '.join(profils)}")
         out_combine = get_out_dir(f"bilan_combine_{'_'.join(profils)}")
         out_combine.mkdir(parents=True, exist_ok=True)
         generated_pdfs_last_profile: list[Path] = []
         for pid in profils:
-            print(f"  Exécution profil {pid}...")
+            print(f"\nExécution du profil : {pid}...")
             started_at = time()
             ret = run_profile(pid, date_deb, date_fin, echelle, code, options=cli_options)
             if ret != 0:
@@ -158,7 +158,7 @@ def run_profiles_batch(
             "Les rapports individuels sont dans data/out/bilan_<profil>/.\n",
             encoding="utf-8",
         )
-        print(f"Résumé combiné dans {out_combine}")
+        print(f"\nRésumé combiné disponible dans : {out_combine}")
         _open_generated_pdfs(generated_pdfs_last_profile)
         return 0
 
@@ -180,7 +180,7 @@ def run_profiles_batch(
 
     generated_pdfs_last_profile = []
     for pid in profils:
-        print(f"Exécution bilan {pid}...")
+        print(f"\nDémarrage du bilan : {pid}...")
         started_at = time()
         ret = run_profile(pid, date_deb, date_fin, echelle, code, options=cli_options)
         if ret != 0:

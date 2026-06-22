@@ -110,6 +110,7 @@ class ProfileConfig:
     cartes_actives: List[str] = field(default_factory=list)
     cartes_definitions: Dict[str, MapDefinition] = field(default_factory=dict)
     pochoir: str = "departement"
+    emprise: str = "departement"
     couches_vecteurs_extra: List[str] = field(default_factory=list)
 
     # Identifiants des éléments texte dans le layout QGIS

@@ -280,6 +280,7 @@ def _load_profiles_from_param() -> Optional[tuple[Dict[str, "ProfileConfig"], st
         # Sur-charges spécifiques au profil
         cartes_actives = carto_cfg.get("cartes_actives", default_cartes_actives)
         pochoir = carto_cfg.get("pochoir", default_pochoir)
+        emprise = carto_cfg.get("emprise", pochoir)
         couches_extra = carto_cfg.get("couches_vecteurs_extra", default_couches_vecteurs)
         
         prof_sym_src = str(carto_cfg.get("symbology_source", global_symbology_source)).strip().lower()
@@ -341,6 +342,7 @@ def _load_profiles_from_param() -> Optional[tuple[Dict[str, "ProfileConfig"], st
             cartes_actives=cartes_actives,
             cartes_definitions=cartes_definitions,
             pochoir=pochoir,
+            emprise=emprise,
             couches_vecteurs_extra=couches_extra,
             natinf_pve=n_pve,
             natinf_pj=n_pj,
@@ -381,6 +383,9 @@ def _load_profiles_from_param() -> Optional[tuple[Dict[str, "ProfileConfig"], st
             subtitle=str(yaml_pdata.get("subtitle", "")),
             layout_title_item_id=str(yaml_pdata.get("layout_title_item_id", "titre_principal")),
             layout_subtitle_item_id=str(yaml_pdata.get("layout_subtitle_item_id", "sous_titre")),
+            pochoir=str(yaml_pdata.get("pochoir", "departement")),
+            emprise=str(yaml_pdata.get("emprise", yaml_pdata.get("pochoir", "departement"))),
+            couches_vecteurs_extra=yaml_pdata.get("couches_vecteurs_extra", []),
             symbology_source=yaml_sym_src,
             natinf_pve=n_pve,
             natinf_pj=n_pj,
@@ -543,8 +548,21 @@ def resolve_layers_for_config(
             
             gpkg_path = None
             if role == "pej":
-                from ofbilan.common.chargeurs_donnees import get_points_infrac_pj_path
-                gpkg_path = get_points_infrac_pj_path(PROJECT_ROOT)
+                prefixes_candidats = [profil_prefix]
+                parts = profil_prefix.split('_') if profil_prefix else []
+                if len(parts) >= 3:
+                    prefixes_candidats.append(f"{parts[0]}_{parts[-1]}")
+                if len(parts) >= 2:
+                    prefixes_candidats.append(parts[0])
+                
+                for pref in prefixes_candidats:
+                    path_cand = carto_dir / f"pej_{pref}_export_automatique.gpkg"
+                    if path_cand.exists():
+                        gpkg_path = path_cand
+                        break
+                if gpkg_path is None:
+                    from ofbilan.common.chargeurs_donnees import get_points_infrac_pj_path
+                    gpkg_path = get_points_infrac_pj_path(PROJECT_ROOT)
             else:
                 is_pve = "pve" in layer_key.lower() or (role and "pve" in role.lower())
                 is_ctrl = "controle" in layer_key.lower() or "ctrl" in layer_key.lower() or "donnees" in layer_key.lower() or (role and "controle" in role.lower())
@@ -588,6 +606,24 @@ def resolve_layers_for_config(
         layer, layer_name = ensure_pochoir_layer_in_project(dept_code, pochoir_id=pochoir_id)
         if layer and layer_name:
             return [(layer, layer_name, "generated")]
+
+    if not results or not results[0][0]:
+        if lcfg.layer_name == "coeur_parc" or layer_key == "coeur_parc":
+            from ofbilan.common.chargeurs_donnees import get_pnf_coeur_shp_path
+            from ofbilan.chemins_projet import PROJECT_ROOT
+            coeur_path = get_pnf_coeur_shp_path(PROJECT_ROOT)
+            if coeur_path.exists():
+                layer = QgsVectorLayer(str(coeur_path), "coeur_parc", "ogr")
+                if layer.isValid():
+                    from qgis.core import QgsFillSymbol, QgsSingleSymbolRenderer
+                    sym = QgsFillSymbol.createSimple({'color': '0,0,0,0', 'outline_color': '34,139,34', 'outline_width': '0.8'})
+                    layer.setRenderer(QgsSingleSymbolRenderer(sym))
+                    QgsProject.instance().addMapLayer(layer, True)
+                    return [(layer, "coeur_parc", "generated")]
+                else:
+                    logger.error("Couche coeur_parc invalide : %s", coeur_path)
+            else:
+                logger.warning("Fichier coeur_parc introuvable : %s", coeur_path)
 
     if not results:
         return [(None, "", "missing")]
@@ -633,11 +669,14 @@ def ensure_pochoir_layer_in_project(dept_code: str, pochoir_id: str = "departeme
         pochoir_cache_path,
         pochoir_layer_name,
         write_pochoir_gpkg,
+        normalize_dept_code,
     )
 
-    layer_name = pochoir_id if pochoir_id.startswith("pochoir_") else f"pochoir_{pochoir_id}"
     if pochoir_id in ("departement", "aucun"):
         layer_name = pochoir_layer_name(dept_code)
+    else:
+        norm_id = pochoir_id.replace("pochoir_", "", 1) if pochoir_id.startswith("pochoir_") else pochoir_id
+        layer_name = f"pochoir_{norm_id}_sd{normalize_dept_code(dept_code)}"
         
     existing = get_layer_by_name(layer_name)
     cache_dir = OUT_DIR_CARTES / ".pochoir_cache"
@@ -664,15 +703,15 @@ def ensure_pochoir_layer_in_project(dept_code: str, pochoir_id: str = "departeme
     return layer, layer_name
 
 
-def apply_map_extent_for_department(layout, dept_code: str, *, margin_ratio: float = 0.05) -> bool:
-    """Ajuste l'emprise des QgsLayoutItemMap sur le département sélectionné."""
+def apply_map_extent(layout, dept_code: str, pochoir_id: str = "departement", *, margin_ratio: float = 0.05) -> bool:
+    """Ajuste l'emprise des QgsLayoutItemMap sur l'emprise demandée (département, aoa...)."""
     if not HAS_QGIS or not dept_code:
         return False
-    from ofbilan.cartographie.pochoir_helper import load_department_gdf
+    from ofbilan.cartographie.pochoir_helper import load_pochoir_gdf
     from qgis.core import QgsRectangle
 
     try:
-        gdf = load_department_gdf(dept_code, project_root=PROJECT_ROOT)
+        gdf = load_pochoir_gdf(pochoir_id, dept_code, project_root=PROJECT_ROOT)
         xmin, ymin, xmax, ymax = gdf.total_bounds
         dx = xmax - xmin
         dy = ymax - ymin
@@ -681,7 +720,7 @@ def apply_map_extent_for_department(layout, dept_code: str, *, margin_ratio: flo
         ymin -= dy * margin_ratio
         ymax += dy * margin_ratio
     except (FileNotFoundError, ValueError) as exc:
-        logger.warning("Emprise carte non ajustée (département %s) : %s", dept_code, exc)
+        logger.warning("Emprise carte non ajustée (pochoir %s, département %s) : %s", pochoir_id, dept_code, exc)
         return False
 
     from qgis.core import QgsRectangle, QgsCoordinateReferenceSystem, QgsCoordinateTransform, QgsProject
@@ -1841,7 +1880,8 @@ def export_layout(
 
     if dept_code:
         try:
-            apply_map_extent_for_department(layout, dept_code)
+            emprise_id = getattr(prof, "emprise", "departement") or "departement"
+            apply_map_extent(layout, dept_code, pochoir_id=emprise_id)
         except Exception as e:
             logger.exception("Erreur ajustement emprise carte (export continué): %s", e)
 
@@ -2289,53 +2329,72 @@ def run_export(
                     continue
 
                 for layer, resolved_name, resolve_source in resolved_infos:
-                    if not layer or not resolved_name or not layer.isValid():
+                    if not resolved_name:
                         continue
+                        
+                    if not layer or not layer.isValid():
+                        # Tentative de réparation de la source de données pour les couches PNF
+                        if resolved_name in ("Coeur_data_gouv_PNForets", "coeur_parc"):
+                            from ofbilan.common.chargeurs_donnees import get_pnf_coeur_shp_path
+                            coeur_path = get_pnf_coeur_shp_path(PROJECT_ROOT)
+                            if coeur_path.exists():
+                                if layer:
+                                    try:
+                                        QgsProject.instance().removeMapLayer(layer.id())
+                                    except Exception:
+                                        pass
+                                layer = QgsVectorLayer(str(coeur_path), resolved_name, "ogr")
+                                if layer.isValid():
+                                    from PyQt5.QtGui import QColor
+                                    from qgis.core import QgsFillSymbol, QgsSingleSymbolRenderer, QgsSimpleFillSymbolLayer
+                                    sl = QgsSimpleFillSymbolLayer()
+                                    sl.setFillColor(QColor(34, 139, 34, 128))  # 50% transparency
+                                    sl.setStrokeColor(QColor(34, 139, 34, 255))
+                                    sl.setStrokeWidth(0.8)
+                                    sym = QgsFillSymbol()
+                                    sym.changeSymbolLayer(0, sl)
+                                    layer.setRenderer(QgsSingleSymbolRenderer(sym))
+                                    QgsProject.instance().addMapLayer(layer, True)
+                        elif resolved_name in ("AOA_2021_PNForets", "AOA_2021_PNForet_21", "AOA_2021_PNForets.shp"):
+                            from ofbilan.common.chargeurs_donnees import get_pnf_aoa_shp_path
+                            aoa_path = get_pnf_aoa_shp_path(PROJECT_ROOT)
+                            if aoa_path.exists():
+                                if layer:
+                                    try:
+                                        QgsProject.instance().removeMapLayer(layer.id())
+                                    except Exception:
+                                        pass
+                                layer = QgsVectorLayer(str(aoa_path), resolved_name, "ogr")
+                                if layer.isValid():
+                                    QgsProject.instance().addMapLayer(layer, True)
+                                    
+                    if not layer or not layer.isValid():
+                        continue
+                        
+                    if resolved_name in ("Coeur_data_gouv_PNForets", "coeur_parc"):
+                        try:
+                            from PyQt5.QtGui import QColor
+                            from qgis.core import QgsFillSymbol, QgsSingleSymbolRenderer, QgsSimpleFillSymbolLayer
+                            sl = QgsSimpleFillSymbolLayer()
+                            sl.setFillColor(QColor(34, 139, 34, 128))  # 50% transparency
+                            sl.setStrokeColor(QColor(34, 139, 34, 255))
+                            sl.setStrokeWidth(0.8)
+                            sym = QgsFillSymbol()
+                            sym.changeSymbolLayer(0, sl)
+                            layer.setRenderer(QgsSingleSymbolRenderer(sym))
+                            layer.triggerRepaint()
+                        except Exception as e:
+                            logger.error("Erreur lors de l'application de la symbologie coeur_parc : %s", e)
+
                     layers_to_render.append(layer)
 
-                    is_pnf = resolved_name in ("Coeur_data_gouv_PNForets", "AOA_2021_PNForet_21")
+                    is_pnf = resolved_name in ("Coeur_data_gouv_PNForets", "AOA_2021_PNForet_21", "coeur_parc")
                     if is_pnf and str(effective_dept) not in ("21", "52"):
                         layers_to_render.remove(layer)
                         continue
 
                     if is_pnf:
-                        try:
-                            pochoir_layer, _ = ensure_pochoir_layer_in_project(effective_dept, "departement")
-                            if pochoir_layer:
-                                pochoir_geom = None
-                                for f in pochoir_layer.getFeatures():
-                                    if not pochoir_geom:
-                                        pochoir_geom = f.geometry()
-                                    else:
-                                        pochoir_geom = pochoir_geom.combine(f.geometry())
-                                
-                                if pochoir_geom:
-                                    geom_type_map = {0: "Point", 1: "LineString", 2: "Polygon"}
-                                    g_type = geom_type_map.get(layer.geometryType(), "Point")
-                                    crs_str = layer.crs().authid()
-                                    clipped = QgsVectorLayer(f"{g_type}?crs={crs_str}", layer.name(), "memory")
-                                    pr = clipped.dataProvider()
-                                    pr.addAttributes(layer.fields())
-                                    clipped.updateFields()
-                                    
-                                    feats = []
-                                    req = QgsFeatureRequest().setFilterRect(pochoir_geom.boundingBox())
-                                    for f in layer.getFeatures(req):
-                                        geom = f.geometry()
-                                        if geom and geom.intersects(pochoir_geom):
-                                            f_out = QgsFeature(f)
-                                            if not geom.within(pochoir_geom):
-                                                f_out.setGeometry(geom.intersection(pochoir_geom))
-                                            feats.append(f_out)
-                                    
-                                    pr.addFeatures(feats)
-                                    clipped.updateExtents()
-                                    clipped.setRenderer(layer.renderer().clone())
-                                    layers_to_render[-1] = clipped
-                                    layer = clipped
-                                    logger.info("  → Couche '%s' tronquée par le pochoir départemental", resolved_name)
-                        except Exception as e:
-                            logger.error("  → Erreur lors du clipping de '%s' : %s", resolved_name, e)
+                        pass # No need to clip PNF layers manually, the inverted polygon pochoir masks the outside visually
 
                     if resolve_source != "exact":
                         logger.info(
@@ -2406,6 +2465,23 @@ def run_export(
                     node = root.findLayer(layer.id())
                     if node and node.isVisible():
                         layers_to_render.append(layer)
+
+            # Ordre de rendu (QGIS : index 0 = premier plan)
+            # 1. Pochoirs (doit masquer tout ce qui dépasse)
+            # 2. Points (PEJ, PVe, etc.)
+            # 3. Contexte (coeur_parc, aoa...)
+            # 4. Fonds de carte (déjà à la fin)
+            pochoir_layers = [lyr for lyr in layers_to_render if "pochoir" in lyr.name().lower()]
+            context_layers = [lyr for lyr in layers_to_render if lyr.name().lower() in ("coeur_parc", "coeur_data_gouv_pnforets", "aoa_2021_pnforet_21")]
+            basemap_layers = [lyr for lyr in layers_to_render if is_basemap_layer(lyr.name())]
+            other_layers = [
+                lyr for lyr in layers_to_render
+                if lyr not in pochoir_layers
+                and lyr not in context_layers
+                and lyr not in basemap_layers
+            ]
+            
+            layers_to_render = pochoir_layers + other_layers + context_layers + basemap_layers
 
             out_path = out_dir / prof.output_filename
 
@@ -2616,10 +2692,13 @@ def main() -> None:
 
 def _extract_legend_info(layer, lcfg):
     """Extrait les informations de légende (titre, items) depuis le QgsVectorLayer."""
-    if "pochoir" in lcfg.layer_name.lower() or "pochoir" in layer.name().lower() or "contexte" == getattr(lcfg, "layer_role", ""):
+    is_coeur = "coeur_parc" in layer.name().lower() or "coeur_data_gouv_pnforets" in layer.name().lower()
+    if "pochoir" in lcfg.layer_name.lower() or "pochoir" in layer.name().lower() or ("contexte" == getattr(lcfg, "layer_role", "") and not is_coeur):
         return None
         
     title = lcfg.legend_label or lcfg.layer_name
+    if is_coeur and (not title or title == "coeur_parc"):
+        title = "Cœur de Parc National"
     items = []
     
     renderer = layer.renderer()
@@ -2682,7 +2761,12 @@ def _extract_legend_info(layer, lcfg):
             break
         if not has_any:
             return None
-        color = renderer.symbol().color().name() if renderer.symbol() else "#000000"
+        
+        color = "#000000"
+        if renderer.symbol() and renderer.symbol().color():
+            c = renderer.symbol().color()
+            color = f"#{c.red():02x}{c.green():02x}{c.blue():02x}{c.alpha():02x}"
+            
         items.append({"label": title, "color": color, "shape": base_shape})
         title = None
     elif rtype == "categorizedSymbol":
@@ -2691,7 +2775,12 @@ def _extract_legend_info(layer, lcfg):
             val = cat.value()
             if val == "" or val is None: continue
             if str(val).lower() not in present_str_values: continue
-            color = cat.symbol().color().name() if cat.symbol() else "#000000"
+            
+            color = "#000000"
+            if cat.symbol() and cat.symbol().color():
+                c = cat.symbol().color()
+                color = f"#{c.red():02x}{c.green():02x}{c.blue():02x}{c.alpha():02x}"
+                
             label = cat.label() or str(val)
             items.append({"label": label, "color": color, "shape": base_shape})
     elif rtype == "graduatedSymbol":
@@ -2710,7 +2799,11 @@ def _extract_legend_info(layer, lcfg):
                     break
             if not has_features:
                 continue
-            color = range_.symbol().color().name() if range_.symbol() else "#000000"
+                
+            color = "#000000"
+            if range_.symbol() and range_.symbol().color():
+                c = range_.symbol().color()
+                color = f"#{c.red():02x}{c.green():02x}{c.blue():02x}{c.alpha():02x}"
             lower = range_.lowerValue()
             upper = range_.upperValue()
             if lower.is_integer() and upper.is_integer():

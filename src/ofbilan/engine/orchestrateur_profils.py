@@ -405,16 +405,19 @@ def _run_global_profile_via_yaml(
         
     out_dir = get_out_dir(out_subdir)
 
-    print(
-        f"Période : {date_deb_ts.date():%d/%m/%Y} au {date_fin_ts.date():%d/%m/%Y} – {echelle_norm} {code_norm}."
-    )
+    from ofbilan.configuration_journalisation import add_file_handler
+    add_file_handler(out_dir)
+
+    print(f"Bilan « {profile.get('label', 'global')} »")
+    print(f"Période : du {date_deb_ts.date():%d/%m/%Y} au {date_fin_ts.date():%d/%m/%Y}")
+    
     ventilation_mode, vent_type, seuil_jours, duree_jours = _resolve_ventilation_mode_from_profile(
         profile,
         date_deb_ts=date_deb_ts,
         date_fin_ts=date_fin_ts,
     )
 
-    print("Étape 1/3 : chargement des données...")
+    print("[1/5] Chargement des données...")
     with Spinner():
         point = load_point_ctrl(root, echelle=echelle_norm, code=code_norm, date_deb=date_deb_ts, date_fin=date_fin_ts)
         pa = load_pa(root, date_deb=date_deb_ts, date_fin=date_fin_ts)
@@ -440,12 +443,7 @@ def _run_global_profile_via_yaml(
             pve, root, context="bilan global — PVe", log=spatial_log
         )
 
-    print(
-        f"Ventilation temporelle : {ventilation_mode} "
-        f"(type={vent_type}, seuil={seuil_jours} j, durée={duree_jours} j)"
-    )
-
-    print("Étape 2/3 : agrégations...")
+    print(f"[2/5] Regroupement et calcul des indicateurs (Période : {ventilation_mode})...")
     with Spinner():
         run_aggregations(
             profile=profile,
@@ -560,6 +558,7 @@ def _run_global_profile_via_yaml(
         profile["filter"]["keywords"] = mots_cles
 
     if resolved_opts.get("cartes", False) and map_profiles:
+        print("[3/5] Préparation des cartes de localisation...")
         try:
             ensure_maps_for_profiles(
                 map_profiles,
@@ -573,6 +572,8 @@ def _run_global_profile_via_yaml(
         except Exception as e:
             logger = logging.getLogger("ofbilan.engine")
             logger.warning("Cartes profils : %s", e)
+    else:
+        print("[3/5] Préparation des cartes de localisation (Désactivé)...")
 
     prompt_cartography_integration(
         root=root,
@@ -588,7 +589,11 @@ def _run_global_profile_via_yaml(
         print("Option --cartes-seules active : arrêt avant la génération du PDF.")
         return 0
 
-    print("Étape 3/3 : génération du PDF (graphiques et mise en page)...")
+    print("[4/5] Exportation des tableaux de résultats (CSV)...")
+    # L'export CSV est fait en interne dans run_aggregations pour le bilan global
+    print("  Tableaux exportés.")
+
+    print("[5/5] Mise en page et création du rapport PDF...")
     with Spinner():
         profil_id = str(profile.get("id", "global")).strip()
         if code_norm:
@@ -613,6 +618,7 @@ def _run_global_profile_via_yaml(
             pdf_kwargs["brochure"] = bool(resolved_opts.get("brochure", False))
         generate_pdf_impl(out_dir, **pdf_kwargs)
 
+    print(f"\nTerminé ! Rapport disponible dans : {out_dir}")
     print(_message_fin_generation_pdf(profile, out_subdir, resolved_opts=resolved_opts))
     return 0
 
@@ -784,7 +790,12 @@ def prompt_cartography_integration(
     
     # If no specific patterns are found, expected_map_filenames defaults to [carte_..., carte_..._2]
     # We can check if at least the first one exists.
-    actual_paths = resolve_profile_map_paths(map_id, profile=profile, presentation_cfg=pres_cfg if isinstance(pres_cfg, dict) else None)
+    actual_paths = resolve_profile_map_paths(
+        map_id,
+        profile=profile,
+        presentation_cfg=pres_cfg if isinstance(pres_cfg, dict) else None,
+        target_dir=cartes_dir,
+    )
     if actual_paths:
         # Les cartes sont déjà présentes !
         print("\n--- Cartographie ---")
@@ -2786,6 +2797,67 @@ def _export_csv(
             pej_filtered[cols].to_csv(
                 out_dir / f"pej_{prefix}.csv", sep=";", index=False
             )
+        try:
+            import geopandas as gpd
+            import logging
+            from pathlib import Path
+            logger = logging.getLogger(__name__)
+            
+            lon_col, lat_col = "x_faits", "y_faits"
+            if lon_col in pej_filtered.columns and lat_col in pej_filtered.columns:
+                df_geo = pej_filtered.copy()
+                df_geo["_lon"] = pd.to_numeric(df_geo[lon_col], errors="coerce")
+                df_geo["_lat"] = pd.to_numeric(df_geo[lat_col], errors="coerce")
+                
+                # Gérer les PEJ orphelins (sans coordonnées) en utilisant le centroïde de leur commune si possible
+                missing = df_geo["_lon"].isna() | df_geo["_lat"].isna() | (df_geo["_lon"] == 0) | (df_geo["_lat"] == 0)
+                root = Path(__file__).resolve().parent.parent.parent.parent
+                
+                if missing.any():
+                    communes_shp = root / "ref" / "programme" / "sig" / "communes_21" / "communes.shp"
+                    if communes_shp.exists():
+                        try:
+                            # Lire les communes et calculer les centroïdes en WGS84
+                            coms = gpd.read_file(communes_shp)
+                            if coms.crs is None or coms.crs.to_epsg() != 4326:
+                                coms = coms.to_crs("EPSG:4326")
+                            
+                            # Use long_centr and lat_centro if they exist, else compute
+                            if "long_centr" in coms.columns and "lat_centro" in coms.columns:
+                                dict_x = coms.set_index("INSEE_COM")["long_centr"].astype(float).to_dict()
+                                dict_y = coms.set_index("INSEE_COM")["lat_centro"].astype(float).to_dict()
+                            else:
+                                dict_x = pd.Series(coms.geometry.centroid.x.values, index=coms.INSEE_COM).to_dict()
+                                dict_y = pd.Series(coms.geometry.centroid.y.values, index=coms.INSEE_COM).to_dict()
+                            
+                            insee_s = coalesced_insee_series(df_geo)
+                            df_geo["insee_str"] = insee_s.astype(str).str.zfill(5)
+                            
+                            # Mettre à jour les valeurs manquantes via le dictionnaire
+                            df_geo.loc[missing, "_lon"] = df_geo.loc[missing, "insee_str"].map(dict_x)
+                            df_geo.loc[missing, "_lat"] = df_geo.loc[missing, "insee_str"].map(dict_y)
+                        except Exception as e_geom:
+                            logger.warning(f"Impossible de centrer les PEJ orphelins : {e_geom}")
+                
+                # Exporter seulement ceux qui ont des coordonnées finales valides
+                mask_geo = df_geo["_lon"].notna() & df_geo["_lat"].notna() & (df_geo["_lon"] != 0) & (df_geo["_lat"] != 0)
+                if mask_geo.any():
+                    gdf = gpd.GeoDataFrame(
+                        pej_filtered[mask_geo],
+                        geometry=gpd.points_from_xy(df_geo.loc[mask_geo, "_lon"], df_geo.loc[mask_geo, "_lat"]),
+                        crs="EPSG:4326"
+                    ).to_crs("EPSG:2154")
+                    
+                    for col in gdf.select_dtypes(include=['datetime64[ns, UTC]', 'datetime64[ns]', 'datetime64']).columns:
+                        gdf[col] = gdf[col].astype(str)
+                    
+                    carto_dir = root / "data" / "sources" / "sig" / "CARTO"
+                    carto_dir.mkdir(parents=True, exist_ok=True)
+                    gpkg_path = carto_dir / f"pej_{prefix}_export_automatique.gpkg"
+                    gdf.to_file(gpkg_path, driver="GPKG")
+                    logger.info(f"Couche géographique PEJ générée pour QGIS : {gpkg_path} ({mask_geo.sum()} points)")
+        except Exception as e:
+            logger.warning(f"Impossible d'exporter la couche QGIS des PEJ : {e}")
     if "pej_par_theme" in results:
         results["pej_par_theme"].to_csv(
             out_dir / f"pej_{prefix}_par_theme.csv", sep=";", index=False
@@ -4853,7 +4925,10 @@ def _generate_pdf(
     if options.get("cartes", False):
         map_id = profile.get("_map_id") or profil_id
         map_paths = resolve_profile_map_paths(
-            str(map_id), profile=profile, presentation_cfg=presentation_cfg
+            str(map_id),
+            profile=profile,
+            presentation_cfg=presentation_cfg,
+            target_dir=out_dir,
         )
         map_layout = resolve_map_layout(profile=profile, presentation_cfg=presentation_cfg)
         if map_paths and is_block_enabled(presentation_cfg, "sec5.show_map", True):
@@ -4986,6 +5061,10 @@ def _run_engine_thematic_pipeline(
         out_subdir = f"{out_subdir}_{code_norm}"
         
     out_dir = cfg.get_out(out_subdir)
+
+    from ofbilan.configuration_journalisation import add_file_handler
+    add_file_handler(out_dir)
+
     label = profile["label"]
     sources = profile["sources"]
 
@@ -5081,7 +5160,7 @@ def _run_engine_thematic_pipeline(
         profile.pop("_export_prefix", None)
 
     # ── Chargement ──
-    print("  Chargement des données...")
+    print("[1/6] Chargement des données...")
     with Spinner():
         point = (
             load_point_ctrl(root, echelle=echelle, code=code, date_deb=date_deb, date_fin=date_fin)
@@ -5120,7 +5199,7 @@ def _run_engine_thematic_pipeline(
             point, _profile_sans_cible_type_usager(profile)
         )
 
-    print("  Filtrage...")
+    print("[2/6] Filtrage thématique...")
     with Spinner():
         point_filtered = _filter_point_ctrl(point, profile) if not point.empty else point
         pej_filtered = _filter_pej(pej, profile, cfg, point_filtered) if not pej.empty else pej
@@ -5134,7 +5213,6 @@ def _run_engine_thematic_pipeline(
     spatial_log = logging.getLogger("ofbilan.spatial")
     restrict_geo_val = str(profile.get("restrict_geo") or "").strip().lower()
     if restrict_geo_val == "pnf":
-        print("  Restriction géographique PNF...")
         with Spinner():
             point_filtered, pej_filtered, pa_filtered, pve_filtered = _apply_restrict_geo_pnf(
                 point_filtered, pej_filtered, pa_filtered, pve_filtered, root, spatial_log
@@ -5149,7 +5227,6 @@ def _run_engine_thematic_pipeline(
                     spatial_log,
                 )
     elif restrict_geo_val == "tub":
-        print("  Restriction géographique TUB...")
         with Spinner():
             point_filtered, pej_filtered, pa_filtered, pve_filtered = _apply_restrict_geo_tub(
                 point_filtered, pej_filtered, pa_filtered, pve_filtered, root, spatial_log
@@ -5233,20 +5310,14 @@ def _run_engine_thematic_pipeline(
         )
 
     # ── Analyses spatiales ──
-    print("  Analyses spatiales...")
+    print(f"[3/6] Regroupement et calcul des indicateurs (Période : {ventilation_mode})...")
     with Spinner():
         spatial, point_filtered = _run_spatial_analyses(
             point_filtered, pej_filtered, pve_filtered,
             resolved_opts, cfg, profil_id=profil_id,
         )
 
-    print(
-        f"Ventilation temporelle : {ventilation_mode} "
-        f"(type={vent_type}, seuil={seuil_jours} j, durée={duree_jours} j)"
-    )
-
     # ── Agrégations ──
-    print("  Agrégations...")
     with Spinner():
         results = _run_aggregations(
             point_filtered, pej_filtered, pa_filtered, pve_filtered,
@@ -5255,7 +5326,7 @@ def _run_engine_thematic_pipeline(
         )
 
     # ── Export CSV ──
-    print("  Export CSV...")
+    print("[4/6] Exportation des tableaux de résultats (CSV)...")
     with Spinner():
         _export_csv(
             results, point_filtered, pej_filtered, pa_filtered, pve_filtered,
@@ -5279,6 +5350,7 @@ def _run_engine_thematic_pipeline(
     map_profiles = resolve_qgis_profile_ids(profile, profil_id, resolved_opts)
 
     if resolved_opts.get("cartes", False) and map_profiles:
+        print("[5/6] Préparation des cartes de localisation...")
         try:
             ensure_maps_for_profiles(
                 map_profiles,
@@ -5292,6 +5364,8 @@ def _run_engine_thematic_pipeline(
         except Exception as e:
             logger = logging.getLogger("ofbilan.engine")
             logger.warning("Cartes profils : %s", e)
+    else:
+        print("[5/6] Préparation des cartes de localisation (Désactivé)...")
 
     prompt_cartography_integration(
         root=root,
@@ -5309,10 +5383,9 @@ def _run_engine_thematic_pipeline(
         return 0
 
     # ── PDF ──
-    print("  Génération du PDF...")
+    print("[6/6] Mise en page et création du rapport PDF...")
     with Spinner():
         _generate_pdf(results, out_dir, profile, cfg, resolved_opts)
 
-    # Flèche ASCII pour éviter les problèmes d'encodage dans certaines consoles Windows.
-    print(f"  Terminé -> {out_dir}")
+    print(f"\nTerminé ! Rapport disponible dans : {out_dir}")
     return 0

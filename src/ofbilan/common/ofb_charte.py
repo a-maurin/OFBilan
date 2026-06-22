@@ -460,18 +460,19 @@ class Spinner:
 
     Animation type « machine à écrire » :
     - apparition caractère par caractère de
-      « Traitement des données en cours. Patience... »
+      « Traitement des données en cours. Patience... » (ou message personnalisé)
     - courte pause avec le message complet
     - effacement caractère par caractère
     - boucle tant que le contexte est actif.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, message: str = "Traitement des données en cours. Patience...") -> None:
+        self.message = message
         self._stop_event = threading.Event()
         self._thread = threading.Thread(target=self._spin, daemon=True)
 
     def _spin(self) -> None:
-        message = "Traitement des données en cours. Patience..."
+        message = self.message
         appear_delay = 0.06
         disappear_delay = 0.03
         pause_full = 1.5
@@ -518,6 +519,18 @@ class Spinner:
                 elapsed += 0.1
 
     def __enter__(self) -> "Spinner":
+        import logging
+        # En mode debug (console_level <= DEBUG), on désactive l'animation du spinner pour ne pas corrompre le flux de log
+        is_debug = False
+        logger = logging.getLogger("ofbilan")
+        for h in logger.handlers:
+            if isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler):
+                if h.level <= logging.DEBUG:
+                    is_debug = True
+                    break
+        if is_debug:
+            return self
+            
         _enable_windows_vt100()
         sys.stdout.write("\n")
         sys.stdout.flush()
@@ -525,9 +538,19 @@ class Spinner:
         return self
 
     def __exit__(self, _exc_type, _exc_val, _exc_tb) -> None:
+        import logging
+        is_debug = False
+        logger = logging.getLogger("ofbilan")
+        for h in logger.handlers:
+            if isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler):
+                if h.level <= logging.DEBUG:
+                    is_debug = True
+                    break
+        if is_debug:
+            return
+            
         self._stop_event.set()
         self._thread.join()
         # Nettoyage de la ligne
-        message = "Traitement des données en cours. Patience..."
-        sys.stdout.write("\r" + " " * len(message) + "\r")
+        sys.stdout.write("\r" + " " * len(self.message) + "\r")
         sys.stdout.flush()

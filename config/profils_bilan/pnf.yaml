@@ -47,6 +47,17 @@ options:
     ask: false
 
 cartographie:
+  mode: dedie
+  cartes_actives:
+    - domaines
+    - usagers
+    - resultats
+    - procedures
+  fichiers:
+    - carte_pnf_domaines.png
+    - carte_pnf_usagers.png
+    - carte_pnf_resultats.png
+    - carte_pnf_procedures.png
   pochoir: aoa
   emprise: aoa
   couches_vecteurs_extra:

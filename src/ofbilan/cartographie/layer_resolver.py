@@ -188,6 +188,16 @@ def resolve_layer_names(
 
     role = layer_role or infer_layer_role(layer_key, configured_name)
     if role == "pochoir" and dept_code:
+        # Si un pochoir spécifique est configuré (ex: pochoir_aoa) et existe, on ne force pas le département
+        is_generic = not configured_name or configured_name == "pochoir_departement" or configured_name.startswith("pochoir_sd")
+        if not is_generic:
+            if configured_name in names:
+                return [(configured_name, "exact")]
+            target_specific = f"{configured_name}_sd{normalize_dept_code(dept_code)}"
+            if target_specific in names:
+                return [(target_specific, "exact")]
+            return []
+        
         target = pochoir_layer_name(dept_code)
         if target in names:
             return [(target, "dept")]
