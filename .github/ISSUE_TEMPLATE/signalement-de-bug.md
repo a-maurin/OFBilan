@@ -7,8 +7,8 @@ assignees: ''
 
 ---
 
-**Describe the bug**
-A clear and concise description of what the bug is.
+**Description du bug**
+Une description claire et concise du problème rencontré.
 
 **Étapes pour reproduire**
 Décrivez les actions à effectuer pour reproduire le comportement :
