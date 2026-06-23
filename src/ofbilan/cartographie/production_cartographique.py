@@ -1128,8 +1128,8 @@ def apply_layer_symbology(layer, config: "LayerSymbologyConfig", geometry_mode_o
             
             # Résolution robuste du type de symbole pour QgsLegendPatchShape
             try:
-                from qgis.core import Qgis
-                symbol_type = Qgis.SymbolType.Marker
+                import qgis.core
+                symbol_type = qgis.core.Qgis.SymbolType.Marker
             except (ImportError, AttributeError):
                 try:
                     from qgis.core import QgsSymbol

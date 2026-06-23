@@ -535,7 +535,8 @@ def render_sec31(ctx: PdfContext) -> None:
         and not pve_natinf.empty
         and is_block_enabled(ctx.presentation_cfg, "sec31.show_table", True)
     ):
-        natinf_label_w = ctx.avail_w * 0.60
+        col_widths = [ctx.avail_w * 0.85, ctx.avail_w * 0.15]
+        natinf_label_w = col_widths[0]
         tbl = [["Nature d'infraction (NATINF)", "Nombre PVe"]]
         for _, row in pve_natinf.head(15).iterrows():
             libelle = row.get("libelle_natinf") or row.get("LIBELLE_NATINF") or ""
@@ -553,7 +554,7 @@ def render_sec31(ctx: PdfContext) -> None:
         ctx.builder.add_table(
             tbl,
             caption="Analyse des NATINF relevées (PVe)",
-            col_widths=[ctx.avail_w * 0.85, ctx.avail_w * 0.15],
+            col_widths=col_widths,
             col_aligns=["LEFT", "RIGHT"],
         )
     elif ctx.show_placeholder:
@@ -614,7 +615,8 @@ def render_sec32(ctx: PdfContext) -> None:
         if not natinf_ref.empty and "libelle_natinf" not in top_df.columns:
             top_df = top_df.merge(natinf_ref, on="numero_natinf", how="left")
 
-        natinf_label_w = ctx.avail_w * 0.60
+        col_widths = [ctx.avail_w * 0.85, ctx.avail_w * 0.15]
+        natinf_label_w = col_widths[0]
         tbl = [["Nature d'infraction (NATINF)", "Nombre PEJ"]]
         for _, row in top_df.head(15).iterrows():
             libelle = row.get("libelle_natinf") or row.get("LIBELLE_NATINF") or ""
@@ -632,7 +634,7 @@ def render_sec32(ctx: PdfContext) -> None:
         ctx.builder.add_table(
             tbl,
             caption="Analyse des NATINF relevées (PEJ)",
-            col_widths=[ctx.avail_w * 0.85, ctx.avail_w * 0.15],
+            col_widths=col_widths,
             col_aligns=["LEFT", "RIGHT"],
         )
 
