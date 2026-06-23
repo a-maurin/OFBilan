@@ -1047,9 +1047,9 @@ def apply_layer_symbology(layer, config: "LayerSymbologyConfig", geometry_mode_o
         else:
             values = [str(v) for v in values]
 
-        if str(diffusion).strip().lower() == "externe":
-            excluded = {"non renseigné", "en attente"}
-            values = [v for v in values if str(v).strip().lower() not in excluded]
+        # Exclure systématiquement les fiches en attente ou non renseignées des catégories de symbologie
+        excluded = {"non renseigné", "en attente", "en_attente"}
+        values = [v for v in values if str(v).strip().lower() not in excluded]
 
         # Si le nombre de valeurs dépasse la palette fournie, on génère une palette dynamique (hue spread)
         def _get_color_for_idx(idx: int, total: int) -> QColor:
@@ -1098,11 +1098,12 @@ def apply_layer_symbology(layer, config: "LayerSymbologyConfig", geometry_mode_o
         if "resultat" in config.field.lower():
             try:
                 from qgis.core import QgsFeatureRequest
-                expr_str = f"CASE WHEN lower({config.field}) = 'conforme' THEN 0 ELSE 1 END"
+                expr_str = f"CASE WHEN lower({config.field}) = 'conforme' THEN 0 WHEN lower({config.field}) = 'manquement' THEN 1 ELSE 2 END"
                 clause = QgsFeatureRequest.OrderByClause(expr_str, True)
-                layer.setOrderBy(QgsFeatureRequest.OrderBy([clause]))
-                layer.setUsingOrderBy(True)
-                logger.info("Tri de rendu appliqué pour la couche '%s' (Conforme dessous)", layer.name())
+                orderby = QgsFeatureRequest.OrderBy([clause])
+                renderer.setOrderBy(orderby)
+                renderer.setOrderByEnabled(True)
+                logger.info("Tri de rendu appliqué pour la couche '%s' (Conforme < Manquement < Infraction)", layer.name())
             except Exception as e:
                 logger.warning("Impossible d'appliquer le tri de rendu pour '%s' : %s", layer.name(), e)
     else:
@@ -1124,7 +1125,22 @@ def apply_layer_symbology(layer, config: "LayerSymbologyConfig", geometry_mode_o
         patch_shape = None
         if not is_polygon or geom_mode == "polygon_centroid":
             geom = QgsGeometry.fromPointXY(QgsPointXY(0, 0))
-            patch_shape = QgsLegendPatchShape(geom, False)
+            
+            # Résolution robuste du type de symbole pour QgsLegendPatchShape
+            try:
+                from qgis.core import Qgis
+                symbol_type = Qgis.SymbolType.Marker
+            except (ImportError, AttributeError):
+                try:
+                    from qgis.core import QgsSymbol
+                    symbol_type = QgsSymbol.Marker
+                except (ImportError, AttributeError):
+                    symbol_type = None
+
+            if symbol_type is not None:
+                patch_shape = QgsLegendPatchShape(symbol_type, geom, False)
+            else:
+                patch_shape = QgsLegendPatchShape(geom, False)
         
         if patch_shape and hasattr(layer, "legend") and layer.legend():
             if hasattr(layer.legend(), "setLegendPatchShape"):
@@ -1289,6 +1305,9 @@ def _build_point_ctrl_global_expression(fields, date_deb: str, date_fin: str, co
     date_cond = _build_date_condition(fields, "date_ctrl", date_deb, date_fin)
     
     expr = f'{_depart_attr_condition("num_depart", depart)} AND {date_cond}'
+    res_col = next((c for c in ("resultat", "Resultat", "resultat_controle") if c in field_names), None)
+    if res_col:
+        expr += f" AND lower(coalesce(\"{res_col}\", '')) != 'en attente'"
     if str(diffusion).strip().lower() == "externe":
         expr += " AND lower(coalesce(\"resultat\", \"Resultat\", \"resultat_controle\", '')) IN ('conforme', 'manquement', 'infraction', 'manquement et infraction')"
     return expr
