@@ -67,6 +67,13 @@ def resolve_map_png_path(
     if not pid:
         return None
 
+    try:
+        p = Path(pid)
+        if p.exists() and p.is_file():
+            return p.resolve()
+    except Exception:
+        pass
+
     from ofbilan.common.cartographie_config import parse_cartography_catalog
 
     for prof in (bilan_profiles or {}).values():
@@ -317,57 +324,62 @@ def generate_maps(
     date_deb_eff = date_deb or f"{curr_year}-01-01"
     date_fin_eff = date_fin or datetime.now().strftime("%Y-%m-%d")
 
-    if qgis_available():
-        try:
-            from ofbilan.cartographie.production_cartographique import run_export
-            from ofbilan.common.cartographie_config import build_qgis_overrides_from_bilan_profiles
+    import os
+    os.environ["BILANS_CARTO_ECHELLE"] = echelle or "departement"
+    try:
+        if qgis_available():
+            try:
+                from ofbilan.cartographie.production_cartographique import run_export
+                from ofbilan.common.cartographie_config import build_qgis_overrides_from_bilan_profiles
 
-            qgis_overrides = build_qgis_overrides_from_bilan_profiles(bilan_profiles)
+                qgis_overrides = build_qgis_overrides_from_bilan_profiles(bilan_profiles)
+                logger.info(
+                    "Génération cartes QGIS (in-process) : profils=%s, département=%s, période %s → %s",
+                    ", ".join(profile_ids),
+                    carto_dept,
+                    date_deb_eff,
+                    date_fin_eff,
+                )
+                get_qgis_app()
+                if target_dir:
+                    os.environ["CARTO_OUTPUT_DIR"] = str(target_dir)
+                run_export(
+                    profile_ids,
+                    date_deb=date_deb_eff,
+                    date_fin=date_fin_eff,
+                    dept_code=carto_dept,
+                    qgis_overrides=qgis_overrides,
+                    diffusion=diffusion,
+                )
+                if target_dir and "CARTO_OUTPUT_DIR" in os.environ:
+                    del os.environ["CARTO_OUTPUT_DIR"]
+            except Exception:
+                logger.exception(
+                    "Échec génération cartes QGIS in-process (département %s, profils : %s)",
+                    carto_dept,
+                    ", ".join(profile_ids),
+                )
+                return []
+        else:
+            from ofbilan.cartographie.qgis_runtime import run_cartography_export_subprocess
+
             logger.info(
-                "Génération cartes QGIS (in-process) : profils=%s, département=%s, période %s → %s",
-                ", ".join(profile_ids),
-                carto_dept,
-                date_deb_eff,
-                date_fin_eff,
+                "PyQGIS absent de l'interpréteur courant — délégation export QGIS (sous-processus)."
             )
-            get_qgis_app()
-            import os
-            if target_dir:
-                os.environ["CARTO_OUTPUT_DIR"] = str(target_dir)
-            run_export(
+            ok = run_cartography_export_subprocess(
                 profile_ids,
                 date_deb=date_deb_eff,
                 date_fin=date_fin_eff,
                 dept_code=carto_dept,
-                qgis_overrides=qgis_overrides,
+                target_dir=target_dir,
                 diffusion=diffusion,
             )
-            if target_dir and "CARTO_OUTPUT_DIR" in os.environ:
-                del os.environ["CARTO_OUTPUT_DIR"]
-        except Exception:
-            logger.exception(
-                "Échec génération cartes QGIS in-process (département %s, profils : %s)",
-                carto_dept,
-                ", ".join(profile_ids),
-            )
-            return []
-    else:
-        from ofbilan.cartographie.qgis_runtime import run_cartography_export_subprocess
-
-        logger.info(
-            "PyQGIS absent de l'interpréteur courant — délégation export QGIS (sous-processus)."
-        )
-        ok = run_cartography_export_subprocess(
-            profile_ids,
-            date_deb=date_deb_eff,
-            date_fin=date_fin_eff,
-            dept_code=carto_dept,
-            target_dir=target_dir,
-            diffusion=diffusion,
-        )
-        if not ok:
-            _warn_qgis_unavailable_for_cartes(carto_dept, subprocess_failed=True)
-            return []
+            if not ok:
+                _warn_qgis_unavailable_for_cartes(carto_dept, subprocess_failed=True)
+                return []
+    finally:
+        if "BILANS_CARTO_ECHELLE" in os.environ:
+            del os.environ["BILANS_CARTO_ECHELLE"]
 
     from ofbilan.cartographie.pochoir_helper import (
         is_map_valid_for_dept,

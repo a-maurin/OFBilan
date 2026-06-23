@@ -159,7 +159,8 @@ def run_profiles_batch(
             encoding="utf-8",
         )
         print(f"\nRésumé combiné disponible dans : {out_combine}")
-        _open_generated_pdfs(generated_pdfs_last_profile)
+        if not (cli_options and cli_options.get("no_open")):
+            _open_generated_pdfs(generated_pdfs_last_profile)
         return 0
 
     non_mixable = []
@@ -186,5 +187,6 @@ def run_profiles_batch(
         if ret != 0:
             return ret
         generated_pdfs_last_profile = _list_generated_pdf_files(pid, started_at, code=code)
-    _open_generated_pdfs(generated_pdfs_last_profile)
+    if not (cli_options and cli_options.get("no_open")):
+        _open_generated_pdfs(generated_pdfs_last_profile)
     return 0

@@ -96,6 +96,17 @@ def _ask_profils_interactive() -> list[str]:
 def main() -> int:
     logger = logging.getLogger("ofbilan")
 
+    try:
+        from ofbilan.common.utilitaires_metier import _load_bmi_config
+        bmi_codes = sorted(_load_bmi_config().get("BMI_CONFIG", {}).keys())
+    except Exception:
+        bmi_codes = []
+
+    try:
+        user_types = _load_type_usager_labels()
+    except Exception:
+        user_types = []
+
     parser = argparse.ArgumentParser(
         description="Génération des bilans : un ou plusieurs profils YAML (--profil <id>)."
     )
@@ -118,8 +129,13 @@ def main() -> int:
     )
     parser.add_argument("--date-deb", type=str, default=None, help="Date début (YYYY-MM-DD).")
     parser.add_argument("--date-fin", type=str, default=None, help="Date fin (YYYY-MM-DD).")
-    parser.add_argument("--echelle", choices=["departement", "region", "bmi", "national"], default=None, help="Échelle spatiale (departement, region, bmi, national).")
-    parser.add_argument("--code", type=str, default=None, help="Code géographique (ex. 21, 27).")
+    parser.add_argument("--echelle", type=str.lower, choices=["departement", "region", "bmi", "national"], default=None, help="Échelle spatiale (departement, region, bmi, national).")
+    
+    code_help = "Code géographique (ex. 21, 27)."
+    if bmi_codes:
+        code_help += f" Codes BMI possibles : {', '.join(bmi_codes)}."
+    parser.add_argument("--code", type=str, default=None, help=code_help)
+    
     parser.add_argument(
         "--dept-code",
         type=str,
@@ -128,20 +144,25 @@ def main() -> int:
     )
     parser.add_argument(
         "--preset",
+        type=str.lower,
         choices=("compact", "standard", "large"),
         default=None,
         help="Preset de taille des graphiques PDF.",
     )
+    
+    type_usager_help = (
+        "Type d'usager cible pour le profil types_usager_cible "
+        "(libellé exact ou numéro, voir --list-type-usagers). Répétable. "
+        "Ex. --type-usager 2 ou --type-usager \"Agriculteur et autres acteurs agricoles\"."
+    )
+    if user_types:
+        type_usager_help += " Valeurs possibles : " + ", ".join(f"{i}: {ut}" for i, ut in enumerate(user_types, 1)) + "."
     parser.add_argument(
         "--type-usager",
         action="append",
         dest="type_usager",
         metavar="LIBELLE_OU_NUMERO",
-        help=(
-            "Type d'usager cible pour le profil types_usager_cible "
-            "(libellé exact ou numéro, voir --list-type-usagers). Répétable. "
-            "Ex. --type-usager 2 ou --type-usager \"Agriculteur et autres acteurs agricoles\"."
-        ),
+        help=type_usager_help,
     )
     parser.add_argument(
         "--mot-cle",
@@ -211,6 +232,11 @@ def main() -> int:
         "--debug",
         action="store_true",
         help="Afficher tous les messages de débogage techniques sur la console.",
+    )
+    parser.add_argument(
+        "--no-open",
+        action="store_true",
+        help="Ne pas ouvrir automatiquement le fichier PDF généré.",
     )
     args = parser.parse_args()
 
@@ -343,6 +369,9 @@ def main() -> int:
 
     if args.mots_cles:
         cli_options["mots_cles"] = args.mots_cles
+
+    if args.no_open:
+        cli_options["no_open"] = True
 
     from ofbilan.common.chargeurs_donnees import init_session_cache, clear_session_cache
 

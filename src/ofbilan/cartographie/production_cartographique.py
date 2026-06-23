@@ -1154,6 +1154,27 @@ def apply_layer_symbology(layer, config: "LayerSymbologyConfig", geometry_mode_o
 def _depart_attr_condition(field_name: str, depart: str) -> str:
     """Condition attribut département (chaîne ou entier INSEE)."""
     depart = str(depart or "").strip()
+    import os
+    echelle = os.environ.get("BILANS_CARTO_ECHELLE", "departement").lower()
+    from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre
+    
+    if depart.upper().startswith("R") or echelle == "region":
+        deps = get_departements_pour_perimetre("region", depart.lower())
+    elif depart.upper().startswith("BMI-") or echelle == "bmi":
+        deps = get_departements_pour_perimetre("bmi", depart)
+    else:
+        deps = [depart]
+        
+    if len(deps) > 1 or (deps and (depart.upper().startswith("R") or depart.upper().startswith("BMI-"))):
+        in_values = []
+        for p in deps:
+            in_values.append(repr(p))
+            try:
+                in_values.append(str(int(p)))
+            except ValueError:
+                pass
+        return f'"{field_name}" IN ({", ".join(in_values)})'
+        
     try:
         depart_int = int(depart)
         return f'"{field_name}" IN ({depart!r}, {depart_int})'
@@ -1199,12 +1220,35 @@ def _build_pve_expression(fields, date_deb: str, date_fin: str, config, profile=
         natinf_values = getattr(config, "natinf_pve", [27742])
 
     depart = getattr(config, "departement_code", "21")
-
-    # INSEE_DEP est un entier (21) ou une chaîne ("21") — les deux cas
-    if depart_col == "INSEE_DEP":
-        depart_cond = f'"{depart_col}" IN ({depart!r}, {int(depart)})'
+    import os
+    echelle = os.environ.get("BILANS_CARTO_ECHELLE", "departement").lower()
+    from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre
+    
+    if depart.upper().startswith("R") or echelle == "region":
+        deps = get_departements_pour_perimetre("region", depart.lower())
+    elif depart.upper().startswith("BMI-") or echelle == "bmi":
+        deps = get_departements_pour_perimetre("bmi", depart)
     else:
-        depart_cond = f'lower("{depart_col}") = {depart.lower()!r}'
+        deps = [depart]
+
+    if len(deps) > 1 or (deps and (depart.upper().startswith("R") or depart.upper().startswith("BMI-"))):
+        in_values = []
+        for p in deps:
+            in_values.append(repr(p))
+            if depart_col == "INSEE_DEP":
+                try:
+                    in_values.append(str(int(p)))
+                except ValueError:
+                    pass
+        depart_cond = f'"{depart_col}" IN ({", ".join(in_values)})'
+    else:
+        if depart_col == "INSEE_DEP":
+            try:
+                depart_cond = f'"{depart_col}" IN ({depart!r}, {int(depart)})'
+            except ValueError:
+                depart_cond = f'"{depart_col}" = {depart!r}'
+        else:
+            depart_cond = f'lower("{depart_col}") = {depart.lower()!r}'
 
     date_cond = _build_date_condition(fields, date_col, date_deb, date_fin)
     
@@ -1234,7 +1278,13 @@ def _build_pj_expression(fields, date_deb: str, date_fin: str, config, profile=N
     date_cond = _build_date_condition(fields, "date_saisine", date_deb, date_fin)
 
     entite_list = []
-    if depart.lower().startswith("bmi"):
+    import os
+    echelle = os.environ.get("BILANS_CARTO_ECHELLE", "departement").lower()
+    if depart.upper().startswith("R") or echelle == "region":
+        from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre
+        dept_codes = get_departements_pour_perimetre("region", depart.lower())
+        entite_list = [f"sd{d.lower()}" for d in dept_codes]
+    elif depart.upper().startswith("BMI-") or echelle == "bmi":
         from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre, get_bmi_filters
         dept_codes = get_departements_pour_perimetre("bmi", depart)
         if dept_codes and "FR" not in dept_codes:

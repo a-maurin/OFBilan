@@ -519,8 +519,10 @@ class Spinner:
                 elapsed += 0.1
 
     def __enter__(self) -> "Spinner":
+        if not sys.stdout.isatty():
+            return self
+            
         import logging
-        # En mode debug (console_level <= DEBUG), on désactive l'animation du spinner pour ne pas corrompre le flux de log
         is_debug = False
         logger = logging.getLogger("ofbilan")
         for h in logger.handlers:
@@ -538,6 +540,9 @@ class Spinner:
         return self
 
     def __exit__(self, _exc_type, _exc_val, _exc_tb) -> None:
+        if not sys.stdout.isatty():
+            return
+            
         import logging
         is_debug = False
         logger = logging.getLogger("ofbilan")

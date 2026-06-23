@@ -116,7 +116,7 @@ echo !QGIS_PYTHON! | findstr /i "OSGeo4W" >nul
         set "QT_PLUGIN_PATH=!OSGEO4W_ROOT!\apps\!QGIS_APPS_DIR!\qtplugins;!OSGEO4W_ROOT!\apps\qt5\plugins"
         set "PYTHONPATH=!OSGEO4W_ROOT!\apps\!QGIS_APPS_DIR!\python;!PYTHONPATH!"
     )
-"%QGIS_PYTHON%" "%SCRIPT_DIR%production_cartographique.py" %*
+"!QGIS_PYTHON!" "%SCRIPT_DIR%production_cartographique.py" %*
 if errorlevel 1 (
     echo.
     echo Le script a echoue. Verifier les messages ci-dessus.

@@ -111,14 +111,28 @@ def resolve_cartes_selection(profile: dict | None, resolved_opts: dict | None) -
         selected: list[str] = []
         for raw in cli_profiles:
             mid = str(raw).strip()
-            if mid and mid in catalog_ids and mid not in selected:
+            is_file = False
+            try:
+                is_file = Path(mid).is_file()
+            except Exception:
+                pass
+            if mid and (mid in catalog_ids or is_file) and mid not in selected:
                 selected.append(mid)
         if selected:
             return selected
 
     yaml_sel = opts.get("cartes_selection")
     if isinstance(yaml_sel, list):
-        selected = [str(x).strip() for x in yaml_sel if str(x).strip() in catalog_ids]
+        selected = []
+        for x in yaml_sel:
+            mid = str(x).strip()
+            is_file = False
+            try:
+                is_file = Path(mid).is_file()
+            except Exception:
+                pass
+            if mid and (mid in catalog_ids or is_file) and mid not in selected:
+                selected.append(mid)
         if selected:
             return selected
 
@@ -339,6 +353,13 @@ def resolve_selected_map_paths(
     for map_id in order:
         entry = by_id.get(map_id)
         if not entry:
+            try:
+                p = Path(map_id)
+                if p.exists() and p.is_file():
+                    paths.append(p.resolve())
+                    captions.append(p.stem.replace("_", " ").capitalize())
+            except Exception:
+                pass
             continue
         candidate = resolve_map_file_for_catalog_entry(entry, target_dir)
         if not candidate.exists():

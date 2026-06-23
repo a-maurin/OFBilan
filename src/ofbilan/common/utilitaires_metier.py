@@ -80,12 +80,12 @@ def get_perimetre_name(echelle: str, code: str) -> str:
 
 
 def resolve_carto_dept_code(echelle: str, code: str, *, default: str = "21") -> str:
-    """Département de référence pour l'étendue cartographique QGIS."""
+    """Département (ou région/BMI) de référence pour l'étendue cartographique QGIS."""
     echelle_norm = str(echelle).strip().lower()
     code_norm = str(code).strip()
     if echelle_norm == "departement":
         return code_norm or default
-    if echelle_norm == "bmi":
+    if echelle_norm in ("bmi", "region"):
         return code_norm
     dept_codes = get_departements_pour_perimetre(echelle_norm, code_norm)
     if dept_codes and dept_codes[0] != "FR":
@@ -1829,8 +1829,14 @@ DEPT_NAMES: dict[str, str] = {
 
 
 def get_dept_name(code: str) -> str:
-    """Renvoie le nom du département pour un code donné, ou 'Département <code>' si inconnu."""
-    return DEPT_NAMES.get(str(code).strip(), f"Département {code}")
+    """Renvoie le nom du département pour un code donné, ou le nom de la région si c'est une région."""
+    c = str(code).strip()
+    if c in DEPT_NAMES:
+        return DEPT_NAMES[c]
+    reg_name = get_region_name(c)
+    if reg_name != f"Région {c}":
+        return reg_name
+    return f"Département {c}"
 
 
 def _detect_insee_column(communes: gpd.GeoDataFrame) -> str:

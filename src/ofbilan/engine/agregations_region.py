@@ -2,6 +2,32 @@ import pandas as pd
 from pathlib import Path
 from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre
 
+def _load_natinf_to_theme_map() -> dict[str, str]:
+    """Lit les profils YAML pour associer chaque NATINF PVe à un id de profil (thème)."""
+    from ofbilan.chemins_projet import PROJECT_ROOT
+    import yaml
+    
+    mapping = {}
+    profiles_dir = PROJECT_ROOT / "config" / "profils_bilan"
+    if not profiles_dir.exists():
+        return mapping
+    
+    for p in profiles_dir.glob("*.yaml"):
+        if p.stem in ("_defaults", "schema_ui"):
+            continue
+        try:
+            with open(p, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f)
+                if isinstance(data, dict):
+                    natinfs = data.get("natinf_pve", [])
+                    if isinstance(natinfs, list):
+                        for n in natinfs:
+                            mapping[str(n).strip()] = p.stem
+        except Exception:
+            continue
+    return mapping
+
+
 def analyse_region_par_departement(point: pd.DataFrame, pa: pd.DataFrame, pej: pd.DataFrame, pve: pd.DataFrame, echelle: str, code: str, out_dir: Path) -> None:
     if str(echelle).strip().lower() not in ("region", "bmi"):
         return
@@ -94,15 +120,32 @@ def analyse_region_par_departement(point: pd.DataFrame, pa: pd.DataFrame, pej: p
     if not pve.empty:
         pv = pve.copy()
         pv["domaine"] = pv["DOMAINE"].fillna("Hors domaine").astype(str) if "DOMAINE" in pv.columns else "Hors domaine"
-        # Assuming PVe themes are NATINF or similar, but we might not have 'theme' easily
-        pv["theme"] = "Hors thème"
-        # We can map NATINF to themes if natinf_ref is loaded, but for now fallback to "Hors thème"
         
+        natinf_map = _load_natinf_to_theme_map()
+        def _get_theme_from_natinf(val):
+            if pd.isna(val):
+                return "Hors thème"
+            tokens = [t.strip() for t in str(val).replace("_", " ").replace("-", " ").split() if t.strip()]
+            for tok in tokens:
+                if tok in natinf_map:
+                    return natinf_map[tok]
+            return "Hors thème"
+            
+        natinf_col = "INF-NATINF" if "INF-NATINF" in pv.columns else ("NATINF" if "NATINF" in pv.columns else None)
+        if natinf_col:
+            pv["theme"] = pv[natinf_col].apply(_get_theme_from_natinf)
+        else:
+            pv["theme"] = "Hors thème"
+            
         pv["departement"] = "Inconnu"
         if "INF-INSEE" in pv.columns:
-            pv["departement"] = pv["INF-INSEE"].astype(str).str[:2]
+            def _extract_dep(val):
+                s = str(val).strip().zfill(5)
+                return s[:3] if s.startswith("97") else s[:2]
+            pv["departement"] = pv["INF-INSEE"].apply(_extract_dep)
         elif "INSEE_DEP" in pv.columns:
             pv["departement"] = pv["INSEE_DEP"].astype(str)
+
             
         pves = pv.groupby(["domaine", "theme", "departement"]).size().reset_index(name="nb_pve")
         for _, r in pves.iterrows():

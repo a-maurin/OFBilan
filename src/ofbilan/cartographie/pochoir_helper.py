@@ -73,14 +73,25 @@ def load_department_gdf(
 ) -> gpd.GeoDataFrame:
     """
     Extrait le polygone du département cible depuis DEPARTEMENT_ADMIN_Express_200207.shp.
-    Gère également la fusion des départements si le code correspond à une BMI.
+    Gère également la fusion des départements si le code correspond à une région (commençant par R) ou une BMI.
     """
     shp = get_departements_admin_shp(project_root)
     gdf = _load_all_departements(str(shp.resolve()))
     
-    # Gestion BMI
+    # Gestion BMI et Régions
+    import os
     from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre
-    target_depts = get_departements_pour_perimetre("bmi", dept_code) if dept_code.startswith("BMI") else [normalize_dept_code(dept_code)]
+    
+    code_upper = dept_code.upper()
+    echelle = os.environ.get("BILANS_CARTO_ECHELLE", "departement").lower()
+    
+    if code_upper.startswith("R") or echelle == "region":
+        # region prefix/detection
+        target_depts = get_departements_pour_perimetre("region", dept_code.lower())
+    elif code_upper.startswith("BMI-") or echelle == "bmi":
+        target_depts = get_departements_pour_perimetre("bmi", dept_code)
+    else:
+        target_depts = [normalize_dept_code(dept_code)]
     
     mask = gdf[_INSEE_DEP_COL].astype(str).str.strip().str.upper().isin(target_depts)
     subset = gdf.loc[mask].copy()
@@ -342,6 +353,17 @@ def is_map_valid_for_dept(
     """
     if not map_png.exists():
         return False
+
+    from ofbilan.chemins_projet import get_cartes_dir
+    try:
+        abs_map = map_png.resolve()
+        abs_cartes_dir = get_cartes_dir().resolve()
+        if not abs_map.is_relative_to(abs_cartes_dir):
+            return True
+        if not abs_map.name.startswith("carte_"):
+            return True
+    except Exception:
+        pass
     target = normalize_dept_code(dept_code)
     marker_dept = read_map_dept_marker(map_png)
     if marker_dept is not None:

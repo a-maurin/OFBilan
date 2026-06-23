@@ -3,7 +3,6 @@
 # OFBilan
 
 Outil d'aide à la décision et de communication permettant de générer automatiquement des bilans d'activité cartographiés au format PDF à partir des données de contrôles (OSCEAN) et des procédures (PVe / PEJ / PA) de l'Office Français de la Biodiversité (OFB).
-Outil d'aide à la décision et de communication permettant de générer automatiquement des bilans d'activité cartographiés au format PDF à partir des données de contrôles (OSCEAN) et des procédures (PVe / PEJ / PA) de l'Office Français de la Biodiversité (OFB).
 
 ---
 
@@ -20,7 +19,6 @@ Outil d'aide à la décision et de communication permettant de générer automat
 Plus de 35 profils configurables permettent de cibler précisément un sujet ou un territoire :
 * **Bilan Global** : Une vision consolidée de toute l'activité du service.
 * **Synthèse d'Activité PA / PJ** : Synthèse des activités de Police Administrative et Police Judiciaire, avec édition automatique de la plaquette de communication (brochure).
-* **Parc National de Forêts (PNF)** : Analyse territorialisée automatique sur les communes du parc (cœur et aire d'adhésion) avec cartographie dédiée intégrant le zonage réglementaire.
 * **Bilans Thématiques** : Chasse, Agrainage, Pêche, Sécheresse, Espèces Protégées, Continuité Écologique, Travaux, Zones Humides, Pollutions, etc.
 * **Bilans par Usagers** : Possibilité de cibler un public spécifique (ex. Agriculteurs, Particuliers, Collectivités) pour analyser la répartition des contrôles et leur conformité.
 
