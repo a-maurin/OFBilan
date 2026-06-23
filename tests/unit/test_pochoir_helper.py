@@ -92,14 +92,16 @@ def test_resolve_pochoir_no_wrong_dept_fallback():
     assert source == "missing"
 
 
-def test_legacy_map_without_marker_valid_for_dept_21_only(tmp_path):
+def test_legacy_map_without_marker_valid_for_dept_21_only(tmp_path, monkeypatch):
+    monkeypatch.setattr("ofbilan.chemins_projet.get_cartes_dir", lambda: tmp_path)
     png = tmp_path / "carte_global.png"
     png.write_bytes(b"x")
     assert is_map_valid_for_dept(png, "21")
     assert not is_map_valid_for_dept(png, "25")
 
 
-def test_map_dept_marker_roundtrip(tmp_path):
+def test_map_dept_marker_roundtrip(tmp_path, monkeypatch):
+    monkeypatch.setattr("ofbilan.chemins_projet.get_cartes_dir", lambda: tmp_path)
     png = tmp_path / "carte_agrainage.png"
     png.write_bytes(b"x")
     write_map_dept_marker(png, "25")

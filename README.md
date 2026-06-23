@@ -35,10 +35,27 @@ Plus de 35 profils configurables permettent de cibler précisément un sujet ou 
 
 ## Mode d'Utilisation
 
-### Guide de démarrage rapide (Mode Interactif)
-L'assistant interactif vous guide pas-à-pas pour configurer votre bilan (sélection des profils, période de dates, périmètre géographique, etc.).
+### 1. Interface Graphique (GUI Locale Web) — *Recommandé*
+Une interface utilisateur moderne et conviviale est disponible pour configurer et générer vos bilans sans saisir de lignes de commande.
 
-* **Avec génération automatique des cartes (Recommandé, QGIS requis)** :
+* **Démarrage de l'interface** :
+  Double-cliquez sur `lancer_gui.bat` (Windows) ou lancez dans votre console :
+  ```bash
+  scripts/windows/lancer_gui.bat
+  ```
+  *(Le script ouvre automatiquement votre navigateur internet à l'adresse [http://localhost:8000](http://localhost:8000)).*
+
+* **Fonctionnalités de l'interface** :
+  * Sélection interactive des profils de bilans avec filtrage et recherche intelligente.
+  * Saisie simplifiée de la période, de l'échelle géographique (département, région, BMI) et du type d'usager.
+  * Choix précis des cartes QGIS à intégrer au PDF (Par défaut : Domaines, Résultats, Usagers, Procédures).
+  * Possibilité d'intégrer des cartes personnalisées depuis votre disque en indiquant leur chemin absolu.
+  * Suivi du traitement en temps réel dans une console intégrée et téléchargement immédiat du PDF généré.
+
+### 2. Lancement en Ligne de Commande (CLI & Mode Interactif)
+L'assistant interactif classique en mode console vous guide pas-à-pas :
+
+* **Avec génération automatique des cartes (QGIS requis)** :
   Double-cliquez sur `lancer_bilans_qgis.bat` (Windows) ou lancez dans votre console :
   ```bash
   scripts/windows/lancer_bilans_qgis.bat

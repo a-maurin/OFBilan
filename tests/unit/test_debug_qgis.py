@@ -1,7 +1,9 @@
 import subprocess
 import os
+import pytest
 from pathlib import Path
 
+@pytest.mark.skip(reason="Debug helper only")
 def test_debug_bat_file():
     print("Testing BAT file directly")
     PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -52,7 +54,6 @@ def test_debug_bat_file():
         print("OSGeo4W python run stderr:", res.stderr)
         print("OSGeo4W python run returncode:", res.returncode)
 
-    import os
     o4w_env = Path(r"C:\Program Files\QGIS 3.44.8\bin\o4w_env.bat")
     print(f"o4w_env.bat exists: {o4w_env.exists()}")
     if o4w_env.exists():

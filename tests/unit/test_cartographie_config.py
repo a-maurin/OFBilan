@@ -98,6 +98,7 @@ def test_resolve_selected_map_paths_rejects_wrong_dept(tmp_path: Path, monkeypat
     png.write_bytes(b"a")
     write_map_dept_marker(png, "21")
     monkeypatch.setattr("ofbilan.common.cartographie_config.get_cartes_dir", lambda: cartes)
+    monkeypatch.setattr("ofbilan.chemins_projet.get_cartes_dir", lambda: cartes)
 
     with caplog.at_level(logging.WARNING):
         paths, captions = resolve_selected_map_paths(
@@ -119,6 +120,7 @@ def test_resolve_selected_map_paths_accepts_matching_dept(tmp_path: Path, monkey
     png.write_bytes(b"a")
     write_map_dept_marker(png, "89")
     monkeypatch.setattr("ofbilan.common.cartographie_config.get_cartes_dir", lambda: cartes)
+    monkeypatch.setattr("ofbilan.chemins_projet.get_cartes_dir", lambda: cartes)
 
     paths, _ = resolve_selected_map_paths(
         _global_profile(),

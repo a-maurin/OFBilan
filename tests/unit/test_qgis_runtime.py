@@ -39,6 +39,7 @@ def test_run_cartography_subprocess_delegates_to_bat(monkeypatch, tmp_path: Path
     bat = tmp_path / "lancer_production_cartographique.bat"
     bat.write_text("@echo off\n", encoding="utf-8")
     monkeypatch.setattr(qgis_runtime.sys, "platform", "win32")
+    monkeypatch.setattr(qgis_runtime, "find_qgis_python_executable", lambda *a, **k: None)
     monkeypatch.setattr(qgis_runtime.subprocess, "run", fake_run)
     monkeypatch.setattr(qgis_runtime, "_cartography_launcher_bat", lambda: bat)
 

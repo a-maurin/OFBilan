@@ -26,6 +26,7 @@ def test_ensure_maps_rejects_stale_dept21_for_dept89(monkeypatch, caplog, tmp_pa
     write_map_dept_marker(png, "21")
 
     monkeypatch.setattr(carte_helper, "get_cartes_dir", lambda: cartes)
+    monkeypatch.setattr("ofbilan.chemins_projet.get_cartes_dir", lambda: cartes)
     monkeypatch.setattr(carte_helper, "qgis_available", lambda: False)
     monkeypatch.setattr(carte_helper, "generate_maps", lambda *a, **k: [])
     monkeypatch.setattr(
