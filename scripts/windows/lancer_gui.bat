@@ -12,6 +12,6 @@ echo Appuyez sur Ctrl+C dans cette fenetre pour arreter.
 echo.
 
 start http://localhost:8000
-python src/ofbilan/web/serveur.py
+python src/ofbilan/web/serveur.py <nul
 
 endlocal

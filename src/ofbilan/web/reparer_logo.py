@@ -22,7 +22,6 @@ def generer_logo_blanc():
         # Écriture dans le dossier web local
         local_dst_path.write_text(modified, encoding="utf-8")
         
-        print(f"Succès : Logos générés.")
         return True
     except Exception as e:
         print(f"Erreur lors de la génération du logo : {e}")
