@@ -6,23 +6,23 @@ Outil d'aide à la décision et de communication permettant de générer automat
 
 ---
 
-## Usages et Fonctionnalités Métier
+## Usages et fonctionnalités métier
 
-### 1. Des Formats de Restitution Adaptés
+### 1. Des formats de restitution adaptés
 * **Rapports PDF détaillés** : Documents complets avec indicateurs, graphiques de répartition et listes de procédures conformes à la charte graphique de l'OFB.
 * **Mode Brochure A4 (Recto-Verso)** : Généré automatiquement pour le profil de synthèse PA/PJ. Il produit un document de 4 pages au format paysage, pour l'impression et la distribution physique.
 * **Double Périmètre de Diffusion** :
   * **Interne** : Contient les données sensibles liées aux procédures (numéros de dossier, localisation précise des infractions).
   * **Externe** : Masque les données sensibles pour une transmission sécurisée aux partenaires institutionnels ou au grand public.
 
-### 2. Catalogue de Profils de Bilans Prêts à l'Emploi
+### 2. Catalogue de profils de bilans prêts à l'emploi
 Plus de 35 profils configurables permettent de cibler précisément un sujet ou un territoire :
 * **Bilan Global** : Une vision consolidée de toute l'activité du service.
 * **Synthèse d'Activité PA / PJ** : Synthèse des activités de Police Administrative et Police Judiciaire, avec édition automatique de la plaquette de communication (brochure).
 * **Bilans Thématiques** : Chasse, Agrainage, Pêche, Sécheresse, Espèces Protégées, Continuité Écologique, Travaux, Zones Humides, Pollutions, etc.
 * **Bilans par Usagers** : Possibilité de cibler un public spécifique (ex. Agriculteurs, Particuliers, Collectivités) pour analyser la répartition des contrôles et leur conformité.
 
-### 3. Adaptation Spatiale et Cartographie Dynamique
+### 3. Adaptation spatiale et cartographie dynamique
 * **Multi-Échelles** : Génération de bilans pour n'importe quel département, région administrative, ou à l'échelle nationale (en cours d'implémentation)
 * **Intégration des Brigades Mobiles d'Intervention (BMI)** : Prise en charge native des secteurs géographiques des BMI (ex. `BMI-NEC`, `BMI-SO`, `BMI-SE`, `BMI-NO`).
 * **Cartographie QGIS Automatisée** : 
@@ -33,10 +33,10 @@ Plus de 35 profils configurables permettent de cibler précisément un sujet ou 
 
 ---
 
-## Mode d'Utilisation
+## Mode d'utilisation
 
-### 1. Interface Graphique (GUI Locale Web) — *Recommandé*
-Une interface utilisateur moderne et conviviale est disponible pour configurer et générer vos bilans sans saisir de lignes de commande.
+### 1. Interface graphique (GUI locale web) — *Recommandé*
+Une interface utilisateur est disponible pour configurer et générer vos bilans sans saisir de lignes de commande.
 
 * **Démarrage de l'interface** :
   Double-cliquez sur `lancer_gui.bat` (Windows) ou lancez dans votre console :
@@ -52,7 +52,7 @@ Une interface utilisateur moderne et conviviale est disponible pour configurer e
   * Possibilité d'intégrer des cartes personnalisées depuis votre disque en indiquant leur chemin absolu.
   * Suivi du traitement en temps réel dans une console intégrée et téléchargement immédiat du PDF généré.
 
-### 2. Lancement en Ligne de Commande (CLI & Mode Interactif)
+### 2. Lancement en ligne de commande (CLI & mode interactif)
 L'assistant interactif classique en mode console vous guide pas-à-pas :
 
 * **Avec génération automatique des cartes (QGIS requis)** :
@@ -68,19 +68,19 @@ L'assistant interactif classique en mode console vous guide pas-à-pas :
 
 ---
 
-## Instructions Techniques & Configuration
+## Instructions techniques & configuration
 
-### 1. Installation de QGIS & Environnement Cartographique
+### 1. Installation de QGIS & environnement cartographique
 La génération automatique des cartes du rapport nécessite l'accès à **PyQGIS** (les bibliothèques Python de QGIS).
 1. Installez **QGIS** (version LTR recommandée, ex: 3.40+) sur votre poste de travail.
 2. Installez le package `ofbilan` dans l'interprète Python de QGIS (requis une seule fois) :
    ```bash
-   "C:\Program Files\QGIS 3.40.15\bin\python.exe" -m pip install -e .
+   "C:\Program Files\QGIS 3.40.11\bin\python.exe" -m pip install -e .
    ```
    *(Ajustez le chemin de l'exécutable Python selon votre version de QGIS. Dans QGIS, allez dans Extensions > Console Python et lancez `import sys; print(sys.executable)` pour le connaître).*
 3. Si QGIS est installé dans un répertoire personnalisé et n'est pas détecté automatiquement, créez un fichier texte nommé `qgis_python_path.txt` dans le dossier `scripts/windows/` contenant uniquement le chemin absolu vers `python.exe` de QGIS.
 
-### 2. Paramétrage pour un autre département (Hors Côte-d'Or 21)
+### 2. Paramétrage pour un autre département (hors Côte-d'Or 21)
 Bien que configuré par défaut pour la Côte-d'Or (21), l'outil peut générer des bilans pour **n'importe quel département français** en suivant ces étapes :
 * **Données Sources** : Déposez les exports de données (OSCEAN, PVe, PEJ) correspondant au département ciblé dans le répertoire `data/sources/`.
 * **Génération du Pochoir** : Le pochoir de découpe spécifique à votre département est **généré automatiquement** par l'outil à partir des limites administratives officielles de l'IGN (`ref/programme/sig/limites_admin_dep/DEPARTEMENT_ADMIN_Express_200207.shp`). Le projet QGIS de référence (`ref/programme/sig/bilans_carte.qgz`) n'a pas besoin de le contenir d'avance, il doit seulement intégrer le pochoir modèle (`pochoir_sd21`) qui sert de gabarit graphique pour cloner la symbologie du masque inversé (le blanc opaque masquant les zones hors département).
@@ -90,7 +90,7 @@ Bien que configuré par défaut pour la Côte-d'Or (21), l'outil peut générer 
   ```
 * **Compilation sans QGIS (Marqueurs)** : Si les cartes sont générées sur un poste équipé de QGIS puis copiées sur un poste sans QGIS pour la génération finale du PDF, elles doivent être accompagnées d'un fichier marqueur sidecar nommé `carte_<nom_carte>.<code_dept>.dept` (ex: `carte_global.25.dept`) dans `data/out/generateur_de_cartes/`.
 
-### 3. Exemples de Commandes CLI
+### 3. Exemples de commandes CLI
 Une fois installé, la commande de base `ofbilan` (ou `python -m ofbilan`) propose ces options :
 
 ```bash
@@ -111,7 +111,7 @@ ofbilan --list-themes
 ofbilan --list-type-usagers
 ```
 
-### 4. Automatisation et Tests
+### 4. Automatisation et tests
 * **Scripts de raccourci** : Des batchs d'automatisation sont disponibles dans `scripts/windows/` et `scripts/linux/` (`lancer_bilans`, `lancer_bilans_qgis`, `generer_cartes`, `parametrer_cartes`).
 * **Tests unitaires** :
   ```bash
@@ -120,7 +120,7 @@ ofbilan --list-type-usagers
 
 ---
 
-## Structure des Fichiers Clés
+## Structure des fichiers clés
 
 * `src/ofbilan/` : Code source applicatif (Calculs, PDF ReportLab, interface CLI, intégration QGIS).
 * `config/` : Profils YAML de configuration des bilans (`config/profils_bilan/`), référentiel des régions et BMI.

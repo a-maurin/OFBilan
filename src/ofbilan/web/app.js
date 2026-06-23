@@ -299,6 +299,34 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    const btnOpenPdf = document.getElementById('btn-open-pdf');
+    const btnOpenFolder = document.getElementById('btn-open-folder');
+
+    function openOutput(endpoint) {
+        const profil = inputProfil.value;
+        const code = inputCode.value;
+        
+        fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ profil, code })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (!data.success) {
+                alert("Erreur lors de l'ouverture : " + data.error);
+            }
+        })
+        .catch(err => {
+            alert("Erreur réseau : " + err.message);
+        });
+    }
+
+    btnOpenPdf.addEventListener('click', () => openOutput('/api/open-pdf'));
+    btnOpenFolder.addEventListener('click', () => openOutput('/api/open-folder'));
+
     btnClear.addEventListener('click', () => {
         consoleOutput.textContent = '> Console effacée.\n';
     });

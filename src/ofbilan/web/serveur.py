@@ -7,6 +7,8 @@ from pathlib import Path
 # Ajouter le dossier actuel au path pour importer reparer_logo
 WEB_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(WEB_DIR))
+SRC_DIR = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(SRC_DIR))
 
 try:
     from reparer_logo import generer_logo_blanc
@@ -124,6 +126,51 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(f"\n[ERREUR] Impossible de lancer le traitement : {e}\n".encode('utf-8'))
             
             self.wfile.flush()
+        elif self.path in ("/api/open-pdf", "/api/open-folder"):
+            content_length = int(self.headers['Content-Length'])
+            post_data = self.rfile.read(content_length)
+            params = json.loads(post_data.decode('utf-8'))
+            profil = params.get("profil")
+            code = params.get("code", "")
+            
+            if not profil:
+                self.send_response(400)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": False, "error": "Profil non spécifié"}).encode('utf-8'))
+                return
+                
+            try:
+                from ofbilan.engine.execution_lots_profils import resolve_profile_output_dir
+                out_dir = resolve_profile_output_dir(profil, code)
+                
+                if self.path == "/api/open-folder":
+                    target = out_dir
+                else:
+                    pdfs = list(out_dir.glob("*.pdf"))
+                    if not pdfs:
+                        raise FileNotFoundError("Aucun fichier PDF trouvé dans le dossier de sortie.")
+                    target = max(pdfs, key=lambda p: p.stat().st_mtime)
+                
+                if target.exists():
+                    if sys.platform == "win32":
+                        os.startfile(target)
+                    elif sys.platform == "darwin":
+                        subprocess.run(["open", str(target)], check=False)
+                    else:
+                        subprocess.run(["xdg-open", str(target)], check=False)
+                        
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"success": True}).encode('utf-8'))
+                else:
+                    raise FileNotFoundError(f"Le chemin {target} n'existe pas.")
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
         else:
             super().do_POST()
 
