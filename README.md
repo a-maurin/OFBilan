@@ -70,6 +70,11 @@ L'assistant interactif classique en mode console vous guide pas-à-pas :
 
 ## Instructions techniques & configuration
 
+### 0. Récupération des référentiels et données (Pack de configuration)
+Pour des raisons de confidentialité, les référentiels géographiques (`ref/programme/`), les modèles de chartes graphiques et les dossiers de données d'entrée (`data/sources/`) ne sont pas inclus dans ce dépôt Git.
+
+Si vous souhaitez utiliser l'outil, vous pouvez contacter l'auteur du projet pour obtenir le pack de configuration et données. Un script d'installation automatique (`installer_pack.bat`) est fourni avec ce pack pour configurer votre environnement local facilement.
+
 ### 1. Installation de QGIS & environnement cartographique
 La génération automatique des cartes du rapport nécessite l'accès à **PyQGIS** (les bibliothèques Python de QGIS).
 1. Installez **QGIS** (version LTR recommandée, ex: 3.40+) sur votre poste de travail.

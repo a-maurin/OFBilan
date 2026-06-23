@@ -4,7 +4,7 @@ Toutes les modifications notables apportées au projet **OFBilan** depuis la ver
 
 ---
 
-## [v1.0.0] - 2026-06-23
+## [v1.0.0] - 2026-06-23 : Interface graphique (GUI) & flexibilité cartographique
 
 ### Nouvelle interface graphique (GUI locale)
 * **Serveur web local** : Implémentation d'un serveur HTTP léger (`serveur.py` sur le port `8000`) pilotant le moteur Python sous-jacent en arrière-plan de manière asynchrone et isolée.
