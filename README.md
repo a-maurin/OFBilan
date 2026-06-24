@@ -117,7 +117,7 @@ ofbilan --list-type-usagers
 ```
 
 ### 4. Automatisation et tests
-* **Scripts de raccourci** : Des batchs d'automatisation sont disponibles dans `scripts/windows/` et `scripts/linux/` (`lancer_bilans`, `lancer_bilans_qgis`, `generer_cartes`, `parametrer_cartes`).
+* **Scripts de raccourci** : Des batchs d'automatisation sont disponibles dans `scripts/windows/` (`lancer_bilans`, `lancer_bilans_qgis`, `generer_cartes`, `parametrer_cartes`).
 * **Tests unitaires** :
   ```bash
   python -m pytest -q

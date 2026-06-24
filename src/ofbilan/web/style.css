@@ -11,7 +11,7 @@
     --color-accent: #4296CE;
     --font-family: 'Marianne', 'Arial', sans-serif;
     --shadow-soft: 0 4px 12px rgba(0, 58, 118, 0.05);
-    --shadow-inset: inset 0 2px 4px rgba(0,0,0,0.06);
+    --shadow-inset: inset 0 2px 4px rgba(0, 0, 0, 0.06);
     --border-radius: 8px;
 }
 
@@ -35,8 +35,39 @@ body {
 .app-header {
     background-color: var(--color-primary);
     color: #FFFFFF;
-    padding: 7px 30px;
+    padding: 3px 20px;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+}
+
+/* Navigation */
+.app-nav {
+    background-color: var(--color-primary);
+    padding: 10px 30px;
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.nav-item {
+    color: rgba(255, 255, 255, 0.8);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 6px 20px;
+    border-radius: 20px;
+    transition: all 0.2s ease;
+}
+
+.nav-item:hover {
+    color: #FFFFFF;
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.nav-item.active {
+    color: var(--color-primary);
+    background-color: #FFFFFF;
+    font-weight: 600;
 }
 
 .header-container {
@@ -136,7 +167,9 @@ label {
     color: var(--color-text-dark);
 }
 
-select, input[type="text"], input[type="date"] {
+select,
+input[type="text"],
+input[type="date"] {
     width: 100%;
     padding: 10px 12px;
     border: 1px solid var(--color-border);
@@ -148,7 +181,8 @@ select, input[type="text"], input[type="date"] {
     transition: border-color 0.2s, box-shadow 0.2s;
 }
 
-select:focus, input:focus {
+select:focus,
+input:focus {
     outline: none;
     border-color: var(--color-accent);
     box-shadow: 0 0 0 3px rgba(66, 150, 206, 0.15);
@@ -292,11 +326,11 @@ select:focus, input:focus {
     border-radius: 50%;
 }
 
-input:checked + .slider {
+input:checked+.slider {
     background-color: var(--color-primary);
 }
 
-input:checked + .slider:before {
+input:checked+.slider:before {
     transform: translateX(22px);
 }
 
@@ -480,8 +514,15 @@ input:checked + .slider:before {
 }
 
 @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 /* Footer */
@@ -508,9 +549,11 @@ input:checked + .slider:before {
     border-radius: 4px;
     transition: all 0.3s ease;
 }
+
 .sub-options-container.hidden {
     display: none;
 }
+
 .sub-options-title {
     font-size: 11px;
     font-weight: 600;
@@ -519,11 +562,13 @@ input:checked + .slider:before {
     letter-spacing: 0.5px;
     margin-bottom: 2px;
 }
+
 .sub-options-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 8px;
 }
+
 .checkbox-inline-row {
     display: flex;
     align-items: center;
@@ -532,18 +577,21 @@ input:checked + .slider:before {
     color: var(--color-text-dark);
     cursor: pointer;
 }
+
 .checkbox-inline-row input[type="checkbox"] {
     width: 16px;
     height: 16px;
     accent-color: var(--color-primary);
     cursor: pointer;
 }
+
 .cartes-perso-container {
     display: flex;
     flex-direction: column;
     gap: 4px;
     margin-top: 4px;
 }
+
 .cartes-perso-container textarea {
     width: 100%;
     min-height: 48px;
@@ -556,6 +604,7 @@ input:checked + .slider:before {
     color: var(--color-text-dark);
     background-color: #FFFFFF;
 }
+
 .cartes-perso-container textarea:focus {
     outline: none;
     border-color: var(--color-accent);

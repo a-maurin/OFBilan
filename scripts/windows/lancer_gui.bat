@@ -8,10 +8,10 @@ echo   OFBilan - Demarrage de l'interface graphique
 echo ===============================================
 echo.
 echo Lancement du serveur local sur http://localhost:8000 ...
-echo Appuyez sur Ctrl+C dans cette fenetre pour arreter.
+echo Ouverture dans une nouvelle fenetre pour eviter l'invite cmd.exe
 echo.
 
 start http://localhost:8000
-python src/ofbilan/web/serveur.py <nul
+start "Serveur OFBilan" python src/ofbilan/web/serveur.py
 
 endlocal

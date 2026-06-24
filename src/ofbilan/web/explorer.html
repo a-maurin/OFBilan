@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OFBilan Explorer - Office Français de la Biodiversité</title>
+    <link rel="stylesheet" href="style.css?v=1.0.7">
+    <!-- Leaflet.js CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <style>
+        /* Compact styling overrides to avoid scrolling */
+
+        .app-footer {
+            padding: 4px !important;
+            margin-top: 10px !important;
+        }
+
+        /* Réduit la hauteur du bloc des indicateurs clés */
+        .explorer-panel>.card:first-of-type {
+            padding: 8px 12px !important;
+            height: auto !important;
+        }
+
+        .explorer-panel>.card:first-of-type h2 {
+            margin-bottom: 6px !important;
+            font-size: 13px !important;
+        }
+
+        .explorer-container {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 15px;
+            max-width: 1780px;
+            margin: 10px auto;
+            padding: 0 15px;
+            flex: 1;
+            width: 100%;
+        }
+
+        @media (max-width: 1200px) {
+            .explorer-container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .explorer-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        @media (max-width: 992px) {
+            .dashboard-split-grid {
+                grid-template-columns: 1fr !important;
+            }
+        }
+
+        /* Card-specific compact styles */
+        .card {
+            padding: 14px !important;
+        }
+
+        .card h2 {
+            font-size: 14px !important;
+            margin-bottom: 10px !important;
+            padding-bottom: 5px !important;
+        }
+
+        .form-group {
+            margin-bottom: 8px !important;
+        }
+
+        .form-row {
+            gap: 8px !important;
+            margin-bottom: 8px !important;
+        }
+
+        label {
+            font-size: 11px !important;
+            margin-bottom: 3px !important;
+        }
+
+        select,
+        input[type="text"],
+        input[type="date"] {
+            padding: 5px 8px !important;
+            font-size: 12px !important;
+        }
+
+        .code-helper {
+            font-size: 10px !important;
+            margin-top: 3px !important;
+        }
+
+        .btn {
+            padding: 8px 12px !important;
+            font-size: 12px !important;
+        }
+
+        /* Stats indicators compact styles */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+            gap: 10px;
+            margin-bottom: 0px !important;
+        }
+
+        .stat-card {
+            background: #FFFFFF;
+            padding: 6px 10px !important;
+            border-radius: 6px;
+            border: 1px solid var(--color-border);
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.01);
+        }
+
+        .stat-card .value {
+            font-size: 20px !important;
+            font-weight: bold;
+            color: var(--color-primary);
+            line-height: 1.2;
+        }
+
+        .stat-card .label {
+            font-size: 9px !important;
+            color: var(--color-text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Map styling */
+        #map {
+            height: 410px;
+            width: 100%;
+            border-radius: var(--border-radius);
+            border: 1px solid var(--color-border);
+            z-index: 1;
+        }
+    </style>
+</head>
+
+<body>
+    <header class="app-header">
+        <div class="header-container">
+            <div class="logo-area">
+                <img src="logo.svg" alt="Bandeau OFBilan" class="header-logo">
+            </div>
+        </div>
+    </header>
+
+    <nav class="app-nav">
+        <a href="index.html" class="nav-item">Générateur PDF</a>
+        <a href="explorer.html" class="nav-item active">OFBilan Explorer</a>
+    </nav>
+
+    <main class="explorer-container">
+        <!-- Panneau de Configuration Gauche -->
+        <section class="control-panel">
+            <div class="card">
+                <h2>Filtres d'exploration</h2>
+                <form id="config-form">
+                    <div class="form-group">
+                        <label for="profil">Profil de bilan</label>
+                        <div class="custom-select-container">
+                            <input type="text" id="profil" name="profil"
+                                placeholder="Rechercher ou sélectionner un profil..." required value="global"
+                                autocomplete="off">
+                            <button type="button" id="btn-toggle-profils" class="select-arrow-btn">▼</button>
+                            <div id="profils-dropdown" class="select-dropdown hidden"></div>
+                        </div>
+                    </div>
+
+                    <!-- Période temporelle -->
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="date-deb">Date de début</label>
+                            <input type="date" id="date-deb" name="date-deb" value="2025-01-01" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="date-fin">Date de fin</label>
+                            <input type="date" id="date-fin" name="date-fin" value="2025-12-31" required>
+                        </div>
+                    </div>
+
+                    <!-- Périmètre géographique -->
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="echelle">Échelle spatiale</label>
+                            <select id="echelle" name="echelle" required>
+                                <option value="departement" selected>Département</option>
+                                <option value="region">Région</option>
+                                <option value="bmi">BMI (Interrégional)</option>
+                                <option value="national">National</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="code" id="label-code">Code géographique</label>
+                            <div class="custom-select-container">
+                                <input type="text" id="code" name="code" value="21"
+                                    placeholder="Rechercher ou sélectionner..." required autocomplete="off">
+                                <button type="button" id="btn-toggle-codes" class="select-arrow-btn">▼</button>
+                                <div id="codes-dropdown" class="select-dropdown hidden"></div>
+                            </div>
+                            <div id="code-helper" class="code-helper">Exemples : 21, 27</div>
+                        </div>
+                    </div>
+
+                    <!-- Type usager cible -->
+                    <div class="form-group">
+                        <label for="type-usager">Type d'usager cible (Optionnel)</label>
+                        <div class="custom-select-container">
+                            <input type="text" id="type-usager" name="type-usager"
+                                placeholder="Tous les types d'usagers" autocomplete="off">
+                            <button type="button" id="btn-toggle-usagers" class="select-arrow-btn">▼</button>
+                            <div id="usagers-dropdown" class="select-dropdown hidden"></div>
+                        </div>
+                    </div>
+
+                    <!-- Bouton de lancement -->
+                    <button type="button" id="btn-update" class="btn btn-primary" style="margin-top: 10px;">Charger les
+                        données</button>
+                </form>
+            </div>
+        </section>
+
+        <!-- Tableau de bord Droite -->
+        <section class="explorer-panel">
+            <!-- Indicateurs Clés en pleine largeur -->
+            <div class="card" style="margin-bottom: 0;">
+                <h2>Indicateurs Clés</h2>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="value" id="val-controles">-</div>
+                        <div class="label">Contrôles</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="value" id="val-pej">-</div>
+                        <div class="label">Procédures Judiciaires</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="value" id="val-pa">-</div>
+                        <div class="label">Procédures Adm.</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="value" id="val-pve">-</div>
+                        <div class="label">Verbalisations</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Grille Carte (Gauche) / Statistiques (Droite) -->
+            <div class="dashboard-split-grid" style="display: grid; grid-template-columns: 1.6fr 1fr; gap: 20px; flex: 1;">
+                <!-- Bloc Carte -->
+                <div class="card" style="margin-bottom: 0; display: flex; flex-direction: column; min-width: 0;">
+                    <h2>Localisation des contrôles</h2>
+                    <div id="map" style="flex: 1; min-height: 380px; margin-bottom: 0;"></div>
+                </div>
+
+                <!-- Bloc Statistiques -->
+                <div class="card" style="margin-bottom: 0; display: flex; flex-direction: column; gap: 10px; min-width: 0;">
+                    <h2>Répartitions et Statistiques</h2>
+                    <div
+                        style="background:#FFFFFF; padding:10px; border:1px solid var(--color-border); border-radius:6px; flex: 1; min-height: 195px; display: flex; flex-direction: column; min-width: 0;">
+                        <h3 style="font-size:11px; margin-bottom:6px; text-align:center; color:var(--color-primary);">
+                            Résultats des Contrôles</h3>
+                        <div style="flex: 1; min-height: 140px; position: relative;">
+                            <canvas id="chart-results" style="max-height: 155px; width: 100%;"></canvas>
+                        </div>
+                    </div>
+                    <div
+                        style="background:#FFFFFF; padding:10px; border:1px solid var(--color-border); border-radius:6px; flex: 1; min-height: 195px; display: flex; flex-direction: column; min-width: 0;">
+                        <h3 style="font-size:11px; margin-bottom:6px; text-align:center; color:var(--color-primary);">
+                            Par Domaine d'Activité</h3>
+                        <div style="flex: 1; min-height: 140px; position: relative;">
+                            <canvas id="chart-domains" style="max-height: 155px; width: 100%;"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="app-footer">
+        <p>OFBilan - Explorateur Local v1.0.0 | Office Français de la Biodiversité</p>
+    </footer>
+
+    <!-- Leaflet.js Javascript -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- Chart.js Javascript -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Frontend controller script -->
+    <script src="explorer.js?v=1.0.7"></script>
+</body>
+
+</html>

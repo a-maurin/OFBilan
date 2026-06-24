@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="fr">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OFBilan - Générateur de Bilans et Cartes</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=1.0.7">
 </head>
+
 <body>
     <header class="app-header">
         <div class="header-container">
@@ -14,6 +16,11 @@
             </div>
         </div>
     </header>
+
+    <nav class="app-nav">
+        <a href="index.html" class="nav-item active">Générateur PDF</a>
+        <a href="explorer.html" class="nav-item">OFBilan Explorer</a>
+    </nav>
 
     <main class="app-container">
         <!-- Panneau de Configuration -->
@@ -24,7 +31,9 @@
                     <div class="form-group">
                         <label for="profil">Profil de bilan</label>
                         <div class="custom-select-container">
-                            <input type="text" id="profil" name="profil" placeholder="Rechercher ou sélectionner un profil..." required value="global" autocomplete="off">
+                            <input type="text" id="profil" name="profil"
+                                placeholder="Rechercher ou sélectionner un profil..." required value="global"
+                                autocomplete="off">
                             <button type="button" id="btn-toggle-profils" class="select-arrow-btn">▼</button>
                             <div id="profils-dropdown" class="select-dropdown hidden"></div>
                         </div>
@@ -55,7 +64,12 @@
                         </div>
                         <div class="form-group">
                             <label for="code" id="label-code">Code géographique</label>
-                            <input type="text" id="code" name="code" value="21" placeholder="ex : 21" required>
+                            <div class="custom-select-container">
+                                <input type="text" id="code" name="code" value="21"
+                                    placeholder="Rechercher ou sélectionner..." required autocomplete="off">
+                                <button type="button" id="btn-toggle-codes" class="select-arrow-btn">▼</button>
+                                <div id="codes-dropdown" class="select-dropdown hidden"></div>
+                            </div>
                             <div id="code-helper" class="code-helper">Exemples : 21, 27</div>
                         </div>
                     </div>
@@ -105,7 +119,8 @@
                             </div>
                             <div class="cartes-perso-container">
                                 <div class="sub-options-title">Cartes personnalisées (fichiers locaux PNG) :</div>
-                                <textarea id="cartes-perso" placeholder="Un chemin absolu de fichier PNG par ligne (ex: C:\Cartes\ma_carte.png)"></textarea>
+                                <textarea id="cartes-perso"
+                                    placeholder="Un chemin absolu de fichier PNG par ligne (ex: C:\Cartes\ma_carte.png)"></textarea>
                             </div>
                         </div>
 
@@ -155,7 +170,7 @@
         <section class="status-panel">
             <div class="card">
                 <h2>Suivi de Génération</h2>
-                
+
                 <div class="progress-container">
                     <div class="progress-bar-bg">
                         <div id="progress-bar" class="progress-bar" style="width: 0%;"></div>
@@ -171,7 +186,8 @@
                         <span>Terminal d'exécution</span>
                         <button id="btn-clear" class="btn-clear-console">Effacer</button>
                     </div>
-                    <pre id="console-output" class="console-output">> Prêt à générer. Sélectionnez vos paramètres à gauche et cliquez sur "Générer le Bilan".</pre>
+                    <pre id="console-output"
+                        class="console-output">> Prêt à générer. Sélectionnez vos paramètres à gauche et cliquez sur "Générer le Bilan".</pre>
                 </div>
 
                 <div id="result-card" class="result-card hidden">
@@ -192,7 +208,7 @@
     <footer class="app-footer">
         <p>OFBilan - Interface Web Locale v1.0.0 | Office Français de la Biodiversité</p>
     </footer>
-
-    <script src="app.js"></script>
+    <script src="app.js?v=1.0.7"></script>
 </body>
+
 </html>

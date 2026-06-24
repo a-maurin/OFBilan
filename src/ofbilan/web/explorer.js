@@ -1,12 +1,14 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const btnGenerate = document.getElementById('btn-generate');
-    const btnClear = document.getElementById('btn-clear');
-    const progressBar = document.getElementById('progress-bar');
-    const percentText = document.getElementById('percent-text');
-    const statusText = document.getElementById('status-text');
-    const consoleOutput = document.getElementById('console-output');
-    const resultCard = document.getElementById('result-card');
+    let isUnloading = false;
+    window.addEventListener('beforeunload', () => {
+        isUnloading = true;
+    });
 
+    let chartResults = null;
+    let chartDomains = null;
+    let boundaryLayer = null;
+
+    const btnUpdate = document.getElementById('btn-update');
     const selectEchelle = document.getElementById('echelle');
     const inputCode = document.getElementById('code');
     const codeHelper = document.getElementById('code-helper');
@@ -14,14 +16,37 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnToggleCodes = document.getElementById('btn-toggle-codes');
     const codesDropdown = document.getElementById('codes-dropdown');
 
+    // Set default dates dynamically: Jan 1st of current year to today
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const dateDebEl = document.getElementById('date-deb');
+    const dateFinEl = document.getElementById('date-fin');
+    if (dateDebEl) dateDebEl.value = `${currentYear}-01-01`;
+    if (dateFinEl) {
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        dateFinEl.value = `${currentYear}-${month}-${day}`;
+    }
+
+    // Stats Elements
+    const valControles = document.getElementById('val-controles');
+    const valPej = document.getElementById('val-pej');
+    const valPa = document.getElementById('val-pa');
+    const valPve = document.getElementById('val-pve');
+
     // Combobox Profils de bilan
     const inputProfil = document.getElementById('profil');
     const btnToggleProfils = document.getElementById('btn-toggle-profils');
     const profilsDropdown = document.getElementById('profils-dropdown');
 
+    // Combobox Type Usager
+    const inputUsager = document.getElementById('type-usager');
+    const btnToggleUsagers = document.getElementById('btn-toggle-usagers');
+    const usagersDropdown = document.getElementById('usagers-dropdown');
+
     const profilesList = [
         { value: "global", label: "Bilan Global d'Activité" },
-        { value: "synthese_activite_PA_PJ", label: "Synthèse Activité PA/PJ" },
+        { value: "synthese_activite_PA_PJ", label: "Synthèse & Activité PA/PJ" },
         { value: "agrainage", label: "Police de l'Agrainage" },
         { value: "chasse", label: "Police de la Chasse" },
         { value: "autorisations_environnementales", label: "Autorisations Environnementales" },
@@ -54,60 +79,6 @@ document.addEventListener('DOMContentLoaded', () => {
         { value: "zones_humides", label: "Zones Humides" },
         { value: "hors_theme", label: "Hors Thème" }
     ];
-
-    function renderDropdown(filterText = '') {
-        profilsDropdown.innerHTML = '';
-        const search = filterText.toLowerCase().trim();
-        const filtered = profilesList.filter(p =>
-            p.label.toLowerCase().includes(search) || p.value.toLowerCase().includes(search)
-        );
-
-        if (filtered.length === 0) {
-            const noRes = document.createElement('div');
-            noRes.className = 'dropdown-option-empty';
-            noRes.textContent = 'Aucun profil trouvé';
-            profilsDropdown.appendChild(noRes);
-            return;
-        }
-
-        filtered.forEach(p => {
-            const opt = document.createElement('div');
-            opt.className = 'dropdown-option';
-            opt.dataset.value = p.value;
-            opt.textContent = p.label;
-            opt.addEventListener('click', () => {
-                inputProfil.value = p.value;
-                profilsDropdown.classList.add('hidden');
-            });
-            profilsDropdown.appendChild(opt);
-        });
-    }
-
-    // Toggle dropdown on arrow button click
-    btnToggleProfils.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const isHidden = profilsDropdown.classList.contains('hidden');
-        if (isHidden) {
-            renderDropdown();
-            profilsDropdown.classList.remove('hidden');
-            inputProfil.focus();
-        } else {
-            profilsDropdown.classList.add('hidden');
-        }
-    });
-
-    // Show dropdown and filter on input typing
-    inputProfil.addEventListener('input', () => {
-        renderDropdown(inputProfil.value);
-        profilsDropdown.classList.remove('hidden');
-    });
-
-    // Show all when input is focused/clicked
-    inputProfil.addEventListener('click', (e) => {
-        e.stopPropagation();
-        renderDropdown(inputProfil.value);
-        profilsDropdown.classList.remove('hidden');
-    });
 
     const deptsList = [
         { value: "01", label: "01 - Ain" },
@@ -231,6 +202,16 @@ document.addEventListener('DOMContentLoaded', () => {
         { value: "FR", label: "FR - France (National)" }
     ];
 
+    const usagersList = [
+        { value: "", label: "Tous les types d'usagers" },
+        { value: "Particulier (usager de la nature + gestionnaire d'une propriété)", label: "Particulier (usager de la nature + gestionnaire d'une propriété)" },
+        { value: "Agriculteur et autres acteurs agricoles", label: "Agriculteur et autres acteurs agricoles" },
+        { value: "Collectivité", label: "Collectivité" },
+        { value: "Entreprise", label: "Entreprise" },
+        { value: "Acteurs sylvicoles", label: "Acteurs sylvicoles" },
+        { value: "Autre", label: "Autre" }
+    ];
+
     function getActiveCodesList() {
         const scale = selectEchelle.value;
         if (scale === 'departement') return deptsList;
@@ -238,6 +219,24 @@ document.addEventListener('DOMContentLoaded', () => {
         if (scale === 'bmi') return bmisList;
         if (scale === 'national') return nationalList;
         return [];
+    }
+
+    function splitLabel(str, maxLen = 25) {
+        if (!str) return [];
+        if (str.length <= maxLen) return [str];
+        const words = str.split(' ');
+        const lines = [];
+        let currentLine = '';
+        words.forEach(word => {
+            if ((currentLine + ' ' + word).trim().length <= maxLen) {
+                currentLine = (currentLine + ' ' + word).trim();
+            } else {
+                if (currentLine) lines.push(currentLine);
+                currentLine = word;
+            }
+        });
+        if (currentLine) lines.push(currentLine);
+        return lines;
     }
 
     function setupCombobox(inputEl, toggleBtn, dropdownEl, getListDataFn) {
@@ -296,8 +295,10 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Initialisation de la combobox Code géographique
+    // Initialisation des comboboxes
+    setupCombobox(inputProfil, btnToggleProfils, profilsDropdown, () => profilesList);
     setupCombobox(inputCode, btnToggleCodes, codesDropdown, getActiveCodesList);
+    setupCombobox(inputUsager, btnToggleUsagers, usagersDropdown, () => usagersList);
 
     // Hide dropdowns when clicking outside
     document.addEventListener('click', (e) => {
@@ -306,9 +307,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    let isRunning = false;
-
-    // Mise à jour dynamique de l'aide géographique
     selectEchelle.addEventListener('change', () => {
         const val = selectEchelle.value;
         if (val === 'departement') {
@@ -330,197 +328,219 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    function setProgress(percent, status) {
-        progressBar.style.width = `${percent}%`;
-        percentText.textContent = `${percent}%`;
-        statusText.textContent = status;
-        statusText.style.color = "";
+    // --- LEAFLET MAP INITIALIZATION ---
+    // France Center
+    const map = L.map('map').setView([46.2276, 2.2137], 6);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    const markersGroup = L.layerGroup().addTo(map);
+
+    // Color definitions for status markers
+    function getMarkerColor(resultat) {
+        if (!resultat) return '#64748B'; // Grey (En attente / Autre)
+        const res = resultat.toLowerCase();
+        if (res.includes('conforme') && !res.includes('non')) {
+            return '#10B981'; // Green
+        } else if (res.includes('infraction') || res.includes('non') || res.includes('manquement')) {
+            return '#EF4444'; // Red
+        }
+        return '#F59E0B'; // Orange (warning or pending)
     }
 
-    function updateProgressFromLog(line) {
-        if (line.includes("session de cache") || line.includes("init_session_cache")) {
-            setProgress(10, "Initialisation de la session de cache...");
-        } else if (line.includes("dépendance") || line.includes("Vérifie la disponibilité")) {
-            setProgress(20, "Vérification des dépendances...");
-        } else if (line.includes("run_profiles_batch") || line.includes("Début d'exécution")) {
-            setProgress(30, "Lancement du batch de profils...");
-        } else if (line.includes("Chargement du profil") || line.includes("YAML")) {
-            setProgress(40, "Lecture des configurations...");
-        } else if (line.includes("Agrégation") || line.includes("agregations")) {
-            setProgress(60, "Agrégation des données...");
-        } else if (line.includes("QGIS") || line.includes("cartographie") || line.includes("carte")) {
-            setProgress(80, "Production des cartes QGIS...");
-        } else if (line.includes("Génération du rapport") || line.includes("reportlab") || line.includes("PDF")) {
-            setProgress(90, "Génération du rapport PDF...");
-        } else if (line.includes("[SUCCESS]")) {
-            setProgress(100, "Génération complétée avec succès !");
-        } else if (line.includes("[ERREUR]")) {
-            setProgress(100, "Une erreur est survenue.");
-            statusText.textContent = "Erreur de génération";
-            statusText.style.color = "#D95C4A";
-        }
-    }
+    function loadData() {
+        btnUpdate.disabled = true;
+        btnUpdate.textContent = 'Chargement...';
 
-    // Gestion de l'affichage dynamique des sous-options de cartes
-    const cartesCheckbox = document.getElementById('cartes');
-    const cartesSubOptions = document.getElementById('cartes-sub-options');
-
-    function toggleCartesSubOptions() {
-        if (cartesCheckbox.checked) {
-            cartesSubOptions.classList.remove('hidden');
-        } else {
-            cartesSubOptions.classList.add('hidden');
-        }
-    }
-    cartesCheckbox.addEventListener('change', toggleCartesSubOptions);
-    toggleCartesSubOptions();
-
-    btnGenerate.addEventListener('click', () => {
-        if (isRunning) return;
-
-        isRunning = true;
-        btnGenerate.disabled = true;
-        btnGenerate.textContent = "Génération en cours...";
-        resultCard.classList.add('hidden');
-
-        // Reset progress bar
-        progressBar.style.width = '0%';
-        percentText.textContent = '0%';
-        statusText.textContent = 'Lancement du traitement...';
-        consoleOutput.textContent = '> Démarrage de la génération du bilan...\n';
-
-        // Construction de la sélection des cartes
-        const cartesSelection = [];
-        if (cartesCheckbox.checked) {
-            const profilId = inputProfil.value || 'global';
-            if (document.getElementById('carte-domaines').checked) {
-                cartesSelection.push(`${profilId}_domaines`);
-            }
-            if (document.getElementById('carte-resultats').checked) {
-                cartesSelection.push(`${profilId}_resultats`);
-            }
-            if (document.getElementById('carte-usagers').checked) {
-                cartesSelection.push(`${profilId}_usagers`);
-            }
-            if (document.getElementById('carte-procedures').checked) {
-                cartesSelection.push(`${profilId}_procedures`);
-            }
-
-            // Cartes personnalisées depuis la zone de texte
-            const customText = document.getElementById('cartes-perso').value;
-            const lines = customText.split('\n');
-            for (let line of lines) {
-                line = line.trim();
-                if (line) {
-                    cartesSelection.push(line);
-                }
-            }
-        }
-
-        // Collect parameters from form
         const params = {
             profil: inputProfil.value,
             'date-deb': document.getElementById('date-deb').value,
             'date-fin': document.getElementById('date-fin').value,
             echelle: selectEchelle.value,
             code: inputCode.value,
-            'type-usager': document.getElementById('type-usager').value,
-            cartes: cartesCheckbox.checked,
-            cartes_selection: cartesSelection,
-            pnf: document.getElementById('pnf').checked,
-            brochure: document.getElementById('brochure').checked,
-            diffusion: document.getElementById('diffusion').value,
-            preset: document.getElementById('preset').value
+            'type-usager': document.getElementById('type-usager').value
         };
 
-        // Call backend API
-        fetch('/api/generate', {
+        fetch('/api/data', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify(params)
         })
-            .then(response => {
-                if (!response.body) {
-                    throw new Error("Le flux de réponse n'est pas disponible.");
-                }
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder('utf-8');
-                let buffer = '';
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Erreur serveur lors de la récupération des données.');
+            }
+            return response.json();
+        })
+        .then(res => {
+            // Update stats indicators
+            valControles.textContent = res.stats.total_controles;
+            valPej.textContent = res.stats.total_pej;
+            valPa.textContent = res.stats.total_pa;
+            valPve.textContent = res.stats.total_pve;
 
-                function read() {
-                    return reader.read().then(({ done, value }) => {
-                        if (done) {
-                            isRunning = false;
-                            btnGenerate.disabled = false;
-                            btnGenerate.textContent = "Génération du Bilan";
+            // Update map markers
+            markersGroup.clearLayers();
+            if (boundaryLayer) {
+                map.removeLayer(boundaryLayer);
+                boundaryLayer = null;
+            }
+            const coordinates = [];
 
-                            if (consoleOutput.textContent.includes('[SUCCESS]')) {
-                                resultCard.classList.remove('hidden');
-                            }
-                            return;
-                        }
+            if (res.points && res.points.length > 0) {
+                res.points.forEach(pt => {
+                    const lat = parseFloat(pt.y);
+                    const lng = parseFloat(pt.x);
 
-                        const chunk = decoder.decode(value, { stream: true });
-                        buffer += chunk;
+                    if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+                        coordinates.push([lat, lng]);
 
-                        const lines = buffer.split('\n');
-                        buffer = lines.pop(); // Keep last partial line
-
-                        lines.forEach(line => {
-                            if (line.trim()) {
-                                consoleOutput.textContent += line + '\n';
-                                consoleOutput.scrollTop = consoleOutput.scrollHeight;
-                                updateProgressFromLog(line);
-                            }
+                        const color = getMarkerColor(pt.resultat);
+                        const marker = L.circleMarker([lat, lng], {
+                            radius: 6,
+                            fillColor: color,
+                            color: '#FFFFFF',
+                            weight: 1.5,
+                            opacity: 1,
+                            fillOpacity: 0.8
                         });
 
-                        return read();
-                    });
+                        const popupContent = `
+                            <strong>Contrôle OSCEAN</strong><br>
+                            ID: ${pt.dc_id || 'N/A'}<br>
+                            Date: ${pt.date_ctrl || 'N/A'}<br>
+                            Résultat: <span style="font-weight:bold;color:${color}">${pt.resultat || 'N/A'}</span><br>
+                            Domaine: ${pt.domaine || 'N/A'}<br>
+                            Thème: ${pt.theme || 'N/A'}<br>
+                            Usager: ${pt.type_usager || 'N/A'}<br>
+                            Commune: ${pt.nom_commun || 'N/A'}
+                        `;
+                        marker.bindPopup(popupContent);
+                        markersGroup.addLayer(marker);
+                    }
+                });
+            }
+
+            // Render boundary if available
+            if (res.geojson) {
+                boundaryLayer = L.geoJSON(res.geojson, {
+                    style: {
+                        color: '#003A76',
+                        weight: 2.5,
+                        opacity: 0.85,
+                        fillColor: '#003A76',
+                        fillOpacity: 0.05
+                    }
+                }).addTo(map);
+            }
+
+            // Center/zoom map
+            if (boundaryLayer) {
+                map.fitBounds(boundaryLayer.getBounds(), { padding: [20, 20] });
+            } else if (coordinates.length > 0) {
+                const bounds = L.latLngBounds(coordinates);
+                map.fitBounds(bounds, { padding: [30, 30] });
+            } else {
+                // If no points, reset view to France
+                map.setView([46.2276, 2.2137], 6);
+            }
+
+            // --- CHARTS GENERATION ---
+            // 1. Aggregate results
+            const resultsCounts = { "Conforme": 0, "Non-conforme": 0, "En attente": 0 };
+            const domainsCounts = {};
+
+            if (res.points && res.points.length > 0) {
+                res.points.forEach(pt => {
+                    const resText = pt.resultat ? pt.resultat.toLowerCase() : '';
+                    if (resText.includes('conforme') && !resText.includes('non')) {
+                        resultsCounts["Conforme"]++;
+                    } else if (resText.includes('infraction') || resText.includes('non') || resText.includes('manquement')) {
+                        resultsCounts["Non-conforme"]++;
+                    } else {
+                        resultsCounts["En attente"]++;
+                    }
+
+                    const domain = pt.domaine || 'Hors domaine';
+                    domainsCounts[domain] = (domainsCounts[domain] || 0) + 1;
+                });
+            }
+
+            // Render Results Chart (Doughnut)
+            if (chartResults) {
+                chartResults.destroy();
+            }
+            const ctxResults = document.getElementById('chart-results').getContext('2d');
+            chartResults = new Chart(ctxResults, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(resultsCounts),
+                    datasets: [{
+                        data: Object.values(resultsCounts),
+                        backgroundColor: ['#10B981', '#EF4444', '#64748B'],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } }
+                    }
                 }
-                return read();
-            })
-            .catch(err => {
-                isRunning = false;
-                btnGenerate.disabled = false;
-                btnGenerate.textContent = "Génération du Bilan";
-                consoleOutput.textContent += `\n[ERREUR] Impossible de se connecter au serveur : ${err.message}\n`;
-                consoleOutput.scrollTop = consoleOutput.scrollHeight;
-                setProgress(100, "Erreur de connexion");
-                statusText.style.color = "#D95C4A";
             });
-    });
 
-    const btnOpenPdf = document.getElementById('btn-open-pdf');
-    const btnOpenFolder = document.getElementById('btn-open-folder');
-
-    function openOutput(endpoint) {
-        const profil = inputProfil.value;
-        const code = inputCode.value;
-
-        fetch(endpoint, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ profil, code })
+            // Render Domains Chart (Bar)
+            if (chartDomains) {
+                chartDomains.destroy();
+            }
+            
+            const sortedDomains = Object.entries(domainsCounts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 5);
+            
+            const ctxDomains = document.getElementById('chart-domains').getContext('2d');
+            chartDomains = new Chart(ctxDomains, {
+                type: 'bar',
+                data: {
+                    labels: sortedDomains.map(d => splitLabel(d[0], 25)),
+                    datasets: [{
+                        label: 'Contrôles',
+                        data: sortedDomains.map(d => d[1]),
+                        backgroundColor: '#003A76',
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        x: { beginAtZero: true, ticks: { font: { size: 9 } } },
+                        y: { ticks: { font: { size: 9 } } }
+                    }
+                }
+            });
         })
-            .then(response => response.json())
-            .then(data => {
-                if (!data.success) {
-                    alert("Erreur lors de l'ouverture : " + data.error);
-                }
-            })
-            .catch(err => {
-                alert("Erreur réseau : " + err.message);
-            });
+        .catch(err => {
+            if (isUnloading) return;
+            console.error(err);
+            alert('Impossible de charger les données : ' + err.message);
+        })
+        .finally(() => {
+            btnUpdate.disabled = false;
+            btnUpdate.textContent = 'Charger les données';
+        });
     }
 
-    btnOpenPdf.addEventListener('click', () => openOutput('/api/open-pdf'));
-    btnOpenFolder.addEventListener('click', () => openOutput('/api/open-folder'));
+    btnUpdate.addEventListener('click', loadData);
 
-    btnClear.addEventListener('click', () => {
-        consoleOutput.textContent = '> Console effacée.\n';
-    });
+    // Initial load
+    loadData();
 });
