@@ -45,12 +45,19 @@ Une interface utilisateur est disponible pour configurer et générer vos bilans
   ```
   *(Le script ouvre automatiquement votre navigateur internet à l'adresse [http://localhost:8000](http://localhost:8000)).*
 
-* **Fonctionnalités de l'interface** :
-  * Sélection interactive des profils de bilans avec filtrage et recherche intelligente.
-  * Saisie simplifiée de la période, de l'échelle géographique (département, région, BMI) et du type d'usager.
+* **Fonctionnalités de génération** :
+  * Sélection interactive des profils de bilans avec filtrage et recherche intelligente par autocomplétion.
+  * Saisie simplifiée de la période, de l'échelle géographique (département, région, BMI) et du type d'usager via des comboboxes dynamiques.
   * Choix précis des cartes QGIS à intégrer au PDF (Par défaut : Domaines, Résultats, Usagers, Procédures).
   * Possibilité d'intégrer des cartes personnalisées depuis votre disque en indiquant leur chemin absolu.
   * Suivi du traitement en temps réel dans une console intégrée et téléchargement immédiat du PDF généré.
+
+* **Explorateur de données interactif (OFBilan Explorer)** :
+  * Accessible directement depuis l'interface via l'onglet de navigation dédié.
+  * **Cartographie interactive (Leaflet.js)** : Visualisation géographique des points de contrôle OSCEAN sur le territoire sélectionné.
+  * **Tableaux de bord (Chart.js)** : Graphiques dynamiques affichant la répartition par résultat de contrôle et le Top 5 des domaines d'activité les plus contrôlés.
+  * **Indicateurs de synthèse** : Synthèse chiffrée immédiate (localisations, contrôles réels, procédures pénales, procédures administratives adaptées).
+  * **Filtrage à la volée** : Exploration rapide de la base de données OSCEAN par période, échelle spatiale et type d'usager avec rafraîchissement instantané sans génération de PDF.
 
 ### 2. Lancement en ligne de commande (CLI & mode interactif)
 L'assistant interactif classique en mode console vous guide pas-à-pas :
