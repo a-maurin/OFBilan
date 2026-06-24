@@ -5,22 +5,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OFBilan - Générateur de Bilans et Cartes</title>
-    <link rel="stylesheet" href="style.css?v=1.0.7">
+    <link rel="stylesheet" href="style.css?v=1.1.1">
 </head>
 
-<body>
+<body class="page-editor">
     <header class="app-header">
         <div class="header-container">
             <div class="logo-area">
                 <img src="logo.svg" alt="Bandeau OFBilan" class="header-logo">
             </div>
+            <nav class="app-nav">
+                <a href="explorer.html" class="nav-item">Analyse Interactive</a>
+                <a href="index.html" class="nav-item active">Éditeur de Bilans</a>
+            </nav>
         </div>
     </header>
-
-    <nav class="app-nav">
-        <a href="index.html" class="nav-item active">Générateur PDF</a>
-        <a href="explorer.html" class="nav-item">OFBilan Explorer</a>
-    </nav>
 
     <main class="app-container">
         <!-- Panneau de Configuration -->
@@ -74,15 +73,60 @@
                         </div>
                     </div>
 
-                    <!-- Type usager cible -->
-                    <div class="form-group">
-                        <label for="type-usager">Type d'usager cible (Optionnel)</label>
-                        <select id="type-usager" name="type-usager">
-                            <option value="">Tous les types d'usagers</option>
-                            <option value="agriculteur">Agriculteur et acteurs agricoles</option>
-                            <option value="chasseur">Chasseur / Association de chasse</option>
-                            <option value="particulier">Particulier</option>
-                        </select>
+                    <!-- Filtres optionnels (accordéon) -->
+                    <div class="accordion-section" id="accordion-filtres">
+                        <div class="accordion-header" id="accordion-filtres-header">
+                            <span class="accordion-title">
+                                <span>Filtres optionnels</span>
+                                <span class="accordion-badge hidden" id="filtres-badge">0</span>
+                            </span>
+                            <span class="accordion-arrow">&#9660;</span>
+                        </div>
+                        <div class="accordion-body" id="accordion-filtres-body">
+                            <!-- Type usager cible -->
+                            <div class="form-group">
+                                <label for="type-usager">Type d'usager cible</label>
+                                <div class="custom-select-container">
+                                    <input type="text" id="type-usager" name="type-usager"
+                                        placeholder="Tous les types d'usagers" autocomplete="off">
+                                    <button type="button" id="btn-toggle-usagers" class="select-arrow-btn">&#9660;</button>
+                                    <div id="usagers-dropdown" class="select-dropdown hidden"></div>
+                                </div>
+                            </div>
+
+                            <!-- Domaines de la SNC -->
+                            <div class="form-group">
+                                <label for="domaine-snc">Domaines de la SNC</label>
+                                <div class="custom-select-container">
+                                    <input type="text" id="domaine-snc" name="domaine-snc"
+                                        placeholder="Tous les domaines" autocomplete="off">
+                                    <button type="button" id="btn-toggle-domaines-snc" class="select-arrow-btn">&#9660;</button>
+                                    <div id="domaines-snc-dropdown" class="select-dropdown hidden"></div>
+                                </div>
+                            </div>
+
+                            <!-- Thèmes de la SNC -->
+                            <div class="form-group">
+                                <label for="theme-snc">Thèmes de la SNC</label>
+                                <div class="custom-select-container">
+                                    <input type="text" id="theme-snc" name="theme-snc"
+                                        placeholder="Tous les thèmes" autocomplete="off">
+                                    <button type="button" id="btn-toggle-themes-snc" class="select-arrow-btn">&#9660;</button>
+                                    <div id="themes-snc-dropdown" class="select-dropdown hidden"></div>
+                                </div>
+                            </div>
+
+                            <!-- Type d'action -->
+                            <div class="form-group">
+                                <label for="type-action-snc">Type d'action</label>
+                                <div class="custom-select-container">
+                                    <input type="text" id="type-action-snc" name="type-action-snc"
+                                        placeholder="Tous les types d'action" autocomplete="off">
+                                    <button type="button" id="btn-toggle-types-action" class="select-arrow-btn">&#9660;</button>
+                                    <div id="types-action-dropdown" class="select-dropdown hidden"></div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Options Carto & Analyse -->
@@ -160,8 +204,10 @@
                         </div>
                     </div>
 
-                    <!-- Bouton de lancement -->
-                    <button type="button" id="btn-generate" class="btn btn-primary">Générer le Bilan</button>
+                    <!-- Bouton de lancement (sticky) -->
+                    <div class="form-footer-sticky">
+                        <button type="button" id="btn-generate" class="btn btn-primary">Générer le Bilan</button>
+                    </div>
                 </form>
             </div>
         </section>
@@ -208,7 +254,7 @@
     <footer class="app-footer">
         <p>OFBilan - Interface Web Locale v1.0.0 | Office Français de la Biodiversité</p>
     </footer>
-    <script src="app.js?v=1.0.7"></script>
+    <script src="app.js?v=1.1.0"></script>
 </body>
 
 </html>

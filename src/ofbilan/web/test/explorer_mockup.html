@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maquette OFBilan Explorer - Office Français de la Biodiversité</title>
+    <link rel="stylesheet" href="../style.css">
+    <style>
+        /* Ajustements spécifiques pour la maquette */
+        .explorer-container {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 15px;
+            max-width: 1780px;
+            margin: 10px auto;
+            padding: 0 15px;
+            flex: 1;
+            width: 100%;
+        }
+
+        .explorer-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+            gap: 10px;
+        }
+
+        .stat-card {
+            background: #FFFFFF;
+            padding: 6px 10px;
+            border-radius: 6px;
+            border: 1px solid var(--color-border);
+            text-align: center;
+        }
+
+        .stat-card .value {
+            font-size: 20px;
+            font-weight: bold;
+            color: var(--color-primary);
+            line-height: 1.2;
+        }
+
+        .stat-card .label {
+            font-size: 9px;
+            color: var(--color-text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Organisation de la grille principale */
+        .dashboard-split-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 15px;
+        }
+
+        @media (min-width: 1200px) {
+            .dashboard-split-grid {
+                grid-template-columns: 1.2fr 1fr;
+            }
+        }
+
+        /* Layout des stats en 2x2 */
+        .stats-subgrid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+        }
+
+        @media (min-width: 576px) {
+            .stats-subgrid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        .chart-box {
+            background: #FFFFFF;
+            padding: 10px;
+            border: 1px solid var(--color-border);
+            border-radius: 6px;
+            display: flex;
+            flex-direction: column;
+            min-height: 200px;
+        }
+
+        .chart-box h3 {
+            font-size: 11px;
+            margin-bottom: 6px;
+            text-align: center;
+            color: var(--color-primary);
+        }
+
+        .chart-container {
+            flex: 1;
+            position: relative;
+            min-height: 150px;
+        }
+
+        /* Block Carte Factice */
+        .mock-map {
+            background: #E5E9F0;
+            border: 1px solid var(--color-border);
+            border-radius: var(--border-radius);
+            height: 380px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--color-text-muted);
+            font-style: italic;
+        }
+    </style>
+</head>
+
+<body>
+    <header class="app-header">
+        <div class="header-container">
+            <div class="logo-area">
+                <img src="../logo.svg" alt="Bandeau OFBilan" class="header-logo">
+            </div>
+        </div>
+    </header>
+
+    <nav class="app-nav">
+        <a href="#" class="nav-item">Générateur PDF</a>
+        <a href="#" class="nav-item active">OFBilan Explorer (Maquette)</a>
+    </nav>
+
+    <main class="explorer-container">
+        <!-- Panneau Gauche Factice -->
+        <section class="control-panel">
+            <div class="card">
+                <h2>Filtres d'exploration</h2>
+                <div class="form-group">
+                    <label>Profil de bilan</label>
+                    <input type="text" value="Bilan Global d'Activité" disabled>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Date de début</label>
+                        <input type="date" value="2025-01-01" disabled>
+                    </div>
+                    <div class="form-group">
+                        <label>Date de fin</label>
+                        <input type="date" value="2025-12-31" disabled>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-primary" style="margin-top: 10px;" disabled>Charger les données</button>
+            </div>
+        </section>
+
+        <!-- Tableau de Bord Droite -->
+        <section class="explorer-panel">
+            <!-- Indicateurs Clés -->
+            <div class="card" style="margin-bottom: 0;">
+                <h2>Indicateurs Clés (Données simulées)</h2>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="value">142</div>
+                        <div class="label">Contrôles</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="value">28</div>
+                        <div class="label">Procédures Judiciaires</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="value">14</div>
+                        <div class="label">Procédures Adm.</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="value">32</div>
+                        <div class="label">Verbalisations</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Grille Carte / Statistiques -->
+            <div class="dashboard-split-grid">
+                <!-- Bloc Carte & Frise Temporelle -->
+                <div style="display: flex; flex-direction: column; gap: 15px;">
+                    <div class="card" style="margin-bottom: 0; flex: 1;">
+                        <h2>Localisation des contrôles (Simulée)</h2>
+                        <div class="mock-map">
+                            [ Emplacement Carte Leaflet.js ]
+                        </div>
+                    </div>
+                    
+                    <!-- Nouvelle Frise Temporelle sous la carte -->
+                    <div class="card" style="margin-bottom: 0;">
+                        <h2>Saisonnalité de l'activité (Nouveau)</h2>
+                        <div class="chart-container" style="min-height: 180px;">
+                            <canvas id="chart-seasonality"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bloc Statistiques Répartitions -->
+                <div class="card" style="margin-bottom: 0; display: flex; flex-direction: column; gap: 10px;">
+                    <h2>Répartitions et Statistiques</h2>
+                    
+                    <div class="stats-subgrid">
+                        <!-- 1. Résultats -->
+                        <div class="chart-box">
+                            <h3>Résultats des Contrôles</h3>
+                            <div class="chart-container">
+                                <canvas id="chart-results"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- 2. Usagers (Nouveau) -->
+                        <div class="chart-box">
+                            <h3>Par Type d'Usager (Nouveau)</h3>
+                            <div class="chart-container">
+                                <canvas id="chart-usagers"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- 3. Domaines -->
+                        <div class="chart-box" style="grid-column: span 2; min-height: 180px;">
+                            <h3>Par Domaine d'Activité</h3>
+                            <div class="chart-container">
+                                <canvas id="chart-domains"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- 4. Thèmes (Nouveau) -->
+                        <div class="chart-box" style="grid-column: span 2; min-height: 180px;">
+                            <h3>Par Thématique (Nouveau)</h3>
+                            <div class="chart-container">
+                                <canvas id="chart-themes"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="app-footer">
+        <p>OFBilan - Maquette Explorateur | Office Français de la Biodiversité</p>
+    </footer>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Colors matching the brand palette
+            const primaryColor = '#003A76';
+            const secondaryColor = '#1E4E85';
+            const accentColor = '#4296CE';
+            const successColor = '#53AB60';
+            const dangerColor = '#EF4444';
+            const mutedColor = '#64748B';
+
+            // 1. Chart Results (Doughnut)
+            new Chart(document.getElementById('chart-results').getContext('2d'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['Conforme', 'Non-conforme', 'En attente'],
+                    datasets: [{
+                        data: [95, 35, 12],
+                        backgroundColor: [successColor, dangerColor, mutedColor],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 9 } } }
+                    }
+                }
+            });
+
+            // 2. Chart Usagers (Doughnut - NEW)
+            new Chart(document.getElementById('chart-usagers').getContext('2d'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['Agriculteur', 'Particulier', 'Collectivité', 'Entreprise', 'Autre'],
+                    datasets: [{
+                        data: [54, 42, 22, 16, 8],
+                        backgroundColor: [primaryColor, accentColor, '#F59E0B', '#10B981', mutedColor],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 9 } } }
+                    }
+                }
+            });
+
+            // 3. Chart Domains (Bar)
+            new Chart(document.getElementById('chart-domains').getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: ['Eau & Milieux Aquatiques', 'Nature (Faune/Flore)', 'Forêt & Espaces Boisés'],
+                    datasets: [{
+                        label: 'Contrôles',
+                        data: [78, 48, 16],
+                        backgroundColor: primaryColor,
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { beginAtZero: true, ticks: { font: { size: 9 } } },
+                        y: { ticks: { font: { size: 9 } } }
+                    }
+                }
+            });
+
+            // 4. Chart Themes (Bar - NEW)
+            new Chart(document.getElementById('chart-themes').getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: ['Sécheresse / Prélèvements', 'Zones Humides', 'Police de la Chasse', 'Continuité Écologique', 'Espèces Protégées'],
+                    datasets: [{
+                        label: 'Contrôles',
+                        data: [32, 24, 18, 12, 10],
+                        backgroundColor: accentColor,
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { beginAtZero: true, ticks: { font: { size: 9 } } },
+                        y: { ticks: { font: { size: 9 } } }
+                    }
+                }
+            });
+
+            // 5. Chart Seasonality (Line - NEW)
+            new Chart(document.getElementById('chart-seasonality').getContext('2d'), {
+                type: 'line',
+                data: {
+                    labels: ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sept', 'Oct', 'Nov', 'Déc'],
+                    datasets: [
+                        {
+                            label: 'Contrôles',
+                            data: [8, 12, 15, 20, 22, 28, 35, 38, 25, 18, 10, 8],
+                            borderColor: primaryColor,
+                            backgroundColor: 'rgba(0, 58, 118, 0.05)',
+                            fill: true,
+                            tension: 0.3
+                        },
+                        {
+                            label: 'Infractions',
+                            data: [2, 3, 4, 6, 8, 9, 12, 15, 8, 5, 2, 1],
+                            borderColor: dangerColor,
+                            backgroundColor: 'rgba(239, 68, 68, 0.05)',
+                            fill: true,
+                            tension: 0.3
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top', labels: { boxWidth: 12, font: { size: 10 } } }
+                    },
+                    scales: {
+                        x: { ticks: { font: { size: 9 } } },
+                        y: { beginAtZero: true, ticks: { font: { size: 9 } } }
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>

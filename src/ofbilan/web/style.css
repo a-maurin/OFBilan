@@ -31,22 +31,24 @@ body {
     min-height: 100vh;
 }
 
+/* Layout fixe full-viewport — éditeur de bilans uniquement */
+body.page-editor {
+    height: 100vh;
+    overflow: hidden;
+}
+
 /* Header */
 .app-header {
     background-color: var(--color-primary);
     color: #FFFFFF;
-    padding: 3px 20px;
+    padding: 3px 0px;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
 }
 
 /* Navigation */
 .app-nav {
-    background-color: var(--color-primary);
-    padding: 10px 30px;
     display: flex;
-    justify-content: center;
     gap: 15px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .nav-item {
@@ -73,9 +75,11 @@ body {
 .header-container {
     max-width: 1200px;
     margin: 0 auto;
+    padding: 0 20px;
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
+    gap: 30px;
 }
 
 .logo-area {
@@ -99,19 +103,36 @@ body {
 /* Container */
 .app-container {
     max-width: 1200px;
-    margin: 30px auto;
-    padding: 0 20px;
+    margin: 0 auto;
+    padding: 20px 20px 0;
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 30px;
+    gap: 24px;
     flex: 1;
     width: 100%;
+}
+
+/* Éditeur : conteneur sans défilement de page */
+body.page-editor .app-container {
+    overflow: hidden;
+    min-height: 0;
 }
 
 @media (max-width: 900px) {
     .app-container {
         grid-template-columns: 1fr;
     }
+    body.page-editor .app-container {
+        overflow-y: auto;
+    }
+}
+
+/* Panneaux scrollables — éditeur uniquement */
+body.page-editor .control-panel,
+body.page-editor .status-panel {
+    overflow-y: auto;
+    min-height: 0;
+    padding-bottom: 20px;
 }
 
 /* Cards */
@@ -121,7 +142,6 @@ body {
     padding: 24px;
     box-shadow: var(--shadow-soft);
     border: 1px solid var(--color-border);
-    height: 100%;
     display: flex;
     flex-direction: column;
 }
@@ -372,6 +392,16 @@ input:checked+.slider:before {
     background-color: #42924E;
 }
 
+.btn-danger {
+    background-color: #E25C5C;
+    color: #FFFFFF;
+    box-shadow: 0 4px 6px rgba(226, 92, 92, 0.15);
+}
+
+.btn-danger:hover {
+    background-color: #C94F4F;
+}
+
 .btn-outline {
     background-color: transparent;
     border: 1px solid var(--color-border);
@@ -532,7 +562,87 @@ input:checked+.slider:before {
     text-align: center;
     padding: 7px;
     font-size: 11px;
+    flex-shrink: 0;
+}
+
+/* Accordéon filtres optionnels */
+.accordion-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    padding: 10px 14px;
+    background-color: var(--color-bg-light);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    margin-bottom: 4px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--color-text-dark);
+    user-select: none;
+    transition: background-color 0.2s;
+}
+
+.accordion-header:hover {
+    background-color: #E8EFF6;
+}
+
+.accordion-header .accordion-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.accordion-header .accordion-badge {
+    font-size: 11px;
+    background-color: var(--color-accent);
+    color: #fff;
+    border-radius: 10px;
+    padding: 1px 7px;
+    font-weight: 600;
+}
+
+.accordion-arrow {
+    font-size: 10px;
+    color: var(--color-text-muted);
+    transition: transform 0.25s ease;
+    display: inline-block;
+}
+
+.accordion-header.open .accordion-arrow {
+    transform: rotate(180deg);
+}
+
+.accordion-body {
+    display: none;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px 12px 4px;
+    border-left: 2px solid var(--color-border);
+    margin-left: 4px;
+    margin-bottom: 8px;
+}
+
+.accordion-body.open {
+    display: flex;
+}
+
+.accordion-body .form-group {
+    margin-bottom: 0;
+}
+
+/* Bouton sticky en bas du panneau gauche */
+.form-footer-sticky {
+    position: sticky;
+    bottom: 0;
+    background: linear-gradient(transparent, var(--color-bg-card) 40%);
+    padding-top: 16px;
     margin-top: auto;
+    margin-left: -24px;
+    margin-right: -24px;
+    padding-left: 24px;
+    padding-right: 24px;
+    padding-bottom: 0;
 }
 
 /* Sub-options for Cartography */

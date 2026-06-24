@@ -5210,6 +5210,40 @@ def _run_engine_thematic_pipeline(
         pa_filtered = _filter_pa(pa, profile, cfg, point_filtered) if not pa.empty else pa
         pve_filtered = _filter_pve(pve, profile) if not pve.empty else pve
 
+        # Filtrage par domaine et thème SNC (Options utilisateur)
+        target_domains = resolved_opts.get("domaines")
+        if target_domains:
+            # Normaliser la recherche
+            td_lower = {d.strip().lower() for d in target_domains if d.strip()}
+            if td_lower:
+                if not point_filtered.empty and "domaine" in point_filtered.columns:
+                    point_filtered = point_filtered[point_filtered["domaine"].astype(str).str.strip().str.lower().isin(td_lower)].copy()
+                if not pej_filtered.empty and "DOMAINE" in pej_filtered.columns:
+                    pej_filtered = pej_filtered[pej_filtered["DOMAINE"].astype(str).str.strip().str.lower().isin(td_lower)].copy()
+                if not pa_filtered.empty and "DOMAINE" in pa_filtered.columns:
+                    pa_filtered = pa_filtered[pa_filtered["DOMAINE"].astype(str).str.strip().str.lower().isin(td_lower)].copy()
+
+        target_themes = resolved_opts.get("themes")
+        if target_themes:
+            tt_lower = {t.strip().lower() for t in target_themes if t.strip()}
+            if tt_lower:
+                if not point_filtered.empty:
+                    col_pt_theme = "theme" if "theme" in point_filtered.columns else ("type_actio" if "type_actio" in point_filtered.columns else None)
+                    if col_pt_theme:
+                        point_filtered = point_filtered[point_filtered[col_pt_theme].astype(str).str.strip().str.lower().isin(tt_lower)].copy()
+                if not pej_filtered.empty:
+                    col_pej_theme = "THEME" if "THEME" in pej_filtered.columns else ("TYPE_ACTION" if "TYPE_ACTION" in pej_filtered.columns else None)
+                    if col_pej_theme:
+                        pej_filtered = pej_filtered[pej_filtered[col_pej_theme].astype(str).str.strip().str.lower().isin(tt_lower)].copy()
+                if not pa_filtered.empty:
+                    col_pa_theme = "THEME" if "THEME" in pa_filtered.columns else ("TYPE_ACTION" if "TYPE_ACTION" in pa_filtered.columns else None)
+                    if col_pa_theme:
+                        pa_filtered = pa_filtered[pa_filtered[col_pa_theme].astype(str).str.strip().str.lower().isin(tt_lower)].copy()
+                if not pve_filtered.empty:
+                    col_pve_theme = "theme" if "theme" in pve_filtered.columns else ("THEME" if "THEME" in pve_filtered.columns else None)
+                    if col_pve_theme:
+                        pve_filtered = pve_filtered[pve_filtered[col_pve_theme].astype(str).str.strip().str.lower().isin(tt_lower)].copy()
+
     spatial_log = logging.getLogger("ofbilan.spatial")
     restrict_geo_val = str(profile.get("restrict_geo") or "").strip().lower()
     if restrict_geo_val == "pnf":

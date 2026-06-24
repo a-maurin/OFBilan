@@ -177,6 +177,27 @@ def main() -> int:
         help="Afficher les types d'usagers du référentiel (types_usagers.csv) et quitter.",
     )
     parser.add_argument(
+        "--domaine",
+        action="append",
+        dest="domaines",
+        metavar="DOMAINE",
+        help="Domaine(s) de la SNC à filtrer (répétable).",
+    )
+    parser.add_argument(
+        "--theme",
+        action="append",
+        dest="themes",
+        metavar="THEME",
+        help="Thème(s) de la SNC à filtrer (répétable).",
+    )
+    parser.add_argument(
+        "--type-action",
+        action="append",
+        dest="types_action",
+        metavar="TYPE_ACTION",
+        help="Type(s) d'action à filtrer (répétable).",
+    )
+    parser.add_argument(
         "--carte",
         action="append",
         dest="cartes_profil",
@@ -328,6 +349,11 @@ def main() -> int:
             logger.error("%s", e)
             print(e, file=sys.stderr)
             return 1
+
+    if args.domaines:
+        cli_options["domaines"] = args.domaines
+    if args.themes:
+        cli_options["themes"] = args.themes
 
     cartes = args.cartes
     if args.cartes_seules:
