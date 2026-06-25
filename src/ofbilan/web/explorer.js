@@ -37,10 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const valPa = document.getElementById('val-pa');
     const valPve = document.getElementById('val-pve');
 
-    // Combobox Profils de bilan
-    const inputProfil = document.getElementById('profil');
-    const btnToggleProfils = document.getElementById('btn-toggle-profils');
-    const profilsDropdown = document.getElementById('profils-dropdown');
+
 
     // Combobox Type Usager
     const inputUsager = document.getElementById('type-usager');
@@ -62,41 +59,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnToggleTypesAction = document.getElementById('btn-toggle-types-action');
     const typesActionDropdown = document.getElementById('types-action-dropdown');
 
-    const profilesList = [
-        { value: "global", label: "Bilan Global d'Activité" },
-        { value: "synthese_activite_PA_PJ", label: "Synthèse & Activité PA/PJ" },
-        { value: "agrainage", label: "Police de l'Agrainage" },
-        { value: "chasse", label: "Police de la Chasse" },
-        { value: "autorisations_environnementales", label: "Autorisations Environnementales" },
-        { value: "autres_gestion_qualitative", label: "Autres Gestions Qualitatives" },
-        { value: "continuite_ecologique", label: "Continuité Écologique" },
-        { value: "controles_aires_protegees", label: "Contrôles Aires Protégées" },
-        { value: "controles_espaces_proteges", label: "Contrôles Espaces Protégés" },
-        { value: "controles_secheresse", label: "Contrôles Sécheresse" },
-        { value: "especes_exotiques_envahissantes", label: "Espèces Exotiques Envahissantes" },
-        { value: "especes_protegees", label: "Espèces Protégées" },
-        { value: "faune_protegee_reglementee", label: "Faune Protégée Réglementée" },
-        { value: "faune_sauvage", label: "Faune Sauvage" },
-        { value: "faune_sauvage_captive", label: "Faune Sauvage Captive" },
-        { value: "gestion_eaux_pluviales", label: "Gestion des Eaux Pluviales" },
-        { value: "gestion_quantitative_hors_snc", label: "Gestion Quantitative Hors SNC" },
-        { value: "ouvrages_prelevement", label: "Ouvrages de Prélèvement" },
-        { value: "peche", label: "Pêche" },
-        { value: "piegeage", label: "Piégeage" },
-        { value: "plans_eau", label: "Plans d'Eau" },
-        { value: "pnf", label: "PNF (Parc National des Forêts)" },
-        { value: "pollutions_diffuses", label: "Pollutions Diffuses" },
-        { value: "pollutions_urbaines", label: "Pollutions Urbaines" },
-        { value: "procedures_pve", label: "Procédures PVe" },
-        { value: "reglementation_sanitaire", label: "Réglementation Sanitaire" },
-        { value: "sites_inscrits_classes", label: "Sites Inscrits/Classés" },
-        { value: "travaux", label: "Travaux" },
-        { value: "tub", label: "TUB" },
-        { value: "types_usager", label: "Types d'Usagers" },
-        { value: "types_usager_cible", label: "Types d'Usagers – Ciblé" },
-        { value: "zones_humides", label: "Zones Humides" },
-        { value: "hors_theme", label: "Hors Thème" }
-    ];
 
     const deptsList = [
         { value: "01", label: "01 - Ain" },
@@ -393,7 +355,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Initialisation des comboboxes
-    setupCombobox(inputProfil, btnToggleProfils, profilsDropdown, () => profilesList);
     setupCombobox(inputCode, btnToggleCodes, codesDropdown, getActiveCodesList);
     setupCombobox(inputUsager, btnToggleUsagers, usagersDropdown, () => usagersList);
     setupCombobox(inputDomaineSNC, btnToggleDomainesSNC, domainesSNCDropdown, () => domainesSNCList);
@@ -437,17 +398,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }).addTo(map);
 
     const markersGroup = L.layerGroup().addTo(map);
+    const proceduresGroup = L.layerGroup().addTo(map);
 
     // Color definitions for status markers
     function getMarkerColor(resultat) {
-        if (!resultat) return '#64748B'; // Grey (En attente / Autre)
+        if (!resultat) return '#64748B';
         const res = resultat.toLowerCase();
+        if (res.includes('en attente')) return '#64748B';
         if (res.includes('conforme') && !res.includes('non')) {
-            return '#10B981'; // Green
+            return '#10B981';
         } else if (res.includes('infraction') || res.includes('non') || res.includes('manquement')) {
-            return '#EF4444'; // Red
+            return '#EF4444';
         }
-        return '#F59E0B'; // Orange (warning or pending)
+        return '#64748B';
     }
 
     function loadData() {
@@ -455,7 +418,6 @@ document.addEventListener('DOMContentLoaded', () => {
         btnUpdate.textContent = 'Chargement...';
 
         const params = {
-            profil: inputProfil.value,
             'date-deb': document.getElementById('date-deb').value,
             'date-fin': document.getElementById('date-fin').value,
             echelle: selectEchelle.value,
@@ -527,7 +489,35 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 });
             }
+            // Render procedure markers (if any)
+            if (res.procedures && res.procedures.length > 0) {
+                res.procedures.forEach(p => {
+                    const lat = parseFloat(p.y);
+                    const lng = parseFloat(p.x);
+                    if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+                        let procColor = '#3B82F6';
+                        const ptype = (p.type || '').toUpperCase();
+                        if (ptype.includes('PEJ')) procColor = '#3B82F6';
+                        else if (ptype.includes('PA')) procColor = '#8B5CF6';
+                        else if (ptype.includes('PVE')) procColor = '#F97316';
 
+                        const marker = L.circleMarker([lat, lng], {
+                            radius: 5,
+                            color: procColor,
+                            fillColor: procColor,
+                            fillOpacity: 0.6,
+                            weight: 1
+                        });
+                        const popup = `
+                            <strong>Procédure ${p.type}</strong><br>
+                            ID: ${p.dc_id || 'N/A'}<br>
+                            Date: ${p.date_ctrl || 'N/A'}
+                        `;
+                        marker.bindPopup(popup);
+                        proceduresGroup.addLayer(marker);
+                    }
+                });
+            }
             // Render boundary if available
             if (res.geojson) {
                 boundaryLayer = L.geoJSON(res.geojson, {

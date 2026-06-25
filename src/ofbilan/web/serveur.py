@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+import pandas as pd
 from pathlib import Path
 
 # Ajouter le dossier actuel au path pour importer reparer_logo
@@ -220,6 +221,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
                 total_controles = len(df_pts)
 
+                df_pej = pd.DataFrame()
+                df_pa = pd.DataFrame()
+                df_pve = pd.DataFrame()
+
                 # 3. Chargement et filtrage PEJ
                 df_pej = load_pej(project_root, echelle=echelle, code=code, date_deb=date_deb, date_fin=date_fin)
                 if profile_cfg.get("pipeline") != "global":
@@ -376,6 +381,49 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                             "y": float(row["y"]) if pd.notna(row.get("y")) else 0.0
                         })
 
+                # 7. Extraction des procédures (PEJ, PA, PVe) pour la cartographie
+                #    - PEJ : points de contrôle dont code_pej est renseigné
+                #    - PA  : points de contrôle dont code_pa est renseigné
+                #    - PVe : coordonnées issues de load_pve (centroïdes communaux)
+                from ofbilan.common.utilitaires_metier import is_filled_procedure_code
+                procedures = []
+
+                def _pts_to_proc(df, code_col, label):
+                    """Extrait les procédures depuis point_ctrl en filtrant sur code_col non nul."""
+                    arr = []
+                    if df.empty or code_col not in df.columns or "x" not in df.columns or "y" not in df.columns:
+                        return arr
+                    mask = df[code_col].map(is_filled_procedure_code)
+                    df_valid = df.loc[mask].dropna(subset=["x", "y"])
+                    for _, r in df_valid.iterrows():
+                        arr.append({
+                            "type": label,
+                            "dc_id": str(r.get("dc_id", "")).strip() if pd.notna(r.get("dc_id")) else "",
+                            "date_ctrl": str(r.get("date_ctrl", ""))[:10] if pd.notna(r.get("date_ctrl")) else "",
+                            "x": float(r["x"]),
+                            "y": float(r["y"])
+                        })
+                    return arr
+
+                procedures.extend(_pts_to_proc(df_pts, "code_pej", "PEJ"))
+                procedures.extend(_pts_to_proc(df_pts, "code_pa", "PA"))
+
+                # PVe : load_pve() enrichit déjà avec x/y via centroïdes communaux
+                if not df_pve.empty:
+                    x_col = "x" if "x" in df_pve.columns else None
+                    y_col = "y" if "y" in df_pve.columns else None
+                    if x_col and y_col:
+                        pve_valid = df_pve.dropna(subset=[x_col, y_col])
+                        date_col_pve = "INF-DATE-MIF" if "INF-DATE-MIF" in df_pve.columns else "INF-DATE-INTG"
+                        for _, r in pve_valid.iterrows():
+                            procedures.append({
+                                "type": "PVe",
+                                "dc_id": str(r.get("DC_ID", "")).strip() if pd.notna(r.get("DC_ID")) else "",
+                                "date_ctrl": str(r.get(date_col_pve, ""))[:10] if pd.notna(r.get(date_col_pve)) else "",
+                                "x": float(r[x_col]),
+                                "y": float(r[y_col])
+                            })
+                
                 geojson_data = None
                 try:
                     from ofbilan.cartographie.pochoir_helper import load_department_gdf
@@ -405,6 +453,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         }
                     },
                     "points": points,
+                    "procedures": procedures,
                     "geojson": geojson_data
                 }
 
@@ -414,6 +463,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps(clean_nan(response_data)).encode('utf-8'))
 
             except Exception as e:
+                import traceback
+                traceback.print_exc()
                 self.send_response(500)
                 self.send_header('Content-Type', 'application/json; charset=utf-8')
                 self.end_headers()

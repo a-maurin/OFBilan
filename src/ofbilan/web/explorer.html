@@ -165,16 +165,6 @@
             <div class="card">
                 <h2>Filtres d'exploration</h2>
                 <form id="config-form">
-                    <div class="form-group">
-                        <label for="profil">Profil de bilan</label>
-                        <div class="custom-select-container">
-                            <input type="text" id="profil" name="profil"
-                                placeholder="Rechercher ou sélectionner un profil..." required value="global"
-                                autocomplete="off">
-                            <button type="button" id="btn-toggle-profils" class="select-arrow-btn">▼</button>
-                            <div id="profils-dropdown" class="select-dropdown hidden"></div>
-                        </div>
-                    </div>
 
                     <!-- Période temporelle -->
                     <div class="form-row">
@@ -226,8 +216,8 @@
                     <div class="form-group">
                         <label for="domaine-snc">Domaines de la SNC (Optionnel)</label>
                         <div class="custom-select-container">
-                            <input type="text" id="domaine-snc" name="domaine-snc"
-                                placeholder="Tous les domaines" autocomplete="off">
+                            <input type="text" id="domaine-snc" name="domaine-snc" placeholder="Tous les domaines"
+                                autocomplete="off">
                             <button type="button" id="btn-toggle-domaines-snc" class="select-arrow-btn">▼</button>
                             <div id="domaines-snc-dropdown" class="select-dropdown hidden"></div>
                         </div>
@@ -237,8 +227,8 @@
                     <div class="form-group">
                         <label for="theme-snc">Thèmes de la SNC (Optionnel)</label>
                         <div class="custom-select-container">
-                            <input type="text" id="theme-snc" name="theme-snc"
-                                placeholder="Tous les thèmes" autocomplete="off">
+                            <input type="text" id="theme-snc" name="theme-snc" placeholder="Tous les thèmes"
+                                autocomplete="off">
                             <button type="button" id="btn-toggle-themes-snc" class="select-arrow-btn">▼</button>
                             <div id="themes-snc-dropdown" class="select-dropdown hidden"></div>
                         </div>
@@ -253,14 +243,19 @@
                             <button type="button" id="btn-toggle-types-action" class="select-arrow-btn">▼</button>
                             <div id="types-action-dropdown" class="select-dropdown hidden"></div>
                         </div>
-                    </div>    <!-- Bouton de lancement -->
+                    </div>
+                    <div class="form-group" style="margin-top:8px;">
+                        <input type="checkbox" id="show-procedures" checked />
+                        <label for="show-procedures">Afficher les procédures (PEJ/PA/PVe)</label>
+                    </div>
                     <button type="button" id="btn-update" class="btn btn-primary" style="margin-top: 10px;">Charger les
                         données</button>
-                    <button type="button" id="btn-pdf" class="btn btn-danger" style="margin-top: 10px;">Édition PDF</button>
+                    <button type="button" id="btn-pdf" class="btn btn-danger" style="margin-top: 10px;">Édition
+                        PDF</button>
                 </form>
             </div>
         </section>
- 
+
         <!-- Tableau de bord Droite -->
         <section class="explorer-panel">
             <!-- Indicateurs Clés en pleine largeur -->
@@ -285,12 +280,14 @@
                     </div>
                 </div>
             </div>
- 
+
             <!-- Grille Carte (Gauche) / Statistiques (Droite) -->
-            <div class="dashboard-split-grid" style="display: grid; grid-template-columns: 1.6fr 1fr; gap: 20px; flex: 1;">
+            <div class="dashboard-split-grid"
+                style="display: grid; grid-template-columns: 1.6fr 1fr; gap: 20px; flex: 1;">
                 <!-- Bloc Carte & Saisonnalité -->
                 <div style="display: flex; flex-direction: column; gap: 15px; min-width: 0;">
-                    <div class="card" style="margin-bottom: 0; display: flex; flex-direction: column; min-width: 0; flex: 1;">
+                    <div class="card"
+                        style="margin-bottom: 0; display: flex; flex-direction: column; min-width: 0; flex: 1;">
                         <h2>Localisation des contrôles</h2>
                         <div id="map" style="flex: 1; min-height: 380px; margin-bottom: 0;"></div>
                     </div>
@@ -301,40 +298,55 @@
                         </div>
                     </div>
                 </div>
- 
+
                 <!-- Bloc Statistiques -->
-                <div class="card" style="margin-bottom: 0; display: flex; flex-direction: column; gap: 10px; min-width: 0;">
+                <div class="card"
+                    style="margin-bottom: 0; display: flex; flex-direction: column; gap: 10px; min-width: 0;">
                     <h2>Répartitions et Statistiques</h2>
-                     
+
                     <!-- Graphiques Donuts Côte à Côte -->
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                        <div style="background:#FFFFFF; padding:10px; border:1px solid var(--color-border); border-radius:6px; min-height: 250px; display: flex; flex-direction: column; min-width: 0;">
-                            <h3 style="font-size:11px; margin-bottom:6px; text-align:center; color:var(--color-primary);">Résultats des Contrôles</h3>
+                        <div
+                            style="background:#FFFFFF; padding:10px; border:1px solid var(--color-border); border-radius:6px; min-height: 250px; display: flex; flex-direction: column; min-width: 0;">
+                            <h3
+                                style="font-size:11px; margin-bottom:6px; text-align:center; color:var(--color-primary);">
+                                Résultats des Contrôles</h3>
                             <div style="height: 140px; position: relative;">
                                 <canvas id="chart-results" style="max-height: 140px; width: 100%;"></canvas>
                             </div>
-                            <div id="legend-results" style="display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 12px; margin-top: 10px; flex: 1; align-items: center; align-content: center;"></div>
+                            <div id="legend-results"
+                                style="display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 12px; margin-top: 10px; flex: 1; align-items: center; align-content: center;">
+                            </div>
                         </div>
-                        <div style="background:#FFFFFF; padding:10px; border:1px solid var(--color-border); border-radius:6px; min-height: 250px; display: flex; flex-direction: column; min-width: 0;">
-                            <h3 style="font-size:11px; margin-bottom:6px; text-align:center; color:var(--color-primary);">Par Type d'Usager</h3>
+                        <div
+                            style="background:#FFFFFF; padding:10px; border:1px solid var(--color-border); border-radius:6px; min-height: 250px; display: flex; flex-direction: column; min-width: 0;">
+                            <h3
+                                style="font-size:11px; margin-bottom:6px; text-align:center; color:var(--color-primary);">
+                                Par Type d'Usager</h3>
                             <div style="height: 140px; position: relative;">
                                 <canvas id="chart-usagers" style="max-height: 140px; width: 100%;"></canvas>
                             </div>
-                            <div id="legend-usagers" style="display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 12px; margin-top: 10px; flex: 1; align-items: center; align-content: center;"></div>
+                            <div id="legend-usagers"
+                                style="display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 12px; margin-top: 10px; flex: 1; align-items: center; align-content: center;">
+                            </div>
                         </div>
                     </div>
 
                     <!-- Domaines d'Activité -->
-                    <div style="background:#FFFFFF; padding:10px; border:1px solid var(--color-border); border-radius:6px; flex: 1; display: flex; flex-direction: column; min-width: 0;">
-                        <h3 style="font-size:11px; margin-bottom:6px; text-align:center; color:var(--color-primary);">Par Domaine d'Activité</h3>
+                    <div
+                        style="background:#FFFFFF; padding:10px; border:1px solid var(--color-border); border-radius:6px; flex: 1; display: flex; flex-direction: column; min-width: 0;">
+                        <h3 style="font-size:11px; margin-bottom:6px; text-align:center; color:var(--color-primary);">
+                            Par Domaine d'Activité</h3>
                         <div id="wrapper-domains" style="position: relative; width: 100%;">
                             <canvas id="chart-domains" style="width: 100%;"></canvas>
                         </div>
                     </div>
 
                     <!-- Thématiques Fines -->
-                    <div style="background:#FFFFFF; padding:10px; border:1px solid var(--color-border); border-radius:6px; flex: 1; display: flex; flex-direction: column; min-width: 0;">
-                        <h3 style="font-size:11px; margin-bottom:6px; text-align:center; color:var(--color-primary);">Par Thématique (Top 5)</h3>
+                    <div
+                        style="background:#FFFFFF; padding:10px; border:1px solid var(--color-border); border-radius:6px; flex: 1; display: flex; flex-direction: column; min-width: 0;">
+                        <h3 style="font-size:11px; margin-bottom:6px; text-align:center; color:var(--color-primary);">
+                            Par Thématique (Top 5)</h3>
                         <div id="wrapper-themes" style="position: relative; width: 100%;">
                             <canvas id="chart-themes" style="width: 100%;"></canvas>
                         </div>
@@ -345,7 +357,7 @@
     </main>
 
     <footer class="app-footer">
-        <p>OFBilan - Explorateur Local v1.0.0 | Office Français de la Biodiversité</p>
+        <p>OFBilan - v1.0.1 | Office Français de la Biodiversité | Auteur : Aguirre MAURIN - SD21 | Contact : aguirre.maurin@ofb.gouv.Fr</p>
     </footer>
 
     <!-- Leaflet.js Javascript -->
