@@ -25,4 +25,4 @@ Ce fichier sert de point d'entrée pour l'agent. Il associe les grandes fonction
 - **Point d'entrée (CLI)** : `src/ofbilan/point_entree_cli.py`
 - **Orchestration des profils** : `src/ofbilan/engine/orchestrateur_profils.py`
 
-*Note : Si l'utilisateur signale un bug sans fichier cible, identifiez la catégorie du bug et utilisez cette carte pour trouver le(s) fichier(s) pertinent(s).*
+*Note : Si l'utilisateur signale un bug sans fichier cible, identifier la catégorie du bug et utilisez cette carte pour trouver le(s) fichier(s) pertinent(s).*
