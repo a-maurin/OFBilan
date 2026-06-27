@@ -382,6 +382,64 @@ profiles:
         - when: always
           text: "<b>Réalisation :</b> service départemental de la Côte d'Or."
 
+  # Produits Phytosanitaires (PPP) : Police judiciaire (PEJ) uniquement
+  ppp:
+    scope: thematique
+    sections:
+      enabled:
+        sec1: true       # Chiffres clés
+        sec2: true       # Conservé pour l'évolution temporelle générale (sec21)
+        sec21: true      # Evolution temporelle
+        sec22: false     # Pas de répartition par domaine
+        sec23: false     # Pas de résultats de contrôles PA
+        sec4: true       # Activité par type d'usager
+        sec41: false
+        sec42: false
+        sec43: true      # PEJ par type d'usager
+        sec44: false
+        sec3: true       # Activité par nature d'infraction et type d'auteur
+        sec31: false     # Pas de PVe
+        sec32: true      # Détail des procédures d'enquête judiciaire (PEJ)
+        sec33: false     # Pas de PA
+        sec5: true       # Cartes
+        sec6: true       # Annexes
+      titles:
+        sec1: "1. Chiffres clés et indicateurs généraux"
+        sec2: "2. Analyse temporelle et dynamique des enquêtes"
+        sec21: "2.1. Évolution de l'activité judiciaire"
+        sec4: "3. Activité par type d'usager"
+        sec43: "3.1. Procédures d'enquête judiciaire (PEJ) par type d'usager"
+        sec3: "4. Analyse thématique et nature des infractions"
+        sec32: "4.1. Détail des procédures d'enquête judiciaire (PEJ)"
+        sec5: "5. Répartition géographique des procédures"
+        sec6: "6. Notice méthodologique et Référentiel des infractions ciblées"
+    blocks:
+      sec2:
+        show_intro_text: false
+      sec21:
+        show_table: true
+        show_chart_controles: false    # Pas de graphiques de contrôles
+        show_chart_procedures: true    # Graphique d'évolution des PEJ
+        show_chart_taux_line: false    # Pas de taux de non-conformité PA
+      sec4:
+        show_intro_text: false
+        show_pie_usagers: false
+        show_table_usagers: false
+        show_table_themes_par_type_usager: false
+        show_resultats_par_type_usager_chart: false
+        show_pej_par_type_usager: true   # Rendu spécifique
+        show_natinf_par_type_usager: true # Analyse croisée
+      sec32:
+        show_zone_table: false          # Pas de zones PNF/TUB
+        show_detail_table: true        # Affiche la liste des PEJ
+        show_cloture_table: false       # Pas de statistiques de clôture
+        show_suite_table: false         # Pas de statistiques de suite donné
+        show_top_infractions: true     # Affiche le tableau complet des infractions (toutes)
+        show_natinf_analysis: true     # Analyse des infractions NATINF
+      sec5:
+        map_files:
+          - "carte_ppp.png"
+
   # Contrôles sécheresse : pas de tableaux « par zone » PVe/PEJ (découpages type PNF/TUB).
   controles_secheresse:
     scope: thematique

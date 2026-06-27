@@ -183,6 +183,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 domaines = params.get("domaines")
                 themes = params.get("themes")
                 types_action = params.get("types_action")
+                resultats_filter = params.get("resultats")
+                commune = params.get("commune")
 
                 project_root = Path(__file__).resolve().parents[3]
 
@@ -200,24 +202,61 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 df_pts = load_point_ctrl(project_root, echelle=echelle, code=code, date_deb=date_deb, date_fin=date_fin)
                 if profile_cfg.get("pipeline") != "global":
                     df_pts = _filter_point_ctrl(df_pts, profile_cfg)
+                
+                # Filtrage multi-usagers ou simple
                 if type_usager:
-                    df_pts = df_pts[df_pts["type_usager"].astype(str).str.lower().str.contains(type_usager.lower(), na=False)].copy()
+                    if isinstance(type_usager, str):
+                        type_usager = [type_usager]
+                    tu_lower = {u.strip().lower() for u in type_usager if u.strip()}
+                    if tu_lower:
+                        df_pts = df_pts[df_pts["type_usager"].astype(str).str.strip().str.lower().apply(
+                            lambda val: any(u in val for u in tu_lower)
+                        )].copy()
+
                 if domaines:
+                    if isinstance(domaines, str):
+                        domaines = [domaines]
                     td_lower = {d.strip().lower() for d in domaines if d.strip()}
                     if td_lower and "domaine" in df_pts.columns:
                         df_pts = df_pts[df_pts["domaine"].astype(str).str.strip().str.lower().isin(td_lower)].copy()
                 if themes:
+                    if isinstance(themes, str):
+                        themes = [themes]
                     tt_lower = {t.strip().lower() for t in themes if t.strip()}
                     if tt_lower:
                         col_pt_theme = "theme" if "theme" in df_pts.columns else ("type_actio" if "type_actio" in df_pts.columns else None)
                         if col_pt_theme:
                             df_pts = df_pts[df_pts[col_pt_theme].astype(str).str.strip().str.lower().isin(tt_lower)].copy()
                 if types_action:
+                    if isinstance(types_action, str):
+                        types_action = [types_action]
                     ta_lower = {a.strip().lower() for a in types_action if a.strip()}
                     if ta_lower:
                         col_ta = "type_actio" if "type_actio" in df_pts.columns else ("type_action" if "type_action" in df_pts.columns else None)
                         if col_ta:
                             df_pts = df_pts[df_pts[col_ta].astype(str).str.strip().str.lower().isin(ta_lower)].copy()
+
+                # Filtrage résultat (Conforme / Non-conforme / En attente)
+                if resultats_filter and not df_pts.empty:
+                    if isinstance(resultats_filter, str):
+                        resultats_filter = [resultats_filter]
+                    res_series = classify_resultat_controle_series(df_pts["resultat"])
+                    valeurs_reelles = []
+                    for r in resultats_filter:
+                        r_lower = r.lower()
+                        if "non-conforme" in r_lower or "infraction" in r_lower or "manquement" in r_lower:
+                            valeurs_reelles.extend(["Infraction", "Manquement"])
+                        elif "conforme" in r_lower:
+                            valeurs_reelles.append("Conforme")
+                        elif "attente" in r_lower:
+                            valeurs_reelles.append("En attente")
+                    
+                    if valeurs_reelles:
+                        df_pts = df_pts[res_series.isin(valeurs_reelles)].copy()
+
+                # Filtrage commune
+                if commune and not df_pts.empty and "nom_commun" in df_pts.columns:
+                    df_pts = df_pts[df_pts["nom_commun"].astype(str).str.lower().str.contains(commune.lower(), na=False)].copy()
 
                 total_controles = len(df_pts)
 

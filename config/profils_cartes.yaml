@@ -288,6 +288,43 @@ global_usagers:
         "Acteurs sylvicoles": "#9B59B6" # Violet
         "Autre": "#95A5A6"              # Gris
 
+ppp:
+  title: "Bilan d'activité de police judiciaire sur les produits phytosanitaires — Côte-d'Or"
+  layout_name: "Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or"
+  output_filename: "carte_ppp.png"
+  date_deb: "2025-01-01"
+  date_fin: "2026-02-05"
+  title_main: "Procédures d'enquête judiciaire (PEJ) - PPP"
+  subtitle: ""
+  layout_title_item_id: "titre_principal"
+  layout_subtitle_item_id: "sous_titre"
+  layers:
+    Coeur_data_gouv_PNForets:
+      layer_name: "Coeur_data_gouv_PNForets"
+      legend_label: "Cœur de Parc National"
+      symbology_source: "qgis"
+      geometry_mode: "polygon_fill"
+      renderer_type: "single"
+    AOA_2021_PNForet_21:
+      layer_name: "AOA_2021_PNForet_21"
+      legend_label: "AOA Parc National"
+      symbology_source: "qgis"
+      geometry_mode: "polygon_fill"
+      renderer_type: "single"
+    pochoir_sd21:
+      layer_name: "pochoir_sd21"
+      legend_label: "Périmètre SD21"
+      geometry_mode: "polygon_fill"
+      renderer_type: "graduated"
+      palette: "Blues"
+    localisation_infrac_FAITS:
+      layer_name: "localisation_infrac_FAITS"
+      legend_label: "Procédures judiciaires (FAITS)"
+      filter_type: "pj"
+      geometry_mode: "polygon_fill"
+      renderer_type: "single"
+      palette: "Blues"
+
 procedures_pve:
   title: "Bilan procédures judiciaires et PVe — Côte-d'Or"
   layout_name: "Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or"

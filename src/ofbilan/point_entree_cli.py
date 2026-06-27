@@ -122,6 +122,22 @@ def main() -> int:
         metavar="ID",
         help="Profil à exécuter (répétable). Ex. --profil global ou --profil chasse --profil agrainage.",
     )
+    # Identity configuration options
+    parser.add_argument(
+        "--set-identite",
+        action="store_true",
+        help="Enregistrer le nom et le service de l'utilisateur dans config/identite.yaml",
+    )
+    parser.add_argument(
+        "--nom",
+        type=str,
+        help="Nom de l'utilisateur (ex. 'Aguirre MAURIN')",
+    )
+    parser.add_argument(
+        "--service",
+        type=str,
+        help="Service de l'utilisateur (ex. 'OFB — Service départemental de la Côte d'Or')",
+    )
     parser.add_argument(
         "--combine",
         action="store_true",

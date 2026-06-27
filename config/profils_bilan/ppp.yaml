@@ -1,0 +1,49 @@
+# Profil thématique - Produits phytosanitaires (PPP)
+schema_version: 2
+id: ppp
+label: "Produits phytosanitaires"
+out_subdir: bilan_ppp
+
+filter:
+  type: type_action_list
+  type_actions:
+    - "Eau et Nature;Gestion qualitative de la ressource en eau;Pollutions diffuses;Assurer le respect des conditions d'emplois des produits phytopharmaceutiques afin de préserver la qualité de l'eau et des milieux aquatiques (SNC 2.5);Procédures judiciaires liées aux PPP et en lien avec l'action 2.5 de la SNC"
+    - "Eau et Nature;Gestion qualitative de la ressource en eau;Pollutions diffuses;Assurer le respect des conditions d'emplois des produits phytopharmaceutiques afin de préserver la qualité de l'eau et des milieux aquatiques (SNC 2.5);Autres actions de police judiciaire liée aux PPP"
+  columns: [type_actio]
+
+# Chargement de la liste externe des NATINF
+natinf_pej: !include ../../ref/programme/tables_reference/natinf_ppp.yaml
+natinf_pve: []
+
+analyse_PVe: false
+
+sources:
+  point_ctrl: false
+  pej: true
+  pa: false
+  pve: false
+
+periode_analyse:
+  ventilation:
+    type: auto
+    seuil_jours: 366
+
+cartographie:
+  mode: dedie
+  cartes_actives:
+    - procedures
+  fichiers:
+    - "carte_ppp.png"
+
+presentation:
+  title:
+    line1: "Bilan d'activité de police judiciaire de l'OFB"
+    line2_mode: fixed
+    line2_fixed: "Produits phytopharmaceutiques"
+    line3_mode: department
+
+options:
+  cartes:
+    label: "Intégration des cartes"
+    default: true
+    ask: false

@@ -188,6 +188,19 @@ def load_profile_config(root: Path, profil_id: str) -> dict:
         )
 
     if yaml is not None:
+        # Enregistrement d'un constructeur personnalisé pour charger dynamiquement des inclusions
+        def yaml_include_constructor(loader, node):
+            value = loader.construct_scalar(node)
+            include_path = Path(loader.stream.name).parent / value
+            if not include_path.exists():
+                # Repli relatif par rapport au root du projet
+                include_path = root / value
+            with open(include_path, "r", encoding="utf-8") as f_inc:
+                return yaml.safe_load(f_inc)
+
+        # Ajout du constructeur à SafeLoader
+        yaml.add_constructor("!include", yaml_include_constructor, Loader=yaml.SafeLoader)
+
         defaults_data: dict[str, Any] = {}
         if defaults_path.exists():
             with open(defaults_path, "r", encoding="utf-8") as f:
@@ -250,6 +263,7 @@ def _normalize_profile(data: dict, profil_id: str) -> dict:
     filt = data["filter"]
     filt.setdefault("type", "keywords")
     filt.setdefault("keywords", data.get("keywords", []))
+    filt.setdefault("type_actions", [])
     filt.setdefault("columns", ["theme", "type_actio", "nom_dossie"])
     filt.setdefault("exclude_patterns", [])
     filt.setdefault("type_usager_target", [])
@@ -1030,11 +1044,21 @@ def _filter_point_ctrl(point: pd.DataFrame, profile: dict) -> pd.DataFrame:
     if ft == "tub":
         return _filter_tub(point)
 
-    if ft == "type_usager":
-        targets = filt.get("type_usager_target", [])
-        if targets:
-            return _filter_by_type_usager(point, targets)
-        return point.copy()
+    if ft == "type_action_list":
+        type_actions = filt.get("type_actions", [])
+        if not type_actions:
+            return point.copy()
+        
+        columns = filt.get("columns", ["type_actio", "type_action"])
+        mask = pd.Series(False, index=point.index)
+        
+        for col in columns:
+            if col in point.columns:
+                col_series = point[col].fillna("").astype(str)
+                for act in type_actions:
+                    # Match partiel ("contient") pour être robuste face aux troncatures
+                    mask |= col_series.str.lower().str.contains(act.lower(), regex=False)
+        return point[mask].copy()
 
     # Défaut : filtre par mots-clés
     keywords = filt.get("keywords", [])
@@ -2041,7 +2065,7 @@ def _run_aggregations(
                 .reset_index(name="nb")
             )
             if not pej_counts.empty:
-                if len(pej_filtered) < 10:
+                if len(pej_filtered) < 10 or profil_id == "ppp":
                     results["pej_top_infractions"] = pej_counts
                 else:
                     results["pej_top_infractions"] = pej_counts.head(10)
@@ -3564,51 +3588,66 @@ def _generate_pdf(
     # ── CHIFFRES CLÉS ──
     builder.add_section("sec1", section_title["sec1"])
     kf = []
-    nb_operations_controle = results.get("nb_operations_controle", 0)
-    if nb_operations_controle > 0:
-        kf.append((str(nb_operations_controle), "Opérations de contrôle"))
-    if nb_localisations > 0:
-        kf.append((str(nb_localisations), "Localisations de contrôle"))
-    if tab_resultats is not None:
-        nb_nc = 0
-        for _lbl in ("Infraction", "Manquement"):
-            sub = tab_resultats[tab_resultats["resultat"] == _lbl]
-            if not sub.empty and "nb" in sub.columns:
-                nb_nc += int(sub["nb"].sum())
-        if nb_nc > 0:
-            taux_nc = nb_nc / nb_localisations if nb_localisations else 0
-            kf.append((str(nb_nc), PDF_LABEL_NON_CONFORME_LOCATIONS))
-            kf.append((format_pct_int_from_rate(taux_nc), "Taux de non-conformité"))
-    if nb_pej > 0:
-        kf.append((str(nb_pej), PDF_LABEL_PEJ_COUNT))
-    kf.append((str(nb_pa), "Nombre de PA"))
-    if nb_pve > 0:
-        kf.append((str(nb_pve), "Nombre de PVe"))
-        # En mode \"types d'usagers\", ajouter un indicateur complémentaire :
-        # somme des effectifs d'usagers contrôlés (peut dépasser nb_localisations).
-    if is_type_usager:
-        ue = results.get("usager_effectifs")
-        if ue is not None and not ue.empty and "nb" in ue.columns:
-            total_usagers = int(ue["nb"].sum())
-            if is_single_usager and single_label:
-                kf.append((str(total_usagers), f"Effectifs – {single_label}"))
-            else:
-                kf.append((str(total_usagers), "Effectifs d'usagers contrôlés"))
-    if is_procedures and "pej_duree_resume" in results:
-        dr = results["pej_duree_resume"]
-        kf.append((str(dr["nb_pej"]), "PEJ"))
-        kf.append((f"{dr['duree_moy_j']} j", "Durée moyenne"))
-        kf.append((f"{dr['duree_mediane_j']} j", "Durée médiane"))
+    
+    if profil_id == "ppp":
+        # Pour les PPP, uniquement PEJ et communes concernées
+        if nb_pej > 0:
+            kf.append((str(nb_pej), "Procédures d'enquête judiciaire (PEJ)"))
+        pej_detail_df = results.get("pej_detail")
+        if isinstance(pej_detail_df, pd.DataFrame) and not pej_detail_df.empty and "commune" in pej_detail_df.columns:
+            nb_communes = pej_detail_df["commune"].nunique()
+            kf.append((str(nb_communes), "Communes concernées par un fait"))
+    else:
+        nb_operations_controle = results.get("nb_operations_controle", 0)
+        if nb_operations_controle > 0:
+            kf.append((str(nb_operations_controle), "Opérations de contrôle"))
+        if nb_localisations > 0:
+            kf.append((str(nb_localisations), "Localisations de contrôle"))
+        if tab_resultats is not None:
+            nb_nc = 0
+            for _lbl in ("Infraction", "Manquement"):
+                sub = tab_resultats[tab_resultats["resultat"] == _lbl]
+                if not sub.empty and "nb" in sub.columns:
+                    nb_nc += int(sub["nb"].sum())
+            if nb_nc > 0:
+                taux_nc = nb_nc / nb_localisations if nb_localisations else 0
+                kf.append((str(nb_nc), PDF_LABEL_NON_CONFORME_LOCATIONS))
+                kf.append((format_pct_int_from_rate(taux_nc), "Taux de non-conformité"))
+        if nb_pej > 0:
+            kf.append((str(nb_pej), PDF_LABEL_PEJ_COUNT))
+        kf.append((str(nb_pa), "Nombre de PA"))
+        if nb_pve > 0:
+            kf.append((str(nb_pve), "Nombre de PVe"))
+        if is_type_usager:
+            ue = results.get("usager_effectifs")
+            if ue is not None and not ue.empty and "nb" in ue.columns:
+                total_usagers = int(ue["nb"].sum())
+                if is_single_usager and single_label:
+                    kf.append((str(total_usagers), f"Effectifs – {single_label}"))
+                else:
+                    kf.append((str(total_usagers), "Effectifs d'usagers contrôlés"))
+        if is_procedures and "pej_duree_resume" in results:
+            dr = results["pej_duree_resume"]
+            kf.append((str(dr["nb_pej"]), "PEJ"))
+            kf.append((f"{dr['duree_moy_j']} j", "Durée moyenne"))
+            kf.append((f"{dr['duree_mediane_j']} j", "Durée médiane"))
+            
     builder.add_key_figures(kf)
 
     # 2. Contrôles (chapitre)
     builder.add_section("sec2", section_title["sec2"])
     if is_block_enabled(presentation_cfg, "sec2.show_intro_text", True):
-        builder.add_paragraph(
-            "Cette section présente l'évolution temporelle de l'activité de contrôle et des procédures "
-            "(judiciaires et administratives) sur la période du bilan, ainsi que les résultats "
-            "détaillés des contrôles réalisés au titre de la police administrative."
-        )
+        if profil_id == "ppp":
+            builder.add_paragraph(
+                "Cette section présente l'évolution temporelle de l'activité répressive liée aux procédures "
+                "d'enquête judiciaire (PEJ) sur la période du bilan."
+            )
+        else:
+            builder.add_paragraph(
+                "Cette section présente l'évolution temporelle de l'activité de contrôle et des procédures "
+                "(judiciaires et administratives) sur la période du bilan, ainsi que les résultats "
+                "détaillés des contrôles réalisés au titre de la police administrative."
+            )
 
     # ── ANALYSE DE L'ENSEMBLE DE LA PÉRIODE DU BILAN / RÉSULTATS ──
     agg_annuelle = results.get("agg_annuelle")
@@ -3638,32 +3677,43 @@ def _generate_pdf(
                 if is_month
                 else ("Trimestre" if is_trim else ("Semaine" if is_week else "Année"))
             )
-            tbl = [[
-                label_col,
-                "Opérations de contrôle",
-                PDF_LABEL_CTRL_LOCATIONS_SHORT,
-                PDF_LABEL_NON_CONFORME_LOCATIONS,
-                "Taux de non-conformité",
-                PDF_LABEL_PEJ,
-                "PA",
-                "PVe",
-            ]]
-            for _, row in agg_annuelle.iterrows():
-                taux = (
-                    format_pct_int_from_rate(row.get("taux_non_conformite_controles"))
-                    if pd.notna(row.get("taux_non_conformite_controles"))
-                    else "n.d."
-                )
-                tbl.append([
-                    str(row["periode"]),
-                    str(int(row.get("nb_operations_controle", 0))),
-                    str(int(row["nb_localisations"])),
-                    str(int(row["nb_localisations_non_conformes"])),
-                    taux,
-                    str(int(row["nb_pej"])),
-                    str(int(row["nb_pa"])),
-                    str(int(row["nb_pve"])),
-                ])
+            if profil_id == "ppp":
+                tbl = [[
+                    label_col,
+                    "Procédures d'enquête judiciaire (PEJ)"
+                ]]
+                for _, row in agg_annuelle.iterrows():
+                    tbl.append([
+                        str(row["periode"]),
+                        str(int(row.get("nb_pej", 0)))
+                    ])
+            else:
+                tbl = [[
+                    label_col,
+                    "Opérations de contrôle",
+                    PDF_LABEL_CTRL_LOCATIONS_SHORT,
+                    PDF_LABEL_NON_CONFORME_LOCATIONS,
+                    "Taux de non-conformité",
+                    PDF_LABEL_PEJ,
+                    "PA",
+                    "PVe",
+                ]]
+                for _, row in agg_annuelle.iterrows():
+                    taux = (
+                        format_pct_int_from_rate(row.get("taux_non_conformite_controles"))
+                        if pd.notna(row.get("taux_non_conformite_controles"))
+                        else "n.d."
+                    )
+                    tbl.append([
+                        str(row["periode"]),
+                        str(int(row.get("nb_operations_controle", 0))),
+                        str(int(row["nb_localisations"])),
+                        str(int(row["nb_localisations_non_conformes"])),
+                        taux,
+                        str(int(row["nb_pej"])),
+                        str(int(row["nb_pa"])),
+                        str(int(row["nb_pve"])),
+                    ])
             if is_block_enabled(presentation_cfg, "sec21.show_table", True):
                 cap_vent = (
                     "mensuels"
@@ -3674,13 +3724,13 @@ def _generate_pdf(
                         else ("hebdomadaires" if is_week else "annuels")
                     )
                 )
-                builder.add_table(
-                    tbl,
-                    caption=(
-                        f"Indicateurs {cap_vent} "
-                        f"({PDF_LABEL_CTRL_LOCATIONS_SHORT}, PVe, PEJ, et PA)"
-                    ),
-                    col_widths=[
+                if profil_id == "ppp":
+                    caption_sec21_tbl = f"Nombre de procédures d'enquête judiciaire (PEJ) {cap_vent}"
+                    col_w_sec21 = [avail_w * 0.40, avail_w * 0.60]
+                    col_a_sec21 = ["RIGHT", "RIGHT"]
+                else:
+                    caption_sec21_tbl = f"Indicateurs {cap_vent} ({PDF_LABEL_CTRL_LOCATIONS_SHORT}, PVe, PEJ, et PA)"
+                    col_w_sec21 = [
                         avail_w * 0.12,
                         avail_w * 0.13,
                         avail_w * 0.13,
@@ -3689,46 +3739,54 @@ def _generate_pdf(
                         avail_w * 0.10,
                         avail_w * 0.10,
                         avail_w * 0.10,
-                    ],
-                    col_aligns=["RIGHT", "RIGHT", "RIGHT", "RIGHT", "RIGHT", "RIGHT", "RIGHT", "RIGHT"],
+                    ]
+                    col_a_sec21 = ["RIGHT", "RIGHT", "RIGHT", "RIGHT", "RIGHT", "RIGHT", "RIGHT", "RIGHT"]
+                    
+                builder.add_table(
+                    tbl,
+                    caption=caption_sec21_tbl,
+                    col_widths=col_w_sec21,
+                    col_aligns=col_a_sec21,
                 )
             period_labels = [str(v) for v in agg_annuelle["periode"].tolist()]
-            if is_month:
-                titre_ctrl = "Localisations de contrôle par mois (conformes / non-conformes)"
-                titre_proc = "Procédures et PVe par mois"
-            elif is_trim:
-                titre_ctrl = "Localisations de contrôle par trimestre (conformes / non-conformes)"
-                titre_proc = "Procédures et PVe par trimestre"
-            elif is_week:
-                titre_ctrl = "Localisations de contrôle par semaine (conformes / non-conformes)"
-                titre_proc = "Procédures et PVe par semaine"
+            if profil_id == "ppp":
+                titre_proc = "Nombre de PEJ" if not is_month else "Nombre de PEJ par mois"
+                if is_trim:
+                    titre_proc = "Nombre de PEJ par trimestre"
+                elif is_week:
+                    titre_proc = "Nombre de PEJ par semaine"
+                series_proc = {
+                    "PEJ": [int(v) for v in agg_annuelle["nb_pej"].tolist()],
+                }
             else:
-                titre_ctrl = "Localisations de contrôle par année (conformes / non-conformes)"
-                titre_proc = "Procédures et PVe par année"
-            conformes = [
-                int(row["nb_localisations"]) - int(row["nb_localisations_non_conformes"])
-                for _, row in agg_annuelle.iterrows()
-            ]
-            non_conformes = [int(v) for v in agg_annuelle["nb_localisations_non_conformes"].tolist()]
-            stacked_ctrl = {"Conformes": conformes, "Non-conformes": non_conformes}
-            stacked_path = chart_bar_stacked(
-                period_labels,
-                stacked_ctrl,
-                titre_ctrl,
-                PDF_LABEL_CTRL_LOCATIONS,
-                tmp_dir,
-                "bar_annuel_ctrl_stacked.png",
-                legend_fontsize=legend_fontsize_sec21,
-                legend_ncol_max=legend_ncol_max,
-                figure_scale=figure_scale_sec21,
-            )
-            if is_block_enabled(presentation_cfg, "sec21.show_chart_controles", True):
+                series_proc = {
+                    "PEJ": [int(v) for v in agg_annuelle["nb_pej"].tolist()],
+                    "PA": [int(v) for v in agg_annuelle["nb_pa"].tolist()],
+                    "PVe": [int(v) for v in agg_annuelle["nb_pve"].tolist()],
+                }
+                
+            if not is_block_enabled(presentation_cfg, "sec21.show_chart_controles", True) or profil_id == "ppp":
+                pass
+            else:
+                conformes = [
+                    int(row["nb_localisations"]) - int(row["nb_localisations_non_conformes"])
+                    for _, row in agg_annuelle.iterrows()
+                ]
+                non_conformes = [int(v) for v in agg_annuelle["nb_localisations_non_conformes"].tolist()]
+                stacked_ctrl = {"Conformes": conformes, "Non-conformes": non_conformes}
+                stacked_path = chart_bar_stacked(
+                    period_labels,
+                    stacked_ctrl,
+                    titre_ctrl,
+                    PDF_LABEL_CTRL_LOCATIONS,
+                    tmp_dir,
+                    "bar_annuel_ctrl_stacked.png",
+                    legend_fontsize=legend_fontsize_sec21,
+                    legend_ncol_max=legend_ncol_max,
+                    figure_scale=figure_scale_sec21,
+                )
                 builder.add_image(Path(stacked_path), width_ratio=chart_ratio_base)
-            series_proc = {
-                "PEJ": [int(v) for v in agg_annuelle["nb_pej"].tolist()],
-                "PA": [int(v) for v in agg_annuelle["nb_pa"].tolist()],
-                "PVe": [int(v) for v in agg_annuelle["nb_pve"].tolist()],
-            }
+                
             has_proc = any(sum(vals) > 0 for vals in series_proc.values())
             if has_proc and is_block_enabled(presentation_cfg, "sec21.show_chart_procedures", True):
                 stacked_proc_path = chart_bar_stacked(
@@ -4050,9 +4108,11 @@ def _generate_pdf(
             df_dom["nb_pej"] = 0
             
         if not df_dom.empty:
-            df_dom["nb"] = df_dom.get("nb", 0).fillna(0)
-            df_dom["nb_pej"] = df_dom.get("nb_pej", 0).fillna(0)
-            df_dom["nb_operations"] = df_dom.get("nb_operations", 0).fillna(0)
+            for col_name in ["nb", "nb_pej", "nb_operations"]:
+                if col_name in df_dom.columns:
+                    df_dom[col_name] = df_dom[col_name].fillna(0)
+                else:
+                    df_dom[col_name] = 0
             df_dom["total_act"] = df_dom["nb"] + df_dom["nb_pej"]
             df_dom = df_dom.sort_values(by="total_act", ascending=False)
             
@@ -4551,7 +4611,7 @@ def _generate_pdf(
         if has_infractions and is_block_enabled(presentation_cfg, "sec32.show_top_infractions", True):
             # Bandeau + infractions relevées (sans tableau « PEJ par thème » : voir procédures par domaine/thème).
             natinf_ref = load_natinf_ref(PROJECT_ROOT)
-            top_cap = len(pej_top) if nb_pej < 10 else 6
+            top_cap = len(pej_top) if (nb_pej < 10 or profil_id == "ppp") else 6
             top_df = pej_top.head(top_cap).copy()
             top_df["numero_natinf"] = top_df["natinf"].astype(str).str.extract(r"(\d+)", expand=False)
             if not natinf_ref.empty:
@@ -4572,20 +4632,43 @@ def _generate_pdf(
                 lib = str(r.get("libelle_natinf") or "").strip()
                 return lib if lib else str(r["natinf"])
             top_df["libelle_affich"] = top_df.apply(_fmt_natinf_row_pej, axis=1)
-            tbl_infractions = [["Infraction (qualification et nature)", "Nombre"]]
-            for _, row in top_df.iterrows():
-                tbl_infractions.append([str(row["libelle_affich"]), str(int(row["nb"]))])
+            if profil_id == "ppp":
+                tbl_infractions = [["Infraction (qualification uniquement)", "Nature d'infraction", "Nombre"]]
+                for _, r in top_df.iterrows():
+                    qualif = str(r.get("qualification_infraction") or "").strip()
+                    if not qualif:
+                        qualif = str(r.get("libelle_natinf") or "").strip()
+                    if not qualif:
+                        qualif = str(r["natinf"])
+                        
+                    nature_raw = str(r.get("nature_infraction") or "").strip()
+                    nature = nature_raw
+                    if nature_raw.lower().startswith("contravention de classe "):
+                        num = nature_raw[len("contravention de classe "):].strip()
+                        nature = f"C{num}" if num else nature_raw
+                        
+                    tbl_infractions.append([qualif, nature, str(int(r["nb"]))])
+                
+                col_w_infra = [avail_w * 0.55, avail_w * 0.30, avail_w * 0.15]
+                col_a_infra = ["LEFT", "LEFT", "RIGHT"]
+            else:
+                tbl_infractions = [["Infraction (qualification et nature)", "Nombre"]]
+                for _, row in top_df.iterrows():
+                    tbl_infractions.append([str(row["libelle_affich"]), str(int(row["nb"]))])
+                col_w_infra = [avail_w * 0.75, avail_w * 0.25]
+                col_a_infra = ["LEFT", "RIGHT"]
+                
             caption_infra_pej = (
                 "Infractions relevées"
-                if nb_pej < 10
+                if (nb_pej < 10 or profil_id == "ppp")
                 else "Infractions les plus relevées"
             )
             builder.add_key_figures_and_table(
                 [],
                 tbl_infractions,
                 caption=caption_infra_pej,
-                col_widths=[avail_w * 0.75, avail_w * 0.25],
-                col_aligns=["LEFT", "RIGHT"],
+                col_widths=col_w_infra,
+                col_aligns=col_a_infra,
                 merge_with_next=merge_pej_detail_next,
             )
         else:
@@ -4686,10 +4769,7 @@ def _generate_pdf(
                     avail_w * 0.10,
                 ],
                 col_aligns=["LEFT", "LEFT", "LEFT", "RIGHT"],
-                keep_together=False,
-                # Forcer une coupe inter-lignes au-delà de ~12 lignes pour éviter LayoutError.
-                max_rows_keep_together=12,
-                max_cell_chars_before_split=2000,
+                keep_together=True,
             )
 
     def _render_sec33() -> None:
@@ -4878,7 +4958,66 @@ def _generate_pdf(
         builder.add_paragraph(
             "<i>Note importante : Le décompte des effectifs selon le type d'usager suit des règles spécifiques qui sont détaillées dans la notice méthodologique.</i>",
         )
-        if results.get("_pdf_show_pression_controle_usagers"):
+        if profil_id == "ppp":
+            # Analyse spécifique PPP : répartition des PEJ par types d'usagers
+            pej_df = results.get("_raw_pej_filtered", pd.DataFrame())
+            if not pej_df.empty and "type_usager" in pej_df.columns:
+                # 1. Répartition des PEJ par type d'usager
+                pej_usagers = pej_df["type_usager"].fillna("Non renseigné").astype(str).value_counts().rename_axis("type_usager").reset_index(name="nb")
+                total_pej_usagers = pej_usagers["nb"].sum()
+                tbl_pej_usagers = [["Type d'usager", "Nombre de PEJ", "Part (%)"]]
+                for _, r in pej_usagers.iterrows():
+                    pct = f"{int(round(r['nb'] * 100 / total_pej_usagers))}%" if total_pej_usagers > 0 else "0%"
+                    tbl_pej_usagers.append([str(r["type_usager"]), str(int(r["nb"])), pct])
+                
+                builder.add_section(
+                    "sec43",
+                    section_title.get("sec43", "3.1. Procédures d'enquête judiciaire (PEJ) par type d'usager"),
+                    level=2,
+                    toc_level=1,
+                    append_to_pending=False,
+                )
+                builder.add_table(
+                    tbl_pej_usagers,
+                    caption="Répartition des procédures d'enquête judiciaire (PEJ) par type d'usager",
+                    col_widths=[avail_w * 0.50, avail_w * 0.25, avail_w * 0.25],
+                    col_aligns=["LEFT", "RIGHT", "RIGHT"],
+                    keep_together=True,
+                )
+                builder.add_spacer(4)
+                
+                # 2. Répartition croisée NATINF / Type d'usager
+                natinf_col = "NATINF_PEJ" if "NATINF_PEJ" in pej_df.columns else "NATINF"
+                if natinf_col in pej_df.columns:
+                    pej_cross = pej_df.groupby([natinf_col, "type_usager"]).size().rename("nb").reset_index()
+                    # Charger les libellés de NATINF pour enrichir
+                    natinf_ref = load_natinf_ref(PROJECT_ROOT)
+                    pej_cross["numero_natinf"] = pej_cross[natinf_col].astype(str).str.extract(r"(\d+)", expand=False)
+                    if not natinf_ref.empty:
+                        pej_cross = pej_cross.merge(natinf_ref, on="numero_natinf", how="left")
+                    
+                    tbl_cross = [["Libellé NATINF", "Type d'usager", "Nombre"]]
+                    for _, r in pej_cross.sort_values(by="nb", ascending=False).iterrows():
+                        qualif = str(r.get("qualification_infraction") or "").strip()
+                        if not qualif:
+                            qualif = str(r.get("libelle_natinf") or "").strip()
+                        if not qualif:
+                            qualif = str(r[natinf_col])
+                        
+                        tbl_cross.append([qualif, str(r["type_usager"]), str(int(r["nb"]))])
+                        
+                    builder.add_table(
+                        tbl_cross,
+                        caption="Répartition des infractions (NATINF) par type d'usager",
+                        col_widths=[avail_w * 0.50, avail_w * 0.35, avail_w * 0.15],
+                        col_aligns=["LEFT", "LEFT", "RIGHT"],
+                        keep_together=False,
+                        max_rows_keep_together=15,
+                    )
+                    builder.add_spacer(4)
+            else:
+                builder.add_paragraph("Aucune donnée d'activité par type d'usager pour la période.")
+        elif results.get("_pdf_show_pression_controle_usagers"):
             _pdf_section_pression_controle_usagers(
                 builder,
                 results,

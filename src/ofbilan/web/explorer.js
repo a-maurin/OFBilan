@@ -11,6 +11,14 @@ document.addEventListener('DOMContentLoaded', () => {
     let chartSeasonality = null;
     let boundaryLayer = null;
 
+    // État pour le tableau détaillé des contrôles
+    let activePoints = [];
+    let currentTablePage = 1;
+    const tableRowsPerPage = 25;
+    let tableSortColumn = '';
+    let tableSortAsc = true;
+    let isTableExpanded = false;
+
     const btnUpdate = document.getElementById('btn-update');
     const selectEchelle = document.getElementById('echelle');
     const inputCode = document.getElementById('code');
@@ -29,6 +37,30 @@ document.addEventListener('DOMContentLoaded', () => {
         const month = String(now.getMonth() + 1).padStart(2, '0');
         const day = String(now.getDate()).padStart(2, '0');
         dateFinEl.value = `${currentYear}-${month}-${day}`;
+    }
+
+    // Comparaison temporelle N-1
+    const compareActiveCheck = document.getElementById('compare-active');
+    const compareDatesContainer = document.getElementById('compare-dates-container');
+    const compareDateDebEl = document.getElementById('compare-date-deb');
+    const compareDateFinEl = document.getElementById('compare-date-fin');
+    if (compareDateDebEl && compareDateFinEl) {
+        const lastYear = currentYear - 1;
+        compareDateDebEl.value = `${lastYear}-01-01`;
+        
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        compareDateFinEl.value = `${lastYear}-${month}-${day}`;
+    }
+    
+    if (compareActiveCheck && compareDatesContainer) {
+        compareActiveCheck.addEventListener('change', () => {
+            if (compareActiveCheck.checked) {
+                compareDatesContainer.classList.remove('hidden');
+            } else {
+                compareDatesContainer.classList.add('hidden');
+            }
+        });
     }
 
     // Stats Elements
@@ -298,7 +330,38 @@ document.addEventListener('DOMContentLoaded', () => {
         return lines;
     }
 
-    function setupCombobox(inputEl, toggleBtn, dropdownEl, getListDataFn) {
+    function setupCombobox(inputEl, toggleBtn, dropdownEl, getListDataFn, isMultiSelect = false) {
+        let selectedValues = [];
+
+        inputEl.getSelectedValues = () => selectedValues;
+        inputEl.setSelectedValues = (vals) => {
+            selectedValues = vals || [];
+            updateInputDisplay();
+        };
+
+        function updateInputDisplay() {
+            const listData = getListDataFn();
+            const selectedLabels = selectedValues
+                .map(val => {
+                    const found = listData.find(d => d.value === val);
+                    return found ? found.label : val;
+                })
+                .filter(Boolean);
+            
+            if (isMultiSelect) {
+                if (selectedValues.length === 0) {
+                    inputEl.value = '';
+                    inputEl.placeholder = inputEl.dataset.placeholder || inputEl.placeholder;
+                } else if (selectedValues.length === 1) {
+                    inputEl.value = selectedLabels[0];
+                } else {
+                    inputEl.value = `${selectedValues.length} sélectionnés`;
+                }
+            } else {
+                inputEl.value = selectedValues[0] || '';
+            }
+        }
+
         function render(filterText = '') {
             dropdownEl.innerHTML = '';
             const search = filterText.toLowerCase().trim();
@@ -318,14 +381,60 @@ document.addEventListener('DOMContentLoaded', () => {
             filtered.forEach(p => {
                 const opt = document.createElement('div');
                 opt.className = 'dropdown-option';
+                opt.style.display = 'flex';
+                opt.style.alignItems = 'center';
+                opt.style.gap = '8px';
                 opt.dataset.value = p.value;
-                opt.textContent = p.label;
-                opt.addEventListener('click', () => {
-                    inputEl.value = p.value;
-                    dropdownEl.classList.add('hidden');
-                });
+
+                if (isMultiSelect && p.value !== "") {
+                    const chk = document.createElement('input');
+                    chk.type = 'checkbox';
+                    chk.checked = selectedValues.includes(p.value);
+                    chk.style.margin = '0';
+                    chk.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        toggleValue(p.value, chk.checked);
+                    });
+                    opt.appendChild(chk);
+                    
+                    const labelSpan = document.createElement('span');
+                    labelSpan.textContent = p.label;
+                    opt.appendChild(labelSpan);
+                    
+                    opt.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const nextState = !chk.checked;
+                        chk.checked = nextState;
+                        toggleValue(p.value, nextState);
+                    });
+                } else {
+                    opt.textContent = p.label;
+                    opt.addEventListener('click', () => {
+                        if (isMultiSelect) {
+                            // C'est l'option "Tous" (vide)
+                            selectedValues = [];
+                            updateInputDisplay();
+                            dropdownEl.classList.add('hidden');
+                        } else {
+                            selectedValues = [p.value];
+                            inputEl.value = p.value;
+                            dropdownEl.classList.add('hidden');
+                        }
+                    });
+                }
                 dropdownEl.appendChild(opt);
             });
+        }
+
+        function toggleValue(val, isChecked) {
+            if (isChecked) {
+                if (!selectedValues.includes(val)) {
+                    selectedValues.push(val);
+                }
+            } else {
+                selectedValues = selectedValues.filter(v => v !== val);
+            }
+            updateInputDisplay();
         }
 
         toggleBtn.addEventListener('click', (e) => {
@@ -335,9 +444,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.querySelectorAll('.select-dropdown').forEach(d => d.classList.add('hidden'));
                 render();
                 dropdownEl.classList.remove('hidden');
-                inputEl.focus();
+                if (!isMultiSelect) inputEl.focus();
             } else {
                 dropdownEl.classList.add('hidden');
+                updateInputDisplay();
             }
         });
 
@@ -349,17 +459,32 @@ document.addEventListener('DOMContentLoaded', () => {
         inputEl.addEventListener('click', (e) => {
             e.stopPropagation();
             document.querySelectorAll('.select-dropdown').forEach(d => d.classList.add('hidden'));
-            render(inputEl.value);
+            render(isMultiSelect ? '' : inputEl.value);
             dropdownEl.classList.remove('hidden');
         });
+
+        inputEl.dataset.placeholder = inputEl.placeholder;
     }
 
+    const resultatsList = [
+        { value: "", label: "Tous les résultats" },
+        { value: "Conforme", label: "Conforme" },
+        { value: "Non-conforme", label: "Non-conforme" },
+        { value: "En attente", label: "En attente" }
+    ];
+
+    const inputResultat = document.getElementById('resultat-select');
+    const btnToggleResultats = document.getElementById('btn-toggle-resultats');
+    const resultatsDropdown = document.getElementById('resultats-dropdown');
+    const inputCommune = document.getElementById('filter-commune');
+
     // Initialisation des comboboxes
-    setupCombobox(inputCode, btnToggleCodes, codesDropdown, getActiveCodesList);
-    setupCombobox(inputUsager, btnToggleUsagers, usagersDropdown, () => usagersList);
-    setupCombobox(inputDomaineSNC, btnToggleDomainesSNC, domainesSNCDropdown, () => domainesSNCList);
-    setupCombobox(inputThemeSNC, btnToggleThemesSNC, themesSNCDropdown, () => themesSNCList);
-    setupCombobox(inputTypeAction, btnToggleTypesAction, typesActionDropdown, () => typesActionList);
+    setupCombobox(inputCode, btnToggleCodes, codesDropdown, getActiveCodesList, false);
+    setupCombobox(inputUsager, btnToggleUsagers, usagersDropdown, () => usagersList, true);
+    setupCombobox(inputDomaineSNC, btnToggleDomainesSNC, domainesSNCDropdown, () => domainesSNCList, true);
+    setupCombobox(inputThemeSNC, btnToggleThemesSNC, themesSNCDropdown, () => themesSNCList, true);
+    setupCombobox(inputTypeAction, btnToggleTypesAction, typesActionDropdown, () => typesActionList, true);
+    setupCombobox(inputResultat, btnToggleResultats, resultatsDropdown, () => resultatsList, true);
 
     // Hide dropdowns when clicking outside
     document.addEventListener('click', (e) => {
@@ -397,8 +522,18 @@ document.addEventListener('DOMContentLoaded', () => {
         attribution: '&copy; <a href="https://www.ign.fr/">IGN</a>'
     }).addTo(map);
 
-    const markersGroup = L.layerGroup().addTo(map);
+    const markersGroup = L.layerGroup(); // Les points individuels sans cluster (si besoin de bascule)
+    const markersClusterGroup = L.markerClusterGroup().addTo(map);
     const proceduresGroup = L.layerGroup().addTo(map);
+    let heatmapLayer = null;
+
+    // Contrôle des couches
+    const baseMaps = {};
+    const overlayMaps = {
+        "Contrôles (Clusters/Points)": markersClusterGroup,
+        "Procédures (PEJ/PA/PVe)": proceduresGroup
+    };
+    L.control.layers(baseMaps, overlayMaps, { collapsed: false, position: 'topright' }).addTo(map);
 
     // Color definitions for status markers
     function getMarkerColor(resultat) {
@@ -417,52 +552,106 @@ document.addEventListener('DOMContentLoaded', () => {
         btnUpdate.disabled = true;
         btnUpdate.textContent = 'Chargement...';
 
-        const params = {
-            'date-deb': document.getElementById('date-deb').value,
-            'date-fin': document.getElementById('date-fin').value,
-            echelle: selectEchelle.value,
-            code: inputCode.value,
-            'type-usager': document.getElementById('type-usager').value,
-            'domaines': document.getElementById('domaine-snc').value ? [document.getElementById('domaine-snc').value] : [],
-            'themes': document.getElementById('theme-snc').value ? [document.getElementById('theme-snc').value] : [],
-            'types_action': document.getElementById('type-action-snc').value ? [document.getElementById('type-action-snc').value] : []
+        const isCompare = compareActiveCheck && compareActiveCheck.checked;
+
+        const getParams = (isComparePeriod = false) => {
+            const debEl = isComparePeriod ? compareDateDebEl : dateDebEl;
+            const finEl = isComparePeriod ? compareDateFinEl : dateFinEl;
+            return {
+                'date-deb': debEl ? debEl.value : '',
+                'date-fin': finEl ? finEl.value : '',
+                echelle: selectEchelle.value,
+                code: inputCode.value,
+                'type-usager': inputUsager.getSelectedValues ? inputUsager.getSelectedValues() : (inputUsager.value ? [inputUsager.value] : []),
+                'domaines': inputDomaineSNC.getSelectedValues ? inputDomaineSNC.getSelectedValues() : (inputDomaineSNC.value ? [inputDomaineSNC.value] : []),
+                'themes': inputThemeSNC.getSelectedValues ? inputThemeSNC.getSelectedValues() : (inputThemeSNC.value ? [inputThemeSNC.value] : []),
+                'types_action': inputTypeAction.getSelectedValues ? inputTypeAction.getSelectedValues() : (inputTypeAction.value ? [inputTypeAction.value] : []),
+                'resultats': inputResultat.getSelectedValues ? inputResultat.getSelectedValues() : [],
+                'commune': inputCommune ? inputCommune.value.trim() : ''
+            };
         };
 
-        fetch('/api/data', {
+        const reqN = fetch('/api/data', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(params)
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Erreur serveur lors de la récupération des données.');
-            }
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(getParams(false))
+        }).then(response => {
+            if (!response.ok) throw new Error('Erreur lors du chargement de la période principale');
             return response.json();
-        })
-        .then(res => {
-            // Update stats indicators
-            valControles.textContent = res.stats.total_controles;
-            valPej.textContent = res.stats.total_pej;
-            valPa.textContent = res.stats.total_pa;
-            valPve.textContent = res.stats.total_pve;
+        });
+
+        const reqN1 = isCompare ? fetch('/api/data', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(getParams(true))
+        }).then(response => {
+            if (!response.ok) throw new Error('Erreur lors du chargement de la période de comparaison');
+            return response.json();
+        }) : Promise.resolve(null);
+
+        Promise.all([reqN, reqN1])
+        .then(([resN, resN1]) => {
+            // Mémorisation de l'état (localStorage et URL)
+            saveStateToLocalStorage();
+            updateURLWithState();
+
+            // Rendu des valeurs d'indicateurs clés
+            function updateStatElement(elementId, valN, valN1) {
+                const el = document.getElementById(elementId);
+                if (!el) return;
+                if (valN1 === undefined || valN1 === null) {
+                    el.innerHTML = valN;
+                } else {
+                    const pct = valN1 > 0 ? ((valN - valN1) / valN1 * 100).toFixed(1) : 0;
+                    const arrow = valN > valN1 ? '▲' : (valN < valN1 ? '▼' : '■');
+                    const color = valN > valN1 ? '#10B981' : (valN < valN1 ? '#EF4444' : '#64748B');
+                    el.innerHTML = `<span style="font-size: 16px;">${valN}</span> <div style="font-size: 9px; font-weight: 600; color: ${color}; margin-top: 2px;">vs ${valN1} (${pct >= 0 ? '+' : ''}${pct}% ${arrow})</div>`;
+                }
+            }
+
+            updateStatElement('val-controles', resN.stats.total_controles, isCompare ? resN1.stats.total_controles : null);
+            updateStatElement('val-pej', resN.stats.total_pej, isCompare ? resN1.stats.total_pej : null);
+            updateStatElement('val-pa', resN.stats.total_pa, isCompare ? resN1.stats.total_pa : null);
+            updateStatElement('val-pve', resN.stats.total_pve, isCompare ? resN1.stats.total_pve : null);
+
+            // Mise à jour des points actifs et du compteur (uniquement basés sur la période principale N)
+            activePoints = resN.points || [];
+            currentTablePage = 1;
+            
+            const resultsCountEl = document.getElementById('results-count');
+            if (resultsCountEl) {
+                const count = activePoints.length;
+                resultsCountEl.textContent = `${count} contrôle${count > 1 ? 's' : ''} chargé${count > 1 ? 's' : ''}`;
+                resultsCountEl.classList.remove('hidden');
+            }
+
+            if (isTableExpanded) {
+                renderTable();
+            }
 
             // Update map markers
             markersGroup.clearLayers();
+            markersClusterGroup.clearLayers();
+            if (heatmapLayer) {
+                map.removeLayer(heatmapLayer);
+                heatmapLayer = null;
+            }
             if (boundaryLayer) {
                 map.removeLayer(boundaryLayer);
                 boundaryLayer = null;
             }
             const coordinates = [];
+            const heatData = [];
+            const isHeatmapMode = document.querySelector('input[name="map-mode"]:checked')?.value === 'heatmap';
 
-            if (res.points && res.points.length > 0) {
-                res.points.forEach(pt => {
+            if (resN.points && resN.points.length > 0) {
+                resN.points.forEach(pt => {
                     const lat = parseFloat(pt.y);
                     const lng = parseFloat(pt.x);
 
                     if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
                         coordinates.push([lat, lng]);
+                        heatData.push([lat, lng, 1.0]);
 
                         const color = getMarkerColor(pt.resultat);
                         const marker = L.circleMarker([lat, lng], {
@@ -486,12 +675,26 @@ document.addEventListener('DOMContentLoaded', () => {
                         `;
                         marker.bindPopup(popupContent);
                         markersGroup.addLayer(marker);
+                        markersClusterGroup.addLayer(marker);
                     }
                 });
             }
+
+            if (isHeatmapMode) {
+                map.removeLayer(markersClusterGroup);
+                heatmapLayer = L.heatLayer(heatData, {
+                    radius: 20,
+                    blur: 15,
+                    maxZoom: 12
+                }).addTo(map);
+            } else {
+                if (!map.hasLayer(markersClusterGroup)) {
+                    markersClusterGroup.addTo(map);
+                }
+            }
             // Render procedure markers (if any)
-            if (res.procedures && res.procedures.length > 0) {
-                res.procedures.forEach(p => {
+            if (resN.procedures && resN.procedures.length > 0) {
+                resN.procedures.forEach(p => {
                     const lat = parseFloat(p.y);
                     const lng = parseFloat(p.x);
                     if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
@@ -519,8 +722,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
             // Render boundary if available
-            if (res.geojson) {
-                boundaryLayer = L.geoJSON(res.geojson, {
+            if (resN.geojson) {
+                boundaryLayer = L.geoJSON(resN.geojson, {
                     style: {
                         color: '#003A76',
                         weight: 2.5,
@@ -543,7 +746,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // --- CHARTS GENERATION ---
-            const chartData = res.charts || {};
+            const chartData = resN.charts || {};
 
             const tooltipPercentageCallback = {
                 label: function(context) {
@@ -563,21 +766,37 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             };
 
-            // Render Results Chart (Doughnut)
+            // --- CHARTS GENERATION ---
+            
+            // 1. Résultats des Contrôles (Doughnut concentrique)
             if (chartResults) {
                 chartResults.destroy();
             }
-            const resultsData = chartData.results || {};
+            const resultsN = chartData.results || {};
+            const resultsN1 = isCompare ? (resN1.charts.results || {}) : null;
+
+            const resultsDatasets = [{
+                data: Object.values(resultsN),
+                backgroundColor: ['#53AB60', '#EF4444', '#64748B'],
+                borderWidth: 1,
+                label: 'Période N'
+            }];
+
+            if (isCompare && resultsN1) {
+                resultsDatasets.push({
+                    data: Object.values(resultsN1),
+                    backgroundColor: ['rgba(83, 171, 96, 0.5)', 'rgba(239, 68, 68, 0.5)', 'rgba(100, 116, 139, 0.5)'],
+                    borderWidth: 1,
+                    label: 'Période N-1'
+                });
+            }
+
             const ctxResults = document.getElementById('chart-results').getContext('2d');
             chartResults = new Chart(ctxResults, {
                 type: 'doughnut',
                 data: {
-                    labels: Object.keys(resultsData),
-                    datasets: [{
-                        data: Object.values(resultsData),
-                        backgroundColor: ['#53AB60', '#EF4444', '#64748B'],
-                        borderWidth: 1
-                    }]
+                    labels: Object.keys(resultsN),
+                    datasets: resultsDatasets
                 },
                 options: {
                     responsive: true,
@@ -595,7 +814,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const legendResults = document.getElementById('legend-results');
             if (legendResults) {
                 legendResults.innerHTML = '';
-                const resultsLabels = Object.keys(resultsData);
+                const resultsLabels = Object.keys(resultsN);
                 const resultsColors = ['#53AB60', '#EF4444', '#64748B'];
                 resultsLabels.forEach((label, idx) => {
                     const color = resultsColors[idx] || '#64748B';
@@ -608,12 +827,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
 
-            // Render Usagers Chart (Doughnut)
+            // 2. Usagers (Doughnut concentrique)
             if (chartUsagers) {
                 chartUsagers.destroy();
             }
-            const usagersData = chartData.usagers || {};
-            const rawLabels = Object.keys(usagersData);
+            const usagersN = chartData.usagers || {};
+            const usagersN1 = isCompare ? (resN1.charts.usagers || {}) : null;
+            const rawLabels = Object.keys(usagersN);
             const usagersLabels = rawLabels.map(label => {
                 if (label.toLowerCase().includes('agriculteur')) return 'Agriculteur';
                 if (label.toLowerCase().includes('particulier')) return 'Particulier';
@@ -628,20 +848,49 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (l.includes('sylvic')) return '#16A085';
                 return '#95A5A6';
             });
+
+            const usagersDatasets = [{
+                data: Object.values(usagersN),
+                backgroundColor: usagersColors,
+                borderWidth: 1,
+                label: 'Période N'
+            }];
+
+            if (isCompare && usagersN1) {
+                const alignedN1Data = rawLabels.map(lbl => usagersN1[lbl] || 0);
+                usagersDatasets.push({
+                    data: alignedN1Data,
+                    backgroundColor: usagersColors.map(c => c + '80'),
+                    borderWidth: 1,
+                    label: 'Période N-1'
+                });
+            }
+
             const ctxUsagers = document.getElementById('chart-usagers').getContext('2d');
             chartUsagers = new Chart(ctxUsagers, {
                 type: 'doughnut',
                 data: {
                     labels: usagersLabels,
-                    datasets: [{
-                        data: Object.values(usagersData),
-                        backgroundColor: usagersColors,
-                        borderWidth: 1
-                    }]
+                    datasets: usagersDatasets
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    onClick: (event, elements) => {
+                        if (elements && elements.length > 0) {
+                            const index = elements[0].index;
+                            const shortLabel = chartUsagers.data.labels[index];
+                            const matched = usagersList.find(u => u.label.toLowerCase().includes(shortLabel.toLowerCase()) || u.value.toLowerCase().includes(shortLabel.toLowerCase()));
+                            if (matched && matched.value) {
+                                if (inputUsager.setSelectedValues) {
+                                    inputUsager.setSelectedValues([matched.value]);
+                                } else {
+                                    inputUsager.value = matched.value;
+                                }
+                                loadData();
+                            }
+                        }
+                    },
                     plugins: {
                         legend: { display: false },
                         tooltip: {
@@ -666,18 +915,38 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
 
-            // Render Domains Chart (Bar)
+            // 3. Domaines d'Activité (Barres groupées)
             if (chartDomains) {
                 chartDomains.destroy();
             }
-            
-            const sortedDomains = Object.entries(chartData.domains || {})
+            const sortedDomainsN = Object.entries(chartData.domains || {})
                 .sort((a, b) => b[1] - a[1])
                 .slice(0, 5);
             
-            const domainLabels = sortedDomains.map(d => splitLabel(d[0], 25));
+            const domainsN1 = isCompare ? (resN1.charts.domains || {}) : null;
+            const domainLabels = sortedDomainsN.map(d => splitLabel(d[0], 25));
+
+            const domainsDatasets = [{
+                label: 'Période N',
+                data: sortedDomainsN.map(d => d[1]),
+                backgroundColor: '#003A76',
+                borderRadius: 4,
+                barThickness: isCompare ? 8 : 12
+            }];
+
+            if (isCompare && domainsN1) {
+                const alignedN1 = sortedDomainsN.map(d => domainsN1[d[0]] || 0);
+                domainsDatasets.push({
+                    label: 'Période N-1',
+                    data: alignedN1,
+                    backgroundColor: '#93C5FD',
+                    borderRadius: 4,
+                    barThickness: 8
+                });
+            }
+
             const domainTotalLines = domainLabels.reduce((sum, lines) => sum + lines.length, 0);
-            const domainHeight = Math.max(100, 45 + (domainLabels.length * 24) + (domainTotalLines - domainLabels.length) * 11);
+            const domainHeight = Math.max(100, 45 + (domainLabels.length * (isCompare ? 36 : 24)) + (domainTotalLines - domainLabels.length) * 11);
             const wrapperDomains = document.getElementById('wrapper-domains');
             if (wrapperDomains) {
                 wrapperDomains.style.height = `${domainHeight}px`;
@@ -688,20 +957,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 type: 'bar',
                 data: {
                     labels: domainLabels,
-                    datasets: [{
-                        label: 'Contrôles',
-                        data: sortedDomains.map(d => d[1]),
-                        backgroundColor: '#003A76',
-                        borderRadius: 4,
-                        barThickness: 12
-                    }]
+                    datasets: domainsDatasets
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     indexAxis: 'y',
+                    onClick: (event, elements) => {
+                        if (elements && elements.length > 0) {
+                            const index = elements[0].index;
+                            const domainName = sortedDomainsN[index][0];
+                            if (inputDomaineSNC.setSelectedValues) {
+                                inputDomaineSNC.setSelectedValues([domainName]);
+                            } else {
+                                inputDomaineSNC.value = domainName;
+                            }
+                            loadData();
+                        }
+                    },
                     plugins: {
-                        legend: { display: false },
+                        legend: { display: isCompare, position: 'top', labels: { boxWidth: 10, font: { size: 9 } } },
                         tooltip: {
                             callbacks: tooltipPercentageCallback
                         }
@@ -716,18 +991,38 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
 
-            // Render Themes Chart (Bar)
+            // 4. Thématiques (Barres groupées)
             if (chartThemes) {
                 chartThemes.destroy();
             }
-            
-            const sortedThemes = Object.entries(chartData.themes || {})
+            const sortedThemesN = Object.entries(chartData.themes || {})
                 .sort((a, b) => b[1] - a[1])
                 .slice(0, 5);
             
-            const themeLabels = sortedThemes.map(d => splitLabel(d[0], 25));
+            const themesN1 = isCompare ? (resN1.charts.themes || {}) : null;
+            const themeLabels = sortedThemesN.map(d => splitLabel(d[0], 25));
+
+            const themesDatasets = [{
+                label: 'Période N',
+                data: sortedThemesN.map(d => d[1]),
+                backgroundColor: '#4296CE',
+                borderRadius: 4,
+                barThickness: isCompare ? 8 : 12
+            }];
+
+            if (isCompare && themesN1) {
+                const alignedN1 = sortedThemesN.map(d => themesN1[d[0]] || 0);
+                themesDatasets.push({
+                    label: 'Période N-1',
+                    data: alignedN1,
+                    backgroundColor: '#FCA5A5',
+                    borderRadius: 4,
+                    barThickness: 8
+                });
+            }
+
             const themeTotalLines = themeLabels.reduce((sum, lines) => sum + lines.length, 0);
-            const themeHeight = Math.max(100, 45 + (themeLabels.length * 24) + (themeTotalLines - themeLabels.length) * 11);
+            const themeHeight = Math.max(100, 45 + (themeLabels.length * (isCompare ? 36 : 24)) + (themeTotalLines - themeLabels.length) * 11);
             const wrapperThemes = document.getElementById('wrapper-themes');
             if (wrapperThemes) {
                 wrapperThemes.style.height = `${themeHeight}px`;
@@ -738,20 +1033,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 type: 'bar',
                 data: {
                     labels: themeLabels,
-                    datasets: [{
-                        label: 'Contrôles',
-                        data: sortedThemes.map(d => d[1]),
-                        backgroundColor: '#4296CE',
-                        borderRadius: 4,
-                        barThickness: 12
-                    }]
+                    datasets: themesDatasets
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     indexAxis: 'y',
+                    onClick: (event, elements) => {
+                        if (elements && elements.length > 0) {
+                            const index = elements[0].index;
+                            const themeName = sortedThemesN[index][0];
+                            if (inputThemeSNC.setSelectedValues) {
+                                inputThemeSNC.setSelectedValues([themeName]);
+                            } else {
+                                inputThemeSNC.value = themeName;
+                            }
+                            loadData();
+                        }
+                    },
                     plugins: {
-                        legend: { display: false },
+                        legend: { display: isCompare, position: 'top', labels: { boxWidth: 10, font: { size: 9 } } },
                         tooltip: {
                             callbacks: tooltipPercentageCallback
                         }
@@ -766,35 +1067,60 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
 
-            // Render Seasonality Chart (Line)
+            // 5. Saisonnalité de l'activité (Double Courbe Line)
             if (chartSeasonality) {
                 chartSeasonality.destroy();
             }
             const monthsLabels = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sept', 'Oct', 'Nov', 'Déc'];
-            const seasonalityData = chartData.seasonality || { controls: Array(12).fill(0), infractions: Array(12).fill(0) };
+            const seasonalityN = chartData.seasonality || { controls: Array(12).fill(0), infractions: Array(12).fill(0) };
+            const seasonalityN1 = isCompare ? (resN1.charts.seasonality || { controls: Array(12).fill(0), infractions: Array(12).fill(0) }) : null;
+
+            const seasonalityDatasets = [
+                {
+                    label: 'Contrôles (N)',
+                    data: seasonalityN.controls,
+                    borderColor: '#003A76',
+                    backgroundColor: 'rgba(0, 58, 118, 0.05)',
+                    fill: true,
+                    tension: 0.3
+                },
+                {
+                    label: 'Infractions (N)',
+                    data: seasonalityN.infractions,
+                    borderColor: '#EF4444',
+                    backgroundColor: 'rgba(239, 68, 68, 0.05)',
+                    fill: true,
+                    tension: 0.3
+                }
+            ];
+
+            if (isCompare && seasonalityN1) {
+                seasonalityDatasets.push({
+                    label: 'Contrôles (N-1)',
+                    data: seasonalityN1.controls,
+                    borderColor: '#93C5FD',
+                    backgroundColor: 'transparent',
+                    borderDash: [5, 5],
+                    fill: false,
+                    tension: 0.3
+                });
+                seasonalityDatasets.push({
+                    label: 'Infractions (N-1)',
+                    data: seasonalityN1.infractions,
+                    borderColor: '#FCA5A5',
+                    backgroundColor: 'transparent',
+                    borderDash: [5, 5],
+                    fill: false,
+                    tension: 0.3
+                });
+            }
+
             const ctxSeasonality = document.getElementById('chart-seasonality').getContext('2d');
             chartSeasonality = new Chart(ctxSeasonality, {
                 type: 'line',
                 data: {
                     labels: monthsLabels,
-                    datasets: [
-                        {
-                            label: 'Contrôles',
-                            data: seasonalityData.controls,
-                            borderColor: '#003A76',
-                            backgroundColor: 'rgba(0, 58, 118, 0.05)',
-                            fill: true,
-                            tension: 0.3
-                        },
-                        {
-                            label: 'Infractions',
-                            data: seasonalityData.infractions,
-                            borderColor: '#EF4444',
-                            backgroundColor: 'rgba(239, 68, 68, 0.05)',
-                            fill: true,
-                            tension: 0.3
-                        }
-                    ]
+                    datasets: seasonalityDatasets
                 },
                 options: {
                     responsive: true,
@@ -823,6 +1149,395 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // --- GESTION DU TABLEAU DÉTAILLÉ DES CONTRÔLES (LOT 1) ---
+    const toggleTableHeader = document.getElementById('toggle-table-header');
+    const tableContainer = document.getElementById('table-container');
+    const tableToggleIcon = document.getElementById('table-toggle-icon');
+    
+    if (toggleTableHeader && tableContainer && tableToggleIcon) {
+        toggleTableHeader.addEventListener('click', (e) => {
+            if (e.target.id === 'btn-export-csv' || e.target.closest('#btn-export-csv')) return;
+            
+            isTableExpanded = !isTableExpanded;
+            if (isTableExpanded) {
+                tableContainer.classList.remove('hidden');
+                tableToggleIcon.textContent = '▼';
+                renderTable();
+            } else {
+                tableContainer.classList.add('hidden');
+                tableToggleIcon.textContent = '▶';
+            }
+        });
+    }
+
+    function renderTable() {
+        const tableBody = document.getElementById('table-body');
+        if (!tableBody) return;
+        
+        tableBody.innerHTML = '';
+        
+        let data = [...activePoints];
+        
+        // Tri
+        if (tableSortColumn) {
+            data.sort((a, b) => {
+                let valA = a[tableSortColumn] || '';
+                let valB = b[tableSortColumn] || '';
+                
+                if (typeof valA === 'string') {
+                    return tableSortAsc ? valA.localeCompare(valB) : valB.localeCompare(valA);
+                } else {
+                    return tableSortAsc ? (valA - valB) : (valB - valA);
+                }
+            });
+        }
+        
+        // Pagination
+        const totalRows = data.length;
+        const totalPages = Math.max(1, Math.ceil(totalRows / tableRowsPerPage));
+        if (currentTablePage > totalPages) currentTablePage = totalPages;
+        
+        const startIndex = (currentTablePage - 1) * tableRowsPerPage;
+        const endIndex = Math.min(startIndex + tableRowsPerPage, totalRows);
+        const pageData = data.slice(startIndex, endIndex);
+        
+        if (pageData.length === 0) {
+            tableBody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--color-text-muted); padding: 20px;">Aucun contrôle à afficher.</td></tr>`;
+        } else {
+            pageData.forEach(row => {
+                const tr = document.createElement('tr');
+                const color = getMarkerColor(row.resultat);
+                tr.innerHTML = `
+                    <td style="padding: 6px 8px;">${row.dc_id || ''}</td>
+                    <td style="padding: 6px 8px;">${row.date_ctrl || ''}</td>
+                    <td style="padding: 6px 8px; font-weight: 600; color: ${color};">${row.resultat || ''}</td>
+                    <td style="padding: 6px 8px;">${row.domaine || ''}</td>
+                    <td style="padding: 6px 8px;">${row.theme || ''}</td>
+                    <td style="padding: 6px 8px;">${row.type_usager || ''}</td>
+                    <td style="padding: 6px 8px;">${row.nom_commun || ''}</td>
+                `;
+                tableBody.appendChild(tr);
+            });
+        }
+        
+        // Mise à jour de l'UI pagination
+        const infoEl = document.getElementById('table-pagination-info');
+        if (infoEl) {
+            infoEl.textContent = `Affichage de ${totalRows ? startIndex + 1 : 0} à ${endIndex} sur ${totalRows} contrôle${totalRows > 1 ? 's' : ''} (Page ${currentTablePage}/${totalPages})`;
+        }
+        
+        const btnPrev = document.getElementById('btn-page-prev');
+        const btnNext = document.getElementById('btn-page-next');
+        if (btnPrev) btnPrev.disabled = (currentTablePage === 1);
+        if (btnNext) btnNext.disabled = (currentTablePage === totalPages);
+    }
+
+    const btnPrev = document.getElementById('btn-page-prev');
+    const btnNext = document.getElementById('btn-page-next');
+    if (btnPrev) {
+        btnPrev.addEventListener('click', () => {
+            if (currentTablePage > 1) {
+                currentTablePage--;
+                renderTable();
+            }
+        });
+    }
+    if (btnNext) {
+        btnNext.addEventListener('click', () => {
+            const totalPages = Math.max(1, Math.ceil(activePoints.length / tableRowsPerPage));
+            if (currentTablePage < totalPages) {
+                currentTablePage++;
+                renderTable();
+            }
+        });
+    }
+    
+    // Événements de tri sur les en-têtes
+    document.querySelectorAll('.data-table th[data-sort]').forEach(th => {
+        th.addEventListener('click', () => {
+            const col = th.dataset.sort;
+            if (tableSortColumn === col) {
+                tableSortAsc = !tableSortAsc;
+            } else {
+                tableSortColumn = col;
+                tableSortAsc = true;
+            }
+            
+            document.querySelectorAll('.data-table th[data-sort]').forEach(header => {
+                const baseText = header.textContent.replace(/[⇅▲▼]/g, '').trim();
+                if (header.dataset.sort === tableSortColumn) {
+                    header.textContent = `${baseText} ${tableSortAsc ? '▲' : '▼'}`;
+                } else {
+                    header.textContent = `${baseText} ⇅`;
+                }
+            });
+            renderTable();
+        });
+    });
+
+    // Export CSV
+    const btnExportCsv = document.getElementById('btn-export-csv');
+    if (btnExportCsv) {
+        btnExportCsv.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (activePoints.length === 0) {
+                alert('Aucun contrôle à exporter.');
+                return;
+            }
+            
+            const headers = ['ID', 'Date', 'Resultat', 'Domaine', 'Theme', 'Type Usager', 'Commune', 'X', 'Y'];
+            const rows = activePoints.map(row => [
+                row.dc_id || '',
+                row.date_ctrl || '',
+                row.resultat || '',
+                row.domaine || '',
+                row.theme || '',
+                row.type_usager || '',
+                row.nom_commun || '',
+                row.x || 0.0,
+                row.y || 0.0
+            ]);
+            
+            const csvContent = "\uFEFF" + [
+                headers.join(';'),
+                ...rows.map(r => r.map(val => `"${String(val).replace(/"/g, '""')}"`).join(';'))
+            ].join('\n');
+            
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.setAttribute('href', url);
+            link.setAttribute('download', `export_controles_${new Date().toISOString().slice(0,10)}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+    }
+
+    // Réinitialisation des filtres (bouton Effacer)
+    const btnReset = document.getElementById('btn-reset');
+    if (btnReset) {
+        btnReset.addEventListener('click', () => {
+            const now = new Date();
+            const currentYear = now.getFullYear();
+            if (dateDebEl) dateDebEl.value = `${currentYear}-01-01`;
+            if (dateFinEl) {
+                const month = String(now.getMonth() + 1).padStart(2, '0');
+                const day = String(now.getDate()).padStart(2, '0');
+                dateFinEl.value = `${currentYear}-${month}-${day}`;
+            }
+            
+            selectEchelle.value = 'departement';
+            inputCode.value = '21';
+            codeHelper.textContent = 'Exemples : 21, 27, 39';
+            
+            // Réinitialisation des filtres multi-sélections
+            if (inputUsager.setSelectedValues) inputUsager.setSelectedValues([]);
+            else inputUsager.value = '';
+
+            if (inputDomaineSNC.setSelectedValues) inputDomaineSNC.setSelectedValues([]);
+            else inputDomaineSNC.value = '';
+
+            if (inputThemeSNC.setSelectedValues) inputThemeSNC.setSelectedValues([]);
+            else inputThemeSNC.value = '';
+
+            if (inputTypeAction.setSelectedValues) inputTypeAction.setSelectedValues([]);
+            else inputTypeAction.value = '';
+
+            if (inputResultat.setSelectedValues) inputResultat.setSelectedValues([]);
+            else inputResultat.value = '';
+
+            if (inputCommune) inputCommune.value = '';
+            
+            loadData();
+        });
+    }
+
+    // Gestion du basculement du mode carte (Points / Chaleur)
+    document.querySelectorAll('input[name="map-mode"]').forEach(radio => {
+        radio.addEventListener('change', () => {
+            const isHeatmapMode = radio.value === 'heatmap';
+            if (isHeatmapMode) {
+                if (map.hasLayer(markersClusterGroup)) {
+                    map.removeLayer(markersClusterGroup);
+                }
+                const heatData = activePoints
+                    .map(pt => [parseFloat(pt.y), parseFloat(pt.x), 1.0])
+                    .filter(coords => !isNaN(coords[0]) && !isNaN(coords[1]) && coords[0] !== 0 && coords[1] !== 0);
+                
+                if (heatmapLayer) {
+                    map.removeLayer(heatmapLayer);
+                }
+                heatmapLayer = L.heatLayer(heatData, {
+                    radius: 20,
+                    blur: 15,
+                    maxZoom: 12
+                }).addTo(map);
+            } else {
+                if (heatmapLayer) {
+                    map.removeLayer(heatmapLayer);
+                    heatmapLayer = null;
+                }
+                if (!map.hasLayer(markersClusterGroup)) {
+                    markersClusterGroup.addTo(map);
+                }
+            }
+        });
+    });
+
+    // --- GESTION DU LOCAL STORAGE & DU PERMALIEN (LOT 3) ---
+    function getFiltersState() {
+        return {
+            'date-deb': document.getElementById('date-deb').value,
+            'date-fin': document.getElementById('date-fin').value,
+            echelle: selectEchelle.value,
+            code: inputCode.value,
+            'type-usager': inputUsager.getSelectedValues ? inputUsager.getSelectedValues() : (inputUsager.value ? [inputUsager.value] : []),
+            'domaines': inputDomaineSNC.getSelectedValues ? inputDomaineSNC.getSelectedValues() : (inputDomaineSNC.value ? [inputDomaineSNC.value] : []),
+            'themes': inputThemeSNC.getSelectedValues ? inputThemeSNC.getSelectedValues() : (inputThemeSNC.value ? [inputThemeSNC.value] : []),
+            'types_action': inputTypeAction.getSelectedValues ? inputTypeAction.getSelectedValues() : (inputTypeAction.value ? [inputTypeAction.value] : []),
+            'resultats': inputResultat.getSelectedValues ? inputResultat.getSelectedValues() : [],
+            'commune': inputCommune ? inputCommune.value.trim() : '',
+            'compare-active': compareActiveCheck ? compareActiveCheck.checked : false,
+            'compare-date-deb': compareDateDebEl ? compareDateDebEl.value : '',
+            'compare-date-fin': compareDateFinEl ? compareDateFinEl.value : ''
+        };
+    }
+
+    function applyFiltersState(state) {
+        if (!state) return;
+        
+        if (state['date-deb']) document.getElementById('date-deb').value = state['date-deb'];
+        if (state['date-fin']) document.getElementById('date-fin').value = state['date-fin'];
+        
+        if (state.echelle) {
+            selectEchelle.value = state.echelle;
+            selectEchelle.dispatchEvent(new Event('change'));
+        }
+        if (state.code) inputCode.value = state.code;
+        
+        if (state['type-usager'] && inputUsager.setSelectedValues) inputUsager.setSelectedValues(state['type-usager']);
+        if (state['domaines'] && inputDomaineSNC.setSelectedValues) inputDomaineSNC.setSelectedValues(state['domaines']);
+        if (state['themes'] && inputThemeSNC.setSelectedValues) inputThemeSNC.setSelectedValues(state['themes']);
+        if (state['types_action'] && inputTypeAction.setSelectedValues) inputTypeAction.setSelectedValues(state['types_action']);
+        if (state['resultats'] && inputResultat.setSelectedValues) inputResultat.setSelectedValues(state['resultats']);
+        if (state['commune'] && inputCommune) inputCommune.value = state['commune'];
+        
+        if (compareActiveCheck && state['compare-active'] !== undefined) {
+            compareActiveCheck.checked = state['compare-active'];
+            compareActiveCheck.dispatchEvent(new Event('change'));
+        }
+        if (state['compare-date-deb'] && compareDateDebEl) {
+            compareDateDebEl.value = state['compare-date-deb'];
+        }
+        if (state['compare-date-fin'] && compareDateFinEl) {
+            compareDateFinEl.value = state['compare-date-fin'];
+        }
+    }
+
+    function saveStateToLocalStorage() {
+        try {
+            const state = getFiltersState();
+            localStorage.setItem('ofbilan_explorer_filters', JSON.stringify(state));
+        } catch (e) {
+            console.error('Impossible de sauvegarder dans localStorage', e);
+        }
+    }
+
+    function loadStateFromLocalStorage() {
+        try {
+            const data = localStorage.getItem('ofbilan_explorer_filters');
+            return data ? JSON.parse(data) : null;
+        } catch (e) {
+            console.error('Impossible de lire depuis localStorage', e);
+            return null;
+        }
+    }
+
+    function updateURLWithState() {
+        const state = getFiltersState();
+        const searchParams = new URLSearchParams();
+        
+        Object.entries(state).forEach(([key, val]) => {
+            if (Array.isArray(val)) {
+                if (val.length > 0) searchParams.set(key, val.join(','));
+            } else if (val !== '' && val !== false && val !== undefined) {
+                searchParams.set(key, val);
+            }
+        });
+        
+        const newRelativePathQuery = window.location.pathname + '?' + searchParams.toString();
+        window.history.replaceState(null, '', newRelativePathQuery);
+    }
+
+    function loadStateFromURL() {
+        const searchParams = new URLSearchParams(window.location.search);
+        if (searchParams.toString() === '') return null;
+        
+        const state = {};
+        searchParams.forEach((value, key) => {
+            if (['type-usager', 'domaines', 'themes', 'types_action', 'resultats'].includes(key)) {
+                state[key] = value.split(',');
+            } else if (key === 'compare-active') {
+                state[key] = value === 'true';
+            } else {
+                state[key] = value;
+            }
+        });
+        return state;
+    }
+
+
+    // --- GESTION DU PLEIN ÉCRAN CARTE (LOT 3) ---
+    const btnFullscreenMap = document.getElementById('btn-fullscreen-map');
+    if (btnFullscreenMap) {
+        btnFullscreenMap.addEventListener('click', () => {
+            const mapCard = document.getElementById('map').closest('.card');
+            if (mapCard) {
+                mapCard.classList.toggle('map-fullscreen');
+                if (mapCard.classList.contains('map-fullscreen')) {
+                    btnFullscreenMap.textContent = '🗗 Quitter';
+                    btnFullscreenMap.title = 'Quitter le mode plein écran';
+                } else {
+                    btnFullscreenMap.textContent = '⛶ Plein écran';
+                    btnFullscreenMap.title = 'Plein écran';
+                }
+                // Attendre la transition de rendu et redimensionner la carte Leaflet
+                setTimeout(() => {
+                    map.invalidateSize();
+                }, 200);
+            }
+        });
+    }
+
+    // --- EXPORT PNG DES GRAPHIPHES (LOT 3) ---
+    document.querySelectorAll('.btn-export-chart-png').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const chartId = btn.getAttribute('data-chart');
+            const canvas = document.getElementById(chartId);
+            if (!canvas) return;
+
+            // Pour s'assurer que le fond de l'image exportée est blanc et non transparent
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = canvas.width;
+            tempCanvas.height = canvas.height;
+            const tempCtx = tempCanvas.getContext('2d');
+            
+            tempCtx.fillStyle = '#FFFFFF';
+            tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+            tempCtx.drawImage(canvas, 0, 0);
+
+            const imageURI = tempCanvas.toDataURL('image/png');
+            const link = document.createElement('a');
+            link.download = `${chartId}_export.png`;
+            link.href = imageURI;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+    });
+
     btnUpdate.addEventListener('click', loadData);
 
     const btnPdf = document.getElementById('btn-pdf');
@@ -832,6 +1547,15 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Initial load
+    // Chargement initial
+    const stateFromURL = loadStateFromURL();
+    const stateFromLS = loadStateFromLocalStorage();
+    
+    if (stateFromURL) {
+        applyFiltersState(stateFromURL);
+    } else if (stateFromLS) {
+        applyFiltersState(stateFromLS);
+    }
+
     loadData();
 });

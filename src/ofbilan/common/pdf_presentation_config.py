@@ -2,6 +2,18 @@
 from __future__ import annotations
 
 import warnings
+import yaml
+from ofbilan.chemins_projet import PROJECT_ROOT
+
+# Load identity configuration
+_IDENTITE_PATH = PROJECT_ROOT / "config" / "identite.yaml"
+if _IDENTITE_PATH.exists():
+    _IDENTITE = yaml.safe_load(_IDENTITE_PATH.read_text(encoding="utf-8")) or {}
+else:
+    _IDENTITE = {}
+_NOM = _IDENTITE.get("nom", "Aguirre MAURIN")
+_SERVICE = _IDENTITE.get("service", "OFB")
+REALISATION = f"<b>Réalisation :</b> {_NOM} — {_SERVICE}"
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -201,9 +213,14 @@ DEFAULT_PDF_PRESENTATION_CONFIG: dict[str, Any] = {
                 },
                 {
                     "when": "always",
+                    "text": REALISATION,
+                },
+                {
+                    "when": "always",
                     "text": (
-                        "<b>Réalisation :</b> service départemental de la Côte d'Or."
+                        "Créé avec OFBilan – Auteur : Aguirre MAURIN (OFB, Service départemental de la Côte d’Or)"
                     ),
+                    "section": "annex"
                 },
             ],
         },
