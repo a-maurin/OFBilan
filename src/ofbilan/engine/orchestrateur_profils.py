@@ -1355,9 +1355,8 @@ def _filter_pve(
                 pve[natinf_col].apply(lambda x: contient_natinf(x, natinf_pve))
             ].copy()
 
-    keywords = profile["filter"].get("keywords", [])
-    if keywords:
-        cols = [c for c in ["INF-NATINF", "NATINF", "theme", "THEME"] if c in pve.columns]
+    # Les thèmes PVe ne correspondent pas aux thèmes SNC pour le moment
+    # La recherche par mot-clé est donc désactivée pour cette source (sera gérée via un dictionnaire de concordance)
     return pve
 
 

@@ -660,12 +660,6 @@ document.addEventListener('DOMContentLoaded', () => {
         zoomDelta: 0.25,
         wheelPxPerZoomLevel: 120
     }).setView([46.2276, 2.2137], 6);
-    
-    // Création d'un volet dédié (pane) pour placer les procédures au-dessus des marqueurs de contrôle
-    const procPane = map.createPane('proceduresPane');
-    if (procPane) {
-        procPane.style.zIndex = 620; // Plus haut que overlayPane (400)
-    }
 
     L.tileLayer('https://data.geopf.fr/wmts?REQUEST=GetTile&SERVICE=WMTS&VERSION=1.0.0&STYLE=normal&TILEMATRIXSET=PM&FORMAT=image/png&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}', {
         maxZoom: 19,
@@ -925,8 +919,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             fillColor: procColor,
                             fillOpacity: 1,
                             weight: 1.5,
-                            interactive: true,
-                            pane: 'proceduresPane'
+                            interactive: true
                         });
                         const popup = `
                             <strong>${p.type}</strong><br>
@@ -1004,8 +997,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             opacity: 0.5,
                             fillOpacity: 0.35,
                             weight: 1.5,
-                            interactive: true,
-                            pane: 'proceduresPane'
+                            interactive: true
                         });
                         const popup = `
                             <strong>${p.type} (N-1)</strong><br>

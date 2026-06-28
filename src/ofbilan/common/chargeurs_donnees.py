@@ -1904,16 +1904,35 @@ def load_pve(
             if echelle_norm == "bmi" and "nom_site" in df.columns:
                 bmi_filters = get_bmi_filters(code)
                 nom_site_val = str(bmi_filters.get("nom_site_pve", "BMI")).upper()
-                df = df[df["nom_site"].astype(str).str.upper().str.contains(nom_site_val, case=True, na=False, regex=False)].copy()
+                import re
+                def clean_str(s):
+                    if pd.isna(s): return ""
+                    s = str(s).upper()
+                    s = s.replace("Ô", "O").replace("ô", "o").replace("-", " ")
+                    return re.sub(r'\s+', ' ', s).strip()
+                
+                # Utiliser les mots-clés explicites du YAML si disponibles, sinon extraction dynamique en fallback
+                keywords_pve_yaml = bmi_filters.get("keywords_pve", [])
+                if keywords_pve_yaml:
+                    keywords_to_find = [str(k).upper() for k in keywords_pve_yaml]
+                else:
+                    nom_site_val_clean = clean_str(nom_site_val)
+                    keywords_to_find = [w for w in nom_site_val_clean.split() if w not in ["POLE", "DE", "ET", "LA", "LE", "DU", "DES"]]
+                
+                nom_site_col = df["nom_site"].apply(clean_str)
+                # La ligne est conservée si TOUS les mots-clés sont présents dans la colonne
+                mask = nom_site_col.apply(lambda x: all(k in x for k in keywords_to_find))
+                df = df[mask].copy()
             elif echelle_norm != "bmi":
                 dept_codes = get_departements_pour_perimetre(echelle, code)
                 dept_col = "INF-DEPART" if "INF-DEPART" in df.columns else "INF-DEPARTEMENT"
                 if dept_col in df.columns and dept_codes and "FR" not in dept_codes:
                     df = df[df[dept_col].astype(str).str.strip().isin(dept_codes)].copy()
-        if date_deb is not None and date_fin is not None and "INF-DATE-INTG" in df.columns:
+        date_col = "INF-DATE-MIF" if "INF-DATE-MIF" in df.columns else ("INF-DATE-INTG" if "INF-DATE-INTG" in df.columns else None)
+        if date_deb is not None and date_fin is not None and date_col is not None:
             deb_ts = pd.to_datetime(date_deb)
             fin_ts = pd.to_datetime(date_fin)
-            df = filtre_periode(df, "INF-DATE-INTG", deb_ts, fin_ts)
+            df = filtre_periode(df, date_col, deb_ts, fin_ts)
         return df
 
     sources = root / "data" / "sources"
@@ -1978,19 +1997,21 @@ def load_pve(
             dept_col = "INF-DEPART" if "INF-DEPART" in df.columns else "INF-DEPARTEMENT"
             if dept_col in df.columns and dept_codes and "FR" not in dept_codes:
                 df = df[df[dept_col].astype(str).str.strip().isin(dept_codes)].copy()
-    if date_deb is not None and date_fin is not None and "INF-DATE-INTG" in df.columns:
+    date_col = "INF-DATE-MIF" if "INF-DATE-MIF" in df.columns else ("INF-DATE-INTG" if "INF-DATE-INTG" in df.columns else None)
+    if date_deb is not None and date_fin is not None and date_col is not None:
         n_before_period = len(df)
         deb_ts = pd.to_datetime(date_deb)
         fin_ts = pd.to_datetime(date_fin)
-        df = filtre_periode(df, "INF-DATE-INTG", deb_ts, fin_ts)
+        df = filtre_periode(df, date_col, deb_ts, fin_ts)
         n_after_period = len(df)
         if n_before_period > n_after_period:
             logger.info(
-                "PVe : %s ligne(s) retenues sur %s après filtre période INF-DATE-INTG "
+                "PVe : %s ligne(s) retenues sur %s après filtre période %s "
                 "(%s → %s) ; %s ligne(s) hors période exclues. "
                 "(Une jointure QGIS sans filtre date sur les mêmes communes PNF peut compter plus de lignes.)",
                 n_after_period,
                 n_before_period,
+                date_col,
                 date_deb,
                 date_fin,
                 n_before_period - n_after_period,

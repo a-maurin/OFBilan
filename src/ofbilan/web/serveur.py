@@ -453,13 +453,26 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                                 df_pa = df_pa[df_pa[col_ta].astype(str).str.strip().str.lower().apply(
                                     lambda val: any(t in val for t in ta_lower)
                                 )].copy()
-                    total_pa = len(df_pa)
+                    from ofbilan.common.utilitaires_metier import count_pa_from_point_ctrl
+                    total_pa = count_pa_from_point_ctrl(df_pts)
                 except Exception:
                     total_pa = 0
 
                 # 5. Chargement et filtrage PVe
                 try:
                     df_pve = load_pve(project_root, echelle=echelle, code=code, date_deb=date_deb, date_fin=date_fin) if load_pve_flag else pd.DataFrame()
+                    
+                    # LOG DE DIAGNOSTIC
+                    with open(project_root / "scratch" / "debug_pve.txt", "w", encoding="utf-8") as f:
+                        f.write(f"GET /data for {date_deb} to {date_fin}\n")
+                        f.write(f"load_pve returned {len(df_pve)} rows\n")
+                        if not df_pve.empty:
+                            f.write(f"Columns: {list(df_pve.columns)}\n")
+                            if "INF-DATE-MIF" in df_pve.columns:
+                                f.write(f"MIF head:\n{df_pve['INF-DATE-MIF'].head()}\n")
+                            if "INF-DATE-INTG" in df_pve.columns:
+                                f.write(f"INTG head:\n{df_pve['INF-DATE-INTG'].head()}\n")
+                                
                     if profile_cfg.get("pipeline") != "global":
                         df_pve = _filter_pve(df_pve, profile_cfg)
                     if themes:
@@ -476,8 +489,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                                 df_pve = df_pve[df_pve[col_ta].astype(str).str.strip().str.lower().apply(
                                     lambda val: any(t in val for t in ta_lower)
                                 )].copy()
+                    
+                    # DIAGNOSTIC LOG AFTER FILTERS
+                    with open(project_root / "scratch" / "debug_pve.txt", "a", encoding="utf-8") as f:
+                        f.write(f"After keyword filters: {len(df_pve)} rows\n")
+                        
                     total_pve = len(df_pve)
-                except Exception:
+                except Exception as e:
+                    with open(project_root / "scratch" / "debug_pve.txt", "a", encoding="utf-8") as f:
+                        f.write(f"EXCEPTION: {e}\n")
                     total_pve = 0
 
                 # 4.bis. Restriction spatiale si echelle == "pnf"
@@ -505,7 +525,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
                     total_controles = len(df_pts)
                     total_pej = len(df_pej)
-                    total_pa = len(df_pa)
+                    total_pa = count_pa_from_point_ctrl(df_pts)
                     total_pve = len(df_pve)
 
                 # 5. Calcul des répartitions statistiques (Combiné sur toutes les sources activées)
