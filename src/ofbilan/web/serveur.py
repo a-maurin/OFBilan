@@ -44,6 +44,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(WEB_DIR), **kwargs)
 
+    def end_headers(self):
+        self.send_header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+        self.send_header('Pragma', 'no-cache')
+        self.send_header('Expires', '0')
+        super().end_headers()
+
     def handle(self):
         try:
             super().handle()
@@ -61,7 +67,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 import yaml
                 project_root = Path(__file__).resolve().parents[3]
                 profiles_dir = project_root / "config" / "profils_bilan"
-                profils_list = [{"value": "global", "label": "Tous (Sans profil)"}]
+                profils_list = [{"value": "global", "label": "Tous (Sans profil)", "disables_point_ctrl": False, "has_action_filter": False, "has_natinf_filter": False, "has_custom_stats": False}]
                 if profiles_dir.exists():
                     import re
                     for yaml_file in profiles_dir.glob("*.yaml"):
@@ -70,7 +76,27 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                             m_id = re.search(r'^id:\s*"?([^"\n]+)"?', content, re.MULTILINE)
                             m_label = re.search(r'^label:\s*"?([^"\n]+)"?', content, re.MULTILINE)
                             if m_id and m_label:
-                                profils_list.append({"value": m_id.group(1).strip(), "label": m_label.group(1).strip()})
+                                val_id = m_id.group(1).strip()
+                                # Eviter les doublons si 'global' est déjà dans la liste
+                                if any(p["value"] == val_id for p in profils_list):
+                                    continue
+                                    
+                                disables_point_ctrl = bool(re.search(r'point_ctrl:\s*false', content))
+                                has_action_filter = False
+                                m_filter_type = re.search(r'^\s*type:\s*"?([^"\n]+)"?', content, re.MULTILINE)
+                                if m_filter_type and m_filter_type.group(1).strip() != "all":
+                                    has_action_filter = True
+                                has_natinf_filter = bool(re.search(r'natinf_(pej|pve):\s*(?!\[\])(.*)', content))
+                                has_custom_stats = bool(re.search(r'^\s*adapter:\s*\w+', content, re.MULTILINE))
+                                
+                                profils_list.append({
+                                    "value": val_id,
+                                    "label": m_label.group(1).strip(),
+                                    "disables_point_ctrl": disables_point_ctrl,
+                                    "has_action_filter": has_action_filter,
+                                    "has_natinf_filter": has_natinf_filter,
+                                    "has_custom_stats": has_custom_stats
+                                })
                         except Exception:
                             pass
                 self.send_response(200)
@@ -758,6 +784,8 @@ def preload_data_async():
                 print(f"  [Preload] Note: Impossible de pré-charger les contours : {e}")
 
             print("  [Preload] Données chargées avec succès en mémoire. L'explorer est prêt !")
+            import webbrowser
+            webbrowser.open(f"http://localhost:{PORT}/explorer.html")
         except Exception as e:
             print(f"  [Preload] Erreur lors du pré-chargement : {e}")
 
@@ -776,7 +804,7 @@ def run_server():
     with socketserver.TCPServer(("", PORT), Handler) as httpd:
         print(f"\n=======================================================")
         print(f"  Serveur OFBilan actif sur http://localhost:{PORT}")
-        print(f"  Ouvrez cette adresse dans votre navigateur web.")
+        print(f"  L'explorateur s'ouvrira automatiquement à la fin du préchargement des données.")
         print(f"  Appuyez sur Ctrl+C pour arrêter le serveur.")
         print(f"=======================================================\n")
         try:

@@ -70,16 +70,85 @@ document.addEventListener('DOMContentLoaded', () => {
             const selectProfil = document.getElementById('profil-select');
             if (selectProfil && Array.isArray(data)) {
                 selectProfil.innerHTML = '';
+                window.profilsMetadata = {};
                 data.forEach(p => {
+                    window.profilsMetadata[p.value] = p;
                     const opt = document.createElement('option');
                     opt.value = p.value;
                     opt.textContent = p.label;
                     selectProfil.appendChild(opt);
                 });
                 
+                selectProfil.addEventListener('change', updateUIForProfile);
+                updateUIForProfile();
             }
         })
         .catch(err => console.error('Erreur chargement profils:', err));
+
+    function updateUIForProfile() {
+        const selectProfil = document.getElementById('profil-select');
+        if (!selectProfil) return;
+        const val = selectProfil.value;
+        const meta = window.profilsMetadata[val];
+        if (!meta) return;
+
+        // Griser les filtres thématiques
+        const filterControls = [
+            document.getElementById('domaine-snc'),
+            document.getElementById('btn-toggle-domaines-snc'),
+            document.getElementById('theme-snc'),
+            document.getElementById('btn-toggle-themes-snc'),
+            document.getElementById('type-action-snc'),
+            document.getElementById('btn-toggle-types-action')
+        ];
+        
+        filterControls.forEach(el => {
+            if (el) {
+                el.disabled = meta.has_action_filter;
+                if (meta.has_action_filter) {
+                    el.style.opacity = '0.5';
+                    el.style.cursor = 'not-allowed';
+                } else {
+                    el.style.opacity = '1';
+                    el.style.cursor = '';
+                }
+            }
+        });
+
+        // Griser les résultats de contrôles
+        const resFilter = document.getElementById('resultats-filter');
+        if (resFilter) {
+            resFilter.disabled = meta.disables_point_ctrl;
+            resFilter.style.opacity = meta.disables_point_ctrl ? '0.5' : '1';
+            resFilter.style.cursor = meta.disables_point_ctrl ? 'not-allowed' : '';
+        }
+
+        const conformiteCard = document.getElementById('chart-conformite')?.closest('.card');
+        const nbControlesCard = document.getElementById('val-controles')?.closest('.card');
+        
+        if (meta.disables_point_ctrl) {
+            if (conformiteCard) conformiteCard.style.opacity = '0.3';
+            if (nbControlesCard) nbControlesCard.style.opacity = '0.3';
+        } else {
+            if (conformiteCard) conformiteCard.style.opacity = '1';
+            if (nbControlesCard) nbControlesCard.style.opacity = '1';
+        }
+
+        // Bannière
+        const banner = document.getElementById('profile-warning-banner');
+        if (banner) {
+            let warnings = [];
+            if (meta.has_natinf_filter) warnings.push("Ce profil filtre automatiquement sur des natures d'infractions (NATINF) spécifiques.");
+            if (meta.has_custom_stats) warnings.push("Attention : l'affichage Web est simplifié. Reportez-vous au PDF pour les statistiques consolidées de ce profil.");
+            
+            if (warnings.length > 0) {
+                banner.innerHTML = warnings.join('<br>');
+                banner.style.display = 'block';
+            } else {
+                banner.style.display = 'none';
+            }
+        }
+    }
 
     // Stats Elements
     const valControles = document.getElementById('val-controles');
