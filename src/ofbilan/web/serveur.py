@@ -695,6 +695,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         if gdf_boundary.crs is None:
                             gdf_boundary.set_crs(epsg=2154, inplace=True)
                         gdf_boundary_wgs84 = gdf_boundary.to_crs("EPSG:4326")
+                        for col in gdf_boundary_wgs84.columns:
+                            if col != "geometry":
+                                gdf_boundary_wgs84[col] = gdf_boundary_wgs84[col].astype(str)
                         geojson_data = json.loads(gdf_boundary_wgs84.to_json())
                         with open(Path(project_root) / "geojson_success.log", "w", encoding="utf-8") as f_ok:
                             f_ok.write(f"Loaded successfully. Scale: {echelle}, Code: {code}, Params: {json.dumps(params)}\n")
