@@ -683,14 +683,27 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     if echelle == "pnf":
                         shp_path = Path(project_root) / "ref" / "programme" / "sig" / "PNF" / "aoa_2021_pnforets" / "AOA_2021_PNForets.shp"
                         gdf_boundary = gpd.read_file(shp_path)
+                        gdf_boundary.crs = "EPSG:2154"
+                        for col in gdf_boundary.columns:
+                            if col != "geometry":
+                                gdf_boundary[col] = gdf_boundary[col].astype(str)
                     else:
                         from ofbilan.cartographie.pochoir_helper import load_department_gdf
                         os.environ["BILANS_CARTO_ECHELLE"] = echelle
                         gdf_boundary = load_department_gdf(code, project_root=project_root)
                     if not gdf_boundary.empty:
+                        if gdf_boundary.crs is None:
+                            gdf_boundary.set_crs(epsg=2154, inplace=True)
                         gdf_boundary_wgs84 = gdf_boundary.to_crs("EPSG:4326")
                         geojson_data = json.loads(gdf_boundary_wgs84.to_json())
+                        with open(Path(project_root) / "geojson_success.log", "w", encoding="utf-8") as f_ok:
+                            f_ok.write(f"Loaded successfully. Scale: {echelle}, Code: {code}, Params: {json.dumps(params)}\n")
+                            f_ok.write(json.dumps(geojson_data)[:1000] + "\n")
                 except Exception as e:
+                    import traceback
+                    with open(Path(project_root) / "geojson_error.log", "w", encoding="utf-8") as f_err:
+                        f_err.write(f"Error loading boundary geojson: {e}\n")
+                        traceback.print_exc(file=f_err)
                     print(f"Error loading boundary geojson: {e}")
 
                 response_data = {
