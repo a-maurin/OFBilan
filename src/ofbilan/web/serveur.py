@@ -44,7 +44,18 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(WEB_DIR), **kwargs)
 
+    def handle(self):
+        try:
+            super().handle()
+        except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError) as e:
+            print(f"  [Réseau] Connexion interrompue par le navigateur ({e.__class__.__name__})")
+
     def do_GET(self):
+        if self.path == "/favicon.ico":
+            self.send_response(204)
+            self.end_headers()
+            return
+
         if self.path == "/api/profils":
             try:
                 import yaml
@@ -562,6 +573,38 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
                 # PVe : load_pve() enrichit déjà avec x/y via centroïdes communaux
                 if not df_pve.empty:
+                    # Fallback 1: utiliser les colonnes GPS brutes si présentes
+                    if "x" not in df_pve.columns:
+                        df_pve["x"] = pd.NA
+                    if "y" not in df_pve.columns:
+                        df_pve["y"] = pd.NA
+                        
+                    if "inf_gps_long" in df_pve.columns:
+                        df_pve["x"] = df_pve["x"].fillna(pd.to_numeric(df_pve["inf_gps_long"], errors="coerce"))
+                    if "inf_gps_lat" in df_pve.columns:
+                        df_pve["y"] = df_pve["y"].fillna(pd.to_numeric(df_pve["inf_gps_lat"], errors="coerce"))
+                        
+                    # Fallback 2: centroïdes des communes nationales si toujours vides
+                    missing_pve_mask = df_pve["x"].isna() | df_pve["y"].isna()
+                    if missing_pve_mask.any() and "INF-INSEE" in df_pve.columns:
+                        try:
+                            from ofbilan.common.chargeurs_donnees import load_communes_centroides
+                            cen_com = load_communes_centroides(project_root)
+                            if not cen_com.empty:
+                                insee_col = "code_insee" if "code_insee" in cen_com.columns else ("CODE_INSEE" if "CODE_INSEE" in cen_com.columns else "insee")
+                                lat_col = "latitude_centre" if "latitude_centre" in cen_com.columns else ("LATITUDE_CENTRE" if "LATITUDE_CENTRE" in cen_com.columns else "lat_centre")
+                                lon_col = "longitude_centre" if "longitude_centre" in cen_com.columns else ("LONGITUDE_CENTRE" if "LONGITUDE_CENTRE" in cen_com.columns else "lon_centre")
+                                
+                                if insee_col and lat_col and lon_col:
+                                    dict_lat = pd.to_numeric(cen_com.set_index(insee_col)[lat_col], errors="coerce").to_dict()
+                                    dict_lon = pd.to_numeric(cen_com.set_index(insee_col)[lon_col], errors="coerce").to_dict()
+                                    
+                                    pve_insee = df_pve.loc[missing_pve_mask, "INF-INSEE"].astype(str).str.extract(r"(\d{1,5})", expand=False).fillna("").str.zfill(5)
+                                    df_pve.loc[missing_pve_mask, "x"] = df_pve.loc[missing_pve_mask, "x"].fillna(pve_insee.map(dict_lon))
+                                    df_pve.loc[missing_pve_mask, "y"] = df_pve.loc[missing_pve_mask, "y"].fillna(pve_insee.map(dict_lat))
+                        except Exception as e:
+                            print(f"Exception fallback communes PVe: {e}")
+
                     x_col = "x" if "x" in df_pve.columns else None
                     y_col = "y" if "y" in df_pve.columns else None
                     if x_col and y_col:
