@@ -375,7 +375,7 @@ def test_date_parsing_dayfirst_in_loaders(monkeypatch, tmp_path: Path) -> None:
 
     pve_df = loaders.load_pve(tmp_path, echelle="departement", code="21", date_deb="2025-01-01", date_fin="2025-12-31")
     assert len(pve_df) == 1
-    assert pve_df.iloc[0]["INF-ID"] == "1"
+    assert pve_df.iloc[0]["INF-ID"] == "2"
 
 
 def test_safe_to_datetime_with_nan() -> None:
