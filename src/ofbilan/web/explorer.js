@@ -649,8 +649,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const markersGroup = L.layerGroup(); // Les points individuels sans cluster (si besoin de bascule)
     const markersClusterGroup = L.markerClusterGroup().addTo(map);
-    const proceduresGroup = L.layerGroup().addTo(map);
-    const pveGroup = L.layerGroup().addTo(map);
+    const proceduresGroup = L.markerClusterGroup({
+        iconCreateFunction: function(cluster) {
+            const count = cluster.getChildCount();
+            return L.divIcon({
+                html: `<div style="background-color:rgba(59, 130, 246, 0.85);border:2px solid white;border-radius:50%;text-align:center;color:white;font-weight:bold;line-height:26px;width:30px;height:30px;box-shadow: 0 1px 3px rgba(0,0,0,0.3);">${count}</div>`,
+                className: '',
+                iconSize: [30, 30]
+            });
+        }
+    }).addTo(map);
+
+    const pveGroup = L.markerClusterGroup({
+        iconCreateFunction: function(cluster) {
+            const count = cluster.getChildCount();
+            return L.divIcon({
+                html: `<div style="background-color:rgba(249, 115, 22, 0.85);border:2px solid white;border-radius:50%;text-align:center;color:white;font-weight:bold;line-height:26px;width:30px;height:30px;box-shadow: 0 1px 3px rgba(0,0,0,0.3);">${count}</div>`,
+                className: '',
+                iconSize: [30, 30]
+            });
+        }
+    }).addTo(map);
     let heatmapLayer = null;
 
     // Contrôle des couches
@@ -827,8 +846,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // Render procedure markers (if any)
             if (resN.procedures && resN.procedures.length > 0) {
                 resN.procedures.forEach(p => {
-                    const lat = parseFloat(p.y);
-                    const lng = parseFloat(p.x);
+                    let lat = parseFloat(p.y);
+                    let lng = parseFloat(p.x);
                     if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
                         let procColor = '#3B82F6';
                         const ptype = (p.type || '').toUpperCase();
@@ -903,8 +922,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // Render procedure markers N-1
             if (isCompare && resN1 && resN1.procedures && resN1.procedures.length > 0) {
                 resN1.procedures.forEach(p => {
-                    const lat = parseFloat(p.y);
-                    const lng = parseFloat(p.x);
+                    let lat = parseFloat(p.y);
+                    let lng = parseFloat(p.x);
                     if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
                         let procColor = '#3B82F6';
                         const ptype = (p.type || '').toUpperCase();
