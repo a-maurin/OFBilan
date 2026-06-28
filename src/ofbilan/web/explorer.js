@@ -115,23 +115,34 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
+        const activeSources = meta.sources || { point_ctrl: true, pej: true, pa: true, pve: true };
+        const hasPointCtrl = activeSources.point_ctrl !== false;
+
         // Griser les résultats de contrôles
         const resFilter = document.getElementById('resultats-filter');
         if (resFilter) {
-            resFilter.disabled = meta.disables_point_ctrl;
-            resFilter.style.opacity = meta.disables_point_ctrl ? '0.5' : '1';
-            resFilter.style.cursor = meta.disables_point_ctrl ? 'not-allowed' : '';
+            resFilter.disabled = !hasPointCtrl;
+            resFilter.style.opacity = hasPointCtrl ? '1' : '0.5';
+            resFilter.style.cursor = hasPointCtrl ? '' : 'not-allowed';
         }
 
         const conformiteCard = document.getElementById('chart-conformite')?.closest('.card');
-        const nbControlesCard = document.getElementById('val-controles')?.closest('.card');
-        
-        if (meta.disables_point_ctrl) {
-            if (conformiteCard) conformiteCard.style.opacity = '0.3';
-            if (nbControlesCard) nbControlesCard.style.opacity = '0.3';
-        } else {
-            if (conformiteCard) conformiteCard.style.opacity = '1';
-            if (nbControlesCard) nbControlesCard.style.opacity = '1';
+        if (conformiteCard) {
+            conformiteCard.style.opacity = hasPointCtrl ? '1' : '0.3';
+        }
+
+        const statCards = {
+            'point_ctrl': document.getElementById('val-controles')?.closest('.stat-card'),
+            'pej': document.getElementById('val-pej')?.closest('.stat-card'),
+            'pa': document.getElementById('val-pa')?.closest('.stat-card'),
+            'pve': document.getElementById('val-pve')?.closest('.stat-card')
+        };
+
+        for (const [sourceKey, cardEl] of Object.entries(statCards)) {
+            if (cardEl) {
+                const isEnabled = activeSources[sourceKey] !== false;
+                cardEl.style.opacity = isEnabled ? '1' : '0.3';
+            }
         }
 
         // Bannière
@@ -618,9 +629,9 @@ document.addEventListener('DOMContentLoaded', () => {
             inputCode.placeholder = 'ex : 21';
             codeHelper.textContent = 'Exemples : 21, 27, 39';
         } else if (val === 'region') {
-            inputCode.value = '27';
+            inputCode.value = 'r27';
             inputCode.placeholder = 'ex : r27';
-            codeHelper.textContent = 'Exemples : 27, 44 (ou r27, r44)';
+            codeHelper.textContent = 'Exemples : r27, r44';
         } else if (val === 'bmi') {
             inputCode.value = 'BMI-NEC';
             inputCode.placeholder = 'ex : BMI-NEC';
@@ -634,7 +645,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- LEAFLET MAP INITIALIZATION ---
     // France Center
-    const map = L.map('map', { preferCanvas: true }).setView([46.2276, 2.2137], 6);
+    const map = L.map('map', { 
+        preferCanvas: true,
+        zoomSnap: 0.25,
+        zoomDelta: 0.25,
+        wheelPxPerZoomLevel: 120
+    }).setView([46.2276, 2.2137], 6);
     
     // Création d'un volet dédié (pane) pour placer les procédures au-dessus des marqueurs de contrôle
     const procPane = map.createPane('proceduresPane');
@@ -648,9 +664,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }).addTo(map);
 
     const markersGroup = L.layerGroup(); // Les points individuels sans cluster (si besoin de bascule)
-    const markersClusterGroup = L.markerClusterGroup({ chunkedLoading: true }).addTo(map);
+    const markersClusterGroup = L.markerClusterGroup({ 
+        chunkedLoading: true,
+        disableClusteringAtZoom: 14,
+        maxClusterRadius: function (zoom) { return (zoom < 8) ? 80 : (zoom < 11) ? 50 : 30; }
+    }).addTo(map);
     const pejGroup = L.markerClusterGroup({
         chunkedLoading: true,
+        disableClusteringAtZoom: 14,
+        maxClusterRadius: function (zoom) { return (zoom < 8) ? 80 : (zoom < 11) ? 50 : 30; },
         iconCreateFunction: function(cluster) {
             const count = cluster.getChildCount();
             return L.divIcon({
@@ -663,6 +685,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const paGroup = L.markerClusterGroup({
         chunkedLoading: true,
+        disableClusteringAtZoom: 14,
+        maxClusterRadius: function (zoom) { return (zoom < 8) ? 80 : (zoom < 11) ? 50 : 30; },
         iconCreateFunction: function(cluster) {
             const count = cluster.getChildCount();
             return L.divIcon({
@@ -675,6 +699,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const pveGroup = L.markerClusterGroup({
         chunkedLoading: true,
+        disableClusteringAtZoom: 14,
+        maxClusterRadius: function (zoom) { return (zoom < 8) ? 80 : (zoom < 11) ? 50 : 30; },
         iconCreateFunction: function(cluster) {
             const count = cluster.getChildCount();
             return L.divIcon({
@@ -1187,34 +1213,84 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
 
-            // 3. Domaines d'Activité (Barres groupées)
+            // 3. Domaines d'Activité (Barres groupées ou empilées par département)
             if (chartDomains) {
                 chartDomains.destroy();
             }
+            
+            const isRegion = selectEchelle.value === 'region';
+            const getDomainTotal = (val) => typeof val === 'number' ? val : Object.values(val).reduce((sum, v) => sum + v, 0);
+
             const sortedDomainsN = Object.entries(chartData.domains || {})
-                .sort((a, b) => b[1] - a[1])
+                .sort((a, b) => getDomainTotal(b[1]) - getDomainTotal(a[1]))
                 .slice(0, 5);
             
             const domainsN1 = isCompare ? (resN1.charts.domains || {}) : null;
             const domainLabels = sortedDomainsN.map(d => splitLabel(d[0], 25));
 
-            const domainsDatasets = [{
-                label: 'Période N',
-                data: sortedDomainsN.map(d => d[1]),
-                backgroundColor: '#003A76',
-                borderRadius: 4,
-                barThickness: isCompare ? 8 : 12
-            }];
-
-            if (isCompare && domainsN1) {
-                const alignedN1 = sortedDomainsN.map(d => domainsN1[d[0]] || 0);
-                domainsDatasets.push({
-                    label: 'Période N-1',
-                    data: alignedN1,
-                    backgroundColor: '#93C5FD',
-                    borderRadius: 4,
-                    barThickness: 8
+            let domainsDatasets = [];
+            // Palette colorée distincte (Type D3 Category10) pour bien différencier les départements
+            const deptColorsDom = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'];
+            const deptColorsDomN1 = ['#aec7e8', '#ffbb78', '#98df8a', '#ff9896', '#c5b0d5', '#c49c94', '#f7b6d2', '#c7c7c7', '#dbdb8d', '#9edae5'];
+            
+            if (isRegion) {
+                const allDepts = new Set();
+                sortedDomainsN.forEach(([_, counts]) => {
+                    if (typeof counts === 'object') Object.keys(counts).forEach(d => allDepts.add(d));
                 });
+                const depts = Array.from(allDepts).sort();
+                
+                depts.forEach((dept, idx) => {
+                    domainsDatasets.push({
+                        label: `Période N - ${dept}`,
+                        data: sortedDomainsN.map(([_, counts]) => (counts[dept] || 0)),
+                        backgroundColor: deptColorsDom[idx % deptColorsDom.length],
+                        borderColor: '#ffffff',
+                        borderWidth: 1,
+                        stack: 'Stack N',
+                        borderRadius: 4,
+                        barThickness: isCompare ? 16 : 24
+                    });
+                });
+                
+                if (isCompare && domainsN1) {
+                    const deptsN1 = new Set();
+                    sortedDomainsN.forEach(([domain]) => {
+                        const counts = domainsN1[domain] || {};
+                        if (typeof counts === 'object') Object.keys(counts).forEach(d => deptsN1.add(d));
+                    });
+                    Array.from(deptsN1).sort().forEach((dept, idx) => {
+                        domainsDatasets.push({
+                            label: `Période N-1 - ${dept}`,
+                            data: sortedDomainsN.map(([domain]) => ((domainsN1[domain] || {})[dept] || 0)),
+                            backgroundColor: deptColorsDomN1[idx % deptColorsDomN1.length],
+                            borderColor: '#ffffff',
+                            borderWidth: 1,
+                            stack: 'Stack N-1',
+                            borderRadius: 4,
+                            barThickness: 16
+                        });
+                    });
+                }
+            } else {
+                domainsDatasets.push({
+                    label: 'Période N',
+                    data: sortedDomainsN.map(d => getDomainTotal(d[1])),
+                    backgroundColor: '#003A76',
+                    borderRadius: 4,
+                    barThickness: isCompare ? 8 : 12
+                });
+
+                if (isCompare && domainsN1) {
+                    const alignedN1 = sortedDomainsN.map(d => getDomainTotal(domainsN1[d[0]] || 0));
+                    domainsDatasets.push({
+                        label: 'Période N-1',
+                        data: alignedN1,
+                        backgroundColor: '#93C5FD',
+                        borderRadius: 4,
+                        barThickness: 8
+                    });
+                }
             }
 
             const domainTotalLines = domainLabels.reduce((sum, lines) => sum + lines.length, 0);
@@ -1248,14 +1324,15 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     },
                     plugins: {
-                        legend: { display: isCompare, position: 'top', labels: { boxWidth: 10, font: { size: 9 } } },
+                        legend: { display: isCompare || isRegion, position: 'top', labels: { boxWidth: 10, font: { size: 9 } } },
                         tooltip: {
                             callbacks: tooltipPercentageCallback
                         }
                     },
                     scales: {
-                        x: { beginAtZero: true, ticks: { font: { size: 9 } } },
+                        x: { stacked: isRegion, beginAtZero: true, ticks: { font: { size: 9 } } },
                         y: { 
+                            stacked: isRegion,
                             grid: { display: false },
                             ticks: { autoSkip: false, font: { size: 9 } } 
                         }
@@ -1263,34 +1340,80 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
 
-            // 4. Thématiques (Barres groupées)
+            // 4. Thématiques (Barres groupées ou empilées)
             if (chartThemes) {
                 chartThemes.destroy();
             }
             const sortedThemesN = Object.entries(chartData.themes || {})
-                .sort((a, b) => b[1] - a[1])
+                .sort((a, b) => getDomainTotal(b[1]) - getDomainTotal(a[1]))
                 .slice(0, 5);
             
             const themesN1 = isCompare ? (resN1.charts.themes || {}) : null;
             const themeLabels = sortedThemesN.map(d => splitLabel(d[0], 25));
 
-            const themesDatasets = [{
-                label: 'Période N',
-                data: sortedThemesN.map(d => d[1]),
-                backgroundColor: '#4296CE',
-                borderRadius: 4,
-                barThickness: isCompare ? 8 : 12
-            }];
-
-            if (isCompare && themesN1) {
-                const alignedN1 = sortedThemesN.map(d => themesN1[d[0]] || 0);
-                themesDatasets.push({
-                    label: 'Période N-1',
-                    data: alignedN1,
-                    backgroundColor: '#FCA5A5',
-                    borderRadius: 4,
-                    barThickness: 8
+            let themesDatasets = [];
+            // Palette colorée distincte (Type D3 Category10) pour bien différencier les départements
+            const deptColorsTh = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'];
+            const deptColorsThN1 = ['#aec7e8', '#ffbb78', '#98df8a', '#ff9896', '#c5b0d5', '#c49c94', '#f7b6d2', '#c7c7c7', '#dbdb8d', '#9edae5'];
+            
+            if (isRegion) {
+                const allDepts = new Set();
+                sortedThemesN.forEach(([_, counts]) => {
+                    if (typeof counts === 'object') Object.keys(counts).forEach(d => allDepts.add(d));
                 });
+                const depts = Array.from(allDepts).sort();
+                
+                depts.forEach((dept, idx) => {
+                    themesDatasets.push({
+                        label: `Période N - ${dept}`,
+                        data: sortedThemesN.map(([_, counts]) => (counts[dept] || 0)),
+                        backgroundColor: deptColorsTh[idx % deptColorsTh.length],
+                        borderColor: '#ffffff',
+                        borderWidth: 1,
+                        stack: 'Stack N',
+                        borderRadius: 4,
+                        barThickness: isCompare ? 16 : 24
+                    });
+                });
+                
+                if (isCompare && themesN1) {
+                    const deptsN1 = new Set();
+                    sortedThemesN.forEach(([theme]) => {
+                        const counts = themesN1[theme] || {};
+                        if (typeof counts === 'object') Object.keys(counts).forEach(d => deptsN1.add(d));
+                    });
+                    Array.from(deptsN1).sort().forEach((dept, idx) => {
+                        themesDatasets.push({
+                            label: `Période N-1 - ${dept}`,
+                            data: sortedThemesN.map(([theme]) => ((themesN1[theme] || {})[dept] || 0)),
+                            backgroundColor: deptColorsThN1[idx % deptColorsThN1.length],
+                            borderColor: '#ffffff',
+                            borderWidth: 1,
+                            stack: 'Stack N-1',
+                            borderRadius: 4,
+                            barThickness: 16
+                        });
+                    });
+                }
+            } else {
+                themesDatasets.push({
+                    label: 'Période N',
+                    data: sortedThemesN.map(d => getDomainTotal(d[1])),
+                    backgroundColor: '#4296CE',
+                    borderRadius: 4,
+                    barThickness: isCompare ? 8 : 12
+                });
+
+                if (isCompare && themesN1) {
+                    const alignedN1 = sortedThemesN.map(d => getDomainTotal(themesN1[d[0]] || 0));
+                    themesDatasets.push({
+                        label: 'Période N-1',
+                        data: alignedN1,
+                        backgroundColor: '#FCA5A5',
+                        borderRadius: 4,
+                        barThickness: 8
+                    });
+                }
             }
 
             const themeTotalLines = themeLabels.reduce((sum, lines) => sum + lines.length, 0);
@@ -1324,14 +1447,15 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     },
                     plugins: {
-                        legend: { display: isCompare, position: 'top', labels: { boxWidth: 10, font: { size: 9 } } },
+                        legend: { display: isCompare || isRegion, position: 'top', labels: { boxWidth: 10, font: { size: 9 } } },
                         tooltip: {
                             callbacks: tooltipPercentageCallback
                         }
                     },
                     scales: {
-                        x: { beginAtZero: true, ticks: { font: { size: 9 } } },
+                        x: { stacked: isRegion, beginAtZero: true, ticks: { font: { size: 9 } } },
                         y: { 
+                            stacked: isRegion,
                             grid: { display: false },
                             ticks: { autoSkip: false, font: { size: 9 } } 
                         }

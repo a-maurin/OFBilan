@@ -65,34 +65,59 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if self.path == "/api/profils":
             try:
                 import yaml
+                def yaml_include_dummy_constructor(loader, node):
+                    return []
+                try:
+                    yaml.add_constructor("!include", yaml_include_dummy_constructor, Loader=yaml.SafeLoader)
+                except Exception:
+                    pass
                 project_root = Path(__file__).resolve().parents[3]
                 profiles_dir = project_root / "config" / "profils_bilan"
-                profils_list = [{"value": "global", "label": "Tous (Sans profil)", "disables_point_ctrl": False, "has_action_filter": False, "has_natinf_filter": False, "has_custom_stats": False}]
+                profils_list = [{
+                    "value": "global",
+                    "label": "Tous (Sans profil)",
+                    "sources": {"point_ctrl": True, "pej": True, "pa": True, "pve": True},
+                    "has_action_filter": False,
+                    "has_natinf_filter": False,
+                    "has_custom_stats": False
+                }]
                 if profiles_dir.exists():
-                    import re
                     for yaml_file in profiles_dir.glob("*.yaml"):
                         try:
                             content = yaml_file.read_text(encoding="utf-8")
-                            m_id = re.search(r'^id:\s*"?([^"\n]+)"?', content, re.MULTILINE)
-                            m_label = re.search(r'^label:\s*"?([^"\n]+)"?', content, re.MULTILINE)
-                            if m_id and m_label:
-                                val_id = m_id.group(1).strip()
-                                # Eviter les doublons si 'global' est déjà dans la liste
+                            data = yaml.safe_load(content)
+                            if not data:
+                                continue
+                            val_id = data.get("id")
+                            val_label = data.get("label")
+                            if val_id and val_label:
                                 if any(p["value"] == val_id for p in profils_list):
                                     continue
                                     
-                                disables_point_ctrl = bool(re.search(r'point_ctrl:\s*false', content))
+                                sources_cfg = data.get("sources", {})
+                                sources = {
+                                    "point_ctrl": sources_cfg.get("point_ctrl", True),
+                                    "pej": sources_cfg.get("pej", True),
+                                    "pa": sources_cfg.get("pa", True),
+                                    "pve": sources_cfg.get("pve", True)
+                                }
+                                # Rétrocompatibilité avec point_ctrl au premier niveau
+                                if data.get("point_ctrl") is False:
+                                    sources["point_ctrl"] = False
+                                    
                                 has_action_filter = False
-                                m_filter_type = re.search(r'^\s*type:\s*"?([^"\n]+)"?', content, re.MULTILINE)
-                                if m_filter_type and m_filter_type.group(1).strip() != "all":
+                                filter_cfg = data.get("filter", {})
+                                if filter_cfg and filter_cfg.get("type") != "all":
                                     has_action_filter = True
+                                
+                                import re
                                 has_natinf_filter = bool(re.search(r'natinf_(pej|pve):\s*(?!\[\])(.*)', content))
-                                has_custom_stats = bool(re.search(r'^\s*adapter:\s*\w+', content, re.MULTILINE))
+                                has_custom_stats = "adapter" in data
                                 
                                 profils_list.append({
                                     "value": val_id,
-                                    "label": m_label.group(1).strip(),
-                                    "disables_point_ctrl": disables_point_ctrl,
+                                    "label": val_label,
+                                    "sources": sources,
                                     "has_action_filter": has_action_filter,
                                     "has_natinf_filter": has_natinf_filter,
                                     "has_custom_stats": has_custom_stats
@@ -480,32 +505,90 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     for k, v in df_pej["type_usager"].astype(str).fillna("Non renseigné").str.strip().value_counts().items():
                         if k and k.lower() != 'nan': usagers_counts[k] = usagers_counts.get(k, 0) + int(v)
 
-                domains_counts = {}
-                s_dom = []
-                if not df_pts.empty and "domaine" in df_pts.columns: s_dom.append(df_pts["domaine"].astype(str))
-                if not df_pej.empty and "DOMAINE" in df_pej.columns: s_dom.append(df_pej["DOMAINE"].astype(str))
-                if not df_pa.empty and "DOMAINE" in df_pa.columns: s_dom.append(df_pa["DOMAINE"].astype(str))
-                if s_dom:
-                    for k, v in pd.concat(s_dom).fillna("Hors domaine").str.strip().value_counts().items():
-                        if k and k.lower() != 'nan': domains_counts[k] = int(v)
 
+                def get_dept_series(df):
+                    if df.empty:
+                        return pd.Series(dtype=str)
+                    for c in ["num_depart", "dept", "code_dept", "DEPT", "departement", "DEP", "DPT", "CODE_DEP"]:
+                        if c in df.columns:
+                            return df[c].astype(str).str.zfill(2).str[:2]
+                    for c in ["ENTITE_ORIGINE_PROCEDURE", "entite_origine_procedure"]:
+                        if c in df.columns:
+                            s = df[c].astype(str).str.extract(r'(\d+)')[0]
+                            s = s.where(s.notna() & (s.str.lower() != "nan"), None)
+                            return s.str.zfill(2).str[:2]
+                    for c in ["insee_comm", "insee_commun", "insee_com", "INF-INSEE"]:
+                        if c in df.columns:
+                            s = df[c].astype(str)
+                            s = s.where(s.str.lower() != "nan", None)
+                            return s.str.zfill(5).str[:2]
+                    return pd.Series("N/A", index=df.index)
+
+                domains_counts = {}
                 themes_counts = {}
-                s_theme = []
-                if not df_pts.empty:
-                    c = "theme" if "theme" in df_pts.columns else ("type_actio" if "type_actio" in df_pts.columns else None)
-                    if c: s_theme.append(df_pts[c].astype(str))
-                if not df_pej.empty:
-                    c = "THEME" if "THEME" in df_pej.columns else ("TYPE_ACTION" if "TYPE_ACTION" in df_pej.columns else None)
-                    if c: s_theme.append(df_pej[c].astype(str))
-                if not df_pa.empty:
-                    c = "THEME" if "THEME" in df_pa.columns else ("TYPE_ACTION" if "TYPE_ACTION" in df_pa.columns else None)
-                    if c: s_theme.append(df_pa[c].astype(str))
-                if not df_pve.empty:
-                    c = "theme" if "theme" in df_pve.columns else ("THEME" if "THEME" in df_pve.columns else None)
-                    if c: s_theme.append(df_pve[c].astype(str))
-                if s_theme:
-                    for k, v in pd.concat(s_theme).fillna("Hors thème").str.strip().value_counts().items():
-                        if k and k.lower() != 'nan': themes_counts[k] = int(v)
+
+                if echelle == "region":
+                    dom_records = []
+                    for df_tmp, col_dom in [(df_pts, "domaine"), (df_pej, "DOMAINE"), (df_pa, "DOMAINE")]:
+                        if not df_tmp.empty and col_dom in df_tmp.columns:
+                            dept_s = get_dept_series(df_tmp)
+                            dom_s = df_tmp[col_dom].astype(str).fillna("Hors domaine").str.strip()
+                            df_merge = pd.DataFrame({"dom": dom_s, "dept": dept_s})
+                            dom_records.append(df_merge)
+                    
+                    if dom_records:
+                        df_all_dom = pd.concat(dom_records)
+                        df_all_dom = df_all_dom[df_all_dom["dom"].str.lower() != 'nan']
+                        for dom, group in df_all_dom.groupby("dom"):
+                            dept_counts = group["dept"].value_counts().to_dict()
+                            domains_counts[dom] = {k: int(v) for k, v in dept_counts.items() if str(k).strip() and str(k).lower() != 'nan'}
+
+                    theme_records = []
+                    for df_tmp, cols_th in [
+                        (df_pts, ["theme", "type_actio"]),
+                        (df_pej, ["THEME", "TYPE_ACTION"]),
+                        (df_pa, ["THEME", "TYPE_ACTION"]),
+                        (df_pve, ["theme", "THEME"])
+                    ]:
+                        if df_tmp.empty: continue
+                        col_used = next((c for c in cols_th if c in df_tmp.columns), None)
+                        if col_used:
+                            dept_s = get_dept_series(df_tmp)
+                            th_s = df_tmp[col_used].astype(str).fillna("Hors thème").str.strip()
+                            df_merge = pd.DataFrame({"theme": th_s, "dept": dept_s})
+                            theme_records.append(df_merge)
+                    
+                    if theme_records:
+                        df_all_th = pd.concat(theme_records)
+                        df_all_th = df_all_th[df_all_th["theme"].str.lower() != 'nan']
+                        for th, group in df_all_th.groupby("theme"):
+                            dept_counts = group["dept"].value_counts().to_dict()
+                            themes_counts[th] = {k: int(v) for k, v in dept_counts.items() if str(k).strip() and str(k).lower() != 'nan'}
+                else:
+                    s_dom = []
+                    if not df_pts.empty and "domaine" in df_pts.columns: s_dom.append(df_pts["domaine"].astype(str))
+                    if not df_pej.empty and "DOMAINE" in df_pej.columns: s_dom.append(df_pej["DOMAINE"].astype(str))
+                    if not df_pa.empty and "DOMAINE" in df_pa.columns: s_dom.append(df_pa["DOMAINE"].astype(str))
+                    if s_dom:
+                        for k, v in pd.concat(s_dom).fillna("Hors domaine").str.strip().value_counts().items():
+                            if k and k.lower() != 'nan': domains_counts[k] = int(v)
+    
+                    s_theme = []
+                    if not df_pts.empty:
+                        c = "theme" if "theme" in df_pts.columns else ("type_actio" if "type_actio" in df_pts.columns else None)
+                        if c: s_theme.append(df_pts[c].astype(str))
+                    if not df_pej.empty:
+                        c = "THEME" if "THEME" in df_pej.columns else ("TYPE_ACTION" if "TYPE_ACTION" in df_pej.columns else None)
+                        if c: s_theme.append(df_pej[c].astype(str))
+                    if not df_pa.empty:
+                        c = "THEME" if "THEME" in df_pa.columns else ("TYPE_ACTION" if "TYPE_ACTION" in df_pa.columns else None)
+                        if c: s_theme.append(df_pa[c].astype(str))
+                    if not df_pve.empty:
+                        c = "theme" if "theme" in df_pve.columns else ("THEME" if "THEME" in df_pve.columns else None)
+                        if c: s_theme.append(df_pve[c].astype(str))
+                    if s_theme:
+                        for k, v in pd.concat(s_theme).fillna("Hors thème").str.strip().value_counts().items():
+                            if k and k.lower() != 'nan': themes_counts[k] = int(v)
 
                 monthly_controls = [0] * 12
                 monthly_infractions = [0] * 12
