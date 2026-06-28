@@ -28,6 +28,9 @@ periode_analyse:
     type: auto
     seuil_jours: 366
 
+analyses:
+  distinction_coeur_hors_coeur: true
+
 options:
   pnf:
     label: "Analyse PNF (ensemble + cœur)"

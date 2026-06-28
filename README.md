@@ -2,34 +2,33 @@
 
 # OFBilan
 
-Outil d'aide à la décision et de communication permettant de générer automatiquement des bilans d'activité cartographiés au format PDF à partir des données de contrôles (OSCEAN) et des procédures (PVe / PEJ / PA) de l'Office Français de la Biodiversité (OFB).
+Outil d'aide à la décision et de communication qui s'articule autour de deux piliers à partir des données de contrôles (OSCEAN) et des procédures (PVe / PEJ / PA) de l'Office Français de la Biodiversité (OFB) :
+1. **L'exploration dynamique des données** via une interface web interactive.
+2. **La génération automatisée de bilans cartographiés** au format PDF.
 
 ---
 
 ## Usages et fonctionnalités métier
 
-### 1. Des formats de restitution adaptés
-* **Rapports PDF détaillés** : Documents complets avec indicateurs, graphiques de répartition et listes de procédures conformes à la charte graphique de l'OFB.
-* **Mode Brochure A4 (Recto-Verso)** : Généré automatiquement pour le profil de synthèse PA/PJ. Il produit un document de 4 pages au format paysage, pour l'impression et la distribution physique.
-* **Double Périmètre de Diffusion** :
-  * **Interne** : Contient les données sensibles liées aux procédures (numéros de dossier, localisation précise des infractions).
-  * **Externe** : Masque les données sensibles pour une transmission sécurisée aux partenaires institutionnels ou au grand public.
+### 1. Exploration dynamique des données (OFBilan Explorer)
+L'interface graphique intègre un explorateur web interactif permettant d'analyser la base de données à la volée :
+* **Cartographie interactive (Leaflet.js)** : Visualisation géographique précise des points de contrôle OSCEAN.
+* **Tableaux de bord (Chart.js)** : Graphiques dynamiques affichant la répartition par résultat de contrôle et les domaines d'activité les plus contrôlés.
+* **Filtrage multicritères** : Exploration instantanée par période, échelle spatiale (département, région, BMI), profil thématique et type d'usager.
+* **Indicateurs de synthèse** : Comptage immédiat des contrôles réels, procédures pénales et administratives adaptées.
 
-### 2. Catalogue de profils de bilans prêts à l'emploi
-Plus de 35 profils configurables permettent de cibler précisément un sujet ou un territoire :
-* **Bilan Global** : Une vision consolidée de toute l'activité du service.
-* **Synthèse d'Activité PA / PJ** : Synthèse des activités de Police Administrative et Police Judiciaire, avec édition automatique de la plaquette de communication (brochure).
-* **Bilans Thématiques** : Chasse, Agrainage, Pêche, Sécheresse, Espèces Protégées, Continuité Écologique, Travaux, Zones Humides, Pollutions, etc.
-* **Bilans par Usagers** : Possibilité de cibler un public spécifique (ex. Agriculteurs, Particuliers, Collectivités) pour analyser la répartition des contrôles et leur conformité.
+### 2. Génération de bilans PDF cartographiés
+Le programme produit automatiquement des rapports complets et formatés (graphiques, indicateurs, procédures) :
+* **Catalogue de +35 profils prêts à l'emploi** : Bilans globaux, Synthèses d'activité PA/PJ, Bilans Thématiques (Chasse, Eau, Espèces, Pollutions...), et Bilans ciblés par Usagers.
+* **Des formats de restitution adaptés** : 
+  * *Rapports détaillés* conformes à la charte graphique OFB.
+  * *Mode Brochure A4 (Recto-Verso)* pour la communication physique (dépliant de 4 pages).
+* **Double Périmètre de Diffusion** : Génération de versions *Internes* (données complètes et sensibles) et *Externes* (masquage des informations confidentielles pour les partenaires).
 
-### 3. Adaptation spatiale et cartographie dynamique
-* **Multi-Échelles** : Génération de bilans pour n'importe quel département, région administrative, ou à l'échelle nationale (en cours d'implémentation)
-* **Intégration des Brigades Mobiles d'Intervention (BMI)** : Prise en charge native des secteurs géographiques des BMI (ex. `BMI-NEC`, `BMI-SO`, `BMI-SE`, `BMI-NO`).
-* **Cartographie QGIS Automatisée** : 
-  * Adaptation dynamique de l'emprise de la carte (zoom automatique sur le département, la région ou la BMI sélectionnée).
-  * Application d'un pochoir de masquage pour mettre en valeur le territoire ciblé.
-  * Ajout automatique de couches vectorielles selon le profil (ex. zonage cœur/adhésion pour le PNF, périmètre TUB pour l'agrainage).
-  * *Mécanisme de repli* : Si QGIS n'est pas disponible sur le poste, le bilan PDF est tout de même généré (seules les cartes sont omises), garantissant la continuité du service.
+### 3. Production cartographique QGIS intégrée
+* **Multi-Échelles** : Analyse et rendu de cartes pour n'importe quel département, région administrative, ou BMI.
+* **Cartographie Automatisée** : Adaptation dynamique de l'emprise, application d'un pochoir de mise en valeur territoriale, et ajout ciblé de couches métier selon le profil choisi.
+* **Mécanisme de repli** : Si QGIS n'est pas disponible, les bilans textuels/graphiques PDF restent entièrement générés sans bloquer le processus.
 
 ---
 
@@ -52,7 +51,7 @@ Une interface utilisateur est disponible pour configurer et générer vos bilans
   * Possibilité d'intégrer des cartes personnalisées depuis votre disque en indiquant leur chemin absolu.
   * Suivi du traitement en temps réel dans une console intégrée et téléchargement immédiat du PDF généré.
 
-* **Explorateur de données interactif (OFBilan Explorer)** :
+* **Explorateur de données interactif** :
   * Accessible directement depuis l'interface via l'onglet de navigation dédié.
   * **Cartographie interactive (Leaflet.js)** : Visualisation géographique des points de contrôle OSCEAN sur le territoire sélectionné.
   * **Tableaux de bord (Chart.js)** : Graphiques dynamiques affichant la répartition par résultat de contrôle et le Top 5 des domaines d'activité les plus contrôlés.
@@ -60,7 +59,7 @@ Une interface utilisateur est disponible pour configurer et générer vos bilans
   * **Filtrage à la volée** : Exploration rapide de la base de données OSCEAN par période, échelle spatiale et type d'usager avec rafraîchissement instantané sans génération de PDF.
 
 ### 2. Lancement en ligne de commande (CLI & mode interactif)
-L'assistant interactif classique en mode console vous guide pas-à-pas :
+L'assistant interactif  en mode console vous guide pas-à-pas :
 
 * **Avec génération automatique des cartes (QGIS requis)** :
   Double-cliquez sur `lancer_bilans_qgis.bat` (Windows) ou lancez dans votre console :

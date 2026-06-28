@@ -244,6 +244,16 @@
                         </select>
                     </div>
 
+                    <!-- Filtre Département PNF -->
+                    <div id="pnf-dept-container" class="form-group hidden" style="background: #f0fdf4; padding: 8px; border-radius: 6px; border: 1px solid #bbf7d0; margin-bottom: 12px !important;">
+                        <label for="pnf-dept-select" style="font-weight: 600; color: #166534;">Département (PNF)</label>
+                        <select id="pnf-dept-select" name="pnf_dept" style="width: 100%; border-color: #86efac; font-weight: 500;">
+                            <option value="">Tous (Total PNF)</option>
+                            <option value="21">Côte-d'Or (21)</option>
+                            <option value="52">Haute-Marne (52)</option>
+                        </select>
+                    </div>
+
                     <!-- Période temporelle -->
                     <div class="form-row">
                         <div class="form-group">
@@ -285,6 +295,7 @@
                                 <option value="region">Région</option>
                                 <option value="bmi">BMI (Interrégional)</option>
                                 <option value="national">National</option>
+                                <option value="pnf">PNF (Parc National)</option>
                             </select>
                         </div>
                         <div class="form-group">

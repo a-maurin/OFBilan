@@ -138,9 +138,40 @@ document.addEventListener('DOMContentLoaded', () => {
         const banner = document.getElementById('profile-warning-banner');
         if (banner) {
             let warnings = [];
-            if (meta.has_natinf_filter) warnings.push("Ce profil filtre automatiquement sur des natures d'infractions (NATINF) spécifiques.");
+            if (meta.has_natinf_filter) {
+                warnings.push("Ce profil cible un nombre restreint de procédures et verrouille la sélection des thèmes et actions.");
+            }
             if (meta.has_custom_stats) warnings.push("Attention : l'affichage Web est simplifié. Reportez-vous au PDF pour les statistiques consolidées de ce profil.");
             
+            // Logique PNF : Forcer l'échelle et bloquer le code géographique
+            const pnfDeptContainer = document.getElementById('pnf-dept-container');
+            if (val === 'pnf') {
+                if (selectEchelle) {
+                    selectEchelle.value = 'pnf';
+                    selectEchelle.disabled = true;
+                }
+                if (inputCode) {
+                    inputCode.value = '';
+                    inputCode.disabled = true;
+                    inputCode.placeholder = 'Dép. 21 et 52';
+                }
+                if (btnToggleCodes) btnToggleCodes.disabled = true;
+                if (pnfDeptContainer) pnfDeptContainer.classList.remove('hidden');
+                warnings.push("Le périmètre géographique est verrouillé sur le Parc National de Forêts (Départements 21 et 52).");
+            } else {
+                if (selectEchelle) {
+                    selectEchelle.disabled = false;
+                    // Reset to default if it was pnf
+                    if (selectEchelle.value === 'pnf') selectEchelle.value = 'departement';
+                }
+                if (inputCode) {
+                    inputCode.disabled = false;
+                    inputCode.placeholder = 'Rechercher ou sélectionner...';
+                }
+                if (btnToggleCodes) btnToggleCodes.disabled = false;
+                if (pnfDeptContainer) pnfDeptContainer.classList.add('hidden');
+            }
+
             if (warnings.length > 0) {
                 banner.innerHTML = warnings.join('<br>');
                 banner.style.display = 'block';
@@ -654,8 +685,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const debEl = isComparePeriod ? compareDateDebEl : dateDebEl;
             const finEl = isComparePeriod ? compareDateFinEl : dateFinEl;
             const selectProfil = document.getElementById('profil-select');
+            const pnfDeptEl = document.getElementById('pnf-dept-select');
             return {
                 profil: selectProfil ? selectProfil.value : 'global',
+                pnf_dept: pnfDeptEl ? pnfDeptEl.value : '',
                 'date-deb': debEl ? debEl.value : '',
                 'date-fin': finEl ? finEl.value : '',
                 echelle: selectEchelle.value,

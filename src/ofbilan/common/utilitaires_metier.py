@@ -55,6 +55,8 @@ def get_departements_pour_perimetre(echelle: str, code: str) -> list[str]:
         return list(filters.get("departements", []))
     if echelle_norm == "national":
         return ["FR"]
+    if echelle_norm == "pnf":
+        return ["21", "52"]
     return []
 
 
@@ -1622,36 +1624,36 @@ def build_tab_resultats_controles(
         is_coeur = z.eq("Coeur_PNF")
         is_hors = ~is_coeur
 
-        def _coeur_hors_txt(mask: pd.Series) -> str:
+        def _coeur_hors_row(mask: pd.Series) -> dict[str, int]:
             c = int((mask & is_coeur).sum())
             h = int((mask & is_hors).sum())
-            return f"Cœur: {c} / Aire d'adhésion: {h}"
+            return {"coeur": c, "aoa": h}
 
         details_rows = [
             {
                 "resultat": "Conforme",
                 "nb": nb_conf,
-                "coeur_hors_coeur": _coeur_hors_txt(r_norm.eq("Conforme")),
+                **_coeur_hors_row(r_norm.eq("Conforme")),
             },
             {
                 "resultat": "Non-conforme",
                 "nb": nb_nc,
-                "coeur_hors_coeur": _coeur_hors_txt(r_norm.isin(["Infraction", "Manquement"])),
+                **_coeur_hors_row(r_norm.isin(["Infraction", "Manquement"])),
             },
             {
                 "resultat": "    Dont manquement",
                 "nb": nb_manq,
-                "coeur_hors_coeur": _coeur_hors_txt(r_norm.eq("Manquement")),
+                **_coeur_hors_row(r_norm.eq("Manquement")),
             },
             {
                 "resultat": "    Dont infraction",
                 "nb": nb_inf,
-                "coeur_hors_coeur": _coeur_hors_txt(r_norm.eq("Infraction")),
+                **_coeur_hors_row(r_norm.eq("Infraction")),
             },
         ]
         if nb_en_attente > 0:
             details_rows.append(
-                {"resultat": "En attente", "nb": nb_en_attente, "coeur_hors_coeur": "n.d."}
+                {"resultat": "En attente", "nb": nb_en_attente, "coeur": 0, "aoa": 0}
             )
     else:
         details_rows = [

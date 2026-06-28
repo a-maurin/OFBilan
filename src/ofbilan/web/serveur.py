@@ -434,6 +434,34 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 except Exception:
                     total_pve = 0
 
+                # 4.bis. Restriction spatiale si echelle == "pnf"
+                if echelle == "pnf":
+                    import logging
+                    from ofbilan.engine.orchestrateur_profils import _apply_restrict_geo_pnf, _coalesced_insee_for_pnf_mask
+                    log = logging.getLogger(__name__)
+                    df_pts, df_pej, df_pa, df_pve = _apply_restrict_geo_pnf(
+                        df_pts, df_pej, df_pa, df_pve, project_root, log
+                    )
+                    
+                    # Filtre additionnel sur le département pour le PNF
+                    pnf_dept = params.get("pnf_dept", "")
+                    if pnf_dept in ("21", "52"):
+                        def _filter_by_dept(df):
+                            if df.empty:
+                                return df
+                            insee_s = _coalesced_insee_for_pnf_mask(df)
+                            return df[insee_s.notna() & insee_s.astype(str).str.startswith(pnf_dept)].copy()
+                            
+                        df_pts = _filter_by_dept(df_pts)
+                        df_pej = _filter_by_dept(df_pej)
+                        df_pa = _filter_by_dept(df_pa)
+                        df_pve = _filter_by_dept(df_pve)
+
+                    total_controles = len(df_pts)
+                    total_pej = len(df_pej)
+                    total_pa = len(df_pa)
+                    total_pve = len(df_pve)
+
                 # 5. Calcul des répartitions statistiques (Combiné sur toutes les sources activées)
                 results_counts = {"Conforme": 0, "Non-conforme": 0, "En attente": 0}
                 if "resultat" in df_pts.columns and not df_pts.empty:
@@ -651,9 +679,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 
                 geojson_data = None
                 try:
-                    from ofbilan.cartographie.pochoir_helper import load_department_gdf
-                    os.environ["BILANS_CARTO_ECHELLE"] = echelle
-                    gdf_boundary = load_department_gdf(code, project_root=project_root)
+                    import geopandas as gpd
+                    if echelle == "pnf":
+                        shp_path = Path(project_root) / "ref" / "programme" / "sig" / "PNF" / "aoa_2021_pnforets" / "AOA_2021_PNForets.shp"
+                        gdf_boundary = gpd.read_file(shp_path)
+                    else:
+                        from ofbilan.cartographie.pochoir_helper import load_department_gdf
+                        os.environ["BILANS_CARTO_ECHELLE"] = echelle
+                        gdf_boundary = load_department_gdf(code, project_root=project_root)
                     if not gdf_boundary.empty:
                         gdf_boundary_wgs84 = gdf_boundary.to_crs("EPSG:4326")
                         geojson_data = json.loads(gdf_boundary_wgs84.to_json())
