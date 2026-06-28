@@ -4,6 +4,32 @@ Toutes les modifications notables apportées au projet **OFBilan** depuis la ver
 
 ---
 
+## [v1.0.2] - 2026-06-28 : Optimisations de l'Explorer et de la génération PDF
+
+Cette version se concentre sur l'amélioration des performances de l'interface "Explorer", la correction de bugs serveur, et l'enrichissement des fonctionnalités cartographiques.
+
+### Explorer et Visualisation
+* **Séparation des couches cartographiques** : Division des cartes en trois couches distinctes ("Contrôles", "PA/PEJ", et "PVe").
+* **Optimisation des performances** : Amélioration significative du temps de chargement initial.
+* **Correction des filtres** : 
+  * Résolution des problèmes de détection des PEJ pour le profil "Produits phytopharmaceutiques".
+  * Correction de l'outil de filtrage "type d'action".
+* **Ajustements UI** : Renommage de "Localisation des contrôles" en "Localisation des données" et correction du rognage CSS du bouton "Édition PDF".
+
+### Serveur web et Démarrage
+* **Lancement intelligent du navigateur** : Le script `lancer_gui.bat` attend désormais la fin du préchargement en mémoire avant d'ouvrir le navigateur.
+* **Stabilité du serveur** : Gestion de la requête `favicon.ico` pour éviter les erreurs de logs et de threads.
+
+### Génération PDF, Cartographie et Profils
+* **Cartes N-1** : Prise en charge des cartes de l'année précédente dans le moteur d'export.
+* **Profils thématiques** : Implémentation du profil d'analyse PPP et de la structure de rapport régionale associée.
+* **Fiabilisation des tests (CI)** : Correction des assertions de casse et résolution de l'erreur du profil "sécheresse" désactivé.
+
+### Documentation
+* **Mise à jour du README** : Description exhaustive des fonctionnalités actuelles d'exploration dynamique et de génération de rapports PDF.
+
+---
+
 ## [v1.0.1] - 2026-06-24 : Visualisation cartographique interactive (Explorer) & Autocomplétion des filtres
 
 Cette version apporte des fonctionnalités de visualisation de données et améliore l'expérience utilisateur dans la saisie des filtres.

@@ -824,7 +824,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             color: '#FFFFFF',
                             weight: 1.5,
                             opacity: 1,
-                            fillOpacity: 0.8
+                            fillOpacity: 1
                         });
 
                         const popupContent = `
@@ -880,7 +880,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             radius: 6,
                             color: procColor,
                             fillColor: procColor,
-                            fillOpacity: 0.7,
+                            fillOpacity: 1,
                             weight: 1.5,
                             interactive: true,
                             pane: 'proceduresPane'
