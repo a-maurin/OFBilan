@@ -906,3 +906,74 @@ def _make_map(
         )
         fig.tight_layout()
     return save_chart(fig, tmp_dir, name)
+
+
+def chart_ppp_ratio_pej(
+    depts: list[str],
+    total_pej: list[int],
+    ppp_pej: list[int],
+    tmp_dir: Path,
+    name: str,
+    *,
+    figure_scale: float = 1.0,
+) -> str:
+    """Graphique comparatif des départements: part des PEJ PPP sur le total des PEJ."""
+    apply_mpl_style()
+    
+    # Calculer les PEJ hors PPP
+    pej_autres = [max(0, tot - ppp) for tot, ppp in zip(total_pej, ppp_pej)]
+    
+    # Largeur fixe et hauteur proportionnelle au nombre de départements
+    fig_w = CHART_FIG_WIDTH * figure_scale
+    fig_h = max(2.5, 0.45 * len(depts) + 1.2) * figure_scale
+    
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h))
+    
+    # Position des barres
+    y_pos = np.arange(len(depts))
+    bar_width = 0.55
+    
+    # Tracer les barres empilées horizontales
+    # Le fond/autres PEJ en gris neutre
+    rects_autres = ax.barh(y_pos, pej_autres, bar_width, label="Autres thématiques PJ", color=COLOR_GREY)
+    # Les PEJ PPP en vert/primaire
+    rects_ppp = ax.barh(y_pos, ppp_pej, bar_width, left=pej_autres, label="Produits phytopharmaceutiques (PPP)", color=COLOR_PRIMARY)
+    
+    # Configurer les axes
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(depts, fontsize=9)
+    ax.invert_yaxis()  # Mettre le premier département en haut
+    ax.set_xlabel("Nombre de procédures d'enquête judiciaire (PEJ)", fontsize=9)
+    ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+    
+    # Titre
+    ax.set_title(
+        "Part des enquêtes PPP dans le total des PEJ ouvertes",
+        fontsize=CHART_TITLE_FONT_SIZE_REF,
+        fontweight="bold",
+        color=COLOR_PRIMARY,
+        pad=15,
+    )
+    
+    # Ajouter des labels de pourcentage et valeurs absolues
+    for i, (tot, ppp) in enumerate(zip(total_pej, ppp_pej)):
+        if tot > 0:
+            pct = (ppp / tot) * 100.0
+            label_text = f" {ppp} / {tot} ({pct:.1f} %)"
+        else:
+            label_text = " 0 / 0 (0 %)"
+        # Placer le texte au bout de la barre
+        ax.text(tot, i, label_text, va="center", ha="left", fontsize=8.5, fontweight="bold")
+        
+    # Légende centrée en dessous
+    _legend_below_axis(ax, ncol=2, anchor_y=-0.16)
+    
+    # Ajouter un peu de marge à droite pour les étiquettes de texte
+    max_tot = max(total_pej) if total_pej else 10
+    ax.set_xlim(0, max_tot * 1.25 + 1)
+    
+    # Désactiver les bordures inutiles
+    for spine in ("top", "right"):
+        ax.spines[spine].set_visible(False)
+        
+    return save_chart(fig, tmp_dir, name, dpi=DEFAULT_RASTER_EXPORT_DPI, tight=True)

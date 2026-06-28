@@ -35,6 +35,11 @@ _SESSION_CACHE = {
     "pve": None,
 }
 
+_POINT_CTRL_RAW_CACHE = {}
+_PEJ_RAW_CACHE = {}
+_PA_RAW_CACHE = {}
+_PVE_RAW_CACHE = {}
+
 
 def init_session_cache(
     root: Path,
@@ -352,111 +357,97 @@ def load_point_ctrl(
 
     selected_paths = [tpl[1] for tpl in per_year.values()]
     frames: List[pd.DataFrame] = []
+    from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre
+    target_depts = get_departements_pour_perimetre(echelle, code)
+    
     for path in selected_paths:
-        engine = _GPKG_ENGINE
-        
-        # Filtre à la lecture par département si possible (réduit le volume chargé)
-        from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre
-        target_depts = get_departements_pour_perimetre(echelle, code)
-        if target_depts is not None and "FR" not in target_depts:
-            try:
-                where_clause = "num_depart IN ('" + "', '".join(target_depts) + "')"
-                gdf = gpd.read_file(
-                    path,
-                    engine=engine,
-                    where=where_clause,
-                )
-            except Exception as e:
-                raise RuntimeError(f"Erreur de lecture du fichier GPKG avec filtre : {e}")
+        if path in _POINT_CTRL_RAW_CACHE:
+            df = _POINT_CTRL_RAW_CACHE[path].copy()
         else:
+            engine = _GPKG_ENGINE
             try:
                 gdf = gpd.read_file(path, engine=engine)
             except Exception as e:
                 raise RuntimeError(f"Erreur de lecture du fichier GPKG : {e}")
-        df = pd.DataFrame(gdf.drop(columns=["geometry"], errors="ignore"))
-        df.columns = [str(c).split(",")[0].strip() for c in df.columns]
+            df = pd.DataFrame(gdf.drop(columns=["geometry"], errors="ignore"))
+            df.columns = [str(c).split(",")[0].strip() for c in df.columns]
+            
+            # Validation des colonnes requises
+            required_columns = ["date_ctrl", "dc_id", "num_depart"]
+            for col in required_columns:
+                if col not in df.columns:
+                    raise KeyError(f"La colonne '{col}' est absente des données point_ctrl_*")
+            
+            if "date_ctrl" in df.columns:
+                df["date_ctrl"] = safe_to_datetime(df["date_ctrl"])
+    
+            # Nom du dossier
+            if "nom_dossier" in df.columns and "nom_dossie" not in df.columns:
+                df["nom_dossie"] = df["nom_dossier"]
+    
+            # Type d'action
+            if "type_action" in df.columns and "type_actio" not in df.columns:
+                df["type_actio"] = df["type_action"]
+    
+            # Normalisation robuste (insensible à la casse) des colonnes clés
+            new_cols = {}
+            for col in df.columns:
+                col_upper = str(col).upper()
+                if col_upper == "DOMAINE" and col != "domaine" and "domaine" not in df.columns:
+                    new_cols[col] = "domaine"
+                elif col_upper == "THEME" and col != "theme" and "theme" not in df.columns:
+                    new_cols[col] = "theme"
+                elif col_upper in ("RESULTAT", "RÉSULTAT") and col != "resultat" and "resultat" not in df.columns:
+                    new_cols[col] = "resultat"
+                elif col_upper == "RESULTAT_CONTROLE" and col != "resultat_controle" and "resultat_controle" not in df.columns:
+                    new_cols[col] = "resultat_controle"
+            
+            if new_cols:
+                df.rename(columns=new_cols, inplace=True)
+    
+            # Nom de commune
+            if "nom_commune" in df.columns and "nom_commun" not in df.columns:
+                df["nom_commun"] = df["nom_commune"]
+    
+            # Type d'usager / usage
+            if "type_usager" in df.columns and "type_usage" not in df.columns:
+                df["type_usage"] = df["type_usager"]
+            if "type_usage" in df.columns and "type_usager" not in df.columns:
+                df["type_usager"] = df["type_usage"]
+    
+            # Nature du contrôle
+            if "nature_controle" in df.columns and "nature_con" not in df.columns:
+                df["nature_con"] = df["nature_controle"]
+            if "nature_con" in df.columns and "nature_controle" not in df.columns:
+                df["nature_controle"] = df["nature_con"]
+    
+            # Plan de contrôle
+            if "plan_controle" in df.columns and "plan_contr" not in df.columns:
+                df["plan_contr"] = df["plan_controle"]
+            if "plan_contr" in df.columns and "plan_controle" not in df.columns:
+                df["plan_controle"] = df["plan_contr"]
+    
+            # Avis patrimoine / biodiversité
+            avis_src = None
+            for cand in ("avis_patbiodiv", "avis_patbi", "avis_pasbi"):
+                if cand in df.columns:
+                    avis_src = cand
+                    break
+            if avis_src is not None:
+                if "avis_patbiodiv" not in df.columns:
+                    df["avis_patbiodiv"] = df[avis_src]
+                if "avis_patbi" not in df.columns:
+                    df["avis_patbi"] = df[avis_src]
+                if "avis_pasbi" not in df.columns:
+                    df["avis_pasbi"] = df[avis_src]
+            
+            _POINT_CTRL_RAW_CACHE[path] = df.copy()
+
+        # Filtre à posteriori par département
+        if target_depts is not None and "FR" not in target_depts:
+            if "num_depart" in df.columns:
+                df = df[df["num_depart"].astype(str).str.strip().isin(target_depts)].copy()
         
-        # Validation des colonnes requises
-        required_columns = ["date_ctrl", "dc_id", "num_depart"]
-        for col in required_columns:
-            if col not in df.columns:
-                raise KeyError(f"La colonne '{col}' est absente des données point_ctrl_*")
-        
-        if "date_ctrl" in df.columns:
-            df["date_ctrl"] = safe_to_datetime(df["date_ctrl"])
-
-        # Alias de colonnes : le reste du code travaille avec des noms
-        # uniformisés, malgré les variations entre GPKG/SHP et les versions.
-        # - nom_dossier / nom_dossie
-        # - type_action / type_actio
-        # - Résultat / RESULTAT / resultat
-        # - nom_commun / nom_commune
-        # - type_usage / type_usager
-        # - nature_con / nature_controle
-        # - plan_contr / plan_controle
-        # - avis_pasbi / avis_patbi / avis_patbiodiv
-
-        # Nom du dossier
-        if "nom_dossier" in df.columns and "nom_dossie" not in df.columns:
-            df["nom_dossie"] = df["nom_dossier"]
-
-        # Type d'action
-        if "type_action" in df.columns and "type_actio" not in df.columns:
-            df["type_actio"] = df["type_action"]
-
-        # Normalisation robuste (insensible à la casse) des colonnes clés
-        # On renomme au lieu de dupliquer pour éviter les conflits SQLite/QGIS
-        new_cols = {}
-        for col in df.columns:
-            col_upper = str(col).upper()
-            if col_upper == "DOMAINE" and col != "domaine" and "domaine" not in df.columns:
-                new_cols[col] = "domaine"
-            elif col_upper == "THEME" and col != "theme" and "theme" not in df.columns:
-                new_cols[col] = "theme"
-            elif col_upper in ("RESULTAT", "RÉSULTAT") and col != "resultat" and "resultat" not in df.columns:
-                new_cols[col] = "resultat"
-            elif col_upper == "RESULTAT_CONTROLE" and col != "resultat_controle" and "resultat_controle" not in df.columns:
-                new_cols[col] = "resultat_controle"
-        
-        if new_cols:
-            df.rename(columns=new_cols, inplace=True)
-
-        # Nom de commune : harmoniser vers nom_commun
-        if "nom_commune" in df.columns and "nom_commun" not in df.columns:
-            df["nom_commun"] = df["nom_commune"]
-
-        # Type d'usager / usage : créer les deux alias pour faciliter les usages
-        if "type_usager" in df.columns and "type_usage" not in df.columns:
-            df["type_usage"] = df["type_usager"]
-        if "type_usage" in df.columns and "type_usager" not in df.columns:
-            df["type_usager"] = df["type_usage"]
-
-        # Nature du contrôle : nature_con (tronqué) / nature_controle (complet)
-        if "nature_controle" in df.columns and "nature_con" not in df.columns:
-            df["nature_con"] = df["nature_controle"]
-        if "nature_con" in df.columns and "nature_controle" not in df.columns:
-            df["nature_controle"] = df["nature_con"]
-
-        # Plan de contrôle : plan_contr / plan_controle
-        if "plan_controle" in df.columns and "plan_contr" not in df.columns:
-            df["plan_contr"] = df["plan_controle"]
-        if "plan_contr" in df.columns and "plan_controle" not in df.columns:
-            df["plan_controle"] = df["plan_contr"]
-
-        # Avis patrimoine / biodiversité
-        avis_src = None
-        for cand in ("avis_patbiodiv", "avis_patbi", "avis_pasbi"):
-            if cand in df.columns:
-                avis_src = cand
-                break
-        if avis_src is not None:
-            if "avis_patbiodiv" not in df.columns:
-                df["avis_patbiodiv"] = df[avis_src]
-            if "avis_patbi" not in df.columns:
-                df["avis_patbi"] = df[avis_src]
-            if "avis_pasbi" not in df.columns:
-                df["avis_pasbi"] = df[avis_src]
-
         frames.append(df)
 
     if not frames:
@@ -547,36 +538,43 @@ def load_pej(
     sources = root / "data" / "sources"
     prefix = "suivi_procedure_enq_judiciaire_"
     path = _find_latest_dated_file(sources, prefix, (".ods",))
-    df = _read_spreadsheet(path)
-    df.columns = pd.Index([str(c).strip().upper() for c in df.columns])
-    # Alias pour compatibilité si le classeur utilise "NATINF" au lieu de "NATINF_PEJ"
-    if "NATINF" in df.columns and "NATINF_PEJ" not in df.columns:
-        df["NATINF_PEJ"] = df["NATINF"]
-    # Alias "type_usager" pour filtrage des bilans usagers ciblés
-    # (dans le classeur PEJ, la colonne s'appelle typiquement "USAGER").
-    # Noms ci-dessous après normalisation des en-têtes (majuscules) ; "TYPE USAGER"
-    # couvre l'ancien libellé LibreOffice « Type usager ».
-    if "type_usager" not in df.columns:
-        for cand in ("TYPE_USAGER", "TYPE USAGER", "USAGER", "USGAER"):
-            if cand in df.columns:
-                df["type_usager"] = df[cand]
-                break
-    df["DATE_CONSTATATION"] = safe_to_datetime(df["DATE_CONSTATATION"])
-    df["DATE_OUVERTURE_PROCEDURE"] = safe_to_datetime(df["DATE_OUVERTURE_PROCEDURE"])
-    if "RECAP_DATE_INIT_PJ" not in df.columns:
-        if date_deb is not None and date_fin is not None:
-            raise KeyError(
-                "Colonne RECAP_DATE_INIT_PJ absente du classeur PEJ — "
-                "obligatoire pour le filtre de période."
-            )
-        df["RECAP_DATE_INIT_PJ"] = pd.NaT
+    
+    if path in _PEJ_RAW_CACHE:
+        df = _PEJ_RAW_CACHE[path].copy()
     else:
-        df["RECAP_DATE_INIT_PJ"] = safe_to_datetime(df["RECAP_DATE_INIT_PJ"])
-    df["DATE_REF"] = (
-        df["DATE_CONSTATATION"]
-        .fillna(df["DATE_OUVERTURE_PROCEDURE"])
-        .fillna(df["RECAP_DATE_INIT_PJ"])
-    )
+        df = _read_spreadsheet(path)
+        df.columns = pd.Index([str(c).strip().upper() for c in df.columns])
+        # Alias pour compatibilité si le classeur utilise "NATINF" au lieu de "NATINF_PEJ"
+        if "NATINF" in df.columns and "NATINF_PEJ" not in df.columns:
+            df["NATINF_PEJ"] = df["NATINF"]
+        # Alias "type_usager" pour filtrage des bilans usagers ciblés
+        if "type_usager" not in df.columns:
+            for cand in ("TYPE_USAGER", "TYPE USAGER", "USAGER", "USGAER"):
+                if cand in df.columns:
+                    df["type_usager"] = df[cand]
+                    break
+        df["DATE_CONSTATATION"] = safe_to_datetime(df["DATE_CONSTATATION"])
+        df["DATE_OUVERTURE_PROCEDURE"] = safe_to_datetime(df["DATE_OUVERTURE_PROCEDURE"])
+        
+        has_recap_date = "RECAP_DATE_INIT_PJ" in df.columns
+        if not has_recap_date:
+            df["RECAP_DATE_INIT_PJ"] = pd.NaT
+        else:
+            df["RECAP_DATE_INIT_PJ"] = safe_to_datetime(df["RECAP_DATE_INIT_PJ"])
+            
+        df["DATE_REF"] = (
+            df["DATE_CONSTATATION"]
+            .fillna(df["DATE_OUVERTURE_PROCEDURE"])
+            .fillna(df["RECAP_DATE_INIT_PJ"])
+        )
+        df.attrs["missing_recap_date"] = not has_recap_date
+        _PEJ_RAW_CACHE[path] = df.copy()
+
+    if df.attrs.get("missing_recap_date") and date_deb is not None and date_fin is not None:
+        raise KeyError(
+            "Colonne RECAP_DATE_INIT_PJ absente du classeur PEJ — "
+            "obligatoire pour le filtre de période."
+        )
     if date_deb is not None and date_fin is not None:
         deb_ts = pd.to_datetime(date_deb)
         fin_ts = pd.to_datetime(date_fin)
@@ -632,17 +630,33 @@ def load_pa(
             deb_ts = pd.to_datetime(date_deb)
             fin_ts = pd.to_datetime(date_fin)
             df = filtre_periode(df, "DATE_REF", deb_ts, fin_ts)
+        if echelle is not None and code is not None:
+            from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre, get_bmi_filters
+            echelle_norm = str(echelle).strip().lower()
+            if echelle_norm == "bmi" and "ENTITE_ORIGINE_PROCEDURE" in df.columns:
+                bmi_filters = get_bmi_filters(code)
+                entite_pej_val = str(bmi_filters.get("entite_pej", code)).upper()
+                df = df[df["ENTITE_ORIGINE_PROCEDURE"].astype(str).str.upper().str.contains(entite_pej_val, case=True, na=False, regex=False)].copy()
+            elif echelle_norm != "bmi" and "ENTITE_ORIGINE_PROCEDURE" in df.columns:
+                dept_codes = get_departements_pour_perimetre(echelle, code)
+                if dept_codes and "FR" not in dept_codes:
+                    entity_sds = [f"SD{d}" for d in dept_codes]
+                    df = df[df["ENTITE_ORIGINE_PROCEDURE"].astype(str).str.strip().isin(entity_sds)].copy()
         return df
 
     sources = root / "data" / "sources"
     path = _find_latest_dated_file(
         sources, "suivi_procedure_administrative_", (".ods",)
     )
-    df = _read_spreadsheet(path)
-    df.columns = pd.Index([str(c).strip().upper() for c in df.columns])
-    df["DATE_CONTROLE"] = safe_to_datetime(df["DATE_CONTROLE"])
-    df["DATE_DOSSIER"] = safe_to_datetime(df["DATE_DOSSIER"])
-    df["DATE_REF"] = df["DATE_CONTROLE"].fillna(df["DATE_DOSSIER"])
+    if path in _PA_RAW_CACHE:
+        df = _PA_RAW_CACHE[path].copy()
+    else:
+        df = _read_spreadsheet(path)
+        df.columns = pd.Index([str(c).strip().upper() for c in df.columns])
+        df["DATE_CONTROLE"] = safe_to_datetime(df["DATE_CONTROLE"])
+        df["DATE_DOSSIER"] = safe_to_datetime(df["DATE_DOSSIER"])
+        df["DATE_REF"] = df["DATE_CONTROLE"].fillna(df["DATE_DOSSIER"])
+        _PA_RAW_CACHE[path] = df.copy()
     if date_deb is not None and date_fin is not None:
         deb_ts = pd.to_datetime(date_deb)
         fin_ts = pd.to_datetime(date_fin)
@@ -1916,36 +1930,41 @@ def load_pve(
     # Fichier le plus récent (date de modification)
     path = max(candidates, key=lambda p: p.stat().st_mtime)
 
-    suffix = path.suffix.lower()
-    if suffix == ".csv":
-        df = pd.read_csv(path, sep=";", dtype=str, encoding="latin1")
-    elif suffix == ".ods":
-        df = _read_spreadsheet(path)
+    if path in _PVE_RAW_CACHE:
+        df = _PVE_RAW_CACHE[path].copy()
     else:
-        # .xlsx : moteur openpyxl requis côté environnement Python
-        df = pd.read_excel(path, dtype=str, engine="openpyxl")
+        suffix = path.suffix.lower()
+        if suffix == ".csv":
+            df = pd.read_csv(path, sep=";", dtype=str, encoding="latin1")
+        elif suffix == ".ods":
+            df = _read_spreadsheet(path)
+        else:
+            # .xlsx : moteur openpyxl requis côté environnement Python
+            df = pd.read_excel(path, dtype=str, engine="openpyxl")
 
-    # Normalisation du code commune
-    if "INF-INSEE" in df.columns:
-        df["INF-INSEE"] = (
-            df["INF-INSEE"]
-            .astype(str)
-            .str.extract(r"(\d{1,5})", expand=False)
-            .fillna("")
-            .str.zfill(5)
-        )
+        # Normalisation du code commune
+        if "INF-INSEE" in df.columns:
+            df["INF-INSEE"] = (
+                df["INF-INSEE"]
+                .astype(str)
+                .str.extract(r"(\d{1,5})", expand=False)
+                .fillna("")
+                .str.zfill(5)
+            )
 
-    # Alias de département INF-DEPART / INF-DEPARTEMENT
-    if "INF-DEPARTEMENT" in df.columns and "INF-DEPART" not in df.columns:
-        df["INF-DEPART"] = df["INF-DEPARTEMENT"]
-    elif "INF-DEPART" in df.columns and "INF-DEPARTEMENT" not in df.columns:
-        df["INF-DEPARTEMENT"] = df["INF-DEPART"]
+        # Alias de département INF-DEPART / INF-DEPARTEMENT
+        if "INF-DEPARTEMENT" in df.columns and "INF-DEPART" not in df.columns:
+            df["INF-DEPART"] = df["INF-DEPARTEMENT"]
+        elif "INF-DEPART" in df.columns and "INF-DEPARTEMENT" not in df.columns:
+            df["INF-DEPARTEMENT"] = df["INF-DEPART"]
 
-    # Date de mise en force (MIF)
-    if "INF-DATE-MIF" in df.columns:
-        df["INF-DATE-MIF"] = safe_to_datetime(df["INF-DATE-MIF"])
-    if "INF-DATE-INTG" in df.columns:
-        df["INF-DATE-INTG"] = safe_to_datetime(df["INF-DATE-INTG"])
+        # Date de mise en force (MIF)
+        if "INF-DATE-MIF" in df.columns:
+            df["INF-DATE-MIF"] = safe_to_datetime(df["INF-DATE-MIF"])
+        if "INF-DATE-INTG" in df.columns:
+            df["INF-DATE-INTG"] = safe_to_datetime(df["INF-DATE-INTG"])
+            
+        _PVE_RAW_CACHE[path] = df.copy()
 
     if echelle is not None and code is not None:
         from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre, get_bmi_filters

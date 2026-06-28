@@ -63,6 +63,24 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Chargement dynamique des Profils Thématiques
+    fetch('/api/profils')
+        .then(res => res.json())
+        .then(data => {
+            const selectProfil = document.getElementById('profil-select');
+            if (selectProfil && Array.isArray(data)) {
+                selectProfil.innerHTML = '';
+                data.forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p.value;
+                    opt.textContent = p.label;
+                    selectProfil.appendChild(opt);
+                });
+                
+            }
+        })
+        .catch(err => console.error('Erreur chargement profils:', err));
+
     // Stats Elements
     const valControles = document.getElementById('val-controles');
     const valPej = document.getElementById('val-pej');
@@ -517,6 +535,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- LEAFLET MAP INITIALIZATION ---
     // France Center
     const map = L.map('map').setView([46.2276, 2.2137], 6);
+    
+    // Création d'un volet dédié (pane) pour placer les procédures au-dessus des marqueurs de contrôle
+    const procPane = map.createPane('proceduresPane');
+    if (procPane) {
+        procPane.style.zIndex = 620; // Plus haut que overlayPane (400)
+    }
+
     L.tileLayer('https://data.geopf.fr/wmts?REQUEST=GetTile&SERVICE=WMTS&VERSION=1.0.0&STYLE=normal&TILEMATRIXSET=PM&FORMAT=image/png&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}', {
         maxZoom: 19,
         attribution: '&copy; <a href="https://www.ign.fr/">IGN</a>'
@@ -525,13 +550,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const markersGroup = L.layerGroup(); // Les points individuels sans cluster (si besoin de bascule)
     const markersClusterGroup = L.markerClusterGroup().addTo(map);
     const proceduresGroup = L.layerGroup().addTo(map);
+    const pveGroup = L.layerGroup().addTo(map);
     let heatmapLayer = null;
 
     // Contrôle des couches
     const baseMaps = {};
     const overlayMaps = {
         "Contrôles (Clusters/Points)": markersClusterGroup,
-        "Procédures (PEJ/PA/PVe)": proceduresGroup
+        "PA/PEJ": proceduresGroup,
+        "PVe": pveGroup
     };
     L.control.layers(baseMaps, overlayMaps, { collapsed: false, position: 'topright' }).addTo(map);
 
@@ -557,7 +584,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const getParams = (isComparePeriod = false) => {
             const debEl = isComparePeriod ? compareDateDebEl : dateDebEl;
             const finEl = isComparePeriod ? compareDateFinEl : dateFinEl;
+            const selectProfil = document.getElementById('profil-select');
             return {
+                profil: selectProfil ? selectProfil.value : 'global',
                 'date-deb': debEl ? debEl.value : '',
                 'date-fin': finEl ? finEl.value : '',
                 echelle: selectEchelle.value,
@@ -629,9 +658,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 renderTable();
             }
 
-            // Update map markers
             markersGroup.clearLayers();
             markersClusterGroup.clearLayers();
+            proceduresGroup.clearLayers();
+            pveGroup.clearLayers();
             if (heatmapLayer) {
                 map.removeLayer(heatmapLayer);
                 heatmapLayer = null;
@@ -700,24 +730,113 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
                         let procColor = '#3B82F6';
                         const ptype = (p.type || '').toUpperCase();
-                        if (ptype.includes('PEJ')) procColor = '#3B82F6';
-                        else if (ptype.includes('PA')) procColor = '#8B5CF6';
-                        else if (ptype.includes('PVE')) procColor = '#F97316';
+                        let targetGroup = proceduresGroup;
+                        if (ptype.includes('PEJ')) {
+                            procColor = '#3B82F6';
+                            targetGroup = proceduresGroup;
+                        } else if (ptype.includes('PA')) {
+                            procColor = '#8B5CF6';
+                            targetGroup = proceduresGroup;
+                        } else if (ptype.includes('PVE')) {
+                            procColor = '#F97316';
+                            targetGroup = pveGroup;
+                        }
 
                         const marker = L.circleMarker([lat, lng], {
-                            radius: 5,
+                            radius: 6,
                             color: procColor,
                             fillColor: procColor,
-                            fillOpacity: 0.6,
-                            weight: 1
+                            fillOpacity: 0.7,
+                            weight: 1.5,
+                            interactive: true,
+                            pane: 'proceduresPane'
                         });
                         const popup = `
-                            <strong>Procédure ${p.type}</strong><br>
-                            ID: ${p.dc_id || 'N/A'}<br>
-                            Date: ${p.date_ctrl || 'N/A'}
+                            <strong>${p.type}</strong><br>
+                            N° Oscean : ${p.dc_id || 'N/A'}<br>
+                            Date: ${p.date_ctrl || 'N/A'}<br>
+                            Type d'action de la ${p.type} : ${p.type_action || 'Non renseigné'}<br>
+                            Usager visé : ${p.type_usager || 'Non renseigné'}
                         `;
                         marker.bindPopup(popup);
-                        proceduresGroup.addLayer(marker);
+                        targetGroup.addLayer(marker);
+                    }
+                });
+            }
+
+            // Render points N-1
+            if (isCompare && resN1 && resN1.points && resN1.points.length > 0) {
+                resN1.points.forEach(pt => {
+                    const lat = parseFloat(pt.y);
+                    const lng = parseFloat(pt.x);
+
+                    if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+                        const color = getMarkerColor(pt.resultat);
+                        const marker = L.circleMarker([lat, lng], {
+                            radius: 6,
+                            fillColor: color,
+                            color: '#FFFFFF',
+                            weight: 1.5,
+                            opacity: 0.5,
+                            fillOpacity: 0.4
+                        });
+
+                        const popupContent = `
+                            <strong>Contrôle OSCEAN (N-1)</strong><br>
+                            ID: ${pt.dc_id || 'N/A'}<br>
+                            Date: ${pt.date_ctrl || 'N/A'}<br>
+                            Résultat: <span style="font-weight:bold;color:${color}">${pt.resultat || 'N/A'}</span><br>
+                            Domaine: ${pt.domaine || 'N/A'}<br>
+                            Thème: ${pt.theme || 'N/A'}<br>
+                            Usager: ${pt.type_usager || 'N/A'}<br>
+                            Commune: ${pt.nom_commun || 'N/A'}
+                        `;
+                        marker.bindPopup(popupContent);
+                        markersGroup.addLayer(marker);
+                        markersClusterGroup.addLayer(marker);
+                    }
+                });
+            }
+
+            // Render procedure markers N-1
+            if (isCompare && resN1 && resN1.procedures && resN1.procedures.length > 0) {
+                resN1.procedures.forEach(p => {
+                    const lat = parseFloat(p.y);
+                    const lng = parseFloat(p.x);
+                    if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+                        let procColor = '#3B82F6';
+                        const ptype = (p.type || '').toUpperCase();
+                        let targetGroup = proceduresGroup;
+                        if (ptype.includes('PEJ')) {
+                            procColor = '#3B82F6';
+                            targetGroup = proceduresGroup;
+                        } else if (ptype.includes('PA')) {
+                            procColor = '#8B5CF6';
+                            targetGroup = proceduresGroup;
+                        } else if (ptype.includes('PVE')) {
+                            procColor = '#F97316';
+                            targetGroup = pveGroup;
+                        }
+
+                        const marker = L.circleMarker([lat, lng], {
+                            radius: 6,
+                            color: procColor,
+                            fillColor: procColor,
+                            opacity: 0.5,
+                            fillOpacity: 0.35,
+                            weight: 1.5,
+                            interactive: true,
+                            pane: 'proceduresPane'
+                        });
+                        const popup = `
+                            <strong>${p.type} (N-1)</strong><br>
+                            N° Oscean : ${p.dc_id || 'N/A'}<br>
+                            Date: ${p.date_ctrl || 'N/A'}<br>
+                            Type d'action de la ${p.type} : ${p.type_action || 'Non renseigné'}<br>
+                            Usager visé : ${p.type_usager || 'Non renseigné'}
+                        `;
+                        marker.bindPopup(popup);
+                        targetGroup.addLayer(marker);
                     }
                 });
             }
@@ -1321,6 +1440,9 @@ document.addEventListener('DOMContentLoaded', () => {
         btnReset.addEventListener('click', () => {
             const now = new Date();
             const currentYear = now.getFullYear();
+            const selectProfil = document.getElementById('profil-select');
+            if (selectProfil) selectProfil.value = 'global';
+
             if (dateDebEl) dateDebEl.value = `${currentYear}-01-01`;
             if (dateFinEl) {
                 const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -1446,13 +1568,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function loadStateFromLocalStorage() {
-        try {
-            const data = localStorage.getItem('ofbilan_explorer_filters');
-            return data ? JSON.parse(data) : null;
-        } catch (e) {
-            console.error('Impossible de lire depuis localStorage', e);
-            return null;
-        }
+        // Désactivé à la demande de l'utilisateur : l'interface doit s'ouvrir "à blanc" par défaut.
+        return null;
     }
 
     function updateURLWithState() {
@@ -1518,15 +1635,108 @@ document.addEventListener('DOMContentLoaded', () => {
             const canvas = document.getElementById(chartId);
             if (!canvas) return;
 
-            // Pour s'assurer que le fond de l'image exportée est blanc et non transparent
+            let chartInstance = null;
+            let chartTitleText = "";
+            if (chartId === 'chart-seasonality') { chartInstance = chartSeasonality; chartTitleText = "Saisonnalité de l'activité"; }
+            else if (chartId === 'chart-results') { chartInstance = chartResults; chartTitleText = "Résultats des Contrôles"; }
+            else if (chartId === 'chart-usagers') { chartInstance = chartUsagers; chartTitleText = "Répartition par Type d'Usager"; }
+            else if (chartId === 'chart-domains') { chartInstance = chartDomains; chartTitleText = "Répartition par Domaine d'Activité"; }
+            else if (chartId === 'chart-themes') { chartInstance = chartThemes; chartTitleText = "Répartition par Thématique (Top 5)"; }
+
+            // Dimensions de l'image finale (hauteur dynamique de pied de page pour affichage vertical sans chevauchement)
+            const headerHeight = 60;
+            const labels = (chartInstance && chartInstance.data && chartInstance.data.labels) ? chartInstance.data.labels : [];
+            const footerHeight = (chartId === 'chart-results' || chartId === 'chart-usagers') ? (labels.length * 20) + 15 : 60;
+            
             const tempCanvas = document.createElement('canvas');
             tempCanvas.width = canvas.width;
-            tempCanvas.height = canvas.height;
+            tempCanvas.height = canvas.height + headerHeight + footerHeight;
             const tempCtx = tempCanvas.getContext('2d');
             
+            // Fond blanc
             tempCtx.fillStyle = '#FFFFFF';
             tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
-            tempCtx.drawImage(canvas, 0, 0);
+            
+            // 1. Dessiner le titre
+            tempCtx.fillStyle = '#003A76';
+            tempCtx.font = 'bold 16px sans-serif';
+            tempCtx.textAlign = 'center';
+            tempCtx.fillText(chartTitleText, tempCanvas.width / 2, 35);
+            
+            // 2. Dessiner le graphique au centre
+            tempCtx.drawImage(canvas, 0, headerHeight);
+            
+            // 3. Dessiner la légende en bas
+            if (chartInstance && chartInstance.data) {
+                tempCtx.textAlign = 'left';
+                tempCtx.font = '11px sans-serif';
+                
+                const datasets = chartInstance.data.datasets || [];
+                
+                if (chartId === 'chart-results' || chartId === 'chart-usagers') {
+                    // Pour les Donuts : on a une couleur par élément
+                    const ds = datasets[0] || {};
+                    const data = ds.data || [];
+                    const bgColors = ds.backgroundColor || [];
+                    
+                    // Calcul du total de la période principale N
+                    const total = data.reduce((a, b) => a + (b || 0), 0);
+                    
+                    let startX = 25;
+                    let startY = canvas.height + headerHeight + 20;
+                    
+                    labels.forEach((lbl, idx) => {
+                        const val = data[idx] || 0;
+                        const pct = total > 0 ? ((val / total) * 100).toFixed(1) : 0;
+                        const color = bgColors[idx] || '#64748B';
+                        
+                        // Carré de couleur
+                        tempCtx.fillStyle = color;
+                        tempCtx.fillRect(startX, startY - 10, 12, 12);
+                        
+                        // Texte de la légende avec les valeurs
+                        tempCtx.fillStyle = '#1E293B';
+                        const displayLabel = Array.isArray(lbl) ? lbl.join(' ') : lbl;
+                        
+                        // Si une comparaison est active, on ajoute la valeur N-1 dans la légende
+                        let valText = `${displayLabel}: ${val} (${pct}%)`;
+                        if (datasets.length > 1) {
+                            const dataN1 = datasets[1].data || [];
+                            const valN1 = dataN1[idx] || 0;
+                            const totalN1 = dataN1.reduce((a, b) => a + (b || 0), 0);
+                            const pctN1 = totalN1 > 0 ? ((valN1 / totalN1) * 100).toFixed(1) : 0;
+                            valText += ` (vs période comp. : ${valN1} [${pctN1}%])`;
+                        }
+                        
+                        tempCtx.fillText(valText, startX + 20, startY);
+                        startY += 20; // Saut de ligne
+                    });
+                } else if (chartId === 'chart-domains' || chartId === 'chart-themes') {
+                    // Pour les barres horizontales
+                    let startY = canvas.height + headerHeight + 30;
+                    tempCtx.fillStyle = '#64748B';
+                    tempCtx.font = 'italic 11px sans-serif';
+                    
+                    let text = "Données issues de la recherche active de l'explorateur OFBilan.";
+                    if (datasets.length > 1) {
+                        text += ` Comparaison : ${datasets[0].label || 'Période N'} vs ${datasets[1].label || 'Période N-1'}`;
+                    }
+                    tempCtx.fillText(text, 20, startY);
+                } else if (chartId === 'chart-seasonality') {
+                    // Pour la saisonnalité
+                    let startX = 20;
+                    let startY = canvas.height + headerHeight + 30;
+                    
+                    datasets.forEach((ds) => {
+                        tempCtx.fillStyle = ds.borderColor || '#64748B';
+                        tempCtx.fillRect(startX, startY - 8, 20, 4);
+                        
+                        tempCtx.fillStyle = '#1E293B';
+                        tempCtx.fillText(ds.label, startX + 25, startY);
+                        startX += 130;
+                    });
+                }
+            }
 
             const imageURI = tempCanvas.toDataURL('image/png');
             const link = document.createElement('a');

@@ -368,7 +368,7 @@ document.addEventListener('DOMContentLoaded', () => {
         { value: "Éviter la pollution des milieux par des épandages de boues d'épuration mal maîtrisés ou sauvages (SNC 2.2)", label: "Épandages de boues d'épuration (SNC 2.2)" },
         { value: "Préserver la qualité des milieux aquatiques et la santé grâce à une gestion durable des eaux pluviales (SNC 2.3)", label: "Eaux pluviales (SNC 2.3)" },
         { value: "Limiter la présence de nitrates d'origine agricole dans les milieux aquatiques afin de lutter contre l'eutrophisation des milieux et protéger la ressource en eau destinée à la consommation humaine (SNC 2.4)", label: "Nitrates agricoles (SNC 2.4)" },
-        { value: "Assurer le respect des conditions d'emplois des produits phytopharmaceutiques afin de préserver la qualité de l'eau et des milieux aquatiques (SNC 2.5)", label: "Produits phytopharmaceutiques (SNC 2.5)" },
+        { value: "Assurer le respect des conditions d'emplois des produits phytopharmaceutiques afin de préserver la qualité de l'eau et des milieux aquatiques (SNC 2.5)", label: "Produits phytosanitaires (SNC 2.5)" },
         { value: "ICPE avec rejets aqueux (hors SNC)", label: "ICPE avec rejets aqueux (hors SNC)" },
         { value: "Autres actions liées à la gestion qualitative", label: "Autres actions liées à la gestion qualitative" },
         { value: "Contrôles gestion quantitative sur IOTA (hors AUP) (SNC 3.1)", label: "IOTA hors AUP (SNC 3.1)" },

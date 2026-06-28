@@ -7,6 +7,54 @@ from ofbilan.engine.pdf_context import PdfContext
 def render_sec_region_detail(ctx: PdfContext) -> None:
     ctx.builder.add_section("secregion", ctx.section_title.get("secregion", "Détail par département"))
     
+    # Intégration du graphique comparatif interdépartemental
+    profil_id = ctx.profile.get("id") if ctx.profile else "global"
+    ratio_csv = ctx.out_dir / f"{profil_id}_ratio_pej_departement.csv"
+    if ratio_csv.exists():
+        try:
+            df_ratio = pd.read_csv(ratio_csv, sep=";", encoding="utf-8")
+            if not df_ratio.empty:
+                from ofbilan.common.rendus_graphiques import chart_ppp_ratio_pej
+                from ofbilan.common.utilitaires_metier import get_dept_name
+                
+                depts_labels = []
+                totals = []
+                ppps = []
+                for _, r in df_ratio.iterrows():
+                    d = str(r["departement"])
+                    depts_labels.append(f"{d} - {get_dept_name(d)}")
+                    totals.append(int(r["total_pej"]))
+                    ppps.append(int(r["ppp_pej"]))
+                    
+                img_name = f"ratio_pej_depts_{profil_id}.png"
+                chart_path = chart_ppp_ratio_pej(
+                    depts_labels, totals, ppps, ctx.tmp_dir, img_name, figure_scale=ctx.figure_scale
+                )
+                
+                ctx.builder.add_section("secregion_ratio", "Part de l'activité thématique par département", level=2, toc_level=1)
+                ctx.builder.add_image(Path(chart_path), width_ratio=ctx.chart_bar_w)
+                ctx.builder.add_spacer(10)
+                
+                tbl_syn = [["Département", "Nombre total de PEJ", "Procédures PPP ciblées", "Part relative"]]
+                for _, r in df_ratio.iterrows():
+                    d = str(r["departement"])
+                    tbl_syn.append([
+                        f"{d} - {get_dept_name(d)}",
+                        str(int(r["total_pej"])),
+                        str(int(r["ppp_pej"])),
+                        f"{r['ratio_pourcent']:.1f} %"
+                    ])
+                ctx.builder.add_table(
+                    tbl_syn,
+                    caption="Synthèse comparative de l'activité judiciaire par département",
+                    col_widths=[ctx.avail_w * 0.40, ctx.avail_w * 0.20, ctx.avail_w * 0.20, ctx.avail_w * 0.20],
+                    col_aligns=["LEFT", "RIGHT", "RIGHT", "RIGHT"],
+                    keep_together=True
+                )
+                ctx.builder.add_page_break()
+        except Exception as e:
+            ctx.builder.add_paragraph(f"<i>Impossible de tracer le graphique comparatif des départements : {e}</i>")
+
     csv_path = ctx.out_dir / "region_detail_par_dept.csv"
     if not csv_path.exists():
         ctx.builder.add_paragraph("Aucune donnée régionale détaillée disponible.")

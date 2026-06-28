@@ -823,6 +823,7 @@ def run_profile_aggregations(
     ventilation_mode: str,
     date_deb: pd.Timestamp,
     date_fin: pd.Timestamp,
+    pej_global: pd.DataFrame | None = None,
 ) -> None:
     """Adapter d'agrégations piloté par profil YAML."""
     analyse_controles_global(point, out_dir)
@@ -853,4 +854,7 @@ def run_profile_aggregations(
         ).to_csv(out_dir / "indicateurs_global_par_annee.csv", sep=";", index=False)
         
     from ofbilan.engine.agregations_region import analyse_region_par_departement
-    analyse_region_par_departement(point, pa, pej, pve, echelle, code, out_dir)
+    analyse_region_par_departement(
+        point, pa, pej, pve, echelle, code, out_dir,
+        pej_global=pej_global, profil_id=str(profile.get("id", "global"))
+    )

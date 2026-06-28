@@ -401,6 +401,7 @@ profiles:
         sec31: false     # Pas de PVe
         sec32: true      # Détail des procédures d'enquête judiciaire (PEJ)
         sec33: false     # Pas de PA
+        secregion: true  # Activé si échelle régionale
         sec5: true       # Cartes
         sec6: true       # Annexes
       titles:
@@ -411,6 +412,7 @@ profiles:
         sec43: "3.1. Procédures d'enquête judiciaire (PEJ) par type d'usager"
         sec3: "4. Analyse thématique et nature des infractions"
         sec32: "4.1. Détail des procédures d'enquête judiciaire (PEJ)"
+        secregion: "5. Détail comparatif par département"
         sec5: "5. Répartition géographique des procédures"
         sec6: "6. Notice méthodologique et Référentiel des infractions ciblées"
     blocks:
@@ -438,7 +440,7 @@ profiles:
         show_natinf_analysis: true     # Analyse des infractions NATINF
       sec5:
         map_files:
-          - "carte_ppp.png"
+          - "carte_ppp_procedures.png"
 
   # Contrôles sécheresse : pas de tableaux « par zone » PVe/PEJ (découpages type PNF/TUB).
   controles_secheresse:

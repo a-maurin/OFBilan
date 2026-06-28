@@ -28,7 +28,17 @@ def _load_natinf_to_theme_map() -> dict[str, str]:
     return mapping
 
 
-def analyse_region_par_departement(point: pd.DataFrame, pa: pd.DataFrame, pej: pd.DataFrame, pve: pd.DataFrame, echelle: str, code: str, out_dir: Path) -> None:
+def analyse_region_par_departement(
+    point: pd.DataFrame,
+    pa: pd.DataFrame,
+    pej: pd.DataFrame,
+    pve: pd.DataFrame,
+    echelle: str,
+    code: str,
+    out_dir: Path,
+    pej_global: pd.DataFrame | None = None,
+    profil_id: str = "global",
+) -> None:
     if str(echelle).strip().lower() not in ("region", "bmi"):
         return
         
@@ -171,4 +181,53 @@ def analyse_region_par_departement(point: pd.DataFrame, pa: pd.DataFrame, pej: p
             df_pivot[col] = 0
             
     df_pivot.to_csv(out_dir / "region_detail_par_dept.csv", sep=";", index=False)
+
+    if pej_global is not None and not pej_global.empty:
+        calculer_ratio_pej_departement(pej, pej_global, echelle, code, out_dir, profil_id)
+
+
+def calculer_ratio_pej_departement(
+    pej_filtered: pd.DataFrame,
+    pej_global: pd.DataFrame,
+    echelle: str,
+    code: str,
+    out_dir: Path,
+    profil_id: str,
+) -> None:
+    """Calcule le ratio d'enquêtes thématiques par rapport au global par département."""
+    if str(echelle).strip().lower() not in ("region", "bmi"):
+        return
+        
+    def _prepare_pej(df: pd.DataFrame) -> pd.DataFrame:
+        d = df.copy()
+        d["departement"] = "Inconnu"
+        if "ENTITE_ORIGINE_PROCEDURE" in d.columns:
+            d["departement"] = d["ENTITE_ORIGINE_PROCEDURE"].astype(str).str.extract(r'SD(\d+)')[0]
+            d["departement"] = d["departement"].fillna("Inconnu")
+        if "DATE_REF" in d.columns and "DC_ID" in d.columns:
+            d = d.sort_values("DATE_REF", ascending=False).drop_duplicates("DC_ID")
+        return d
+
+    df_glob = _prepare_pej(pej_global)
+    df_filt = _prepare_pej(pej_filtered)
+    
+    glob_counts = df_glob.groupby("departement").size().reset_index(name="total_pej")
+    filt_counts = df_filt.groupby("departement").size().reset_index(name="ppp_pej")
+    
+    merged = pd.merge(glob_counts, filt_counts, on="departement", how="outer").fillna(0)
+    merged["total_pej"] = merged["total_pej"].astype(int)
+    merged["ppp_pej"] = merged["ppp_pej"].astype(int)
+    
+    merged = merged[merged["departement"] != "Inconnu"]
+    
+    merged["ratio_pourcent"] = 0.0
+    mask = merged["total_pej"] > 0
+    merged.loc[mask, "ratio_pourcent"] = (merged.loc[mask, "ppp_pej"] / merged.loc[mask, "total_pej"]) * 100.0
+    merged["ratio_pourcent"] = merged["ratio_pourcent"].round(1)
+    
+    merged = merged.sort_values("departement")
+    
+    csv_name = f"{profil_id}_ratio_pej_departement.csv"
+    merged.to_csv(out_dir / csv_name, sep=";", index=False)
+
 

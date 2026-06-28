@@ -33,7 +33,7 @@ cartographie:
   cartes_actives:
     - procedures
   fichiers:
-    - "carte_ppp.png"
+    - "carte_ppp_procedures.png"
 
 presentation:
   title:

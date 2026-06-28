@@ -3534,6 +3534,36 @@ def _generate_pdf(
     sections_toc = resolve_sections_for_toc(presentation_cfg, resolved_section_defs)
     section_title = {sid: title for sid, title in resolved_section_defs}
 
+    if cfg.echelle == "region":
+        import re
+        insert_idx = len(sections_toc)
+        for i, (sid, _) in enumerate(sections_toc):
+            if sid in ("sec5", "sec6"):
+                insert_idx = i
+                break
+        
+        # Déterminer le numéro du chapitre à insérer
+        num_chap = 5
+        if insert_idx > 0:
+            prev_title = sections_toc[insert_idx - 1][1]
+            m_prev = re.match(r"^(\d+)\.", prev_title)
+            if m_prev:
+                num_chap = int(m_prev.group(1)) + 1
+
+        secregion_title = f"{num_chap}. Détail comparatif par département"
+        sections_toc.insert(insert_idx, ("secregion", secregion_title))
+        section_title["secregion"] = secregion_title
+
+        # Renuméroter les chapitres suivants
+        for idx in range(insert_idx + 1, len(sections_toc)):
+            sid, title = sections_toc[idx]
+            m_next = re.match(r"^(\d+)\.(.*)$", title)
+            if m_next:
+                num = int(m_next.group(1))
+                new_title = f"{num + 1}.{m_next.group(2)}"
+                sections_toc[idx] = (sid, new_title)
+                section_title[sid] = new_title
+
     # Page de garde + sommaire
     # Préparer un libellé de thème sans doublon "Bilan "
     main_label = label
@@ -5059,28 +5089,137 @@ def _generate_pdf(
         sec34_order = ["sec3", "sec4"]
     sec34_registry.render_many(sec34_order, {})
 
+    # ── DETAIL REGIONAL PAR DEPARTEMENT ──
+    if cfg.echelle == "region":
+        from ofbilan.engine.sections_region import render_sec_region_detail
+        from ofbilan.engine.pdf_context import PdfContext
+        ctx_region = PdfContext(
+            builder=builder,
+            profile=profile,
+            presentation_cfg=presentation_cfg,
+            behavior_cfg=behavior_cfg,
+            show_placeholder=show_placeholder,
+            date_deb=cfg.date_deb,
+            date_fin=cfg.date_fin,
+            dept_code=cfg.code,
+            dept_name_typo=dept_name_typo,
+            diffusion=diffusion,
+            ventilation_mode=ventilation_mode,
+            out_dir=out_dir,
+            avail_w=avail_w,
+            tmp_dir=tmp_dir,
+            chart_bar_w=chart_ratio_base,
+            legend_fontsize=legend_fontsize,
+            legend_ncol_max=legend_ncol_max,
+            figure_scale=figure_scale,
+            ref_pie_w=ref_pie_w,
+            ref_pie_fs=ref_pie_fs,
+            ref_pie_legend_fs=ref_pie_legend_fs,
+            split_by_row=bool(tables_layout.get("split_by_row")),
+            tables_layout=tables_layout,
+            section_title={"secregion": section_title["secregion"]},
+            nb_localisations=nb_localisations,
+            nb_ops=results.get("nb_operations_controle", 0),
+            nb_pej=nb_pej,
+            nb_pa=nb_pa,
+            nb_pve=nb_pve,
+            tab_resultats=tab_resultats,
+            tab_resultats_controles=results.get("tab_resultats_controles"),
+            agg_domaine=results.get("agg_domaine"),
+            agg_theme=results.get("agg_theme"),
+            agg_usager=results.get("agg_usager"),
+            res_usager=results.get("res_usager"),
+            cross_usager_dom=results.get("cross_usager_dom"),
+            usagers_resume=results.get("usagers_resume"),
+            cartes=options.get("cartes", False),
+            global_map_paths=[],
+            global_map_layout="vertical",
+            map_captions=[],
+            map_id=profil_id,
+        )
+        render_sec_region_detail(ctx_region)
+
     # ── CARTOGRAPHIE ──
     builder.add_section("sec5", section_title["sec5"], start_on_new_page=is_block_enabled(presentation_cfg, "sec5.start_on_new_page", False))
     if options.get("cartes", False):
         map_id = profile.get("_map_id") or profil_id
-        map_paths = resolve_profile_map_paths(
-            str(map_id),
-            profile=profile,
-            presentation_cfg=presentation_cfg,
-            target_dir=out_dir,
-        )
-        map_layout = resolve_map_layout(profile=profile, presentation_cfg=presentation_cfg)
-        if map_paths and is_block_enabled(presentation_cfg, "sec5.show_map", True):
-            builder.add_maps(map_paths, layout=map_layout)
-        elif show_placeholder and is_block_enabled(presentation_cfg, "sec5.show_map_fallback_message", True):
-            expected = expected_map_filenames(
-                str(map_id), profile=profile, presentation_cfg=presentation_cfg
+        
+        if cfg.echelle == "region":
+            from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre
+            from ofbilan.chemins_projet import get_cartes_dir
+            
+            # Nom de base configuré ou par défaut
+            carto_cfg = profile.get("cartographie", {})
+            carto_files = carto_cfg.get("fichiers", [])
+            base_map_name = carto_files[0] if carto_files else f"carte_{map_id}.png"
+            
+            # Dériver le nom régional et les noms départementaux
+            stem = Path(base_map_name).stem
+            ext = Path(base_map_name).suffix
+            
+            cartes_dir = get_cartes_dir()
+            
+            region_map_name = f"{stem}_region{ext}"
+            region_map_path = out_dir / region_map_name
+            if not region_map_path.exists():
+                region_map_path = cartes_dir / region_map_name
+                
+            depts = get_departements_pour_perimetre("region", cfg.code)
+            dept_map_paths = []
+            expected_names = [region_map_name]
+            
+            for d in depts:
+                d_map_name = f"{stem}_{d}{ext}"
+                expected_names.append(d_map_name)
+                d_map_path = out_dir / d_map_name
+                if not d_map_path.exists():
+                    d_map_path = cartes_dir / d_map_name
+                if d_map_path.exists():
+                    dept_map_paths.append((d, d_map_path))
+            
+            # Affichage de la carte régionale
+            if region_map_path.exists() and is_block_enabled(presentation_cfg, "sec5.show_map", True):
+                builder.add_paragraph("<b>Carte de synthèse à l'échelle régionale :</b>")
+                builder.add_maps([region_map_path], layout="vertical")
+                builder.add_spacer(10)
+            elif show_placeholder:
+                builder.add_paragraph(f"<i>Carte régionale non disponible ({region_map_name} manquante).</i>")
+                
+            # Affichage des cartes départementales
+            if dept_map_paths and is_block_enabled(presentation_cfg, "sec5.show_map", True):
+                builder.add_paragraph("<b>Cartes de détail par département :</b>")
+                from ofbilan.common.utilitaires_metier import get_dept_name
+                for d, path in dept_map_paths:
+                    builder.add_paragraph(f"Focus départemental : {d} - {get_dept_name(d)}")
+                    builder.add_maps([path], layout="vertical")
+                    builder.add_spacer(10)
+            
+            # Si aucune carte n'est disponible
+            if not region_map_path.exists() and not dept_map_paths and show_placeholder:
+                files_hint = ", ".join(f"<b>{name}</b>" for name in expected_names)
+                builder.add_paragraph(
+                    f"<i>Cartes non disponibles. Déposez les fichiers {files_hint} dans le dossier "
+                    f"des cartes pour les intégrer au bilan régional.</i>"
+                )
+        else:
+            map_paths = resolve_profile_map_paths(
+                str(map_id),
+                profile=profile,
+                presentation_cfg=presentation_cfg,
+                target_dir=out_dir,
             )
-            files_hint = ", ".join(f"<b>{name}</b>" for name in expected) or f"<b>carte_{map_id}.png</b>"
-            builder.add_paragraph(
-                f"<i>Carte(s) non disponible(s). Déposez {files_hint} dans le dossier "
-                f"des cartes pour les intégrer au bilan.</i>"
-            )
+            map_layout = resolve_map_layout(profile=profile, presentation_cfg=presentation_cfg)
+            if map_paths and is_block_enabled(presentation_cfg, "sec5.show_map", True):
+                builder.add_maps(map_paths, layout=map_layout)
+            elif show_placeholder and is_block_enabled(presentation_cfg, "sec5.show_map_fallback_message", True):
+                expected = expected_map_filenames(
+                    str(map_id), profile=profile, presentation_cfg=presentation_cfg
+                )
+                files_hint = ", ".join(f"<b>{name}</b>" for name in expected) or f"<b>carte_{map_id}.png</b>"
+                builder.add_paragraph(
+                    f"<i>Carte(s) non disponible(s). Déposez {files_hint} dans le dossier "
+                    f"des cartes pour les intégrer au bilan.</i>"
+                )
     elif show_placeholder:
         builder.add_paragraph("<i>Cartographie désactivée pour ce bilan.</i>")
 
@@ -5496,6 +5635,13 @@ def _run_engine_thematic_pipeline(
             point_filtered, pej_filtered, pa_filtered, pve_filtered,
             profile, resolved_opts, spatial, ventilation_mode=ventilation_mode,
             point_ctrl_perimetre=point_ctrl_perimetre,
+        )
+
+    if str(echelle).strip().lower() == "region":
+        from ofbilan.engine.agregations_region import analyse_region_par_departement
+        analyse_region_par_departement(
+            point_filtered, pa_filtered, pej_filtered, pve_filtered,
+            echelle, code, out_dir, pej_global=pej, profil_id=profil_id
         )
 
     # ── Export CSV ──

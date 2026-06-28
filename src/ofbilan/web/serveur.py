@@ -44,6 +44,36 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(WEB_DIR), **kwargs)
 
+    def do_GET(self):
+        if self.path == "/api/profils":
+            try:
+                import yaml
+                project_root = Path(__file__).resolve().parents[3]
+                profiles_dir = project_root / "config" / "profils_bilan"
+                profils_list = [{"value": "global", "label": "Tous (Sans profil)"}]
+                if profiles_dir.exists():
+                    import re
+                    for yaml_file in profiles_dir.glob("*.yaml"):
+                        try:
+                            content = yaml_file.read_text(encoding="utf-8")
+                            m_id = re.search(r'^id:\s*"?([^"\n]+)"?', content, re.MULTILINE)
+                            m_label = re.search(r'^label:\s*"?([^"\n]+)"?', content, re.MULTILINE)
+                            if m_id and m_label:
+                                profils_list.append({"value": m_id.group(1).strip(), "label": m_label.group(1).strip()})
+                        except Exception:
+                            pass
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps(profils_list).encode('utf-8'))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
+        else:
+            super().do_GET()
+
     def do_POST(self):
         if self.path == "/api/generate":
             content_length = int(self.headers['Content-Length'])
@@ -190,6 +220,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
                 # 1. Charger la configuration du profil
                 profile_cfg = load_profile_config(project_root, profil)
+                sources_cfg = profile_cfg.get("sources", {})
+                load_pts_flag = sources_cfg.get("point_ctrl", True)
+                load_pej_flag = sources_cfg.get("pej", True)
+                load_pa_flag = sources_cfg.get("pa", True)
+                load_pve_flag = sources_cfg.get("pve", True)
+
                 cfg_obj = BilanConfig.from_strings(
                     date_deb=date_deb,
                     date_fin=date_fin,
@@ -198,8 +234,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     root=project_root
                 )
 
+                from ofbilan.common.chargeurs_donnees import _SESSION_CACHE
+                _original_cache_active = _SESSION_CACHE["active"]
+                # Désactiver temporairement le cache pour pouvoir charger N-1 (évite le filtre de la session N)
+                _SESSION_CACHE["active"] = False
+
                 # 2. Chargement et filtrage des points de contrôle
-                df_pts = load_point_ctrl(project_root, echelle=echelle, code=code, date_deb=date_deb, date_fin=date_fin)
+                df_pts_unfiltered = load_point_ctrl(project_root, echelle=echelle, code=code, date_deb=date_deb, date_fin=date_fin) if load_pts_flag else pd.DataFrame()
+                df_pts = df_pts_unfiltered.copy()
                 if profile_cfg.get("pipeline") != "global":
                     df_pts = _filter_point_ctrl(df_pts, profile_cfg)
                 
@@ -234,7 +276,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     if ta_lower:
                         col_ta = "type_actio" if "type_actio" in df_pts.columns else ("type_action" if "type_action" in df_pts.columns else None)
                         if col_ta:
-                            df_pts = df_pts[df_pts[col_ta].astype(str).str.strip().str.lower().isin(ta_lower)].copy()
+                            df_pts = df_pts[df_pts[col_ta].astype(str).str.strip().str.lower().apply(
+                                lambda val: any(t in val for t in ta_lower)
+                            )].copy()
 
                 # Filtrage résultat (Conforme / Non-conforme / En attente)
                 if resultats_filter and not df_pts.empty:
@@ -265,7 +309,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 df_pve = pd.DataFrame()
 
                 # 3. Chargement et filtrage PEJ
-                df_pej = load_pej(project_root, echelle=echelle, code=code, date_deb=date_deb, date_fin=date_fin)
+                df_pej = load_pej(project_root, echelle=echelle, code=code, date_deb=date_deb, date_fin=date_fin) if load_pej_flag else pd.DataFrame()
                 if profile_cfg.get("pipeline") != "global":
                     df_pej = _filter_pej(df_pej, profile_cfg, cfg_obj, df_pts)
                 if type_usager:
@@ -285,12 +329,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     if ta_lower:
                         col_ta = "TYPE_ACTION" if "TYPE_ACTION" in df_pej.columns else None
                         if col_ta:
-                            df_pej = df_pej[df_pej[col_ta].astype(str).str.strip().str.lower().isin(ta_lower)].copy()
+                            df_pej = df_pej[df_pej[col_ta].astype(str).str.strip().str.lower().apply(
+                                lambda val: any(t in val for t in ta_lower)
+                            )].copy()
                 total_pej = len(df_pej)
 
                 # 4. Chargement et filtrage PA
                 try:
-                    df_pa = load_pa(project_root, echelle=echelle, code=code, date_deb=date_deb, date_fin=date_fin)
+                    df_pa = load_pa(project_root, echelle=echelle, code=code, date_deb=date_deb, date_fin=date_fin) if load_pa_flag else pd.DataFrame()
                     if profile_cfg.get("pipeline") != "global":
                         df_pa = _filter_pa(df_pa, profile_cfg, cfg_obj, df_pts)
                     else:
@@ -319,16 +365,18 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     if types_action:
                         ta_lower = {a.strip().lower() for a in types_action if a.strip()}
                         if ta_lower:
-                            col_ta = "TYPE_ACTION" if "TYPE_ACTION" in df_pa.columns else None
+                            col_ta = "TYPE_ACTION" if "TYPE_ACTION" in df_pa.columns else ("THEME" if "THEME" in df_pa.columns else None)
                             if col_ta:
-                                df_pa = df_pa[df_pa[col_ta].astype(str).str.strip().str.lower().isin(ta_lower)].copy()
+                                df_pa = df_pa[df_pa[col_ta].astype(str).str.strip().str.lower().apply(
+                                    lambda val: any(t in val for t in ta_lower)
+                                )].copy()
                     total_pa = len(df_pa)
                 except Exception:
                     total_pa = 0
 
                 # 5. Chargement et filtrage PVe
                 try:
-                    df_pve = load_pve(project_root, echelle=echelle, code=code, date_deb=date_deb, date_fin=date_fin)
+                    df_pve = load_pve(project_root, echelle=echelle, code=code, date_deb=date_deb, date_fin=date_fin) if load_pve_flag else pd.DataFrame()
                     if profile_cfg.get("pipeline") != "global":
                         df_pve = _filter_pve(df_pve, profile_cfg)
                     if themes:
@@ -340,14 +388,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     if types_action:
                         ta_lower = {a.strip().lower() for a in types_action if a.strip()}
                         if ta_lower:
-                            col_ta = "type_action" if "type_action" in df_pve.columns else ("THEME" if "THEME" in df_pve.columns else None)
+                            col_ta = "type_action" if "type_action" in df_pve.columns else ("THEME" if "THEME" in df_pve.columns else ("type_actio" if "type_actio" in df_pve.columns else ("INF-TYP-INF-STAT-LIB" if "INF-TYP-INF-STAT-LIB" in df_pve.columns else None)))
                             if col_ta:
-                                df_pve = df_pve[df_pve[col_ta].astype(str).str.strip().str.lower().isin(ta_lower)].copy()
+                                df_pve = df_pve[df_pve[col_ta].astype(str).str.strip().str.lower().apply(
+                                    lambda val: any(t in val for t in ta_lower)
+                                )].copy()
                     total_pve = len(df_pve)
                 except Exception:
                     total_pve = 0
 
-                # 5. Calcul des répartitions statistiques (identiques aux bilans PDF)
+                # 5. Calcul des répartitions statistiques (Combiné sur toutes les sources activées)
                 results_counts = {"Conforme": 0, "Non-conforme": 0, "En attente": 0}
                 if "resultat" in df_pts.columns and not df_pts.empty:
                     res_series = classify_resultat_controle_series(df_pts["resultat"])
@@ -356,44 +406,64 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     results_counts["En attente"] = int((res_series == "En attente").sum())
 
                 usagers_counts = {}
-                if "type_usager" in df_pts.columns and not df_pts.empty:
+                if not df_pts.empty and "type_usager" in df_pts.columns:
                     df_us = agg_effectifs_usagers(df_pts, "point_ctrl", "type_usager")
                     for _, row in df_us.iterrows():
-                        u_label = str(row["type_usager"]).strip() if pd.notna(row.get("type_usager")) else "Non renseigné"
-                        u_val = int(row["nb"]) if pd.notna(row.get("nb")) else 0
-                        if u_label:
-                            usagers_counts[u_label] = u_val
+                        u = str(row["type_usager"]).strip() if pd.notna(row.get("type_usager")) else "Non renseigné"
+                        if u: usagers_counts[u] = usagers_counts.get(u, 0) + int(row["nb"])
+                if not df_pej.empty and "type_usager" in df_pej.columns:
+                    for k, v in df_pej["type_usager"].astype(str).fillna("Non renseigné").str.strip().value_counts().items():
+                        if k and k.lower() != 'nan': usagers_counts[k] = usagers_counts.get(k, 0) + int(v)
 
                 domains_counts = {}
-                if "domaine" in df_pts.columns and not df_pts.empty:
-                    pt_filled = df_pts.copy()
-                    pt_filled["domaine"] = pt_filled["domaine"].fillna("Hors domaine").astype(str).str.strip()
-                    vc = pt_filled["domaine"].value_counts()
-                    for k, v in vc.items():
-                        k_label = str(k).strip() if pd.notna(k) else "Hors domaine"
-                        if k_label:
-                            domains_counts[k_label] = int(v)
+                s_dom = []
+                if not df_pts.empty and "domaine" in df_pts.columns: s_dom.append(df_pts["domaine"].astype(str))
+                if not df_pej.empty and "DOMAINE" in df_pej.columns: s_dom.append(df_pej["DOMAINE"].astype(str))
+                if not df_pa.empty and "DOMAINE" in df_pa.columns: s_dom.append(df_pa["DOMAINE"].astype(str))
+                if s_dom:
+                    for k, v in pd.concat(s_dom).fillna("Hors domaine").str.strip().value_counts().items():
+                        if k and k.lower() != 'nan': domains_counts[k] = int(v)
 
                 themes_counts = {}
-                col_theme = "theme" if "theme" in df_pts.columns else ("type_actio" if "type_actio" in df_pts.columns else None)
-                if col_theme and not df_pts.empty:
-                    pt_theme_filled = df_pts.copy()
-                    pt_theme_filled[col_theme] = pt_theme_filled[col_theme].fillna("Hors theme").astype(str).str.strip()
-                    vc = pt_theme_filled[col_theme].value_counts()
-                    for k, v in vc.items():
-                        k_label = str(k).strip() if pd.notna(k) else "Hors thème"
-                        if k_label:
-                            themes_counts[k_label] = int(v)
+                s_theme = []
+                if not df_pts.empty:
+                    c = "theme" if "theme" in df_pts.columns else ("type_actio" if "type_actio" in df_pts.columns else None)
+                    if c: s_theme.append(df_pts[c].astype(str))
+                if not df_pej.empty:
+                    c = "THEME" if "THEME" in df_pej.columns else ("TYPE_ACTION" if "TYPE_ACTION" in df_pej.columns else None)
+                    if c: s_theme.append(df_pej[c].astype(str))
+                if not df_pa.empty:
+                    c = "THEME" if "THEME" in df_pa.columns else ("TYPE_ACTION" if "TYPE_ACTION" in df_pa.columns else None)
+                    if c: s_theme.append(df_pa[c].astype(str))
+                if not df_pve.empty:
+                    c = "theme" if "theme" in df_pve.columns else ("THEME" if "THEME" in df_pve.columns else None)
+                    if c: s_theme.append(df_pve[c].astype(str))
+                if s_theme:
+                    for k, v in pd.concat(s_theme).fillna("Hors thème").str.strip().value_counts().items():
+                        if k and k.lower() != 'nan': themes_counts[k] = int(v)
 
                 monthly_controls = [0] * 12
                 monthly_infractions = [0] * 12
-                if "date_ctrl" in df_pts.columns and not df_pts.empty:
+                if not df_pts.empty and "date_ctrl" in df_pts.columns:
                     dt_series = pd.to_datetime(df_pts["date_ctrl"], errors="coerce")
                     res_series = classify_resultat_controle_series(df_pts["resultat"]) if "resultat" in df_pts.columns else pd.Series("En attente", index=df_pts.index)
                     for month in range(1, 13):
                         mask_month = dt_series.dt.month == month
-                        monthly_controls[month - 1] = int(mask_month.sum())
-                        monthly_infractions[month - 1] = int((mask_month & res_series.isin(["Infraction", "Manquement"])).sum())
+                        monthly_controls[month - 1] += int(mask_month.sum())
+                        monthly_infractions[month - 1] += int((mask_month & res_series.isin(["Infraction", "Manquement"])).sum())
+                
+                def add_infractions(df, cols_date):
+                    if df.empty: return
+                    for c in cols_date:
+                        if c in df.columns:
+                            dt_s = pd.to_datetime(df[c], errors="coerce")
+                            for month in range(1, 13):
+                                monthly_infractions[month - 1] += int((dt_s.dt.month == month).sum())
+                            break
+                            
+                add_infractions(df_pej, ["DATE_REF", "date_ref", "DATE_CONSTATATION", "date_constatation"])
+                add_infractions(df_pve, ["DATE_INFRACTION", "date_infraction"])
+                add_infractions(df_pa, ["DATE_REF", "date_ref"])
 
                 # 6. Extraction des points valides pour la cartographie
                 points = []
@@ -434,17 +504,60 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         return arr
                     mask = df[code_col].map(is_filled_procedure_code)
                     df_valid = df.loc[mask].dropna(subset=["x", "y"])
+                    col_ta = "type_actio" if "type_actio" in df.columns else ("type_action" if "type_action" in df.columns else None)
                     for _, r in df_valid.iterrows():
                         arr.append({
                             "type": label,
                             "dc_id": str(r.get("dc_id", "")).strip() if pd.notna(r.get("dc_id")) else "",
                             "date_ctrl": str(r.get("date_ctrl", ""))[:10] if pd.notna(r.get("date_ctrl")) else "",
+                            "type_action": str(r.get(col_ta, "Non renseigné")).strip() if col_ta and pd.notna(r.get(col_ta)) else "Non renseigné",
+                            "type_usager": str(r.get("type_usager", "Non renseigné")).strip() if pd.notna(r.get("type_usager")) else "Non renseigné",
                             "x": float(r["x"]),
                             "y": float(r["y"])
                         })
                     return arr
 
-                procedures.extend(_pts_to_proc(df_pts, "code_pej", "PEJ"))
+                # Extraction des PEJ
+                if not df_pej.empty:
+                    try:
+                        from ofbilan.common.chargeurs_donnees import merge_pej_faits_locations
+                        df_pej_loc = merge_pej_faits_locations(df_pej, project_root, echelle, code)
+                        
+                        # --- FALLBACK COORDONNEES VIA df_pts_unfiltered ---
+                        if not df_pts_unfiltered.empty and "dc_id" in df_pts_unfiltered.columns and "x" in df_pts_unfiltered.columns and "y" in df_pts_unfiltered.columns:
+                            import re
+                            df_pts_clean = df_pts_unfiltered.copy()
+                            df_pts_clean["dc_clean"] = df_pts_clean["dc_id"].astype(str).apply(lambda val: re.sub(r"\.0$", "", str(val)) if pd.notna(val) else "")
+                            dict_x = df_pts_clean.set_index("dc_clean")["x"].to_dict()
+                            dict_y = df_pts_clean.set_index("dc_clean")["y"].to_dict()
+                            
+                            if "x_faits" not in df_pej_loc.columns:
+                                df_pej_loc["x_faits"] = pd.NA
+                            if "y_faits" not in df_pej_loc.columns:
+                                df_pej_loc["y_faits"] = pd.NA
+                                
+                            missing_mask = df_pej_loc["x_faits"].isna() | df_pej_loc["y_faits"].isna()
+                            if missing_mask.any():
+                                dc_clean = df_pej_loc.loc[missing_mask, "DC_ID"].astype(str).apply(lambda val: re.sub(r"\.0$", "", str(val)) if pd.notna(val) else "")
+                                df_pej_loc.loc[missing_mask, "x_faits"] = dc_clean.map(dict_x).fillna(df_pej_loc.loc[missing_mask, "x_faits"])
+                                df_pej_loc.loc[missing_mask, "y_faits"] = dc_clean.map(dict_y).fillna(df_pej_loc.loc[missing_mask, "y_faits"])
+
+                        if not df_pej_loc.empty and "x_faits" in df_pej_loc.columns and "y_faits" in df_pej_loc.columns:
+                            df_pej_valid = df_pej_loc.dropna(subset=["x_faits", "y_faits"])
+                            for _, r in df_pej_valid.iterrows():
+                                procedures.append({
+                                    "type": "PEJ",
+                                    "dc_id": str(r.get("DC_ID", "")).strip() if pd.notna(r.get("DC_ID")) else "",
+                                    "date_ctrl": str(r.get("DATE_REF", ""))[:10] if pd.notna(r.get("DATE_REF")) else "",
+                                    "type_action": str(r.get("TYPE_ACTION", "Non renseigné")).strip() if pd.notna(r.get("TYPE_ACTION")) else "Non renseigné",
+                                    "type_usager": str(r.get("type_usager", "Non renseigné")).strip() if pd.notna(r.get("type_usager")) else "Non renseigné",
+                                    "x": float(r["x_faits"]),
+                                    "y": float(r["y_faits"])
+                                })
+                    except Exception as e:
+                        print(f"Exception merging pej faits: {e}")
+                        pass
+                
                 procedures.extend(_pts_to_proc(df_pts, "code_pa", "PA"))
 
                 # PVe : load_pve() enrichit déjà avec x/y via centroïdes communaux
@@ -454,11 +567,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     if x_col and y_col:
                         pve_valid = df_pve.dropna(subset=[x_col, y_col])
                         date_col_pve = "INF-DATE-MIF" if "INF-DATE-MIF" in df_pve.columns else "INF-DATE-INTG"
+                        col_ta_pve = "type_action" if "type_action" in df_pve.columns else ("THEME" if "THEME" in df_pve.columns else ("type_actio" if "type_actio" in df_pve.columns else None))
+                        col_usager_pve = "type_usager" if "type_usager" in df_pve.columns else ("USAGER" if "USAGER" in df_pve.columns else None)
                         for _, r in pve_valid.iterrows():
                             procedures.append({
                                 "type": "PVe",
                                 "dc_id": str(r.get("DC_ID", "")).strip() if pd.notna(r.get("DC_ID")) else "",
                                 "date_ctrl": str(r.get(date_col_pve, ""))[:10] if pd.notna(r.get(date_col_pve)) else "",
+                                "type_action": str(r.get(col_ta_pve, "Non renseigné")).strip() if col_ta_pve and pd.notna(r.get(col_ta_pve)) else "Non renseigné",
+                                "type_usager": str(r.get(col_usager_pve, "Non renseigné")).strip() if col_usager_pve and pd.notna(r.get(col_usager_pve)) else "Non renseigné",
                                 "x": float(r[x_col]),
                                 "y": float(r[y_col])
                             })
@@ -496,12 +613,20 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     "geojson": geojson_data
                 }
 
+                _SESSION_CACHE["active"] = _original_cache_active
+
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json; charset=utf-8')
                 self.end_headers()
                 self.wfile.write(json.dumps(clean_nan(response_data)).encode('utf-8'))
 
             except Exception as e:
+                try:
+                    from ofbilan.common.chargeurs_donnees import _SESSION_CACHE
+                    if '_original_cache_active' in locals():
+                        _SESSION_CACHE["active"] = _original_cache_active
+                except Exception:
+                    pass
                 import traceback
                 traceback.print_exc()
                 self.send_response(500)
@@ -556,9 +681,54 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         else:
             super().do_POST()
 
+def preload_data_async():
+    import threading
+    def target():
+        try:
+            print("  [Preload] Démarrage du chargement des données en arrière-plan...")
+            project_root = Path(__file__).resolve().parents[3]
+            from ofbilan.common.chargeurs_donnees import load_point_ctrl, load_pej, load_pa, load_pve
+            
+            # 1. Charger les points de contrôle (toutes les années disponibles)
+            print("  [Preload] Chargement des points de contrôle...")
+            load_point_ctrl(project_root)
+            
+            # 2. Charger les procédures pénales (PEJ)
+            print("  [Preload] Chargement des enquêtes judiciaires...")
+            load_pej(project_root)
+            
+            # 3. Charger les procédures administratives (PA)
+            print("  [Preload] Chargement des procédures administratives...")
+            load_pa(project_root)
+            
+            # 4. Charger les PVe
+            print("  [Preload] Chargement des PVe...")
+            load_pve(project_root)
+            
+            # 5. Charger le shapefile des départements
+            try:
+                from ofbilan.cartographie.pochoir_helper import get_departements_admin_shp, _load_all_departements
+                shp = get_departements_admin_shp(project_root)
+                print("  [Preload] Chargement des contours géographiques...")
+                _load_all_departements(str(shp.resolve()))
+            except Exception as e:
+                print(f"  [Preload] Note: Impossible de pré-charger les contours : {e}")
+
+            print("  [Preload] Données chargées avec succès en mémoire. L'explorer est prêt !")
+        except Exception as e:
+            print(f"  [Preload] Erreur lors du pré-chargement : {e}")
+
+    threading.Thread(target=target, daemon=True).start()
+
 def run_server():
     # S'assurer que l'on sert depuis le bon dossier
     os.chdir(str(WEB_DIR))
+    
+    # Lancement du pré-chargement des données en tâche de fond
+    try:
+        preload_data_async()
+    except Exception as e:
+        print(f"Impossible d'initialiser le pré-chargement : {e}")
     
     with socketserver.TCPServer(("", PORT), Handler) as httpd:
         print(f"\n=======================================================")
