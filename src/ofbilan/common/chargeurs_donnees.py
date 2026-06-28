@@ -1898,6 +1898,14 @@ def load_pve(
     global _SESSION_CACHE
     if _SESSION_CACHE["active"] and _SESSION_CACHE["pve"] is not None:
         df = _SESSION_CACHE["pve"].copy()
+        
+        with open(root / "scratch" / "debug_load_pve.txt", "w", encoding="utf-8") as f:
+            f.write(f"1. Total in cache: {len(df)}\n")
+            if not df.empty and "INF-DATE-MIF" in df.columns:
+                f.write(f"Max date MIF in cache: {df['INF-DATE-MIF'].max()}\n")
+            if not df.empty and "INF-DATE-INTG" in df.columns:
+                f.write(f"Max date INTG in cache: {df['INF-DATE-INTG'].max()}\n")
+
         if echelle is not None and code is not None:
             from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre, get_bmi_filters
             echelle_norm = str(echelle).strip().lower()
@@ -1911,7 +1919,6 @@ def load_pve(
                     s = s.replace("Ô", "O").replace("ô", "o").replace("-", " ")
                     return re.sub(r'\s+', ' ', s).strip()
                 
-                # Utiliser les mots-clés explicites du YAML si disponibles, sinon extraction dynamique en fallback
                 keywords_pve_yaml = bmi_filters.get("keywords_pve", [])
                 if keywords_pve_yaml:
                     keywords_to_find = [str(k).upper() for k in keywords_pve_yaml]
@@ -1920,19 +1927,29 @@ def load_pve(
                     keywords_to_find = [w for w in nom_site_val_clean.split() if w not in ["POLE", "DE", "ET", "LA", "LE", "DU", "DES"]]
                 
                 nom_site_col = df["nom_site"].apply(clean_str)
-                # La ligne est conservée si TOUS les mots-clés sont présents dans la colonne
                 mask = nom_site_col.apply(lambda x: all(k in x for k in keywords_to_find))
                 df = df[mask].copy()
+                
+                with open(root / "scratch" / "debug_load_pve.txt", "a", encoding="utf-8") as f:
+                    f.write(f"2. After BMI filter (keywords {keywords_to_find}): {len(df)}\n")
             elif echelle_norm != "bmi":
                 dept_codes = get_departements_pour_perimetre(echelle, code)
                 dept_col = "INF-DEPART" if "INF-DEPART" in df.columns else "INF-DEPARTEMENT"
                 if dept_col in df.columns and dept_codes and "FR" not in dept_codes:
                     df = df[df[dept_col].astype(str).str.strip().isin(dept_codes)].copy()
+                
+                with open(root / "scratch" / "debug_load_pve.txt", "a", encoding="utf-8") as f:
+                    f.write(f"2. After Dept filter: {len(df)}\n")
+        
         date_col = "INF-DATE-MIF" if "INF-DATE-MIF" in df.columns else ("INF-DATE-INTG" if "INF-DATE-INTG" in df.columns else None)
         if date_deb is not None and date_fin is not None and date_col is not None:
             deb_ts = pd.to_datetime(date_deb)
             fin_ts = pd.to_datetime(date_fin)
             df = filtre_periode(df, date_col, deb_ts, fin_ts)
+            
+            with open(root / "scratch" / "debug_load_pve.txt", "a", encoding="utf-8") as f:
+                f.write(f"3. After Date filter ({date_col} between {deb_ts} and {fin_ts}): {len(df)}\n")
+
         return df
 
     sources = root / "data" / "sources"
@@ -1991,7 +2008,23 @@ def load_pve(
         if echelle_norm == "bmi" and "nom_site" in df.columns:
             bmi_filters = get_bmi_filters(code)
             nom_site_val = str(bmi_filters.get("nom_site_pve", "BMI")).upper()
-            df = df[df["nom_site"].astype(str).str.upper().str.contains(nom_site_val, case=True, na=False, regex=False)].copy()
+            import re
+            def clean_str(s):
+                if pd.isna(s): return ""
+                s = str(s).upper()
+                s = s.replace("Ô", "O").replace("ô", "o").replace("-", " ")
+                return re.sub(r'\s+', ' ', s).strip()
+            
+            keywords_pve_yaml = bmi_filters.get("keywords_pve", [])
+            if keywords_pve_yaml:
+                keywords_to_find = [str(k).upper() for k in keywords_pve_yaml]
+            else:
+                nom_site_val_clean = clean_str(nom_site_val)
+                keywords_to_find = [w for w in nom_site_val_clean.split() if w not in ["POLE", "DE", "ET", "LA", "LE", "DU", "DES"]]
+            
+            nom_site_col = df["nom_site"].apply(clean_str)
+            mask = nom_site_col.apply(lambda x: all(k in x for k in keywords_to_find))
+            df = df[mask].copy()
         elif echelle_norm != "bmi":
             dept_codes = get_departements_pour_perimetre(echelle, code)
             dept_col = "INF-DEPART" if "INF-DEPART" in df.columns else "INF-DEPARTEMENT"

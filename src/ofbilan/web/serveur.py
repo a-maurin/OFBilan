@@ -758,9 +758,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         df_pve["y"] = pd.NA
                         
                     if "inf_gps_long" in df_pve.columns:
-                        df_pve["x"] = df_pve["x"].fillna(pd.to_numeric(df_pve["inf_gps_long"], errors="coerce"))
+                        df_pve["x"] = df_pve["x"].fillna(
+                            pd.to_numeric(df_pve["inf_gps_long"].astype(str).str.replace(",", "."), errors="coerce")
+                        )
                     if "inf_gps_lat" in df_pve.columns:
-                        df_pve["y"] = df_pve["y"].fillna(pd.to_numeric(df_pve["inf_gps_lat"], errors="coerce"))
+                        df_pve["y"] = df_pve["y"].fillna(
+                            pd.to_numeric(df_pve["inf_gps_lat"].astype(str).str.replace(",", "."), errors="coerce")
+                        )
                         
                     # Fallback 2: centroïdes des communes nationales si toujours vides
                     missing_pve_mask = df_pve["x"].isna() | df_pve["y"].isna()
@@ -975,11 +979,11 @@ def run_server():
         print(f"Impossible d'initialiser le pré-chargement : {e}")
     
     with socketserver.TCPServer(("", PORT), Handler) as httpd:
-        print(f"\n=======================================================")
+        print(f"\n=================================================================================")
         print(f"  Serveur OFBilan actif sur http://localhost:{PORT}")
         print(f"  L'explorateur s'ouvrira automatiquement à la fin du préchargement des données.")
         print(f"  Appuyez sur Ctrl+C pour arrêter le serveur.")
-        print(f"=======================================================\n")
+        print(f"=================================================================================\n")
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:
