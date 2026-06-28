@@ -3393,6 +3393,7 @@ def _generate_pdf(
     profile: dict,
     cfg: BilanConfig,
     options: dict,
+    ventilation_mode: str = "globale",
 ) -> None:
     """Génère le PDF du bilan avec des sections modulaires."""
     profil_id = profile["id"]
@@ -5816,7 +5817,7 @@ def _run_engine_thematic_pipeline(
     # ── PDF ──
     print("[6/6] Mise en page et création du rapport PDF...")
     with Spinner():
-        _generate_pdf(results, out_dir, profile, cfg, resolved_opts)
+        _generate_pdf(results, out_dir, profile, cfg, resolved_opts, ventilation_mode=ventilation_mode)
 
     print(f"\nTerminé ! Rapport disponible dans : {out_dir}")
     return 0

@@ -19,41 +19,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnToggleProfils = document.getElementById('btn-toggle-profils');
     const profilsDropdown = document.getElementById('profils-dropdown');
 
-    const profilesList = [
-        { value: "global", label: "Bilan Global d'Activité" },
-        { value: "synthese_activite_PA_PJ", label: "Synthèse Activité PA/PJ" },
-        { value: "agrainage", label: "Police de l'Agrainage" },
-        { value: "chasse", label: "Police de la Chasse" },
-        { value: "autorisations_environnementales", label: "Autorisations Environnementales" },
-        { value: "autres_gestion_qualitative", label: "Autres Gestions Qualitatives" },
-        { value: "continuite_ecologique", label: "Continuité Écologique" },
-        { value: "controles_aires_protegees", label: "Contrôles Aires Protégées" },
-        { value: "controles_espaces_proteges", label: "Contrôles Espaces Protégés" },
-        { value: "controles_secheresse", label: "Contrôles Sécheresse" },
-        { value: "especes_exotiques_envahissantes", label: "Espèces Exotiques Envahissantes" },
-        { value: "especes_protegees", label: "Espèces Protégées" },
-        { value: "faune_protegee_reglementee", label: "Faune Protégée Réglementée" },
-        { value: "faune_sauvage", label: "Faune Sauvage" },
-        { value: "faune_sauvage_captive", label: "Faune Sauvage Captive" },
-        { value: "gestion_eaux_pluviales", label: "Gestion des Eaux Pluviales" },
-        { value: "gestion_quantitative_hors_snc", label: "Gestion Quantitative Hors SNC" },
-        { value: "ouvrages_prelevement", label: "Ouvrages de Prélèvement" },
-        { value: "peche", label: "Pêche" },
-        { value: "piegeage", label: "Piégeage" },
-        { value: "plans_eau", label: "Plans d'Eau" },
-        { value: "pnf", label: "PNF (Parc National des Forêts)" },
-        { value: "pollutions_diffuses", label: "Pollutions Diffuses" },
-        { value: "pollutions_urbaines", label: "Pollutions Urbaines" },
-        { value: "procedures_pve", label: "Procédures PVe" },
-        { value: "reglementation_sanitaire", label: "Réglementation Sanitaire" },
-        { value: "sites_inscrits_classes", label: "Sites Inscrits/Classés" },
-        { value: "travaux", label: "Travaux" },
-        { value: "tub", label: "TUB" },
-        { value: "types_usager", label: "Types d'Usagers" },
-        { value: "types_usager_cible", label: "Types d'Usagers – Ciblé" },
-        { value: "zones_humides", label: "Zones Humides" },
-        { value: "hors_theme", label: "Hors Thème" }
-    ];
+    let profilesList = [];
+    
+    fetch('/api/profils')
+        .then(res => res.json())
+        .then(data => {
+            if (Array.isArray(data)) {
+                profilesList = data;
+            }
+        })
+        .catch(err => console.error('Erreur chargement profils:', err));
 
     function renderDropdown(filterText = '') {
         profilsDropdown.innerHTML = '';

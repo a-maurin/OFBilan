@@ -634,7 +634,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- LEAFLET MAP INITIALIZATION ---
     // France Center
-    const map = L.map('map').setView([46.2276, 2.2137], 6);
+    const map = L.map('map', { preferCanvas: true }).setView([46.2276, 2.2137], 6);
     
     // Création d'un volet dédié (pane) pour placer les procédures au-dessus des marqueurs de contrôle
     const procPane = map.createPane('proceduresPane');
@@ -648,8 +648,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }).addTo(map);
 
     const markersGroup = L.layerGroup(); // Les points individuels sans cluster (si besoin de bascule)
-    const markersClusterGroup = L.markerClusterGroup().addTo(map);
+    const markersClusterGroup = L.markerClusterGroup({ chunkedLoading: true }).addTo(map);
     const pejGroup = L.markerClusterGroup({
+        chunkedLoading: true,
         iconCreateFunction: function(cluster) {
             const count = cluster.getChildCount();
             return L.divIcon({
@@ -661,6 +662,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }).addTo(map);
 
     const paGroup = L.markerClusterGroup({
+        chunkedLoading: true,
         iconCreateFunction: function(cluster) {
             const count = cluster.getChildCount();
             return L.divIcon({
@@ -672,6 +674,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }).addTo(map);
 
     const pveGroup = L.markerClusterGroup({
+        chunkedLoading: true,
         iconCreateFunction: function(cluster) {
             const count = cluster.getChildCount();
             return L.divIcon({
@@ -807,6 +810,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const coordinates = [];
             const heatData = [];
             const isHeatmapMode = document.querySelector('input[name="map-mode"]:checked')?.value === 'heatmap';
+            
+            const newMarkers = [];
+            const newPejMarkers = [];
+            const newPaMarkers = [];
+            const newPveMarkers = [];
 
             if (resN.points && resN.points.length > 0) {
                 resN.points.forEach(pt => {
@@ -839,7 +847,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         `;
                         marker.bindPopup(popupContent);
                         markersGroup.addLayer(marker);
-                        markersClusterGroup.addLayer(marker);
+                        newMarkers.push(marker);
                     }
                 });
             }
@@ -893,7 +901,9 @@ document.addEventListener('DOMContentLoaded', () => {
                             Usager visé : ${p.type_usager || 'Non renseigné'}
                         `;
                         marker.bindPopup(popup);
-                        targetGroup.addLayer(marker);
+                        if (targetGroup === pejGroup) newPejMarkers.push(marker);
+                        else if (targetGroup === paGroup) newPaMarkers.push(marker);
+                        else if (targetGroup === pveGroup) newPveMarkers.push(marker);
                     }
                 });
             }
@@ -927,7 +937,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         `;
                         marker.bindPopup(popupContent);
                         markersGroup.addLayer(marker);
-                        markersClusterGroup.addLayer(marker);
+                        newMarkers.push(marker);
                     }
                 });
             }
@@ -970,10 +980,19 @@ document.addEventListener('DOMContentLoaded', () => {
                             Usager visé : ${p.type_usager || 'Non renseigné'}
                         `;
                         marker.bindPopup(popup);
-                        targetGroup.addLayer(marker);
+                        if (targetGroup === pejGroup) newPejMarkers.push(marker);
+                        else if (targetGroup === paGroup) newPaMarkers.push(marker);
+                        else if (targetGroup === pveGroup) newPveMarkers.push(marker);
                     }
                 });
             }
+            
+            // Ajout en masse aux clusters
+            markersClusterGroup.addLayers(newMarkers);
+            pejGroup.addLayers(newPejMarkers);
+            paGroup.addLayers(newPaMarkers);
+            pveGroup.addLayers(newPveMarkers);
+
             // Render boundary if available
             if (resN.geojson) {
                 boundaryLayer = L.geoJSON(resN.geojson, {
