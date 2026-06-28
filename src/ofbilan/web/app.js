@@ -30,6 +30,16 @@ document.addEventListener('DOMContentLoaded', () => {
         })
         .catch(err => console.error('Erreur chargement profils:', err));
 
+    fetch('/api/version')
+        .then(res => res.json())
+        .then(data => {
+            const versionSpan = document.getElementById('app-version');
+            if (versionSpan && data.version) {
+                versionSpan.textContent = data.version;
+            }
+        })
+        .catch(err => console.error('Erreur chargement version:', err));
+
     function renderDropdown(filterText = '') {
         profilsDropdown.innerHTML = '';
         const search = filterText.toLowerCase().trim();

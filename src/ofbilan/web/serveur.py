@@ -40,6 +40,20 @@ def clean_nan(obj):
         return None
     return obj
 
+def get_latest_version():
+    """Extrait le numéro de version de la release la plus récente dans CHANGELOG.md."""
+    changelog_path = Path(__file__).resolve().parents[3] / "CHANGELOG.md"
+    if changelog_path.exists():
+        try:
+            import re
+            content = changelog_path.read_text(encoding="utf-8")
+            match = re.search(r'##\s*\[v?(\d+\.\d+\.\d+)\]', content)
+            if match:
+                return f"v{match.group(1)}"
+        except Exception:
+            pass
+    return "v1.0.2"
+
 class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(WEB_DIR), **kwargs)
@@ -60,6 +74,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if self.path == "/favicon.ico":
             self.send_response(204)
             self.end_headers()
+            return
+
+        if self.path == "/api/version":
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json; charset=utf-8')
+            self.end_headers()
+            self.wfile.write(json.dumps({"version": get_latest_version()}).encode('utf-8'))
             return
 
         if self.path == "/api/profils":
