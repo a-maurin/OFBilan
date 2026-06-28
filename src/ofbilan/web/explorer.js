@@ -649,11 +649,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const markersGroup = L.layerGroup(); // Les points individuels sans cluster (si besoin de bascule)
     const markersClusterGroup = L.markerClusterGroup().addTo(map);
-    const proceduresGroup = L.markerClusterGroup({
+    const pejGroup = L.markerClusterGroup({
         iconCreateFunction: function(cluster) {
             const count = cluster.getChildCount();
             return L.divIcon({
                 html: `<div style="background-color:rgba(59, 130, 246, 0.85);border:2px solid white;border-radius:50%;text-align:center;color:white;font-weight:bold;line-height:26px;width:30px;height:30px;box-shadow: 0 1px 3px rgba(0,0,0,0.3);">${count}</div>`,
+                className: '',
+                iconSize: [30, 30]
+            });
+        }
+    }).addTo(map);
+
+    const paGroup = L.markerClusterGroup({
+        iconCreateFunction: function(cluster) {
+            const count = cluster.getChildCount();
+            return L.divIcon({
+                html: `<div style="background-color:rgba(139, 92, 246, 0.85);border:2px solid white;border-radius:50%;text-align:center;color:white;font-weight:bold;line-height:26px;width:30px;height:30px;box-shadow: 0 1px 3px rgba(0,0,0,0.3);">${count}</div>`,
                 className: '',
                 iconSize: [30, 30]
             });
@@ -676,7 +687,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const baseMaps = {};
     const overlayMaps = {
         "Contrôles (Clusters/Points)": markersClusterGroup,
-        "PA/PEJ": proceduresGroup,
+        "PEJ": pejGroup,
+        "PA": paGroup,
         "PVe": pveGroup
     };
     L.control.layers(baseMaps, overlayMaps, { collapsed: false, position: 'topright' }).addTo(map);
@@ -781,7 +793,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             markersGroup.clearLayers();
             markersClusterGroup.clearLayers();
-            proceduresGroup.clearLayers();
+            pejGroup.clearLayers();
+            paGroup.clearLayers();
             pveGroup.clearLayers();
             if (heatmapLayer) {
                 map.removeLayer(heatmapLayer);
@@ -851,13 +864,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
                         let procColor = '#3B82F6';
                         const ptype = (p.type || '').toUpperCase();
-                        let targetGroup = proceduresGroup;
+                        let targetGroup = pejGroup;
                         if (ptype.includes('PEJ')) {
                             procColor = '#3B82F6';
-                            targetGroup = proceduresGroup;
+                            targetGroup = pejGroup;
                         } else if (ptype.includes('PA')) {
                             procColor = '#8B5CF6';
-                            targetGroup = proceduresGroup;
+                            targetGroup = paGroup;
                         } else if (ptype.includes('PVE')) {
                             procColor = '#F97316';
                             targetGroup = pveGroup;
@@ -927,13 +940,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
                         let procColor = '#3B82F6';
                         const ptype = (p.type || '').toUpperCase();
-                        let targetGroup = proceduresGroup;
+                        let targetGroup = pejGroup;
                         if (ptype.includes('PEJ')) {
                             procColor = '#3B82F6';
-                            targetGroup = proceduresGroup;
+                            targetGroup = pejGroup;
                         } else if (ptype.includes('PA')) {
                             procColor = '#8B5CF6';
-                            targetGroup = proceduresGroup;
+                            targetGroup = paGroup;
                         } else if (ptype.includes('PVE')) {
                             procColor = '#F97316';
                             targetGroup = pveGroup;
