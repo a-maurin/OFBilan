@@ -1899,7 +1899,9 @@ def load_pve(
     if _SESSION_CACHE["active"] and _SESSION_CACHE["pve"] is not None:
         df = _SESSION_CACHE["pve"].copy()
         
-        with open(root / "scratch" / "debug_load_pve.txt", "w", encoding="utf-8") as f:
+        debug_dir = root / "tests" / "scratch"
+        debug_dir.mkdir(parents=True, exist_ok=True)
+        with open(debug_dir / "debug_load_pve.txt", "w", encoding="utf-8") as f:
             f.write(f"1. Total in cache: {len(df)}\n")
             if not df.empty and "INF-DATE-MIF" in df.columns:
                 f.write(f"Max date MIF in cache: {df['INF-DATE-MIF'].max()}\n")
@@ -1930,7 +1932,7 @@ def load_pve(
                 mask = nom_site_col.apply(lambda x: all(k in x for k in keywords_to_find))
                 df = df[mask].copy()
                 
-                with open(root / "scratch" / "debug_load_pve.txt", "a", encoding="utf-8") as f:
+                with open(root / "tests" / "scratch" / "debug_load_pve.txt", "a", encoding="utf-8") as f:
                     f.write(f"2. After BMI filter (keywords {keywords_to_find}): {len(df)}\n")
             elif echelle_norm != "bmi":
                 dept_codes = get_departements_pour_perimetre(echelle, code)
@@ -1938,7 +1940,7 @@ def load_pve(
                 if dept_col in df.columns and dept_codes and "FR" not in dept_codes:
                     df = df[df[dept_col].astype(str).str.strip().isin(dept_codes)].copy()
                 
-                with open(root / "scratch" / "debug_load_pve.txt", "a", encoding="utf-8") as f:
+                with open(root / "tests" / "scratch" / "debug_load_pve.txt", "a", encoding="utf-8") as f:
                     f.write(f"2. After Dept filter: {len(df)}\n")
         
         date_col = "INF-DATE-MIF" if "INF-DATE-MIF" in df.columns else ("INF-DATE-INTG" if "INF-DATE-INTG" in df.columns else None)
@@ -1947,7 +1949,7 @@ def load_pve(
             fin_ts = pd.to_datetime(date_fin)
             df = filtre_periode(df, date_col, deb_ts, fin_ts)
             
-            with open(root / "scratch" / "debug_load_pve.txt", "a", encoding="utf-8") as f:
+            with open(root / "tests" / "scratch" / "debug_load_pve.txt", "a", encoding="utf-8") as f:
                 f.write(f"3. After Date filter ({date_col} between {deb_ts} and {fin_ts}): {len(df)}\n")
 
         return df

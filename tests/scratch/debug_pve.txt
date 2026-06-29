@@ -1,0 +1,18 @@
+GET /data for 2026-01-01 to 2026-06-29
+load_pve returned 38 rows
+Columns: ['INF-ID', 'INF-DATE-INTG', 'INF-DATE-MIF', 'INF-CLASSE', 'INF-NATINF', 'INF-TYP-INF', 'INF-TYP-INF-LIB', 'INF-TYP-INF-STAT-LIB', 'INF-TYP-PLAQUE', 'INF-TYP-PLAQUE-LIB', 'INF-GENRE-VEHICULE', 'INF-GENRE-VEHICULE-LIB', 'INF-PAYS-IMMAT', 'INF-TYP-VOIE', 'INF-NATURE-VOIE', 'INF-NOM-VOIE', 'INF-REP-KM', 'inf_gps_lat', 'inf_gps_long', 'INF-COO-GPS', 'INF-ARRONDISSEMENT', 'INF-DEPARTEMENT', 'INF-CP', 'INF-INSEE', 'INF-CODE-UNITE', 'UNITE_Libelle', 'nom_site', 'categorie_unite', 'nom_parc', 'INF-NUM-AGENT', 'Type_Equpiment', 'etat_saisine', 'motif_saisine', 'INF-DEPART', 'x', 'y']
+MIF head:
+0   2026-01-31
+1   2026-01-23
+2   2026-01-02
+3   2026-01-30
+4   2026-01-17
+Name: INF-DATE-MIF, dtype: datetime64[ns]
+INTG head:
+0   2026-01-31
+1   2026-01-28
+2   2026-01-02
+3   2026-01-30
+4   2026-01-19
+Name: INF-DATE-INTG, dtype: datetime64[ns]
+After keyword filters: 38 rows

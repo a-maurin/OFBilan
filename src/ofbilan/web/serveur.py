@@ -333,9 +333,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     if isinstance(type_usager, str):
                         type_usager = [type_usager]
                     tu_lower = {u.strip().lower() for u in type_usager if u.strip()}
-                    if tu_lower:
+                    if tu_lower and "type_usager" in df_pts.columns:
                         df_pts = df_pts[df_pts["type_usager"].astype(str).str.strip().str.lower().apply(
-                            lambda val: any(u in val for u in tu_lower)
+                            lambda val: any(u in str(val) for u in tu_lower)
                         )].copy()
 
                 if domaines:
@@ -360,7 +360,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         col_ta = "type_actio" if "type_actio" in df_pts.columns else ("type_action" if "type_action" in df_pts.columns else None)
                         if col_ta:
                             df_pts = df_pts[df_pts[col_ta].astype(str).str.strip().str.lower().apply(
-                                lambda val: any(t in val for t in ta_lower)
+                                lambda val: any(t in str(val) for t in ta_lower)
                             )].copy()
 
                 # Filtrage résultat (Conforme / Non-conforme / En attente)
@@ -395,8 +395,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 df_pej = load_pej(project_root, echelle=echelle, code=code, date_deb=date_deb, date_fin=date_fin) if load_pej_flag else pd.DataFrame()
                 if profile_cfg.get("pipeline") != "global":
                     df_pej = _filter_pej(df_pej, profile_cfg, cfg_obj, df_pts)
-                if type_usager:
-                    df_pej = df_pej[df_pej["type_usager"].astype(str).str.lower().str.contains(type_usager.lower(), na=False)].copy()
+                if type_usager and tu_lower and "type_usager" in df_pej.columns:
+                    df_pej = df_pej[df_pej["type_usager"].astype(str).str.strip().str.lower().apply(
+                        lambda val: any(u in str(val) for u in tu_lower)
+                    )].copy()
                 if domaines:
                     td_lower = {d.strip().lower() for d in domaines if d.strip()}
                     if td_lower and "DOMAINE" in df_pej.columns:
@@ -413,7 +415,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         col_ta = "TYPE_ACTION" if "TYPE_ACTION" in df_pej.columns else None
                         if col_ta:
                             df_pej = df_pej[df_pej[col_ta].astype(str).str.strip().str.lower().apply(
-                                lambda val: any(t in val for t in ta_lower)
+                                lambda val: any(t in str(val) for t in ta_lower)
                             )].copy()
                 total_pej = len(df_pej)
 
@@ -428,8 +430,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                             df_pa = df_pa[df_pa["ENTITE_ORIGINE_PROCEDURE"].isin(entity_sds)].copy()
                         from ofbilan.common.utilitaires_metier import resolve_type_usager_champ
                         usager_col = resolve_type_usager_champ(df_pa)
-                        if type_usager and usager_col:
-                            df_pa = df_pa[df_pa[usager_col].astype(str).str.lower().str.contains(type_usager.lower(), na=False)].copy()
+                        if type_usager and usager_col and tu_lower:
+                            df_pa = df_pa[df_pa[usager_col].astype(str).str.strip().str.lower().apply(
+                                lambda val: any(u in str(val) for u in tu_lower)
+                            )].copy()
                         if "DC_ID" in df_pa.columns:
                             if "DATE_REF" in df_pa.columns:
                                 df_pa = df_pa.sort_values("DATE_REF", ascending=False).drop_duplicates(subset="DC_ID", keep="first")
@@ -451,7 +455,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                             col_ta = "TYPE_ACTION" if "TYPE_ACTION" in df_pa.columns else ("THEME" if "THEME" in df_pa.columns else None)
                             if col_ta:
                                 df_pa = df_pa[df_pa[col_ta].astype(str).str.strip().str.lower().apply(
-                                    lambda val: any(t in val for t in ta_lower)
+                                    lambda val: any(t in str(val) for t in ta_lower)
                                 )].copy()
                     from ofbilan.common.utilitaires_metier import count_pa_from_point_ctrl
                     total_pa = count_pa_from_point_ctrl(df_pts)
@@ -463,7 +467,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     df_pve = load_pve(project_root, echelle=echelle, code=code, date_deb=date_deb, date_fin=date_fin) if load_pve_flag else pd.DataFrame()
                     
                     # LOG DE DIAGNOSTIC
-                    with open(project_root / "scratch" / "debug_pve.txt", "w", encoding="utf-8") as f:
+                    debug_path = project_root / "tests" / "scratch"
+                    debug_path.mkdir(parents=True, exist_ok=True)
+                    with open(debug_path / "debug_pve.txt", "w", encoding="utf-8") as f:
                         f.write(f"GET /data for {date_deb} to {date_fin}\n")
                         f.write(f"load_pve returned {len(df_pve)} rows\n")
                         if not df_pve.empty:
@@ -487,16 +493,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                             col_ta = "type_action" if "type_action" in df_pve.columns else ("THEME" if "THEME" in df_pve.columns else ("type_actio" if "type_actio" in df_pve.columns else ("INF-TYP-INF-STAT-LIB" if "INF-TYP-INF-STAT-LIB" in df_pve.columns else None)))
                             if col_ta:
                                 df_pve = df_pve[df_pve[col_ta].astype(str).str.strip().str.lower().apply(
-                                    lambda val: any(t in val for t in ta_lower)
+                                    lambda val: any(t in str(val) for t in ta_lower)
                                 )].copy()
                     
                     # DIAGNOSTIC LOG AFTER FILTERS
-                    with open(project_root / "scratch" / "debug_pve.txt", "a", encoding="utf-8") as f:
+                    with open(project_root / "tests" / "scratch" / "debug_pve.txt", "a", encoding="utf-8") as f:
                         f.write(f"After keyword filters: {len(df_pve)} rows\n")
                         
                     total_pve = len(df_pve)
                 except Exception as e:
-                    with open(project_root / "scratch" / "debug_pve.txt", "a", encoding="utf-8") as f:
+                    with open(project_root / "tests" / "scratch" / "debug_pve.txt", "a", encoding="utf-8") as f:
                         f.write(f"EXCEPTION: {e}\n")
                     total_pve = 0
 
@@ -874,6 +880,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 except Exception:
                     pass
                 import traceback
+                import datetime
+                err_log_dir = project_root / "tests" / "scratch"
+                err_log_dir.mkdir(parents=True, exist_ok=True)
+                err_log_path = err_log_dir / "serveur_error.log"
+                with open(err_log_path, "a", encoding="utf-8") as f:
+                    f.write(f"\n--- Erreur API /data à {datetime.datetime.now()} ---\n")
+                    traceback.print_exc(file=f)
                 traceback.print_exc()
                 self.send_response(500)
                 self.send_header('Content-Type', 'application/json; charset=utf-8')
