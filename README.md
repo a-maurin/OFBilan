@@ -62,7 +62,16 @@ L'utilisation principale s'effectue directement depuis l'interface utilisateur d
     *   Elle ouvre automatiquement votre navigateur internet par défaut sur l'interface interactive : `http://localhost:8000/explorer.html`.
 5.  Lorsque vous fermez QGIS, le serveur web d'OFBilan s'arrête automatiquement.
 
-### 2. Fonctionnalités de l'interface web
+### 2. Démarrage en mode autonome (Sans ouvrir QGIS)
+
+Si vous ne souhaitez pas ouvrir QGIS, vous pouvez exécuter le serveur de manière totalement autonome en utilisant le script de démarrage rapide :
+
+1.  Double-cliquez sur le fichier `lancer_serveur_autonome.bat` situé à la racine du projet.
+2.  Le script va automatiquement rechercher l'interpréteur Python de votre installation QGIS locale (ex: dans `C:\Program Files\QGIS 3.44.8`).
+3.  Une fois trouvé, il lance le serveur web d'OFBilan et vous pouvez alors accéder à l'interface via votre navigateur à l'adresse : `http://localhost:8000/explorer.html`.
+4.  Pour arrêter le serveur, il vous suffit de fermer la fenêtre de commande ouverte par le script `.bat`.
+
+### 3. Fonctionnalités de l'interface web
 
 L'application web s'articule autour de deux onglets :
 

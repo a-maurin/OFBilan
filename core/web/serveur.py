@@ -76,6 +76,43 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             return
 
+        if self.path == '/api/restart':
+            # Endpoint pour redémarrer le serveur
+            import time
+            import threading
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "restarting"}).encode('utf-8'))
+            print("Redémarrage du serveur demandé via l'interface web...")
+            
+            def restart():
+                time.sleep(0.5)
+                # On utilise sys.executable pour relancer exactement le même script
+                os.execv(sys.executable, [sys.executable] + sys.argv)
+                
+            threading.Thread(target=restart, daemon=True).start()
+            return
+            
+        elif self.path == '/api/shutdown':
+            # Endpoint pour éteindre le serveur
+            import time
+            import threading
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "shutting down"}).encode('utf-8'))
+            print("Extinction du serveur demandée via l'interface web...")
+            
+            def shutdown():
+                time.sleep(0.5)
+                os._exit(0)
+                
+            threading.Thread(target=shutdown, daemon=True).start()
+            return
+
         if self.path == "/api/version":
             self.send_response(200)
             self.send_header('Content-Type', 'application/json; charset=utf-8')
@@ -1029,6 +1066,7 @@ def run_server():
     except Exception as e:
         print(f"Impossible d'initialiser le pré-chargement : {e}")
     
+    socketserver.TCPServer.allow_reuse_address = True
     with socketserver.TCPServer(("", PORT), Handler) as httpd:
         print(f"\n=================================================================================")
         print(f"  Serveur OFBilan actif sur http://localhost:{PORT}")

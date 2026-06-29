@@ -23,12 +23,8 @@
             margin-bottom: 30px;
         }
         .logo {
-            width: 150px;
+            width: 250px;
             height: auto;
-            /* Animation de pulsation */
-            animation: pulse 2s infinite ease-in-out;
-            /* Filtre blanc pour s'assurer qu'il ressort sur le fond bleu s'il ne l'est pas déjà */
-            filter: brightness(0) invert(1);
         }
         .loading-text {
             font-size: 1.5rem;
@@ -49,12 +45,6 @@
         @keyframes fadeIn {
             from { opacity: 0; }
             to { opacity: 1; }
-        }
-
-        @keyframes pulse {
-            0% { transform: scale(1); opacity: 0.9; }
-            50% { transform: scale(1.05); opacity: 1; }
-            100% { transform: scale(1); opacity: 0.9; }
         }
 
         @keyframes spin {

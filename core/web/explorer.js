@@ -740,7 +740,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function loadData() {
         btnUpdate.disabled = true;
-        btnUpdate.textContent = 'Chargement...';
+        btnUpdate.innerHTML = '<span style="display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-radius:50%;border-top-color:#fff;animation:spin 1s ease-in-out infinite;margin-right:8px;vertical-align:middle;"></span>Chargement...';
 
         const isCompare = compareActiveCheck && compareActiveCheck.checked;
 
@@ -1584,7 +1584,7 @@ document.addEventListener('DOMContentLoaded', () => {
         })
         .finally(() => {
             btnUpdate.disabled = false;
-            btnUpdate.textContent = 'Charger les données';
+            btnUpdate.innerHTML = 'Charger les données';
         });
     }
 

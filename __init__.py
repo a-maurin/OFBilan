@@ -5,14 +5,20 @@ from qgis.PyQt.QtWidgets import QMessageBox
 
 def install_dependencies(iface):
     """Vérifie et installe les dépendances requises via pip dans l'environnement QGIS."""
-    required_packages = ['pandas', 'reportlab', 'fastapi', 'uvicorn', 'pyyaml']
+    required_packages = {
+        'pandas': 'pandas',
+        'reportlab': 'reportlab',
+        'fastapi': 'fastapi',
+        'uvicorn': 'uvicorn',
+        'yaml': 'pyyaml'
+    }
     missing_packages = []
     
-    for package in required_packages:
+    for import_name, package_name in required_packages.items():
         try:
-            __import__(package)
+            __import__(import_name)
         except ImportError:
-            missing_packages.append(package)
+            missing_packages.append(package_name)
             
     if missing_packages:
         msg = f"OFBilan a besoin des paquets suivants : {', '.join(missing_packages)}.\n\nVoulez-vous tenter de les installer automatiquement (nécessite une connexion internet et peut-être des droits administrateur) ?"
