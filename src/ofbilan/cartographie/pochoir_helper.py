@@ -70,6 +70,7 @@ def load_department_gdf(
     dept_code: str,
     *,
     project_root: Optional[Path] = None,
+    dissolve: bool = True,
 ) -> gpd.GeoDataFrame:
     """
     Extrait le polygone du département cible depuis DEPARTEMENT_ADMIN_Express_200207.shp.
@@ -99,22 +100,34 @@ def load_department_gdf(
         raise ValueError(
             f"Département(s) {target_depts} introuvable(s) dans {shp.name}"
         )
-    if len(subset) > 1:
+    if len(subset) > 1 and dissolve:
         subset = subset.dissolve()
         
-    nom = f"Zone {dept_code}" if len(target_depts) > 1 else str(subset.iloc[0].get("NOM_DEP", ""))
-    insee = dept_code if len(target_depts) > 1 else normalize_dept_code(dept_code)
-    
-    out = gpd.GeoDataFrame(
-        {
-            "id": [f"DEPARTEM_{insee}"],
-            "nom": [nom],
-            "insee_dep": [insee],
-            "insee_reg": [str(subset.iloc[0].get("INSEE_REG", ""))],
-        },
-        geometry=subset.geometry.values,
-        crs=subset.crs,
-    )
+    if len(subset) > 1 and not dissolve:
+        out = gpd.GeoDataFrame(
+            {
+                "id": [f"DEPARTEM_{row.get(_INSEE_DEP_COL, '')}" for _, row in subset.iterrows()],
+                "nom": [str(row.get("NOM_DEP", "")) for _, row in subset.iterrows()],
+                "insee_dep": [str(row.get(_INSEE_DEP_COL, "")) for _, row in subset.iterrows()],
+                "insee_reg": [str(row.get("INSEE_REG", "")) for _, row in subset.iterrows()],
+            },
+            geometry=subset.geometry.values,
+            crs=subset.crs,
+        )
+    else:
+        nom = f"Zone {dept_code}" if len(target_depts) > 1 else str(subset.iloc[0].get("NOM_DEP", ""))
+        insee = dept_code if len(target_depts) > 1 else normalize_dept_code(dept_code)
+        
+        out = gpd.GeoDataFrame(
+            {
+                "id": [f"DEPARTEM_{insee}"],
+                "nom": [nom],
+                "insee_dep": [insee],
+                "insee_reg": [str(subset.iloc[0].get("INSEE_REG", ""))],
+            },
+            geometry=subset.geometry.values,
+            crs=subset.crs,
+        )
     return out
 
 

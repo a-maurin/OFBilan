@@ -289,7 +289,7 @@ global_usagers:
         "Autre": "#95A5A6"              # Gris
 
 ppp:
-  title: "Bilan d'activité de police judiciaire sur les produits phytosanitaires — Côte-d'Or"
+  title: "Bilan d'activité de police judiciaire sur les produits phytopharmaceutiques — Côte-d'Or"
   layout_name: "Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or"
   output_filename: "carte_ppp.png"
   date_deb: "2025-01-01"
@@ -326,7 +326,7 @@ ppp:
       palette: "Blues"
 
 ppp_procedures:
-  title: "Bilan d'activité de police judiciaire sur les produits phytosanitaires — Côte-d'Or"
+  title: "Bilan d'activité de police judiciaire sur les produits phytopharmaceutiques — Côte-d'Or"
   layout_name: "Bilan 2025 / 2026 - Agrainage illicite - Côte d'Or"
   output_filename: "carte_ppp_procedures.png"
   date_deb: "2025-01-01"

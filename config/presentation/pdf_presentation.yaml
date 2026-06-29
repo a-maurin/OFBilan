@@ -382,7 +382,7 @@ profiles:
         - when: always
           text: "<b>Réalisation :</b> service départemental de la Côte d'Or."
 
-  # Produits Phytosanitaires (PPP) : Police judiciaire (PEJ) uniquement
+  # Produits Phytopharmaceutiques (PPP) : Police judiciaire (PEJ) uniquement
   ppp:
     scope: thematique
     sections:

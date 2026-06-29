@@ -834,7 +834,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     else:
                         from ofbilan.cartographie.pochoir_helper import load_department_gdf
                         os.environ["BILANS_CARTO_ECHELLE"] = echelle
-                        gdf_boundary = load_department_gdf(code, project_root=project_root)
+                        gdf_boundary = load_department_gdf(code, project_root=project_root, dissolve=(echelle != "region"))
                     if not gdf_boundary.empty:
                         if gdf_boundary.crs is None:
                             gdf_boundary.set_crs(epsg=2154, inplace=True)

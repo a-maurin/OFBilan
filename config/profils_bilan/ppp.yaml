@@ -1,7 +1,7 @@
-# Profil thématique - Produits phytosanitaires (PPP)
+# Profil thématique - Produits phytopharmaceutiques (PPP)
 schema_version: 2
 id: ppp
-label: "Produits phytosanitaires"
+label: "Produits phytopharmaceutiques"
 out_subdir: bilan_ppp
 
 filter:

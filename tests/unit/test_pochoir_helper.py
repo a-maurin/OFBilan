@@ -117,3 +117,10 @@ def test_warn_if_unknown_carto_dept(require_admin_shp, caplog):
         assert warn_if_unknown_carto_dept("25")
         assert not warn_if_unknown_carto_dept("999")
     assert any("999" in r.message for r in caplog.records)
+
+
+def test_load_department_gdf_region_dissolve_false(require_admin_shp):
+    gdf = load_department_gdf("r27", project_root=PROJECT_ROOT, dissolve=False)
+    assert len(gdf) > 1
+    assert all(gdf["insee_reg"] == "27")
+
