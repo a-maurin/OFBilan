@@ -1,7 +1,7 @@
 """Chemins du projet — partagés par tous les programmes."""
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def get_out_dir(programme: str) -> Path:

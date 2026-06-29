@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 
 def generer_logo_blanc():
-    root = Path(__file__).resolve().parents[3]
+    root = Path(__file__).resolve().parents[2]
     src_path = root / "ref" / "programme" / "logos" / "bandeau_ofbilan.svg"
     dst_path = root / "ref" / "programme" / "logos" / "bandeau_ofbilan_blanc.svg"
     local_dst_path = Path(__file__).resolve().parent / "logo.svg"

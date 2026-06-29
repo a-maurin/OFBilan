@@ -20,7 +20,7 @@ from ofbilan.common.ofb_charte import (
     COLOR_TABLE_HEADER_BG,
 )
 
-_MODELE_OFB_DIR = Path(__file__).resolve().parents[3] / "ref" / "programme" / "modele_ofb"
+_MODELE_OFB_DIR = Path(__file__).resolve().parents[2] / "ref" / "programme" / "modele_ofb"
 LOGO_OFB_INTRANET_BLANC = _MODELE_OFB_DIR / "logo-ofb-intranet_blanc.png"
 _BANDEAU_LOGO_H = 9.0 * mm
 _BANDEAU_LOGO_GAP = 2.5 * mm

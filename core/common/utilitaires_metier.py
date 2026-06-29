@@ -9,7 +9,7 @@ from typing import Any, List
 import geopandas as gpd
 import pandas as pd
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _TYPES_USAGERS_PATH = _PROJECT_ROOT / "ref" / "programme" / "tables_reference" / "types_usagers.csv"
 _REGIONS_YAML_PATH = _PROJECT_ROOT / "config" / "regions_referentiel.yaml"
 _BMI_YAML_PATH = _PROJECT_ROOT / "config" / "referentiel_bmi.yaml"

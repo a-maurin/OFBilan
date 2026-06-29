@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 
 # Add src/ to sys.path
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "core"))
 
 from ofbilan.web.serveur import get_latest_version
 

@@ -6,7 +6,7 @@ from difflib import SequenceMatcher
 from pathlib import Path
 
 
-BASE = Path(__file__).resolve().parents[1]
+BASE = Path(__file__).resolve().parents[2]
 
 REF_PATH = (
     BASE

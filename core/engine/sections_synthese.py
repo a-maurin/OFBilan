@@ -42,7 +42,7 @@ from ofbilan.common.pdf_shared_sections import (
     build_filtered_glossary_rows,
 )
 
-_ROOT = Path(__file__).resolve().parents[3]
+_ROOT = Path(__file__).resolve().parents[2]
 
 def render_sec1(ctx: PdfContext) -> None:
     ctx.builder.add_section("sec1", "1. Chiffres clés")

@@ -38,7 +38,7 @@ if not logger.handlers:
     _log_fmt = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
     logging.basicConfig(level=logging.INFO, format=_log_fmt, datefmt="%H:%M:%S")
 
-PROJECT_ROOT = SCRIPT_DIR.parents[2]
+PROJECT_ROOT = SCRIPT_DIR.parents[1]
 OUT_DIR_CARTES = PROJECT_ROOT / "data" / "out" / "generateur_de_cartes"
 sys.path.insert(0, str(SCRIPT_DIR))
 sys.path.insert(0, str(PROJECT_ROOT))

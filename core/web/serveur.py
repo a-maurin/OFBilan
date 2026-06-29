@@ -92,7 +92,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     yaml.add_constructor("!include", yaml_include_dummy_constructor, Loader=yaml.SafeLoader)
                 except Exception:
                     pass
-                project_root = Path(__file__).resolve().parents[3]
+                project_root = Path(__file__).resolve().parents[2]
                 profiles_dir = project_root / "config" / "profils_bilan"
                 profils_list = [{
                     "value": "global",
@@ -273,7 +273,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             try:
                 import datetime
                 from pathlib import Path
-                project_root = Path(__file__).resolve().parents[3]
+                project_root = Path(__file__).resolve().parents[2]
                 
                 debug_log = project_root / "tests" / "scratch" / "api_data_debug.log"
                 debug_log.parent.mkdir(parents=True, exist_ok=True)
@@ -983,7 +983,7 @@ def preload_data_async():
     def target():
         try:
             print("  [Preload] Démarrage du chargement des données en arrière-plan...")
-            project_root = Path(__file__).resolve().parents[3]
+            project_root = Path(__file__).resolve().parents[2]
             from ofbilan.common.chargeurs_donnees import load_point_ctrl, load_pej, load_pa, load_pve
             
             # 1. Charger les points de contrôle (toutes les années disponibles)

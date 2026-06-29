@@ -90,7 +90,7 @@ from ofbilan.common.cartographie_config import (
 from reportlab.lib.units import mm
 from reportlab.platypus import Image as RLImage, Paragraph, Spacer
 
-_ROOT = Path(__file__).resolve().parents[3]
+_ROOT = Path(__file__).resolve().parents[2]
 
 VENTILATION_SEUIL_JOURS_GLOBAL = 366
 

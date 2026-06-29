@@ -26,7 +26,7 @@ from ofbilan.engine.generation_pdf_profil import _build_rows_resultats_controles
 from ofbilan.common.carte_helper import expected_map_filenames
 from ofbilan.common.cartographie_config import expected_map_filenames_for_selection
 from PIL import Image as PILImage
-_ROOT = Path(__file__).resolve().parents[3]
+_ROOT = Path(__file__).resolve().parents[2]
 from reportlab.lib.units import mm
 from reportlab.platypus import Image as RLImage, Paragraph, Spacer
 

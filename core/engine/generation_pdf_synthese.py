@@ -264,7 +264,7 @@ def _build_synthese_key_figure_rows(
         rows.append(row2)
     return rows
 
-_ROOT = Path(__file__).resolve().parents[3]
+_ROOT = Path(__file__).resolve().parents[2]
 PROFILE_ID = "synthese_activite_PA_PJ"
 
 

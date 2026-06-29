@@ -25,7 +25,7 @@ from ofbilan.common.utilitaires_metier import (
     points_as_pa_lignes,
 )
 
-_ROOT = Path(__file__).resolve().parents[3]
+_ROOT = Path(__file__).resolve().parents[2]
 
 def _build_global_proc_detail(
     df: pd.DataFrame,
