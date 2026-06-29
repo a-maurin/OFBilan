@@ -23,7 +23,7 @@
             margin-bottom: 30px;
         }
         .logo {
-            width: 350px;
+            width: 500px;
             height: auto;
         }
         .loading-text {
@@ -50,6 +50,24 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+
+        .logs-container {
+            margin-top: 30px;
+            width: 80%;
+            max-width: 600px;
+            height: 150px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            padding: 15px;
+            text-align: left;
+            font-family: monospace;
+            font-size: 0.9rem;
+            color: #d1d5db;
+            overflow-y: auto;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            margin-left: auto;
+            margin-right: auto;
+        }
     </style>
 </head>
 <body>
@@ -60,28 +78,35 @@
         </div>
         <div class="loading-text">DÉMARRAGE DU SERVEUR</div>
         <div class="spinner"></div>
+        <div class="logs-container" id="logs">Initialisation...</div>
     </div>
 
     <script>
         const targetUrl = 'http://localhost:8000/explorer.html';
-        const pingUrl = 'http://localhost:8000/favicon.ico';
+        const statusUrl = 'http://localhost:8000/api/preload-status';
         let retries = 0;
-        const maxRetries = 60; // 30 secondes (60 * 500ms)
+        const maxRetries = 120; // 60 secondes (120 * 500ms)
 
         function checkServer() {
-            // Mode 'no-cors' pour éviter les erreurs CORS depuis un fichier file://
-            // Si le serveur est mort, fetch lève une exception TypeError (NetworkError).
-            // S'il est en vie, il renverra une réponse opaque.
-            fetch(pingUrl, { mode: 'no-cors' })
-                .then(() => {
-                    // Le serveur a répondu (même avec une erreur 404, au niveau TCP c'est OK)
-                    // On attend un tout petit peu que l'app se stabilise
-                    setTimeout(() => {
-                        window.location.replace(targetUrl);
-                    }, 500);
+            fetch(statusUrl)
+                .then(response => response.json())
+                .then(data => {
+                    const logsDiv = document.getElementById('logs');
+                    if (data.logs && data.logs.length > 0) {
+                        logsDiv.innerHTML = data.logs.join('<br>');
+                        logsDiv.scrollTop = logsDiv.scrollHeight;
+                    }
+                    
+                    if (data.status === 'ready') {
+                        document.querySelector('.loading-text').innerText = "PRÊT !";
+                        setTimeout(() => {
+                            window.location.replace(targetUrl);
+                        }, 500);
+                    } else {
+                        setTimeout(checkServer, 500);
+                    }
                 })
                 .catch((error) => {
-                    // Erreur réseau (serveur pas encore lancé)
                     retries++;
                     if (retries < maxRetries) {
                         setTimeout(checkServer, 500);

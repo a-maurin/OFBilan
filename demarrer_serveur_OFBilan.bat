@@ -2,6 +2,14 @@
 chcp 65001 >nul
 setlocal enabledelayedexpansion
 
+:: Anti "Terminate batch job (Y/N)" prompt trick
+if "%~1"=="run" goto :run
+start "" /B /WAIT cmd /c ""%~f0" run" <nul
+echo Appuyez sur une touche pour quitter...
+pause >nul
+exit /b
+
+:run
 echo =====================================
 echo     Lancement du serveur OFBilan
 echo =====================================
@@ -26,7 +34,6 @@ for /d %%i in ("C:\Program Files\QGIS*") do (
 if %QGIS_PYTHON%=="" (
     echo [ERREUR] Impossible de trouver une installation standard de QGIS dans C:\Program Files\
     echo Veuillez modifier manuellement ce script pour pointer vers votre fichier "python-qgis.bat".
-    pause
     exit /b 1
 )
 
@@ -35,6 +42,5 @@ echo [OK] Demarrage du serveur...
 echo.
 
 :: %~dp0 correspond au dossier ou se trouve ce script .bat
-call %QGIS_PYTHON% "%~dp0core\web\serveur.py" < nul
-
-pause
+call %QGIS_PYTHON% "%~dp0core\web\serveur.py"
+exit /b

@@ -22,6 +22,9 @@ except ImportError:
 
 PORT = 8000
 
+_PRELOAD_LOGS = []
+_PRELOAD_STATUS = "loading"
+
 def clean_nan(obj):
     import math
     if isinstance(obj, dict):
@@ -74,6 +77,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if self.path == "/favicon.ico":
             self.send_response(204)
             self.end_headers()
+            return
+
+        if self.path == "/api/preload-status":
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json; charset=utf-8')
+            self.send_header('Cache-Control', 'no-cache')
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "status": _PRELOAD_STATUS,
+                "logs": _PRELOAD_LOGS
+            }).encode('utf-8'))
             return
 
         if self.path == '/api/restart':
@@ -1019,42 +1033,47 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 def preload_data_async():
     import threading
     def target():
+        def log_preload(msg):
+            print(msg)
+            _PRELOAD_LOGS.append(msg)
+            if len(_PRELOAD_LOGS) > 20:
+                _PRELOAD_LOGS.pop(0)
+                
         try:
-            print("  [Preload] Démarrage du chargement des données en arrière-plan...")
+            log_preload("  Démarrage du chargement des données en arrière-plan...")
             project_root = Path(__file__).resolve().parents[2]
             from ofbilan.common.chargeurs_donnees import load_point_ctrl, load_pej, load_pa, load_pve
             
             # 1. Charger les points de contrôle (toutes les années disponibles)
-            print("  [Preload] Chargement des points de contrôle...")
+            log_preload("  Chargement des points de contrôle...")
             load_point_ctrl(project_root)
             
             # 2. Charger les procédures pénales (PEJ)
-            print("  [Preload] Chargement des enquêtes judiciaires...")
+            log_preload("  Chargement des enquêtes judiciaires...")
             load_pej(project_root)
             
             # 3. Charger les procédures administratives (PA)
-            print("  [Preload] Chargement des procédures administratives...")
+            log_preload("  Chargement des procédures administratives...")
             load_pa(project_root)
             
             # 4. Charger les PVe
-            print("  [Preload] Chargement des PVe...")
+            log_preload("  Chargement des PVe...")
             load_pve(project_root)
             
             # 5. Charger le shapefile des départements
             try:
                 from ofbilan.cartographie.pochoir_helper import get_departements_admin_shp, _load_all_departements
                 shp = get_departements_admin_shp(project_root)
-                print("  [Preload] Chargement des contours géographiques...")
+                log_preload("  Chargement des contours géographiques...")
                 _load_all_departements(str(shp.resolve()))
             except Exception as e:
-                print(f"  [Preload] Note: Impossible de pré-charger les contours : {e}")
+                log_preload(f"  Note: Impossible de pré-charger les contours : {e}")
 
-            print("  [Preload] Données chargées avec succès en mémoire. L'explorer est prêt !")
-            if os.environ.get("OFBILAN_RESTART") != "1":
-                import webbrowser
-                webbrowser.open(f"http://localhost:{PORT}/explorer.html")
+            log_preload("  Données chargées avec succès en mémoire. L'explorer est prêt !")
+            global _PRELOAD_STATUS
+            _PRELOAD_STATUS = "ready"
         except Exception as e:
-            print(f"  [Preload] Erreur lors du pré-chargement : {e}")
+            log_preload(f"  Erreur lors du pré-chargement : {e}")
 
     threading.Thread(target=target, daemon=True).start()
 
@@ -1075,6 +1094,11 @@ def run_server():
         print(f"  L'explorateur s'ouvrira automatiquement à la fin du préchargement des données.")
         print(f"  Appuyez sur Ctrl+C pour arrêter le serveur.")
         print(f"=================================================================================\n")
+        
+        if os.environ.get("OFBILAN_RESTART") != "1":
+            import webbrowser
+            webbrowser.open(f"http://localhost:{PORT}/loading.html")
+            
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:
