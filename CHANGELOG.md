@@ -4,6 +4,25 @@ Toutes les modifications notables apportées au projet **OFBilan** depuis la ver
 
 ---
 
+## [v1.0.3] - 2026-06-29 : Migration vers QGIS et architecture de plugin
+
+Cette version marque une transition majeure : le projet passe d'un outil autonome à un véritable plugin QGIS, exploitant l'environnement Python de QGIS.
+
+### Architecture et intégration QGIS
+* **Plugin QGIS** : Structuration du projet en tant que plugin QGIS pour une intégration native.
+* **Environnement Python QGIS** : Utilisation de l'interpréteur Python fourni par QGIS pour s'affranchir des conflits de dépendances externes.
+* **Script de lancement** : Amélioration de `lancer_serveur_autonome.bat` pour détecter et utiliser correctement Python QGIS.
+
+### Interface et Serveur
+* **Explorer par défaut** : L'interface web s'ouvre désormais directement sur la vue "Explorer".
+* **Gestion du navigateur** : Prévention des ouvertures multiples d'onglets lors du démarrage.
+* **Arrêt du serveur** : Arrêt immédiat et propre du serveur local sans demande de confirmation.
+
+### Documentation et Distribution
+* **Documentation à jour** : Le `README.md` et `carte_code.md` reflètent la nouvelle architecture plugin.
+* **Packaging** : Scripts de déploiement (`installer_pack.bat`) et `.gitignore` ajustés pour le format plugin.
+
+
 ## [v1.0.2] - 2026-06-28 : Optimisations de l'Explorer et de la génération PDF
 
 Cette version se concentre sur l'amélioration des performances de l'interface "Explorer", la correction de bugs serveur, et l'enrichissement des fonctionnalités cartographiques.
