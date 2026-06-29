@@ -1,0 +1,12 @@
+[general]
+name=OFBilan
+qgisMinimumVersion=3.0
+description=Outil d'aide à la décision et de génération de bilans cartographiés pour l'OFB.
+version=2.0.0
+author=Aguirre Maurin
+email=aguirre.maurin@ofb.gouv.fr
+about=Génère des bilans PDF et explore les données de contrôle.
+tracker=https://github.com/votre_depot/issues
+repository=https://github.com/votre_depot
+category=Plugins
+tags=ofb, bilan, pdf, cartographie, oscean

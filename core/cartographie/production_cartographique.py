@@ -478,9 +478,20 @@ def init_qgis_gui():
     return app
 
 
+_ISOLATED_PROJECT = None
+
+def get_qgis_project():
+    """Renvoie une instance de projet QGIS isolée pour ne pas altérer le projet utilisateur."""
+    global _ISOLATED_PROJECT
+    if _ISOLATED_PROJECT is None:
+        from qgis.core import QgsProject
+        _ISOLATED_PROJECT = QgsProject()
+    return _ISOLATED_PROJECT
+
+
 def load_project(project_path: str) -> bool:
     """Charge le projet QGIS. Retourne True si succès."""
-    proj = QgsProject.instance()
+    proj = get_qgis_project()
     res = proj.read(project_path)
     if not res:
         logger.error("Impossible de charger le projet QGIS '%s'", project_path)
@@ -490,14 +501,14 @@ def load_project(project_path: str) -> bool:
 
 def get_layer_by_name(name: str):
     """Retourne la première couche dont le nom correspond."""
-    proj = QgsProject.instance()
+    proj = get_qgis_project()
     layers = proj.mapLayersByName(name)
     return layers[0] if layers else None
 
 
 def get_project_layer_names() -> List[str]:
     """Noms des couches vectorielles/raster chargées dans le projet QGIS."""
-    proj = QgsProject.instance()
+    proj = get_qgis_project()
     return [lyr.name() for lyr in proj.mapLayers().values()]
 
 
@@ -618,7 +629,7 @@ def resolve_layers_for_config(
                     from qgis.core import QgsFillSymbol, QgsSingleSymbolRenderer
                     sym = QgsFillSymbol.createSimple({'color': '0,0,0,0', 'outline_color': '34,139,34', 'outline_width': '0.8'})
                     layer.setRenderer(QgsSingleSymbolRenderer(sym))
-                    QgsProject.instance().addMapLayer(layer, True)
+                    get_qgis_project().addMapLayer(layer, True)
                     return [(layer, "coeur_parc", "generated")]
                 else:
                     logger.error("Couche coeur_parc invalide : %s", coeur_path)
@@ -699,7 +710,7 @@ def ensure_pochoir_layer_in_project(dept_code: str, pochoir_id: str = "departeme
         return None, ""
 
     apply_pochoir_inverted_symbology(layer)
-    QgsProject.instance().addMapLayer(layer, True)
+    get_qgis_project().addMapLayer(layer, True)
     return layer, layer_name
 
 
@@ -734,7 +745,7 @@ def apply_map_extent(layout, dept_code: str, pochoir_id: str = "departement", *,
         if isinstance(item, QgsLayoutItemMap):
             crs_map = item.crs()
             if crs_src != crs_map:
-                transform = QgsCoordinateTransform(crs_src, crs_map, QgsProject.instance())
+                transform = QgsCoordinateTransform(crs_src, crs_map, get_qgis_project())
                 rect_transformed = transform.transformBoundingBox(rect)
                 item.zoomToExtent(rect_transformed)
             else:
@@ -767,11 +778,11 @@ def get_layout_by_name(layout_name: str):
     """Retourne le layout QGIS ou None."""
     if not HAS_QGIS:
         return None
-    return QgsProject.instance().layoutManager().layoutByName(layout_name)
+    return get_qgis_project().layoutManager().layoutByName(layout_name)
 
 
 def _collect_layer_names_from_tree_group(group_name: str) -> List[str]:
-    root = QgsProject.instance().layerTreeRoot()
+    root = get_qgis_project().layerTreeRoot()
     group = None
     for node in root.findGroups():
         if isinstance(node, QgsLayerTreeGroup) and node.name().lower() == group_name.lower():
@@ -845,7 +856,7 @@ def discover_layout_layer_names(prof: "ProfileConfig", layout=None) -> List[str]
         discovered.extend(_collect_layer_names_from_tree_group(group_name))
 
     if not discovered:
-        proj = QgsProject.instance()
+        proj = get_qgis_project()
         root = proj.layerTreeRoot()
         for node in root.findLayers():
             if not node.isVisible():
@@ -1591,7 +1602,7 @@ def apply_date_filter(
 
 def set_basemap_visibility(enabled: bool) -> None:
     """Active ou désactive les couches fond (XYZ, WMS). Force SCAN 25."""
-    proj = QgsProject.instance()
+    proj = get_qgis_project()
     root = proj.layerTreeRoot()
     for layer in proj.mapLayers().values():
         lname = layer.name().lower()
@@ -1832,7 +1843,7 @@ def export_layout(
     """Exporte le layout du profil vers un fichier image."""
     from config_cartes import ProfileConfig, CONFIG
 
-    proj = QgsProject.instance()
+    proj = get_qgis_project()
     title_text = resolve_map_title(prof, dept_code)
 
     # Injection du Layout Dynamique (Lot 1)
@@ -2011,7 +2022,7 @@ def run_interactive_wizard(profile_ids: List[str]) -> None:
         ClassificationMode,
     )
 
-    proj = QgsProject.instance()
+    proj = get_qgis_project()
     all_layers = [lyr for lyr in proj.mapLayers().values() if isinstance(lyr, QgsVectorLayer)]
 
     logger.info("=== Assistant de configuration des cartes ===")
@@ -2339,7 +2350,7 @@ def run_export(
 
             logger.info("  -> Génération : %s", prof.output_filename)
 
-            proj = QgsProject.instance()
+            proj = get_qgis_project()
             available_names = [lyr.name() for lyr in proj.mapLayers().values()]
             legend_labels_map: Dict[str, str] = {}
             global_sym_src = getattr(CONFIG, "symbology_source", "yaml")
@@ -2409,7 +2420,7 @@ def run_export(
                             if coeur_path.exists():
                                 if layer:
                                     try:
-                                        QgsProject.instance().removeMapLayer(layer.id())
+                                        get_qgis_project().removeMapLayer(layer.id())
                                     except Exception:
                                         pass
                                 layer = QgsVectorLayer(str(coeur_path), resolved_name, "ogr")
@@ -2423,19 +2434,19 @@ def run_export(
                                     sym = QgsFillSymbol()
                                     sym.changeSymbolLayer(0, sl)
                                     layer.setRenderer(QgsSingleSymbolRenderer(sym))
-                                    QgsProject.instance().addMapLayer(layer, True)
+                                    get_qgis_project().addMapLayer(layer, True)
                         elif resolved_name in ("AOA_2021_PNForets", "AOA_2021_PNForet_21", "AOA_2021_PNForets.shp"):
                             from ofbilan.common.chargeurs_donnees import get_pnf_aoa_shp_path
                             aoa_path = get_pnf_aoa_shp_path(PROJECT_ROOT)
                             if aoa_path.exists():
                                 if layer:
                                     try:
-                                        QgsProject.instance().removeMapLayer(layer.id())
+                                        get_qgis_project().removeMapLayer(layer.id())
                                     except Exception:
                                         pass
                                 layer = QgsVectorLayer(str(aoa_path), resolved_name, "ogr")
                                 if layer.isValid():
-                                    QgsProject.instance().addMapLayer(layer, True)
+                                    get_qgis_project().addMapLayer(layer, True)
                                     
                     if not layer or not layer.isValid():
                         continue
