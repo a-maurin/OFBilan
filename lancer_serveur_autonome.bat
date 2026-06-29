@@ -35,6 +35,6 @@ echo [OK] Demarrage du serveur...
 echo.
 
 :: %~dp0 correspond au dossier ou se trouve ce script .bat
-%QGIS_PYTHON% "%~dp0core\web\serveur.py"
+call %QGIS_PYTHON% "%~dp0core\web\serveur.py" < nul
 
 pause

@@ -90,6 +90,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             def restart():
                 time.sleep(0.5)
                 # On utilise sys.executable pour relancer exactement le même script
+                os.environ["OFBILAN_RESTART"] = "1"
                 os.execv(sys.executable, [sys.executable] + sys.argv)
                 
             threading.Thread(target=restart, daemon=True).start()
@@ -1049,8 +1050,9 @@ def preload_data_async():
                 print(f"  [Preload] Note: Impossible de pré-charger les contours : {e}")
 
             print("  [Preload] Données chargées avec succès en mémoire. L'explorer est prêt !")
-            import webbrowser
-            webbrowser.open(f"http://localhost:{PORT}/explorer.html")
+            if os.environ.get("OFBILAN_RESTART") != "1":
+                import webbrowser
+                webbrowser.open(f"http://localhost:{PORT}/explorer.html")
         except Exception as e:
             print(f"  [Preload] Erreur lors du pré-chargement : {e}")
 
