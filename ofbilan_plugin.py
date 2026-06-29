@@ -48,7 +48,7 @@ class OFBilanPlugin:
         """Logique exécutée au clic sur le bouton."""
         if self.server_process and self.server_process.poll() is None:
             QMessageBox.information(self.iface.mainWindow(), "OFBilan", "Le serveur OFBilan est déjà en cours d'exécution.\nOuverture du navigateur...")
-            webbrowser.open('http://localhost:8000')
+            webbrowser.open('http://localhost:8000/explorer.html')
             return
 
         # Configuration de l'environnement pour importer 'core'
@@ -58,9 +58,17 @@ class OFBilanPlugin:
         serveur_script = os.path.join(self.plugin_dir, 'core', 'web', 'serveur.py')
         
         try:
+            python_exe = sys.executable
+            if os.name == 'nt' and "qgis" in python_exe.lower():
+                bin_dir = os.path.dirname(python_exe)
+                if os.path.exists(os.path.join(bin_dir, "python.exe")):
+                    python_exe = os.path.join(bin_dir, "python.exe")
+                elif os.path.exists(os.path.join(bin_dir, "python3.exe")):
+                    python_exe = os.path.join(bin_dir, "python3.exe")
+                    
             # Lancement en arrière-plan sans bloquer QGIS
             self.server_process = subprocess.Popen(
-                [sys.executable, serveur_script],
+                [python_exe, serveur_script],
                 env=env,
                 cwd=self.plugin_dir,
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
@@ -69,7 +77,7 @@ class OFBilanPlugin:
             # Pause de 2s pour laisser FastAPI démarrer avant d'ouvrir le navigateur
             def open_browser():
                 time.sleep(2)
-                webbrowser.open('http://localhost:8000')
+                webbrowser.open('http://localhost:8000/explorer.html')
                 
             threading.Thread(target=open_browser, daemon=True).start()
             

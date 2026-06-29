@@ -270,11 +270,24 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             
             self.wfile.flush()
         elif self.path == "/api/data":
-            content_length = int(self.headers['Content-Length'])
-            post_data = self.rfile.read(content_length)
-            params = json.loads(post_data.decode('utf-8'))
-
             try:
+                import datetime
+                from pathlib import Path
+                project_root = Path(__file__).resolve().parents[3]
+                
+                debug_log = project_root / "tests" / "scratch" / "api_data_debug.log"
+                debug_log.parent.mkdir(parents=True, exist_ok=True)
+                def log_debug(msg):
+                    with open(debug_log, "a", encoding="utf-8") as f:
+                        f.write(f"[{datetime.datetime.now()}] {msg}\n")
+                        
+                log_debug("=== NOUVELLE REQUÊTE /api/data ===")
+                
+                content_length = int(self.headers['Content-Length'])
+                post_data = self.rfile.read(content_length)
+                params = json.loads(post_data.decode('utf-8'))
+                log_debug(f"Params décodés: {params}")
+
                 from ofbilan.common.chargeurs_donnees import load_point_ctrl, load_pej, load_pa, load_pve
                 from ofbilan.engine.orchestrateur_profils import (
                     load_profile_config,
@@ -299,7 +312,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 resultats_filter = params.get("resultats")
                 commune = params.get("commune")
 
-                project_root = Path(__file__).resolve().parents[3]
+                # project_root is already defined above
 
                 # 1. Charger la configuration du profil
                 profile_cfg = load_profile_config(project_root, profil)
@@ -323,7 +336,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 _SESSION_CACHE["active"] = False
 
                 # 2. Chargement et filtrage des points de contrôle
+                log_debug(f"Début chargement Points de contrôle (load_pts_flag={load_pts_flag})")
                 df_pts_unfiltered = load_point_ctrl(project_root, echelle=echelle, code=code, date_deb=date_deb, date_fin=date_fin) if load_pts_flag else pd.DataFrame()
+                log_debug(f"Points de contrôle chargés : {len(df_pts_unfiltered)} lignes")
                 df_pts = df_pts_unfiltered.copy()
                 if profile_cfg.get("pipeline") != "global":
                     df_pts = _filter_point_ctrl(df_pts, profile_cfg)
@@ -392,7 +407,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 df_pve = pd.DataFrame()
 
                 # 3. Chargement et filtrage PEJ
+                log_debug(f"Début chargement PEJ (load_pej_flag={load_pej_flag})")
                 df_pej = load_pej(project_root, echelle=echelle, code=code, date_deb=date_deb, date_fin=date_fin) if load_pej_flag else pd.DataFrame()
+                log_debug(f"PEJ chargées : {len(df_pej)} lignes")
                 if profile_cfg.get("pipeline") != "global":
                     df_pej = _filter_pej(df_pej, profile_cfg, cfg_obj, df_pts)
                 if type_usager and tu_lower and "type_usager" in df_pej.columns:
@@ -420,10 +437,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 total_pej = len(df_pej)
 
                 # 4. Chargement et filtrage PA
+                log_debug(f"Début chargement PA (load_pa_flag={load_pa_flag})")
                 df_pa = pd.DataFrame()
                 from ofbilan.common.utilitaires_metier import count_pa_induites_par_controles
                 try:
                     df_pa = load_pa(project_root, echelle=echelle, code=code, date_deb=date_deb, date_fin=date_fin) if load_pa_flag else pd.DataFrame()
+                    log_debug(f"PA chargées : {len(df_pa)} lignes")
                     if profile_cfg.get("pipeline") != "global":
                         df_pa = _filter_pa(df_pa, profile_cfg, cfg_obj, df_pts)
                     else:
@@ -466,8 +485,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     total_pa = 0
 
                 # 5. Chargement et filtrage PVe
+                log_debug(f"Début chargement PVe (load_pve_flag={load_pve_flag})")
                 try:
                     df_pve = load_pve(project_root, echelle=echelle, code=code, date_deb=date_deb, date_fin=date_fin) if load_pve_flag else pd.DataFrame()
+                    log_debug(f"PVe chargés : {len(df_pve)} lignes")
                     
                     # LOG DE DIAGNOSTIC
                     debug_path = project_root / "tests" / "scratch"
@@ -875,12 +896,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     "geojson": geojson_data
                 }
 
-                _SESSION_CACHE["active"] = _original_cache_active
+                log_debug("Construction geojson terminée.")
 
+                _SESSION_CACHE["active"] = _original_cache_active
+                
+                log_debug("Envoi de la réponse JSON...")
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json; charset=utf-8')
                 self.end_headers()
-                self.wfile.write(json.dumps(clean_nan(response_data)).encode('utf-8'))
+                resp_json = json.dumps(clean_nan(response_data))
+                self.wfile.write(resp_json.encode('utf-8'))
+                log_debug("Réponse envoyée avec succès.")
 
             except Exception as e:
                 try:
@@ -898,6 +924,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     f.write(f"\n--- Erreur API /data à {datetime.datetime.now()} ---\n")
                     traceback.print_exc(file=f)
                 traceback.print_exc()
+                if 'log_debug' in locals():
+                    log_debug(f"!!! EXCEPTION CAPTURÉE !!!\n{traceback.format_exc()}")
                 self.send_response(500)
                 self.send_header('Content-Type', 'application/json; charset=utf-8')
                 self.end_headers()

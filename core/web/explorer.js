@@ -769,8 +769,15 @@ document.addEventListener('DOMContentLoaded', () => {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(getParams(false))
-        }).then(response => {
-            if (!response.ok) throw new Error('Erreur lors du chargement de la période principale');
+        }).then(async response => {
+            if (!response.ok) {
+                let errMsg = 'Erreur lors du chargement de la période principale';
+                try {
+                    const data = await response.json();
+                    if (data.error) errMsg += ' : ' + data.error;
+                } catch (e) {}
+                throw new Error(errMsg);
+            }
             return response.json();
         });
 
@@ -778,8 +785,15 @@ document.addEventListener('DOMContentLoaded', () => {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(getParams(true))
-        }).then(response => {
-            if (!response.ok) throw new Error('Erreur lors du chargement de la période de comparaison');
+        }).then(async response => {
+            if (!response.ok) {
+                let errMsg = 'Erreur lors du chargement de la période de comparaison';
+                try {
+                    const data = await response.json();
+                    if (data.error) errMsg += ' : ' + data.error;
+                } catch (e) {}
+                throw new Error(errMsg);
+            }
             return response.json();
         }) : Promise.resolve(null);
 

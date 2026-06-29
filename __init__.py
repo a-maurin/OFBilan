@@ -20,7 +20,17 @@ def install_dependencies(iface):
         
         if reply == QMessageBox.Yes:
             try:
-                subprocess.check_call([sys.executable, "-m", "pip", "install"] + missing_packages)
+                import os
+                python_exe = sys.executable
+                if os.name == 'nt' and "qgis" in python_exe.lower():
+                    # Sur Windows, sys.executable pointe souvent vers qgis-bin.exe
+                    bin_dir = os.path.dirname(python_exe)
+                    if os.path.exists(os.path.join(bin_dir, "python.exe")):
+                        python_exe = os.path.join(bin_dir, "python.exe")
+                    elif os.path.exists(os.path.join(bin_dir, "python3.exe")):
+                        python_exe = os.path.join(bin_dir, "python3.exe")
+                        
+                subprocess.check_call([python_exe, "-m", "pip", "install"] + missing_packages)
                 QMessageBox.information(iface.mainWindow(), 'Succès', 'Les dépendances ont été installées avec succès. Veuillez relancer le plugin.')
                 return True
             except subprocess.CalledProcessError as e:

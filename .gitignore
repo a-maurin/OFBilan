@@ -4,71 +4,6 @@
 
 # Dossiers de données brutes / locales (non versionnées)
 data/sources/
-ref/programme/sig/**
-!ref/programme/README.md
-ref/programme/modele_ofb/**
-ref/programme/tables_reference/**
-!ref/programme/tables_reference/.gitkeep
-# Référentiel minimal requis par le moteur et la CI (pytest)
-!ref/programme/tables_reference/types_usagers.csv
-ref/hors_programme/**
-
-# Paquets ref/ et archives de distribution (transfert local, non versionnés)
-distribution/
-
-# Dossiers de sorties générées (PDF, CSV, images, logs…)
-data/out/
-**/data/out/
-
-############################
-# Environnements virtuels
-############################
-.venv/
-venv/
-env/
-
-############################
-# Fichiers Python compilés / caches
-############################
-*.egg-info/
-__pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-.ipynb_checkpoints/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-
-############################
-# Fichiers temporaires / logs
-############################
-*.log
-*.tmp
-~$*.docx
-/*.png
-
-############################
-# Fichiers de configuration IDE
-############################
-.cursor/
-.vscode/
-.idea/
-.gemini/
-*.code-workspace
-
-############################
-# Artefacts OS / outils
-############################
-.DS_Store
-Thumbs.db
-
-############################
-# Données et sorties
-############################
-
-# Dossiers de données brutes / locales (non versionnées)
-data/sources/
 data/generateur_de_cartes backup/
 ref/programme/sig/**
 !ref/programme/README.md
@@ -87,6 +22,11 @@ data/out/
 **/data/out/
 
 ############################
+# Archives et fichiers lourds
+############################
+data/sources_archive/
+
+############################
 # Environnements virtuels
 ############################
 .venv/
@@ -115,12 +55,20 @@ __pycache__/
 /*.png
 
 ############################
-# Fichiers de configuration IDE
+# Secrets / Environnement
+############################
+.env
+.env.*
+secrets.*
+
+############################
+# Fichiers de configuration IDE & Outils
 ############################
 .cursor/
 .vscode/
 .idea/
 .gemini/
+.agents/
 *.code-workspace
 
 ############################
@@ -130,20 +78,8 @@ __pycache__/
 Thumbs.db
 
 ############################
-# Secrets / Environnement
+# Pack et installeur
 ############################
-.env
-.env.*
-secrets.*
-
-############################
-# Outils et environnements
-############################
-.agents/
-.cursor/
-.gemini/
-
-############################
-# Archives et fichiers lourds
-############################
-data/sources_archive/
+pack_configuration_referentiels.zip
+installer_pack.bat
+installer_pack.7z
