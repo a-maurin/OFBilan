@@ -129,7 +129,7 @@ class PDFReportBuilder:
         self,
         pdf_path: Path,
         header_title: str,
-        footer_line1: str = "Office français de la biodiversité – Direction régionale Bourgogne-Franche-Comté",
+        footer_line1: str | None = None,
         footer_line2: str = "Service départemental de la Côte-d'Or – 57, rue de Mulhouse – 21000 Dijon – www.ofb.gouv.fr",
         title: str = "",
         author: str = "OFB",
@@ -148,7 +148,7 @@ class PDFReportBuilder:
         self._page_w, self._page_h = self._pagesize
 
         self.header_title = header_title
-        self.footer_line1 = footer_line1
+        self.footer_line1 = footer_line1 or "Office français de la biodiversité"
         self.footer_line2 = footer_line2
 
         self._charte = deepcopy(

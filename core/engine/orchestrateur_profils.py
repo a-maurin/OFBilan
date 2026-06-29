@@ -3458,8 +3458,12 @@ def _generate_pdf(
     title_page_cfg = resolve_title_page_config(
         PROJECT_ROOT, scope="thematique", profile_id=profil_id
     )
+    from ofbilan.engine.pdf_utils import get_region_name_for_footer
+    footer_text = get_region_name_for_footer(cfg.echelle, cfg.code)
+    
     builder = PDFReportBuilder(
         pdf_path=pdf_path,
+        footer_line1=footer_text,
         header_title=f"Bilan thématique – {display_label}",
         title=f"Bilan thématique – {display_label}",
         author="Office français de la biodiversité",

@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
 import sys
+import os
 import subprocess
-from qgis.PyQt.QtWidgets import QMessageBox
+from qgis.PyQt.QtWidgets import QMessageBox, QProgressDialog, QApplication
+from qgis.PyQt.QtCore import Qt
+from qgis.core import QgsMessageLog, Qgis
 
 def install_dependencies(iface):
     """Vérifie et installe les dépendances requises via pip dans l'environnement QGIS."""
@@ -25,23 +28,72 @@ def install_dependencies(iface):
         reply = QMessageBox.question(iface.mainWindow(), 'Dépendances manquantes', msg, QMessageBox.Yes | QMessageBox.No)
         
         if reply == QMessageBox.Yes:
+            python_exe = sys.executable
+            if os.name == 'nt' and "qgis" in python_exe.lower():
+                bin_dir = os.path.dirname(python_exe)
+                if os.path.exists(os.path.join(bin_dir, "python.exe")):
+                    python_exe = os.path.join(bin_dir, "python.exe")
+                elif os.path.exists(os.path.join(bin_dir, "python3.exe")):
+                    python_exe = os.path.join(bin_dir, "python3.exe")
+                    
+            progress = QProgressDialog("Préparation de l'installation...", "Annuler", 0, 0, iface.mainWindow())
+            progress.setWindowTitle("OFBilan - Installation des dépendances")
+            progress.setWindowModality(Qt.WindowModal)
+            progress.setMinimumDuration(0)
+            progress.show()
+            
+            log_file_path = os.path.join(os.path.dirname(__file__), "install_dependencies.log")
+            
+            startupinfo = None
+            creationflags = 0
+            if os.name == 'nt':
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                creationflags = 0x08000000  # CREATE_NO_WINDOW
+                
             try:
-                import os
-                python_exe = sys.executable
-                if os.name == 'nt' and "qgis" in python_exe.lower():
-                    # Sur Windows, sys.executable pointe souvent vers qgis-bin.exe
-                    bin_dir = os.path.dirname(python_exe)
-                    if os.path.exists(os.path.join(bin_dir, "python.exe")):
-                        python_exe = os.path.join(bin_dir, "python.exe")
-                    elif os.path.exists(os.path.join(bin_dir, "python3.exe")):
-                        python_exe = os.path.join(bin_dir, "python3.exe")
-                        
-                subprocess.check_call([python_exe, "-m", "pip", "install"] + missing_packages)
-                QMessageBox.information(iface.mainWindow(), 'Succès', 'Les dépendances ont été installées avec succès. Veuillez relancer le plugin.')
-                return True
-            except subprocess.CalledProcessError as e:
-                QMessageBox.critical(iface.mainWindow(), 'Erreur', f"Échec de l'installation des dépendances.\n\nErreur: {e}")
+                QgsMessageLog.logMessage(f"Début de l'installation, log: {log_file_path}", "OFBilan", Qgis.Info)
+                with open(log_file_path, "w", encoding="utf-8") as log_file:
+                    process = subprocess.Popen(
+                        [python_exe, "-m", "pip", "install"] + missing_packages,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        text=True,
+                        startupinfo=startupinfo,
+                        creationflags=creationflags
+                    )
+                    
+                    while True:
+                        output = process.stdout.readline()
+                        if output == '' and process.poll() is not None:
+                            break
+                        if output:
+                            log_file.write(output)
+                            progress.setLabelText(f"Installation en cours...\n{output.strip()[:80]}")
+                            QApplication.processEvents()
+                            
+                        if progress.wasCanceled():
+                            process.terminate()
+                            QgsMessageLog.logMessage("Installation annulée par l'utilisateur.", "OFBilan", Qgis.Warning)
+                            return False
+                            
+                    rc = process.poll()
+                    
+                if rc == 0:
+                    QgsMessageLog.logMessage("Installation des dépendances réussie.", "OFBilan", Qgis.Success)
+                    QMessageBox.information(iface.mainWindow(), 'Succès', 'Les dépendances ont été installées avec succès. Veuillez relancer QGIS.')
+                    return True
+                else:
+                    QgsMessageLog.logMessage(f"Erreur d'installation. Voir {log_file_path}", "OFBilan", Qgis.Critical)
+                    QMessageBox.critical(iface.mainWindow(), 'Erreur', f"Échec de l'installation.\n\nConsultez le fichier de log : {log_file_path}")
+                    return False
+                    
+            except Exception as e:
+                QgsMessageLog.logMessage(f"Exception lors de l'installation: {str(e)}", "OFBilan", Qgis.Critical)
+                QMessageBox.critical(iface.mainWindow(), 'Erreur', f"Une erreur inattendue est survenue:\n\n{e}")
                 return False
+            finally:
+                progress.close()
         else:
             return False
             

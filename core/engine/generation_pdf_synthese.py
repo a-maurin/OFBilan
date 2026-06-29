@@ -454,11 +454,15 @@ def _generate_synthese_pdf(
     title_page_cfg = resolve_title_page_config(_ROOT, scope=scope, profile_id=profil_id)
     
     from reportlab.lib.pagesizes import A4
+    from ofbilan.engine.pdf_utils import get_region_name_for_footer
     pagesize = A4
+    
+    footer_text = get_region_name_for_footer(echelle, code)
     
     builder = PDFReportBuilder(
         pdf_path=pdf_path,
         header_title=report_header,
+        footer_line1=footer_text,
         title=report_header,
         author="Office français de la biodiversité",
         charte_config=charte_cfg,

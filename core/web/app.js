@@ -199,7 +199,24 @@ document.addEventListener('DOMContentLoaded', () => {
     ];
 
     const regionsList = [
-        { value: "r27", label: "r27 - Bourgogne-Franche-Comté" }
+        { value: "r01", label: "r01 - Guadeloupe" },
+        { value: "r02", label: "r02 - Martinique" },
+        { value: "r03", label: "r03 - Guyane" },
+        { value: "r04", label: "r04 - La Réunion" },
+        { value: "r06", label: "r06 - Mayotte" },
+        { value: "r11", label: "r11 - Île-de-France" },
+        { value: "r24", label: "r24 - Centre-Val de Loire" },
+        { value: "r27", label: "r27 - Bourgogne-Franche-Comté" },
+        { value: "r28", label: "r28 - Normandie" },
+        { value: "r32", label: "r32 - Hauts-de-France" },
+        { value: "r44", label: "r44 - Grand Est" },
+        { value: "r52", label: "r52 - Pays de la Loire" },
+        { value: "r53", label: "r53 - Bretagne" },
+        { value: "r75", label: "r75 - Nouvelle-Aquitaine" },
+        { value: "r76", label: "r76 - Occitanie" },
+        { value: "r84", label: "r84 - Auvergne-Rhône-Alpes" },
+        { value: "r93", label: "r93 - Provence-Alpes-Côte d'Azur" },
+        { value: "r94", label: "r94 - Corse" }
     ];
 
     const bmisList = [

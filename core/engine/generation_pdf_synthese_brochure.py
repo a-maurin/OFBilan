@@ -827,9 +827,13 @@ def _generate_synthese_brochure_pdf(
         stem = f"{stem}_brochure"
     pdf_path = apply_diffusion_pdf_suffix(out_dir / f"{stem}.pdf", diffusion)
 
+    from ofbilan.engine.pdf_utils import get_region_name_for_footer
+    footer_text = get_region_name_for_footer(echelle, code)
+
     builder = PDFReportBuilder(
         pdf_path=pdf_path,
         header_title=report_header,
+        footer_line1=footer_text,
         title=report_header,
         author="Office français de la biodiversité",
         diffusion=diffusion,
