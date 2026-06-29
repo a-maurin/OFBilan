@@ -74,12 +74,9 @@ class OFBilanPlugin:
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
             )
             
-            # Pause de 2s pour laisser FastAPI démarrer avant d'ouvrir le navigateur
-            def open_browser():
-                time.sleep(2)
-                webbrowser.open('http://localhost:8000/explorer.html')
-                
-            threading.Thread(target=open_browser, daemon=True).start()
+            # Ouverture immédiate de la page de chargement (qui attendra le serveur)
+            loading_html = os.path.join(self.plugin_dir, 'core', 'web', 'loading.html')
+            webbrowser.open(f"file:///{loading_html.replace(os.sep, '/')}")
             
             self.iface.messageBar().pushMessage("OFBilan", "Démarrage du serveur web...", level=0, duration=3)
             
