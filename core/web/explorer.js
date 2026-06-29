@@ -740,7 +740,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function loadData() {
         btnUpdate.disabled = true;
-        btnUpdate.innerHTML = '<span style="display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-radius:50%;border-top-color:#fff;animation:spin 1s ease-in-out infinite;margin-right:8px;vertical-align:middle;"></span>Chargement...';
+        btnUpdate.innerHTML = `
+            <style>@keyframes btnspin { 100% { transform: rotate(360deg); } }</style>
+            <svg viewBox="0 0 24 24" style="width:18px;height:18px;margin-right:8px;vertical-align:-4px;animation: btnspin 1s linear infinite; stroke: white; fill: none; stroke-width: 3; stroke-linecap: round;">
+                <circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.3)" />
+                <path d="M12 2 A10 10 0 0 1 22 12" stroke="white" />
+            </svg>
+            Chargement...`;
 
         const isCompare = compareActiveCheck && compareActiveCheck.checked;
 
