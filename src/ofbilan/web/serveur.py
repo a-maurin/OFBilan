@@ -420,6 +420,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 total_pej = len(df_pej)
 
                 # 4. Chargement et filtrage PA
+                df_pa = pd.DataFrame()
+                from ofbilan.common.utilitaires_metier import count_pa_induites_par_controles
                 try:
                     df_pa = load_pa(project_root, echelle=echelle, code=code, date_deb=date_deb, date_fin=date_fin) if load_pa_flag else pd.DataFrame()
                     if profile_cfg.get("pipeline") != "global":
@@ -457,9 +459,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                                 df_pa = df_pa[df_pa[col_ta].astype(str).str.strip().str.lower().apply(
                                     lambda val: any(t in str(val) for t in ta_lower)
                                 )].copy()
-                    from ofbilan.common.utilitaires_metier import count_pa_from_point_ctrl
-                    total_pa = count_pa_from_point_ctrl(df_pts)
-                except Exception:
+                    total_pa = count_pa_induites_par_controles(df_pts)
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).error(f"Erreur chargement/filtrage PA: {e}")
                     total_pa = 0
 
                 # 5. Chargement et filtrage PVe
@@ -531,7 +534,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
                     total_controles = len(df_pts)
                     total_pej = len(df_pej)
-                    total_pa = count_pa_from_point_ctrl(df_pts)
+                    total_pa = count_pa_induites_par_controles(df_pts)
                     total_pve = len(df_pve)
 
                 # 5. Calcul des répartitions statistiques (Combiné sur toutes les sources activées)
@@ -551,6 +554,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 if not df_pej.empty and "type_usager" in df_pej.columns:
                     for k, v in df_pej["type_usager"].astype(str).fillna("Non renseigné").str.strip().value_counts().items():
                         if k and k.lower() != 'nan': usagers_counts[k] = usagers_counts.get(k, 0) + int(v)
+
+                if type_usager and tu_lower:
+                    filtered_counts = {}
+                    for k, v in usagers_counts.items():
+                        if any(u in k.lower() for u in tu_lower):
+                            filtered_counts[k] = v
+                    usagers_counts = filtered_counts
 
 
                 def get_dept_series(df):
