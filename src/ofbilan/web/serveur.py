@@ -584,7 +584,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 domains_counts = {}
                 themes_counts = {}
 
-                if echelle == "region":
+                if echelle == "region" or (echelle == "pnf" and pnf_dept not in ("21", "52")):
                     dom_records = []
                     for df_tmp, col_dom in [(df_pts, "domaine"), (df_pej, "DOMAINE"), (df_pa, "DOMAINE")]:
                         if not df_tmp.empty and col_dom in df_tmp.columns:

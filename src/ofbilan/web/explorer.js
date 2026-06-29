@@ -1219,7 +1219,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 chartDomains.destroy();
             }
             
-            const isRegion = selectEchelle.value === 'region';
+            const pnfDeptElChart = document.getElementById('pnf-dept-select');
+            const isRegion = selectEchelle.value === 'region' || (selectEchelle.value === 'pnf' && (!pnfDeptElChart || pnfDeptElChart.value === ''));
             const getDomainTotal = (val) => typeof val === 'number' ? val : Object.values(val).reduce((sum, v) => sum + v, 0);
 
             const sortedDomainsN = Object.entries(chartData.domains || {})
