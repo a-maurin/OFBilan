@@ -12,7 +12,7 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import Flowable, Paragraph, Spacer, Table, TableStyle
 
-from ofbilan.common.ofb_charte import (
+from core.common.ofb_charte import (
     COLOR_GREY,
     COLOR_PRIMARY,
     COLOR_TABLE_ALT_ROW,
@@ -71,7 +71,7 @@ def brochure_table(
     header_row: bool = True,
 ):
     """Tableau brochure : pas de grille ni zébrage (l'encadré arrondi porte la forme)."""
-    from ofbilan.common.pdf_utils import ofb_table
+    from core.common.pdf_utils import ofb_table
 
     return ofb_table(
         data_rows,
@@ -86,7 +86,7 @@ def brochure_table(
 
 
 def apply_brochure_mpl_style() -> None:
-    from ofbilan.common.rendus_graphiques import apply_mpl_style
+    from core.common.rendus_graphiques import apply_mpl_style
 
     apply_mpl_style()
 

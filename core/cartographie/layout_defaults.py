@@ -23,7 +23,7 @@ try:
         OutputConfig,
     )
 except ImportError:
-    from ofbilan.cartographie.config_cartes_model import (
+    from core.cartographie.config_cartes_model import (
         LayoutBandeauDefaultsConfig,
         LayoutDefaultsRootConfig,
         LayoutItemRectConfig,

@@ -7,8 +7,8 @@ from typing import Optional
 
 import pandas as pd
 
-from ofbilan.common.utilitaires_metier import get_perimetre_name
-from ofbilan.chemins_projet import PROJECT_ROOT, get_out_dir
+from core.common.utilitaires_metier import get_perimetre_name
+from core.chemins_projet import PROJECT_ROOT, get_out_dir
 
 
 def resolve_perimetre_kwargs(
@@ -37,7 +37,7 @@ class BilanConfig:
 
     @property
     def entity_sds(self) -> list[str]:
-        from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre
+        from core.common.utilitaires_metier import get_departements_pour_perimetre
         codes = get_departements_pour_perimetre(self.echelle, self.code)
         if codes and "FR" not in codes:
             return [f"SD{c}" for c in codes]

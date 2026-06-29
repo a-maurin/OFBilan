@@ -34,7 +34,7 @@ from reportlab.platypus import (
 from reportlab.platypus.tableofcontents import TableOfContents
 from PIL import Image as PILImage
 
-from ofbilan.common.ofb_charte import (
+from core.common.ofb_charte import (
     COLOR_CALLOUT_BG,
     COLOR_NOTICE_BG,
     COLOR_PRIMARY,
@@ -57,13 +57,13 @@ from ofbilan.common.ofb_charte import (
     charte_asset_path,
     header_layout_metrics,
 )
-from ofbilan.common.pdf_presentation_config import (
+from core.common.pdf_presentation_config import (
     resolve_charte_config,
     resolve_internal_diffusion_notice_config,
     resolve_tables_layout,
     should_show_internal_diffusion_title_notice,
 )
-from ofbilan.common.pdf_utils import key_figures_table, key_figures_table_rows, ofb_table, ofb_table_wide
+from core.common.pdf_utils import key_figures_table, key_figures_table_rows, ofb_table, ofb_table_wide
 
 # Largeur relative (sur la zone utile du PDF) pour les graphiques matplotlib
 # des bilans thématiques — barres, courbes, etc.

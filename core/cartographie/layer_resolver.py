@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass
 from typing import Callable, Iterable, Optional, Sequence
 
-from ofbilan.cartographie.pochoir_helper import normalize_dept_code, pochoir_layer_name
+from core.cartographie.pochoir_helper import normalize_dept_code, pochoir_layer_name
 
 # Rôles métier reconnus dans profils_cartes.yaml
 LayerRole = str

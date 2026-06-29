@@ -4,11 +4,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from ofbilan.common.pdf_report_builder import (
+from core.common.pdf_report_builder import (
     THEMATIC_CHART_WIDTH_RATIO,
     THEMATIC_PIE_CHART_WIDTH_RATIO,
 )
-from ofbilan.common.pdf_presentation_config import load_pdf_presentation_raw_config
+from core.common.pdf_presentation_config import load_pdf_presentation_raw_config
 
 
 DEFAULT_CHART_DISPLAY_CONFIG: dict[str, Any] = {

@@ -9,7 +9,7 @@ COLOR_PRIMARY = "#003A76"
 FONT_FAMILY = "sans-serif" # Fallback generique
 
 def charger_couche_pochoir(dept_code: str, project_root: Path) -> gpd.GeoDataFrame:
-    from ofbilan.cartographie.pochoir_helper import load_department_gdf
+    from core.cartographie.pochoir_helper import load_department_gdf
     try:
         return load_department_gdf(dept_code, project_root=project_root)
     except Exception as e:

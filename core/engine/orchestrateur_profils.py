@@ -6,7 +6,7 @@ génériques, etc.) est centralisée ici. Le profil YAML pilote le comportement 
 filtres, sources de données, options utilisateur, analyses, PDF.
 
 Usage interne (appelé par le runner de profils ``bilans.engine``) :
-    from ofbilan.engine.orchestrateur_profils import run_engine
+    from core.engine.orchestrateur_profils import run_engine
     run_engine("chasse", "2025-09-01", "2026-03-01", "21", options={})
 """
 from __future__ import annotations
@@ -24,10 +24,10 @@ _ROOT = Path(__file__).resolve().parents[2]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from ofbilan.chemins_projet import get_out_dir, get_cartes_dir, PROJECT_ROOT, ref_programme
-from ofbilan.common.bilan_config import BilanConfig
-from ofbilan.common.dataframe_rollup import rollup_small_categories
-from ofbilan.common.chargeurs_donnees import (
+from core.chemins_projet import get_out_dir, get_cartes_dir, PROJECT_ROOT, ref_programme
+from core.common.bilan_config import BilanConfig
+from core.common.dataframe_rollup import rollup_small_categories
+from core.common.chargeurs_donnees import (
     ensure_insee_from_communes_shp,
     load_point_ctrl,
     load_pej,
@@ -46,12 +46,12 @@ from ofbilan.common.chargeurs_donnees import (
     load_pnf_commune_zone_maps,
     pnf_sig_union_membership_mask,
 )
-from ofbilan.common.percent_format import (
+from core.common.percent_format import (
     format_pct_int_from_rate,
     int_percents_largest_remainder,
     tab_counts_to_pct_strings,
 )
-from ofbilan.common.utilitaires_metier import (
+from core.common.utilitaires_metier import (
     est_chasse_point,
     coalesced_insee_series,
     extract_insee_code_series,
@@ -84,11 +84,11 @@ from ofbilan.common.utilitaires_metier import (
     build_zone_pej_from_proc_detail_lecteur,
     ZONE_PEJ_LOCALISATION_ATTENTE,
 )
-from ofbilan.common.ofb_charte import Spinner
-from ofbilan.common.pdf_report_builder import (
+from core.common.ofb_charte import Spinner
+from core.common.pdf_report_builder import (
     PDFReportBuilder,
 )
-from ofbilan.common.pdf_shared_sections import (
+from core.common.pdf_shared_sections import (
     add_procedures_par_type_usager_subsection,
     add_standard_cover_and_toc,
     add_standard_notice_methodology,
@@ -98,7 +98,7 @@ from ofbilan.common.pdf_shared_sections import (
     load_glossary_config,
     summarize_procedures_par_type_usager,
 )
-from ofbilan.common.pdf_presentation_config import (
+from core.common.pdf_presentation_config import (
     apply_diffusion_pdf_suffix,
     build_title_lines_from_cfg,
     normalize_dept_typography,
@@ -117,7 +117,7 @@ from ofbilan.common.pdf_presentation_config import (
     should_show_placeholder,
     slice_proc_detail_for_pdf,
 )
-from ofbilan.common.pdf_table_sort import (
+from core.common.pdf_table_sort import (
     PDF_LABEL_CTRL_LOCATIONS,
     PDF_LABEL_CTRL_LOCATIONS_SHORT,
     PDF_LABEL_NON_CONFORME_LOCATIONS,
@@ -130,21 +130,21 @@ from ofbilan.common.pdf_table_sort import (
     resultat_controle_label_for_pdf,
     sort_dataframe_desc,
 )
-from ofbilan.common.pdf_usagers_domaine_table import (
+from core.common.pdf_usagers_domaine_table import (
     build_usagers_x_domaine_pdf_rows,
     resolve_usagers_x_domaine_header_layout,
     resolve_usagers_x_domaine_header_font_size,
     resolve_usagers_x_domaine_header_max_lines,
     usagers_x_domaine_col_widths,
 )
-from ofbilan.common.pdf_utils import wrap_plain_text_for_pdf_paragraph
-from ofbilan.common.chart_display_config import (
+from core.common.pdf_utils import wrap_plain_text_for_pdf_paragraph
+from core.common.chart_display_config import (
     clamp_uniform_pie_ratio,
     compute_pdf_ratios,
     load_chart_display_config,
     resolve_reference_pie_display,
 )
-from ofbilan.common.rendus_graphiques import (
+from core.common.rendus_graphiques import (
     chart_pie,
     chart_bar,
     chart_bar_grouped,
@@ -152,20 +152,20 @@ from ofbilan.common.rendus_graphiques import (
     chart_bar_stacked,
     chart_line_evolution,
 )
-from ofbilan.common.carte_helper import (
+from core.common.carte_helper import (
     expected_map_filenames,
     ensure_maps_for_profiles,
     resolve_map_layout,
     resolve_profile_map_paths,
 )
-from ofbilan.common.cartographie_config import (
+from core.common.cartographie_config import (
     ask_cartes_selection,
     expected_map_filenames_for_selection,
     has_cartography_catalog,
     resolve_cartes_selection,
     resolve_selected_map_paths,
 )
-from ofbilan.engine.registre_sections_pdf import SectionRegistry
+from core.engine.registre_sections_pdf import SectionRegistry
 
 _log = logging.getLogger(__name__)
 # ═══════════════════════════════════════════════════════════════════════════
@@ -330,7 +330,7 @@ def _resolve_ventilation_mode_from_profile(
     date_fin_ts: pd.Timestamp,
 ) -> tuple[str, str, int, int]:
     """Résout la ventilation temporelle depuis le profil YAML."""
-    from ofbilan.engine.ventilation_temporelle import resolve_ventilation_auto
+    from core.engine.ventilation_temporelle import resolve_ventilation_auto
 
     period_cfg = profile.get("periode_analyse", {}) or {}
     vent_cfg = period_cfg.get("ventilation", {}) or {}
@@ -419,7 +419,7 @@ def _run_global_profile_via_yaml(
         
     out_dir = get_out_dir(out_subdir)
 
-    from ofbilan.configuration_journalisation import add_file_handler
+    from core.configuration_journalisation import add_file_handler
     add_file_handler(out_dir)
 
     print(f"Bilan « {profile.get('label', 'global')} »")
@@ -584,8 +584,8 @@ def _run_global_profile_via_yaml(
         target_dir=out_dir,
     )
 
-    from ofbilan.common.carte_helper import ensure_maps_for_profiles
-    from ofbilan.common.cartographie_config import resolve_qgis_profile_ids
+    from core.common.carte_helper import ensure_maps_for_profiles
+    from core.common.cartographie_config import resolve_qgis_profile_ids
 
     profil_id = str(profile.get("id", "global"))
     map_profiles = resolve_qgis_profile_ids(profile, profil_id, resolved_opts)
@@ -774,9 +774,9 @@ def prompt_cartography_integration(
 
     if has_cartography_catalog(profile):
         selection = profile.get("_cartes_selection") or resolve_cartes_selection(profile, resolved_opts)
-        from ofbilan.cartographie.pochoir_helper import is_map_valid_for_dept
-        from ofbilan.common.carte_helper import qgis_available
-        from ofbilan.common.utilitaires_metier import resolve_carto_dept_code
+        from core.cartographie.pochoir_helper import is_map_valid_for_dept
+        from core.common.carte_helper import qgis_available
+        from core.common.utilitaires_metier import resolve_carto_dept_code
 
         carto_dept = resolve_carto_dept_code(
             echelle or "departement",
@@ -908,7 +908,7 @@ def resolve_options(profile: dict, cli_opts: dict | None = None) -> dict:
 
 def ask_interactive_options(profile: dict, current_opts: dict) -> dict:
     """Pose des questions interactives pour les options marquées ask: true."""
-    from ofbilan.common.prompt_periode import ask_choice_list
+    from core.common.prompt_periode import ask_choice_list
     options_config = profile.get("options", {})
     result = dict(current_opts)
 
@@ -3458,7 +3458,7 @@ def _generate_pdf(
     title_page_cfg = resolve_title_page_config(
         PROJECT_ROOT, scope="thematique", profile_id=profil_id
     )
-    from ofbilan.engine.pdf_utils import get_region_name_for_footer
+    from core.engine.pdf_utils import get_region_name_for_footer
     footer_text = get_region_name_for_footer(cfg.echelle, cfg.code)
     
     builder = PDFReportBuilder(
@@ -5150,8 +5150,8 @@ def _generate_pdf(
 
     # ── DETAIL REGIONAL PAR DEPARTEMENT ──
     if cfg.echelle == "region":
-        from ofbilan.engine.sections_region import render_sec_region_detail
-        from ofbilan.engine.pdf_context import PdfContext
+        from core.engine.sections_region import render_sec_region_detail
+        from core.engine.pdf_context import PdfContext
         ctx_region = PdfContext(
             builder=builder,
             profile=profile,
@@ -5204,8 +5204,8 @@ def _generate_pdf(
         map_id = profile.get("_map_id") or profil_id
         
         if cfg.echelle == "region":
-            from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre
-            from ofbilan.chemins_projet import get_cartes_dir
+            from core.common.utilitaires_metier import get_departements_pour_perimetre
+            from core.chemins_projet import get_cartes_dir
             
             # Nom de base configuré ou par défaut
             carto_cfg = profile.get("cartographie", {})
@@ -5247,7 +5247,7 @@ def _generate_pdf(
             # Affichage des cartes départementales
             if dept_map_paths and is_block_enabled(presentation_cfg, "sec5.show_map", True):
                 builder.add_paragraph("<b>Cartes de détail par département :</b>")
-                from ofbilan.common.utilitaires_metier import get_dept_name
+                from core.common.utilitaires_metier import get_dept_name
                 for d, path in dept_map_paths:
                     builder.add_paragraph(f"Focus départemental : {d} - {get_dept_name(d)}")
                     builder.add_maps([path], layout="vertical")
@@ -5399,7 +5399,7 @@ def _run_engine_thematic_pipeline(
         
     out_dir = cfg.get_out(out_subdir)
 
-    from ofbilan.configuration_journalisation import add_file_handler
+    from core.configuration_journalisation import add_file_handler
     add_file_handler(out_dir)
 
     label = profile["label"]
@@ -5698,7 +5698,7 @@ def _run_engine_thematic_pipeline(
 
         restrict_geo_val = str(profile.get("restrict_geo") or "").strip().lower()
         if restrict_geo_val == "pnf":
-            from ofbilan.engine.orchestrateur_profils import _coalesced_insee_for_pnf_mask
+            from core.engine.orchestrateur_profils import _coalesced_insee_for_pnf_mask
             def _filter_by_dept(df, d):
                 if df.empty: return df
                 insee_s = _coalesced_insee_for_pnf_mask(df)
@@ -5739,7 +5739,7 @@ def _run_engine_thematic_pipeline(
             results["results_52"] = res_52
 
     if str(echelle).strip().lower() == "region":
-        from ofbilan.engine.agregations_region import analyse_region_par_departement
+        from core.engine.agregations_region import analyse_region_par_departement
         analyse_region_par_departement(
             point_filtered, pa_filtered, pej_filtered, pve_filtered,
             echelle, code, out_dir, pej_global=pej, profil_id=profil_id
@@ -5779,8 +5779,8 @@ def _run_engine_thematic_pipeline(
         target_dir=out_dir,
     )
 
-    from ofbilan.common.carte_helper import ensure_maps_for_profiles
-    from ofbilan.common.cartographie_config import resolve_qgis_profile_ids
+    from core.common.carte_helper import ensure_maps_for_profiles
+    from core.common.cartographie_config import resolve_qgis_profile_ids
 
     map_profiles = resolve_qgis_profile_ids(profile, profil_id, resolved_opts)
 

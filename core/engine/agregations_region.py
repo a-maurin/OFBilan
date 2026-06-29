@@ -1,10 +1,10 @@
 import pandas as pd
 from pathlib import Path
-from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre
+from core.common.utilitaires_metier import get_departements_pour_perimetre
 
 def _load_natinf_to_theme_map() -> dict[str, str]:
     """Lit les profils YAML pour associer chaque NATINF PVe à un id de profil (thème)."""
-    from ofbilan.chemins_projet import PROJECT_ROOT
+    from core.chemins_projet import PROJECT_ROOT
     import yaml
     
     mapping = {}
@@ -109,7 +109,7 @@ def analyse_region_par_departement(
             
     # 3. PA
     if not point.empty and "resultat" in point.columns:
-        from ofbilan.common.utilitaires_metier import filter_points_induisant_pa
+        from core.common.utilitaires_metier import filter_points_induisant_pa
         pt_pa = filter_points_induisant_pa(point)
         if not pt_pa.empty:
             pt_pa["domaine"] = pt_pa["domaine"].fillna("Hors domaine").astype(str) if "domaine" in pt_pa.columns else "Hors domaine"

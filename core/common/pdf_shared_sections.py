@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from ofbilan.common.pdf_presentation_config import (
+from core.common.pdf_presentation_config import (
     DEFAULT_PDF_PRESENTATION_CONFIG,
     is_block_enabled,
     is_section_enabled,
@@ -15,7 +15,7 @@ from ofbilan.common.pdf_presentation_config import (
     resolve_sec6_methodology_config,
     resolve_title_page_config,
 )
-from ofbilan.common.pdf_table_sort import pdf_metric_caption
+from core.common.pdf_table_sort import pdf_metric_caption
 
 _VENTILATION_READER_LABELS: dict[str, str] = {
     "hebdomadaire": "indicateurs regroupés par semaine",

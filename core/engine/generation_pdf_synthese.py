@@ -8,13 +8,13 @@ from pathlib import Path
 
 import pandas as pd
 
-from ofbilan.common.carte_helper import (
+from core.common.carte_helper import (
     expected_map_filenames,
     resolve_map_layout,
     resolve_profile_map_paths,
 )
-from ofbilan.common.dataframe_rollup import rollup_small_categories as _rollup_small_categories
-from ofbilan.common.pdf_presentation_config import (
+from core.common.dataframe_rollup import rollup_small_categories as _rollup_small_categories
+from core.common.pdf_presentation_config import (
     apply_diffusion_pdf_suffix,
     build_title_lines_from_cfg,
     is_section_enabled,
@@ -24,9 +24,9 @@ from ofbilan.common.pdf_presentation_config import (
     resolve_title_page_config,
     should_show_placeholder,
 )
-from ofbilan.common.pdf_report_builder import PDFReportBuilder
-from ofbilan.common.pdf_utils import truncate_text_to_width
-from ofbilan.common.pdf_shared_sections import (
+from core.common.pdf_report_builder import PDFReportBuilder
+from core.common.pdf_utils import truncate_text_to_width
+from core.common.pdf_shared_sections import (
     add_standard_cover_and_toc,
     add_standard_notice_methodology,
     build_filtered_glossary_rows,
@@ -34,23 +34,23 @@ from ofbilan.common.pdf_shared_sections import (
     build_sec6_methodology_html,
     load_glossary_config,
 )
-from ofbilan.common.pdf_table_sort import (
+from core.common.pdf_table_sort import (
     pdf_metric_caption,
     sort_dataframe_desc as _sort_desc,
 )
-from ofbilan.common.percent_format import format_pct_int_from_rate, tab_counts_to_pct_strings
-from ofbilan.common.chart_display_config import (
+from core.common.percent_format import format_pct_int_from_rate, tab_counts_to_pct_strings
+from core.common.chart_display_config import (
     clamp_uniform_pie_ratio,
     compute_pdf_ratios,
     load_chart_display_config,
     resolve_reference_pie_display,
 )
-from ofbilan.common.rendus_graphiques import apply_mpl_style, chart_bar_horizontal_stacked, chart_pie
-from ofbilan.common.utilitaires_metier import (
+from core.common.rendus_graphiques import apply_mpl_style, chart_bar_horizontal_stacked, chart_pie
+from core.common.utilitaires_metier import (
     _load_csv_opt,
     format_type_usager_display,
 )
-from ofbilan.common.bilan_config import BilanConfig, resolve_perimetre_kwargs
+from core.common.bilan_config import BilanConfig, resolve_perimetre_kwargs
 
 _KEY_FIGURES_GRAIN_NOTE = (
     "Les localisations comptent les points de contrôle, tandis que les effectifs "
@@ -59,7 +59,7 @@ _KEY_FIGURES_GRAIN_NOTE = (
 )
 
 
-from ofbilan.engine.pdf_utils import (
+from core.engine.pdf_utils import (
     truncate_with_dash as _truncate_with_dash,
     nb_non_conformes_brut as _nb_non_conformes_brut,
     pct_table_cell as _pct_table_cell,
@@ -303,7 +303,7 @@ def generate_synthese_pdf_report(
         diffusion=diffusion,
         cartes=cartes,
     )
-    from ofbilan.engine.generation_pdf_synthese_brochure import (
+    from core.engine.generation_pdf_synthese_brochure import (
         generate_synthese_brochure_pdf_report,
     )
 
@@ -421,7 +421,7 @@ def _generate_synthese_pdf(
         ("sec5map", "5. Cartographie"),
         ("sec6", "6. Annexes"),
     ]
-    from ofbilan.common.pdf_presentation_config import resolve_sections_for_toc
+    from core.common.pdf_presentation_config import resolve_sections_for_toc
     sections_toc = resolve_sections_for_toc(presentation_cfg, section_defs)
     cover_title_lines, header_title_lines = build_title_lines_from_cfg(
         presentation_cfg,
@@ -436,12 +436,12 @@ def _generate_synthese_pdf(
     pdf_path = apply_diffusion_pdf_suffix(out_dir / pdf_name, diffusion)
     charte_cfg = resolve_charte_config(presentation_cfg)
     
-    from ofbilan.common.pdf_presentation_config import resolve_tables_layout
+    from core.common.pdf_presentation_config import resolve_tables_layout
     tables_layout = resolve_tables_layout(presentation_cfg)
     
     map_captions: list[str] = []
     if cartes:
-        from ofbilan.common.carte_helper import resolve_profile_map_paths, resolve_map_layout
+        from core.common.carte_helper import resolve_profile_map_paths, resolve_map_layout
         map_id = str(profile.get("_map_id") or "global").strip() or "global"
         global_map_paths = resolve_profile_map_paths(
             map_id, profile=profile, presentation_cfg=presentation_cfg, target_dir=out_dir
@@ -454,7 +454,7 @@ def _generate_synthese_pdf(
     title_page_cfg = resolve_title_page_config(_ROOT, scope=scope, profile_id=profil_id)
     
     from reportlab.lib.pagesizes import A4
-    from ofbilan.engine.pdf_utils import get_region_name_for_footer
+    from core.engine.pdf_utils import get_region_name_for_footer
     pagesize = A4
     
     footer_text = get_region_name_for_footer(echelle, code)
@@ -493,11 +493,11 @@ def _generate_synthese_pdf(
     )
 
 
-    from ofbilan.engine.pdf_context import PdfContext
-    from ofbilan.engine.sections_synthese import (
+    from core.engine.pdf_context import PdfContext
+    from core.engine.sections_synthese import (
         render_sec1, render_sec4_usagers, render_sec43, render_sec3_procedures, render_sec5, render_sec6
     )
-    from ofbilan.engine.registre_sections_pdf import SectionRegistry
+    from core.engine.registre_sections_pdf import SectionRegistry
     
     ctx = PdfContext(
         builder=builder,
@@ -556,7 +556,7 @@ def _generate_synthese_pdf(
     registry.register("sec5map", render_sec5)
     registry.register("sec6", render_sec6)
     
-    from ofbilan.engine.sections_region import render_sec_region_detail
+    from core.engine.sections_region import render_sec_region_detail
     registry.register("secregion", render_sec_region_detail)
     if cfg.echelle == "region":
         # Inject just before sec5map (cartographie) or sec6

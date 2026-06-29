@@ -7,21 +7,21 @@ from pathlib import Path
 import pandas as pd
 from PIL import Image as PILImage
 
-from ofbilan.common.chart_display_config import (
+from core.common.chart_display_config import (
     clamp_uniform_pie_ratio,
     compute_pdf_ratios,
     load_chart_display_config,
     resolve_reference_pie_display,
 )
-from ofbilan.common.dataframe_rollup import rollup_small_categories
-from ofbilan.common.rendus_graphiques import (
+from core.common.dataframe_rollup import rollup_small_categories
+from core.common.rendus_graphiques import (
     chart_bar_horizontal_stacked,
     chart_bar_stacked,
     chart_line_evolution,
     chart_pie,
     chart_stackplot_resultats_domaine,
 )
-from ofbilan.common.pdf_presentation_config import (
+from core.common.pdf_presentation_config import (
     apply_diffusion_pdf_suffix,
     build_title_lines_from_cfg,
     get_block_int,
@@ -40,9 +40,9 @@ from ofbilan.common.pdf_presentation_config import (
     format_proc_detail_caption,
     slice_proc_detail_for_pdf,
 )
-from ofbilan.common.pdf_report_builder import PDFReportBuilder
-from ofbilan.common.pdf_utils import ofb_table, truncate_text_to_width, wrap_plain_text_for_pdf_paragraph
-from ofbilan.common.pdf_table_sort import (
+from core.common.pdf_report_builder import PDFReportBuilder
+from core.common.pdf_utils import ofb_table, truncate_text_to_width, wrap_plain_text_for_pdf_paragraph
+from core.common.pdf_table_sort import (
     PDF_LABEL_CTRL_LOCATIONS,
     PDF_LABEL_CTRL_LOCATIONS_SHORT,
     PDF_LABEL_NON_CONFORME_LOCATIONS,
@@ -52,14 +52,14 @@ from ofbilan.common.pdf_table_sort import (
     sort_dataframe_desc as _sort_desc,
     sort_tab_resultats_controles_for_pdf,
 )
-from ofbilan.common.pdf_usagers_domaine_table import (
+from core.common.pdf_usagers_domaine_table import (
     build_usagers_x_domaine_pdf_rows,
     resolve_usagers_x_domaine_header_layout,
     resolve_usagers_x_domaine_header_font_size,
     resolve_usagers_x_domaine_header_max_lines,
     usagers_x_domaine_col_widths,
 )
-from ofbilan.common.pdf_shared_sections import (
+from core.common.pdf_shared_sections import (
     add_procedures_par_type_usager_subsection,
     add_standard_cover_and_toc,
     add_standard_notice_methodology,
@@ -69,20 +69,20 @@ from ofbilan.common.pdf_shared_sections import (
     load_glossary_config,
     summarize_procedures_par_type_usager,
 )
-from ofbilan.common.percent_format import (
+from core.common.percent_format import (
     format_pct_int_from_rate,
     int_percents_largest_remainder,
     tab_counts_to_pct_strings,
 )
-from ofbilan.common.utilitaires_metier import _load_csv_opt
-from ofbilan.common.bilan_config import BilanConfig, resolve_perimetre_kwargs
-from ofbilan.engine.registre_sections_pdf import SectionRegistry
-from ofbilan.common.carte_helper import (
+from core.common.utilitaires_metier import _load_csv_opt
+from core.common.bilan_config import BilanConfig, resolve_perimetre_kwargs
+from core.engine.registre_sections_pdf import SectionRegistry
+from core.common.carte_helper import (
     expected_map_filenames,
     resolve_map_layout,
     resolve_profile_map_paths,
 )
-from ofbilan.common.cartographie_config import (
+from core.common.cartographie_config import (
     expected_map_filenames_for_selection,
     has_cartography_catalog,
     resolve_selected_map_paths,
@@ -97,7 +97,7 @@ VENTILATION_SEUIL_JOURS_GLOBAL = 366
 
 def resolve_ventilation_mode_global(date_deb: pd.Timestamp, date_fin: pd.Timestamp) -> str:
     """Détermine le mode global de ventilation temporelle (aligné sur les profils thématiques)."""
-    from ofbilan.engine.ventilation_temporelle import resolve_ventilation_auto
+    from core.engine.ventilation_temporelle import resolve_ventilation_auto
 
     duree_jours = int((date_fin - date_deb).days)
     return resolve_ventilation_auto(duree_jours, seuil_jours=int(VENTILATION_SEUIL_JOURS_GLOBAL))
@@ -140,7 +140,7 @@ def generate_profile_pdf_report(
     )
 
 
-from ofbilan.engine.pdf_utils import (
+from core.engine.pdf_utils import (
     truncate_with_dash as _truncate_with_dash,
     nb_non_conformes_brut as _nb_non_conformes_brut,
     pct_table_cell as _pct_table_cell,
@@ -201,7 +201,7 @@ def generate_pdf_report(
     diffusion: str = "interne",
     cartes: bool = True,
 ) -> None:
-    from ofbilan.common.rendus_graphiques import apply_mpl_style
+    from core.common.rendus_graphiques import apply_mpl_style
 
     apply_mpl_style()
     _generate_pdf_content(
@@ -298,7 +298,7 @@ def _generate_pdf_content(
     report_header = " — ".join(line.strip() for line in header_title_lines if line.strip())
     map_captions: list[str] = []
     if cartes and has_cartography_catalog(profile):
-        from ofbilan.common.utilitaires_metier import resolve_carto_dept_code
+        from core.common.utilitaires_metier import resolve_carto_dept_code
 
         selected = list(profile.get("_cartes_selection") or [])
         carto_dept = resolve_carto_dept_code(cfg.echelle, cfg.code)
@@ -375,7 +375,7 @@ def _generate_pdf_content(
     title_page_cfg = resolve_title_page_config(_ROOT, scope=scope, profile_id=profile_id)
     
     from reportlab.lib.pagesizes import A4
-    from ofbilan.engine.pdf_utils import get_region_name_for_footer
+    from core.engine.pdf_utils import get_region_name_for_footer
     pagesize = A4
     
     footer_text = get_region_name_for_footer(echelle, code)
@@ -417,8 +417,8 @@ def _generate_pdf_content(
 
 
 
-    from ofbilan.engine.pdf_context import PdfContext
-    from ofbilan.engine.sections_profil import (
+    from core.engine.pdf_context import PdfContext
+    from core.engine.sections_profil import (
         render_sec1, render_sec2_chap, render_sec21, render_sec22, render_sec22theme,
         render_sec22res, render_sec3, render_sec31, render_sec32, render_sec33,
         render_sec4, render_sec42, render_sec43, render_sec44, render_sec5map, render_sec6
@@ -489,7 +489,7 @@ def _generate_pdf_content(
     registry.register("sec5map", render_sec5map)
     registry.register("sec6", render_sec6)
     
-    from ofbilan.engine.sections_region import render_sec_region_detail
+    from core.engine.sections_region import render_sec_region_detail
     registry.register("secregion", render_sec_region_detail)
     if echelle == "region":
         # Inject just before sec5map or sec6

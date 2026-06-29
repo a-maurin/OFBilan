@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import warnings
 import yaml
-from ofbilan.chemins_projet import PROJECT_ROOT
+from core.chemins_projet import PROJECT_ROOT
 
 # Load identity configuration
 _IDENTITE_PATH = PROJECT_ROOT / "config" / "identite.yaml"
@@ -952,7 +952,7 @@ def build_title_lines_from_cfg(
         line3 = str(title_cfg.get("line3_fixed", "")).strip()
     else:
         if echelle == "departement":
-            from ofbilan.chemins_projet import PROJECT_ROOT
+            from core.chemins_projet import PROJECT_ROOT
             import yaml
             
             coord = "de la"

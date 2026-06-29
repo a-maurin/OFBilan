@@ -11,8 +11,8 @@ import sys
 from pathlib import Path
 from time import time
 
-from ofbilan.chemins_projet import PROJECT_ROOT, get_out_dir
-from ofbilan.common.reveal_in_file_manager import reveal_path_in_file_manager
+from core.chemins_projet import PROJECT_ROOT, get_out_dir
+from core.common.reveal_in_file_manager import reveal_path_in_file_manager
 
 logger = logging.getLogger("ofbilan.engine")
 
@@ -21,7 +21,7 @@ def resolve_profile_output_dir(profil_id: str, code: str = "", *, root: Path | N
     """
     Dossier ``data/out/<out_subdir>/`` où le moteur écrit pour ce profil (aligné global / thématique).
     """
-    from ofbilan.engine.orchestrateur_profils import load_profile_config
+    from core.engine.orchestrateur_profils import load_profile_config
 
     base = root or PROJECT_ROOT
     profile = load_profile_config(base, profil_id)
@@ -71,7 +71,7 @@ def _open_generated_pdfs(pdf_paths: list[Path]) -> None:
 
 def _load_profiles(profils: list[str]) -> dict[str, dict]:
     """Charge les profils YAML résolus (normalisés) pour la liste fournie."""
-    from ofbilan.engine.orchestrateur_profils import load_profile_config
+    from core.engine.orchestrateur_profils import load_profile_config
 
     out: dict[str, dict] = {}
     for pid in profils:
@@ -94,7 +94,7 @@ def run_profile(
     Exécute un bilan pour un identifiant de profil.
     """
     options = options or {}
-    from ofbilan.engine.orchestrateur_profils import run_engine
+    from core.engine.orchestrateur_profils import run_engine
 
     return run_engine(profil_id, date_deb, date_fin, echelle, code, options=options)
 

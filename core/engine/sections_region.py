@@ -1,8 +1,8 @@
 import pandas as pd
 from pathlib import Path
 from reportlab.platypus import Paragraph, Spacer
-from ofbilan.common.pdf_utils import ofb_table
-from ofbilan.engine.pdf_context import PdfContext
+from core.common.pdf_utils import ofb_table
+from core.engine.pdf_context import PdfContext
 
 def render_sec_region_detail(ctx: PdfContext) -> None:
     ctx.builder.add_section("secregion", ctx.section_title.get("secregion", "Détail par département"))
@@ -14,8 +14,8 @@ def render_sec_region_detail(ctx: PdfContext) -> None:
         try:
             df_ratio = pd.read_csv(ratio_csv, sep=";", encoding="utf-8")
             if not df_ratio.empty:
-                from ofbilan.common.rendus_graphiques import chart_ppp_ratio_pej
-                from ofbilan.common.utilitaires_metier import get_dept_name
+                from core.common.rendus_graphiques import chart_ppp_ratio_pej
+                from core.common.utilitaires_metier import get_dept_name
                 
                 depts_labels = []
                 totals = []
@@ -99,7 +99,7 @@ def render_sec_region_detail(ctx: PdfContext) -> None:
             col_aligns = ["LEFT", "LEFT", "CENTER", "CENTER", "CENTER"]
             
             tbl = [headers]
-            from ofbilan.common.utilitaires_metier import get_dept_name
+            from core.common.utilitaires_metier import get_dept_name
             
             for _, row_theme in agg_theme.iterrows():
                 theme = str(row_theme["theme"])

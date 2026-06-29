@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.ticker import MaxNLocator
 
-from ofbilan.common.ofb_charte import (
+from core.common.ofb_charte import (
     COLOR_PRIMARY,
     CHART_PIE_COLORS,
     CHART_BAR_GROUPED_COLORS,
@@ -21,7 +21,7 @@ from ofbilan.common.ofb_charte import (
     COLOR_CHART_AUTRE_RESULTAT,
     COLOR_GREY,
 )
-from ofbilan.common.percent_format import int_percents_largest_remainder
+from core.common.percent_format import int_percents_largest_remainder
 
 
 def _pick_mpl_font() -> str:

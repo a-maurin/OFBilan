@@ -3,10 +3,10 @@
 from pathlib import Path
 import pandas as pd
 
-from ofbilan.engine.pdf_context import PdfContext
-from ofbilan.common.cartographie_config import has_cartography_catalog, expected_map_filenames_for_selection
-from ofbilan.common.pdf_presentation_config import is_section_enabled, is_block_enabled, get_block_int, format_proc_detail_caption, slice_proc_detail_for_pdf
-from ofbilan.common.pdf_table_sort import (
+from core.engine.pdf_context import PdfContext
+from core.common.cartographie_config import has_cartography_catalog, expected_map_filenames_for_selection
+from core.common.pdf_presentation_config import is_section_enabled, is_block_enabled, get_block_int, format_proc_detail_caption, slice_proc_detail_for_pdf
+from core.common.pdf_table_sort import (
     PDF_LABEL_CTRL_LOCATIONS,
     PDF_LABEL_CTRL_LOCATIONS_SHORT,
     PDF_LABEL_NON_CONFORME_LOCATIONS,
@@ -14,17 +14,17 @@ from ofbilan.common.pdf_table_sort import (
     pdf_metric_caption,
     sort_dataframe_desc as _sort_desc,
 )
-from ofbilan.common.percent_format import format_pct_int_from_rate, tab_counts_to_pct_strings, int_percents_largest_remainder
-from ofbilan.engine.pdf_utils import nb_non_conformes_brut, truncate_with_dash as _truncate_with_dash, pct_table_cell as _pct_table_cell
-from ofbilan.common.rendus_graphiques import chart_bar_stacked, chart_line_evolution, chart_pie, chart_bar_horizontal_stacked, chart_stackplot_resultats_domaine
-from ofbilan.common.utilitaires_metier import _load_csv_opt
-from ofbilan.common.dataframe_rollup import rollup_small_categories
-from ofbilan.common.pdf_utils import ofb_table, truncate_text_to_width, wrap_plain_text_for_pdf_paragraph
-from ofbilan.common.pdf_usagers_domaine_table import build_usagers_x_domaine_pdf_rows, resolve_usagers_x_domaine_header_layout, resolve_usagers_x_domaine_header_font_size, resolve_usagers_x_domaine_header_max_lines, usagers_x_domaine_col_widths
-from ofbilan.common.pdf_shared_sections import add_procedures_par_type_usager_subsection, build_filtered_glossary_rows, build_sec6_methodology_context, build_sec6_methodology_html, load_glossary_config
-from ofbilan.engine.generation_pdf_profil import _build_rows_resultats_controles_pdf, resolve_ventilation_mode_global
-from ofbilan.common.carte_helper import expected_map_filenames
-from ofbilan.common.cartographie_config import expected_map_filenames_for_selection
+from core.common.percent_format import format_pct_int_from_rate, tab_counts_to_pct_strings, int_percents_largest_remainder
+from core.engine.pdf_utils import nb_non_conformes_brut, truncate_with_dash as _truncate_with_dash, pct_table_cell as _pct_table_cell
+from core.common.rendus_graphiques import chart_bar_stacked, chart_line_evolution, chart_pie, chart_bar_horizontal_stacked, chart_stackplot_resultats_domaine
+from core.common.utilitaires_metier import _load_csv_opt
+from core.common.dataframe_rollup import rollup_small_categories
+from core.common.pdf_utils import ofb_table, truncate_text_to_width, wrap_plain_text_for_pdf_paragraph
+from core.common.pdf_usagers_domaine_table import build_usagers_x_domaine_pdf_rows, resolve_usagers_x_domaine_header_layout, resolve_usagers_x_domaine_header_font_size, resolve_usagers_x_domaine_header_max_lines, usagers_x_domaine_col_widths
+from core.common.pdf_shared_sections import add_procedures_par_type_usager_subsection, build_filtered_glossary_rows, build_sec6_methodology_context, build_sec6_methodology_html, load_glossary_config
+from core.engine.generation_pdf_profil import _build_rows_resultats_controles_pdf, resolve_ventilation_mode_global
+from core.common.carte_helper import expected_map_filenames
+from core.common.cartographie_config import expected_map_filenames_for_selection
 from PIL import Image as PILImage
 _ROOT = Path(__file__).resolve().parents[2]
 from reportlab.lib.units import mm
@@ -607,7 +607,7 @@ def render_sec32(ctx: PdfContext) -> None:
         and not pej_top.empty
         and is_block_enabled(ctx.presentation_cfg, "sec32.show_top_infractions", True)
     ):
-        from ofbilan.common.chargeurs_donnees import load_natinf_ref
+        from core.common.chargeurs_donnees import load_natinf_ref
         natinf_ref = load_natinf_ref(_ROOT)
         top_df = pej_top.copy()
         if "numero_natinf" not in top_df.columns:
@@ -923,7 +923,7 @@ def _get_proc_summary(ctx: PdfContext):
     if proc_precomputed is not None and "type_usager" in proc_precomputed.columns:
         return proc_precomputed
     proc_by_dom = _load_csv_opt(ctx.out_dir, "procedures_par_type_usager_domaine.csv")
-    from ofbilan.common.pdf_shared_sections import summarize_procedures_par_type_usager
+    from core.common.pdf_shared_sections import summarize_procedures_par_type_usager
     return summarize_procedures_par_type_usager(proc_by_dom)
 
 def render_sec43(ctx: PdfContext) -> None:
@@ -985,7 +985,7 @@ def render_sec5map(ctx: PdfContext) -> None:
             expected = expected_map_filenames(
                 ctx.map_id, profile=ctx.profile, presentation_cfg=ctx.presentation_cfg
             )
-        from ofbilan.chemins_projet import get_cartes_dir
+        from core.chemins_projet import get_cartes_dir
 
         cartes_dir = get_cartes_dir()
         files_hint = ", ".join(f"<b>{n}</b>" for n in expected) or f"<b>carte_{ctx.map_id}.png</b>"

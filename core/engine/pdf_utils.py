@@ -3,8 +3,8 @@
 import pandas as pd
 import yaml
 from pathlib import Path
-from ofbilan.chemins_projet import PROJECT_ROOT
-from ofbilan.common.percent_format import format_pct_int_from_rate
+from core.chemins_projet import PROJECT_ROOT
+from core.common.percent_format import format_pct_int_from_rate
 
 def truncate_with_dash(value: str, max_len: int) -> str:
     txt = str(value or "")

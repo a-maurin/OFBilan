@@ -15,22 +15,22 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import Image as RLImage, Paragraph, Spacer, Table, TableStyle
 
-from ofbilan.common.carte_helper import resolve_profile_map_paths
-from ofbilan.common.ofb_charte import COLOR_PRIMARY
-from ofbilan.common.pdf_presentation_config import (
+from core.common.carte_helper import resolve_profile_map_paths
+from core.common.ofb_charte import COLOR_PRIMARY
+from core.common.pdf_presentation_config import (
     apply_diffusion_pdf_suffix,
     normalize_dept_typography,
     resolve_pdf_presentation_config,
 )
-from ofbilan.common.pdf_report_builder import PDFReportBuilder
-from ofbilan.common.pdf_utils import truncate_text_to_width
-from ofbilan.common.pdf_table_sort import pdf_metric_caption, sort_dataframe_desc as _sort_desc
-from ofbilan.common.percent_format import format_pct_int_from_rate, tab_counts_to_pct_strings
-from ofbilan.common.rendus_graphiques import (
+from core.common.pdf_report_builder import PDFReportBuilder
+from core.common.pdf_utils import truncate_text_to_width
+from core.common.pdf_table_sort import pdf_metric_caption, sort_dataframe_desc as _sort_desc
+from core.common.percent_format import format_pct_int_from_rate, tab_counts_to_pct_strings
+from core.common.rendus_graphiques import (
     chart_bar_horizontal_stacked,
     chart_pie_legend_right,
 )
-from ofbilan.engine.brochure_charte import (
+from core.engine.brochure_charte import (
     BrochureBandeau,
     LOGO_OFB_INTRANET_BLANC,
     _BANDEAU_LOGO_H,
@@ -43,8 +43,8 @@ from ofbilan.engine.brochure_charte import (
     encadre_section,
     kpi_encadre,
 )
-from ofbilan.common.bilan_config import BilanConfig, resolve_perimetre_kwargs
-from ofbilan.engine.generation_pdf_synthese import (
+from core.common.bilan_config import BilanConfig, resolve_perimetre_kwargs
+from core.engine.generation_pdf_synthese import (
     PROFILE_ID,
     _ROOT,
     _build_synthese_key_figure_rows,
@@ -827,7 +827,7 @@ def _generate_synthese_brochure_pdf(
         stem = f"{stem}_brochure"
     pdf_path = apply_diffusion_pdf_suffix(out_dir / f"{stem}.pdf", diffusion)
 
-    from ofbilan.engine.pdf_utils import get_region_name_for_footer
+    from core.engine.pdf_utils import get_region_name_for_footer
     footer_text = get_region_name_for_footer(echelle, code)
 
     builder = PDFReportBuilder(

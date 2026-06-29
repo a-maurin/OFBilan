@@ -340,16 +340,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 params = json.loads(post_data.decode('utf-8'))
                 log_debug(f"Params décodés: {params}")
 
-                from ofbilan.common.chargeurs_donnees import load_point_ctrl, load_pej, load_pa, load_pve
-                from ofbilan.engine.orchestrateur_profils import (
+                from core.common.chargeurs_donnees import load_point_ctrl, load_pej, load_pa, load_pve
+                from core.engine.orchestrateur_profils import (
                     load_profile_config,
                     _filter_point_ctrl,
                     _filter_pej,
                     _filter_pa,
                     _filter_pve
                 )
-                from ofbilan.common.utilitaires_metier import classify_resultat_controle_series, agg_effectifs_usagers
-                from ofbilan.common.bilan_config import BilanConfig
+                from core.common.utilitaires_metier import classify_resultat_controle_series, agg_effectifs_usagers
+                from core.common.bilan_config import BilanConfig
                 import pandas as pd
 
                 profil = params.get("profil", "global")
@@ -382,7 +382,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     root=project_root
                 )
 
-                from ofbilan.common.chargeurs_donnees import _SESSION_CACHE
+                from core.common.chargeurs_donnees import _SESSION_CACHE
                 _original_cache_active = _SESSION_CACHE["active"]
                 # Désactiver temporairement le cache pour pouvoir charger N-1 (évite le filtre de la session N)
                 _SESSION_CACHE["active"] = False
@@ -491,7 +491,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 # 4. Chargement et filtrage PA
                 log_debug(f"Début chargement PA (load_pa_flag={load_pa_flag})")
                 df_pa = pd.DataFrame()
-                from ofbilan.common.utilitaires_metier import count_pa_induites_par_controles
+                from core.common.utilitaires_metier import count_pa_induites_par_controles
                 try:
                     df_pa = load_pa(project_root, echelle=echelle, code=code, date_deb=date_deb, date_fin=date_fin) if load_pa_flag else pd.DataFrame()
                     log_debug(f"PA chargées : {len(df_pa)} lignes")
@@ -501,7 +501,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         entity_sds = cfg_obj.entity_sds
                         if entity_sds and "ENTITE_ORIGINE_PROCEDURE" in df_pa.columns:
                             df_pa = df_pa[df_pa["ENTITE_ORIGINE_PROCEDURE"].isin(entity_sds)].copy()
-                        from ofbilan.common.utilitaires_metier import resolve_type_usager_champ
+                        from core.common.utilitaires_metier import resolve_type_usager_champ
                         usager_col = resolve_type_usager_champ(df_pa)
                         if type_usager and usager_col and tu_lower:
                             df_pa = df_pa[df_pa[usager_col].astype(str).str.strip().str.lower().apply(
@@ -585,7 +585,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 # 4.bis. Restriction spatiale si echelle == "pnf"
                 if echelle == "pnf":
                     import logging
-                    from ofbilan.engine.orchestrateur_profils import _apply_restrict_geo_pnf, _coalesced_insee_for_pnf_mask
+                    from core.engine.orchestrateur_profils import _apply_restrict_geo_pnf, _coalesced_insee_for_pnf_mask
                     log = logging.getLogger(__name__)
                     df_pts, df_pej, df_pa, df_pve = _apply_restrict_geo_pnf(
                         df_pts, df_pej, df_pa, df_pve, project_root, log
@@ -772,7 +772,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 #    - PEJ : points de contrôle dont code_pej est renseigné
                 #    - PA  : points de contrôle dont code_pa est renseigné
                 #    - PVe : coordonnées issues de load_pve (centroïdes communaux)
-                from ofbilan.common.utilitaires_metier import is_filled_procedure_code
+                from core.common.utilitaires_metier import is_filled_procedure_code
                 procedures = []
 
                 def _pts_to_proc(df, code_col, label):
@@ -798,7 +798,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 # Extraction des PEJ
                 if not df_pej.empty:
                     try:
-                        from ofbilan.common.chargeurs_donnees import merge_pej_faits_locations
+                        from core.common.chargeurs_donnees import merge_pej_faits_locations
                         df_pej_loc = merge_pej_faits_locations(df_pej, project_root, echelle, code)
                         
                         # --- FALLBACK COORDONNEES VIA df_pts_unfiltered ---
@@ -859,7 +859,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     missing_pve_mask = df_pve["x"].isna() | df_pve["y"].isna()
                     if missing_pve_mask.any() and "INF-INSEE" in df_pve.columns:
                         try:
-                            from ofbilan.common.chargeurs_donnees import load_communes_centroides
+                            from core.common.chargeurs_donnees import load_communes_centroides
                             cen_com = load_communes_centroides(project_root)
                             if not cen_com.empty:
                                 insee_col = "code_insee" if "code_insee" in cen_com.columns else ("CODE_INSEE" if "CODE_INSEE" in cen_com.columns else "insee")
@@ -905,7 +905,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                             if col != "geometry":
                                 gdf_boundary[col] = gdf_boundary[col].astype(str)
                     else:
-                        from ofbilan.cartographie.pochoir_helper import load_department_gdf
+                        from core.cartographie.pochoir_helper import load_department_gdf
                         os.environ["BILANS_CARTO_ECHELLE"] = echelle
                         gdf_boundary = load_department_gdf(code, project_root=project_root, dissolve=(echelle != "region"))
                     if not gdf_boundary.empty:
@@ -962,7 +962,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
             except Exception as e:
                 try:
-                    from ofbilan.common.chargeurs_donnees import _SESSION_CACHE
+                    from core.common.chargeurs_donnees import _SESSION_CACHE
                     if '_original_cache_active' in locals():
                         _SESSION_CACHE["active"] = _original_cache_active
                 except Exception:
@@ -997,7 +997,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 return
                 
             try:
-                from ofbilan.engine.execution_lots_profils import resolve_profile_output_dir
+                from core.engine.execution_lots_profils import resolve_profile_output_dir
                 out_dir = resolve_profile_output_dir(profil, code)
                 
                 if self.path == "/api/open-folder":
@@ -1042,7 +1042,7 @@ def preload_data_async():
         try:
             log_preload("  Démarrage du chargement des données en arrière-plan...")
             project_root = Path(__file__).resolve().parents[2]
-            from ofbilan.common.chargeurs_donnees import load_point_ctrl, load_pej, load_pa, load_pve
+            from core.common.chargeurs_donnees import load_point_ctrl, load_pej, load_pa, load_pve
             
             # 1. Charger les points de contrôle (toutes les années disponibles)
             log_preload("  Chargement des points de contrôle...")
@@ -1062,7 +1062,7 @@ def preload_data_async():
             
             # 5. Charger le shapefile des départements
             try:
-                from ofbilan.cartographie.pochoir_helper import get_departements_admin_shp, _load_all_departements
+                from core.cartographie.pochoir_helper import get_departements_admin_shp, _load_all_departements
                 shp = get_departements_admin_shp(project_root)
                 log_preload("  Chargement des contours géographiques...")
                 _load_all_departements(str(shp.resolve()))

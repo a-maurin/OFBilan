@@ -8,9 +8,9 @@ import argparse
 import logging
 import sys
 
-from ofbilan.configuration_journalisation import configure_logging
-from ofbilan.chemins_projet import PROJECT_ROOT
-from ofbilan.common.prompt_periode import ask_periode_perimetre
+from core.configuration_journalisation import configure_logging
+from core.chemins_projet import PROJECT_ROOT
+from core.common.prompt_periode import ask_periode_perimetre
 
 _DEPS_CHECKED = False
 
@@ -36,13 +36,13 @@ def _check_deps() -> None:
 
 def _list_themes() -> list[str]:
     """Liste les identifiants de profils disponibles."""
-    from ofbilan.engine.catalogue_profils import list_profiles
+    from core.engine.catalogue_profils import list_profiles
 
     return list_profiles()
 
 
 def _load_type_usager_labels() -> list[str]:
-    from ofbilan.engine.orchestrateur_profils import _load_types_usagers_labels
+    from core.engine.orchestrateur_profils import _load_types_usagers_labels
 
     return _load_types_usagers_labels(PROJECT_ROOT)
 
@@ -97,7 +97,7 @@ def main() -> int:
     logger = logging.getLogger("ofbilan")
 
     try:
-        from ofbilan.common.utilitaires_metier import _load_bmi_config
+        from core.common.utilitaires_metier import _load_bmi_config
         bmi_codes = sorted(_load_bmi_config().get("BMI_CONFIG", {}).keys())
     except Exception:
         bmi_codes = []
@@ -340,11 +340,11 @@ def main() -> int:
     if date_fin and len(date_fin.strip()) == 10:
         date_fin = f"{date_fin.strip()} 23:59:59"
 
-    from ofbilan.engine.catalogue_profils import resolve_profile_ids
-    from ofbilan.engine.execution_lots_profils import run_profiles_batch
+    from core.engine.catalogue_profils import resolve_profile_ids
+    from core.engine.execution_lots_profils import run_profiles_batch
 
     profils_resolus = resolve_profile_ids(profils_raw)
-    from ofbilan.common.prompt_periode import ask_choice_list, _is_interactive
+    from core.common.prompt_periode import ask_choice_list, _is_interactive
 
     cli_options: dict = {}
     
@@ -415,7 +415,7 @@ def main() -> int:
     if args.no_open:
         cli_options["no_open"] = True
 
-    from ofbilan.common.chargeurs_donnees import init_session_cache, clear_session_cache
+    from core.common.chargeurs_donnees import init_session_cache, clear_session_cache
 
     exit_code = 0
     init_session_cache(PROJECT_ROOT, echelle, codes_list, date_deb, date_fin)

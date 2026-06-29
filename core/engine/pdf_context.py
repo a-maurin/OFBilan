@@ -8,7 +8,7 @@ from typing import Any
 
 import pandas as pd
 from reportlab.platypus import Flowable
-from ofbilan.common.pdf_report_builder import PDFReportBuilder
+from core.common.pdf_report_builder import PDFReportBuilder
 
 @dataclass
 class PdfContext:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from ofbilan.common.utilitaires_metier import ZONE_PEJ_LECTEUR_TABLE_ORDER
+from core.common.utilitaires_metier import ZONE_PEJ_LECTEUR_TABLE_ORDER
 
 _COUNT_COLUMNS_PRIORITY = (
     "nb_localisations",

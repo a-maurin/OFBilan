@@ -15,7 +15,7 @@ from typing import Optional
 import geopandas as gpd
 import pandas as pd
 
-from ofbilan.chemins_projet import PROJECT_ROOT, get_sig_dir
+from core.chemins_projet import PROJECT_ROOT, get_sig_dir
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ DEPARTEMENTS_ADMIN_SHP = (
     get_sig_dir() / "limites_admin_dep" / "DEPARTEMENT_ADMIN_Express_200207.shp"
 )
 
-from ofbilan.common.chargeurs_donnees import load_pnf_aoa_gdf, load_zone_tub_gdf
+from core.common.chargeurs_donnees import load_pnf_aoa_gdf, load_zone_tub_gdf
 
 _INSEE_DEP_COL = "INSEE_DEP"
 
@@ -81,7 +81,7 @@ def load_department_gdf(
     
     # Gestion BMI et Régions
     import os
-    from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre
+    from core.common.utilitaires_metier import get_departements_pour_perimetre
     
     code_upper = dept_code.upper()
     echelle = os.environ.get("BILANS_CARTO_ECHELLE", "departement").lower()
@@ -367,7 +367,7 @@ def is_map_valid_for_dept(
     if not map_png.exists():
         return False
 
-    from ofbilan.chemins_projet import get_cartes_dir
+    from core.chemins_projet import get_cartes_dir
     try:
         abs_map = map_png.resolve()
         abs_cartes_dir = get_cartes_dir().resolve()

@@ -7,7 +7,7 @@ from typing import Any
 
 import pandas as pd
 
-from ofbilan.common.utilitaires_metier import (
+from core.common.utilitaires_metier import (
     agg_effectifs_usagers,
     agg_effectifs_usagers_par_theme,
     agg_procedures_dossiers_par_theme,
@@ -16,7 +16,7 @@ from ofbilan.common.utilitaires_metier import (
     points_as_pa_lignes,
     get_departements_pour_perimetre,
 )
-from ofbilan.engine.agregations_profil import (
+from core.engine.agregations_profil import (
     analyse_controles_global,
     analyse_pej_pa_global,
     analyse_pve_global,
@@ -242,7 +242,7 @@ def _pej_par_type_usager_theme(pej: pd.DataFrame, value_col: str) -> pd.DataFram
     cols = ["type_usager", "theme", value_col]
     if pej is None or pej.empty:
         return pd.DataFrame(columns=cols)
-    from ofbilan.common.utilitaires_metier import resolve_type_usager_champ
+    from core.common.utilitaires_metier import resolve_type_usager_champ
 
     usager_col = resolve_type_usager_champ(pej)
     if usager_col is None:
@@ -385,7 +385,7 @@ def procedures_usager_par_theme(
     empty_pa = pa_lignes.iloc[0:0].copy() if not pa_lignes.empty else pd.DataFrame()
     parts: list[pd.DataFrame] = []
 
-    from ofbilan.common.utilitaires_metier import resolve_type_usager_champ
+    from core.common.utilitaires_metier import resolve_type_usager_champ
 
     pej_usager_col = resolve_type_usager_champ(pej_d) or "type_usager"
     if not pej_d.empty:
@@ -468,7 +468,7 @@ def run_synthese_aggregations(
     )
     _export_synthese_csv(out_dir, "resume", resume)
     
-    from ofbilan.engine.agregations_region import analyse_region_par_departement
+    from core.engine.agregations_region import analyse_region_par_departement
     analyse_region_par_departement(point, pa, pej, pve, echelle, code, out_dir)
 
 

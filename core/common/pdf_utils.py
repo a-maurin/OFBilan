@@ -9,7 +9,7 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.pdfbase import pdfmetrics
 from reportlab.platypus import Flowable, Paragraph, Spacer, Table, TableStyle, PageBreak
 
-from ofbilan.common.ofb_charte import (
+from core.common.ofb_charte import (
     COLOR_PRIMARY,
     COLOR_TABLE_ALT_ROW,
     COLOR_TABLE_BORDER,

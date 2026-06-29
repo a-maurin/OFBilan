@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from ofbilan.chemins_projet import PROJECT_ROOT
+from core.chemins_projet import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 

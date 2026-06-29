@@ -5,11 +5,11 @@ from typing import Any, Tuple
 
 import pandas as pd
 
-from ofbilan.common.chargeurs_donnees import (
+from core.common.chargeurs_donnees import (
     load_natinf_ref,
     load_communes_noms,
 )
-from ofbilan.common.utilitaires_metier import (
+from core.common.utilitaires_metier import (
     agg_effectifs_usagers,
     agg_effectifs_usagers_par_domaine,
     agg_procedures_dossiers_par_domaine,
@@ -270,7 +270,7 @@ def analyse_pej_pa_global(
 
     echelle = str(echelle).strip() or "departement"
     code = str(code).strip() or "21"
-    from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre
+    from core.common.utilitaires_metier import get_departements_pour_perimetre
     dept_codes = get_departements_pour_perimetre(echelle, code)
     sd_list = [f"SD{c}" for c in dept_codes] if dept_codes and "FR" not in dept_codes else []
     if "ENTITE_ORIGINE_PROCEDURE" in pej.columns:
@@ -286,7 +286,7 @@ def analyse_pej_pa_global(
     else:
         pej_dept = pej_dept[pej_dept["DC_ID"].isna() | ~pej_dept.duplicated(subset=["DC_ID"], keep="first")].copy()
 
-    from ofbilan.common.chargeurs_donnees import merge_pej_faits_locations
+    from core.common.chargeurs_donnees import merge_pej_faits_locations
     pej_dept = merge_pej_faits_locations(pej_dept, root, echelle, code)
 
     def _col_or_fallback(df: pd.DataFrame, name: str, fallback: str) -> pd.Series:
@@ -853,7 +853,7 @@ def run_profile_aggregations(
             ]
         ).to_csv(out_dir / "indicateurs_global_par_annee.csv", sep=";", index=False)
         
-    from ofbilan.engine.agregations_region import analyse_region_par_departement
+    from core.engine.agregations_region import analyse_region_par_departement
     analyse_region_par_departement(
         point, pa, pej, pve, echelle, code, out_dir,
         pej_global=pej_global, profil_id=str(profile.get("id", "global"))

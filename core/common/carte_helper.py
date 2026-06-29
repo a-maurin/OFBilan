@@ -12,7 +12,7 @@ import logging
 from pathlib import Path
 from typing import Any, List, Optional
 
-from ofbilan.chemins_projet import PROJECT_ROOT, get_cartes_dir
+from core.chemins_projet import PROJECT_ROOT, get_cartes_dir
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +74,7 @@ def resolve_map_png_path(
     except Exception:
         pass
 
-    from ofbilan.common.cartographie_config import parse_cartography_catalog
+    from core.common.cartographie_config import parse_cartography_catalog
 
     for prof in (bilan_profiles or {}).values():
         if not isinstance(prof, dict):
@@ -238,7 +238,7 @@ _qgis_app = None
 def get_qgis_app():
     global _qgis_app
     if _qgis_app is None:
-        from ofbilan.cartographie.production_cartographique import init_qgis_headless
+        from core.cartographie.production_cartographique import init_qgis_headless
         _qgis_app = init_qgis_headless()
     return _qgis_app
 
@@ -247,7 +247,7 @@ def _resolve_carto_dept(
     code: Optional[str],
     dept_code: Optional[str],
 ) -> str:
-    from ofbilan.common.utilitaires_metier import resolve_carto_dept_code
+    from core.common.utilitaires_metier import resolve_carto_dept_code
 
     echelle_eff = echelle or "departement"
     code_eff = code or dept_code or "21"
@@ -329,8 +329,8 @@ def generate_maps(
     try:
         if qgis_available():
             try:
-                from ofbilan.cartographie.production_cartographique import run_export
-                from ofbilan.common.cartographie_config import build_qgis_overrides_from_bilan_profiles
+                from core.cartographie.production_cartographique import run_export
+                from core.common.cartographie_config import build_qgis_overrides_from_bilan_profiles
 
                 qgis_overrides = build_qgis_overrides_from_bilan_profiles(bilan_profiles)
                 logger.info(
@@ -361,7 +361,7 @@ def generate_maps(
                 )
                 return []
         else:
-            from ofbilan.cartographie.qgis_runtime import run_cartography_export_subprocess
+            from core.cartographie.qgis_runtime import run_cartography_export_subprocess
 
             logger.info(
                 "PyQGIS absent de l'interpréteur courant — délégation export QGIS (sous-processus)."
@@ -381,7 +381,7 @@ def generate_maps(
         if "BILANS_CARTO_ECHELLE" in os.environ:
             del os.environ["BILANS_CARTO_ECHELLE"]
 
-    from ofbilan.cartographie.pochoir_helper import (
+    from core.cartographie.pochoir_helper import (
         is_map_valid_for_dept,
         read_map_dept_marker,
     )
@@ -450,7 +450,7 @@ def ensure_maps_for_profiles(
         if p not in unique_ids:
             unique_ids.append(p)
 
-    from ofbilan.cartographie.pochoir_helper import (
+    from core.cartographie.pochoir_helper import (
         is_map_valid_for_dept,
         read_map_dept_marker,
         warn_if_unknown_carto_dept,

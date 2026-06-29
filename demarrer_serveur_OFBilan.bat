@@ -2,14 +2,6 @@
 chcp 65001 >nul
 setlocal enabledelayedexpansion
 
-:: Anti "Terminate batch job (Y/N)" prompt trick
-if "%~1"=="run" goto :run
-start "" /B /WAIT cmd /c ""%~f0" run" <nul
-echo Appuyez sur une touche pour quitter...
-pause >nul
-exit /b
-
-:run
 echo =====================================
 echo     Lancement du serveur OFBilan
 echo =====================================
@@ -42,5 +34,5 @@ echo [OK] Demarrage du serveur...
 echo.
 
 :: %~dp0 correspond au dossier ou se trouve ce script .bat
-call %QGIS_PYTHON% "%~dp0core\web\serveur.py"
+%QGIS_PYTHON% "%~dp0core\web\serveur.py"
 exit /b

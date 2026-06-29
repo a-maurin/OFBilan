@@ -43,7 +43,7 @@ OUT_DIR_CARTES = PROJECT_ROOT / "data" / "out" / "generateur_de_cartes"
 sys.path.insert(0, str(SCRIPT_DIR))
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from ofbilan.chemins_projet import get_qgis_project_path
+from core.chemins_projet import get_qgis_project_path
 
 _DEFAULT_QGIS_PROJECT = get_qgis_project_path()
 
@@ -51,7 +51,7 @@ _DEFAULT_QGIS_PROJECT = get_qgis_project_path()
 def _load_ref_themes_ctrl_safe(root: Path) -> list:
     """Charge ref_themes_ctrl (bilans ou contexte QGIS legacy)."""
     try:
-        from ofbilan.common.chargeurs_donnees import load_ref_themes_ctrl
+        from core.common.chargeurs_donnees import load_ref_themes_ctrl
 
         return load_ref_themes_ctrl(root)
     except Exception as exc:
@@ -261,8 +261,8 @@ def _load_profiles_from_param() -> Optional[tuple[Dict[str, "ProfileConfig"], st
         )
 
     # Chargement dynamique des profils bilan pour créer les ProfileConfig fusionnés
-    from ofbilan.engine.catalogue_profils import list_profiles
-    from ofbilan.engine.orchestrateur_profils import load_profile_config
+    from core.engine.catalogue_profils import list_profiles
+    from core.engine.orchestrateur_profils import load_profile_config
     
     bilan_profiles = {}
     for pid in list_profiles():
@@ -552,7 +552,7 @@ def resolve_layers_for_config(
         
         # Override data source if an automatic GPKG export exists for this profile (Lot 3 - Filtrage Spatial)
         if layer and profil_prefix and layer_role != "pochoir" and layer_role != "contexte":
-            from ofbilan.chemins_projet import PROJECT_ROOT
+            from core.chemins_projet import PROJECT_ROOT
             from layer_resolver import infer_layer_role
             carto_dir = PROJECT_ROOT / "data" / "sources" / "sig" / "CARTO"
             role = layer_role or infer_layer_role(layer_key, layer.name())
@@ -572,7 +572,7 @@ def resolve_layers_for_config(
                         gpkg_path = path_cand
                         break
                 if gpkg_path is None:
-                    from ofbilan.common.chargeurs_donnees import get_points_infrac_pj_path
+                    from core.common.chargeurs_donnees import get_points_infrac_pj_path
                     gpkg_path = get_points_infrac_pj_path(PROJECT_ROOT)
             else:
                 is_pve = "pve" in layer_key.lower() or (role and "pve" in role.lower())
@@ -620,8 +620,8 @@ def resolve_layers_for_config(
 
     if not results or not results[0][0]:
         if lcfg.layer_name == "coeur_parc" or layer_key == "coeur_parc":
-            from ofbilan.common.chargeurs_donnees import get_pnf_coeur_shp_path
-            from ofbilan.chemins_projet import PROJECT_ROOT
+            from core.common.chargeurs_donnees import get_pnf_coeur_shp_path
+            from core.chemins_projet import PROJECT_ROOT
             coeur_path = get_pnf_coeur_shp_path(PROJECT_ROOT)
             if coeur_path.exists():
                 layer = QgsVectorLayer(str(coeur_path), "coeur_parc", "ogr")
@@ -676,7 +676,7 @@ def ensure_pochoir_layer_in_project(dept_code: str, pochoir_id: str = "departeme
     if not HAS_QGIS:
         return None, ""
 
-    from ofbilan.cartographie.pochoir_helper import (
+    from core.cartographie.pochoir_helper import (
         pochoir_cache_path,
         pochoir_layer_name,
         write_pochoir_gpkg,
@@ -718,7 +718,7 @@ def apply_map_extent(layout, dept_code: str, pochoir_id: str = "departement", *,
     """Ajuste l'emprise des QgsLayoutItemMap sur l'emprise demandée (département, aoa...)."""
     if not HAS_QGIS or not dept_code:
         return False
-    from ofbilan.cartographie.pochoir_helper import load_pochoir_gdf
+    from core.cartographie.pochoir_helper import load_pochoir_gdf
     from qgis.core import QgsRectangle
 
     try:
@@ -760,8 +760,8 @@ def adapt_profile_texts_for_department(prof: "ProfileConfig", dept_code: str) ->
     """Substitue Côte-d'Or / SD21 dans les titres par le département courant."""
     from dataclasses import replace
 
-    from ofbilan.cartographie.pochoir_helper import adapt_text_for_department
-    from ofbilan.common.utilitaires_metier import get_dept_name
+    from core.cartographie.pochoir_helper import adapt_text_for_department
+    from core.common.utilitaires_metier import get_dept_name
 
     dept_name = get_dept_name(dept_code)
     title = adapt_text_for_department(getattr(prof, "title", "") or "", dept_code, dept_name)
@@ -1167,7 +1167,7 @@ def _depart_attr_condition(field_name: str, depart: str) -> str:
     depart = str(depart or "").strip()
     import os
     echelle = os.environ.get("BILANS_CARTO_ECHELLE", "departement").lower()
-    from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre
+    from core.common.utilitaires_metier import get_departements_pour_perimetre
     
     if depart.upper().startswith("R") or echelle == "region":
         deps = get_departements_pour_perimetre("region", depart.lower())
@@ -1233,7 +1233,7 @@ def _build_pve_expression(fields, date_deb: str, date_fin: str, config, profile=
     depart = getattr(config, "departement_code", "21")
     import os
     echelle = os.environ.get("BILANS_CARTO_ECHELLE", "departement").lower()
-    from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre
+    from core.common.utilitaires_metier import get_departements_pour_perimetre
     
     if depart.upper().startswith("R") or echelle == "region":
         deps = get_departements_pour_perimetre("region", depart.lower())
@@ -1292,11 +1292,11 @@ def _build_pj_expression(fields, date_deb: str, date_fin: str, config, profile=N
     import os
     echelle = os.environ.get("BILANS_CARTO_ECHELLE", "departement").lower()
     if depart.upper().startswith("R") or echelle == "region":
-        from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre
+        from core.common.utilitaires_metier import get_departements_pour_perimetre
         dept_codes = get_departements_pour_perimetre("region", depart.lower())
         entite_list = [f"sd{d.lower()}" for d in dept_codes]
     elif depart.upper().startswith("BMI-") or echelle == "bmi":
-        from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre, get_bmi_filters
+        from core.common.utilitaires_metier import get_departements_pour_perimetre, get_bmi_filters
         dept_codes = get_departements_pour_perimetre("bmi", depart)
         if dept_codes and "FR" not in dept_codes:
             entite_list = [f"sd{d.lower()}" for d in dept_codes]
@@ -1802,7 +1802,7 @@ def _ensure_logo_bandeau(layout, prof: "ProfileConfig") -> None:
 
 def resolve_map_title(prof: "ProfileConfig", dept_code: Optional[str] = None) -> str:
     """Résout le titre de la carte en gérant le département et la période de manière sécurisée."""
-    from ofbilan.common.utilitaires_metier import get_dept_name
+    from core.common.utilitaires_metier import get_dept_name
     dept_name = get_dept_name(dept_code) if dept_code else ""
     
     base_title = getattr(prof, "title_main", "") or ""
@@ -2243,7 +2243,7 @@ def run_export(
             out_path = out_dir / getattr(prof, "output_filename", f"carte_{pid}.png")
             try:
                 exporter_carte_matplotlib(prof, out_path, effective_dept, [], PROJECT_ROOT)
-                from ofbilan.cartographie.pochoir_helper import write_map_dept_marker
+                from core.cartographie.pochoir_helper import write_map_dept_marker
                 write_map_dept_marker(out_path, effective_dept)
             except Exception as e:
                 logger.error(f"Erreur avec le generateur matplotlib pour {pid} : {e}")
@@ -2415,7 +2415,7 @@ def run_export(
                     if not layer or not layer.isValid():
                         # Tentative de réparation de la source de données pour les couches PNF
                         if resolved_name in ("Coeur_data_gouv_PNForets", "coeur_parc"):
-                            from ofbilan.common.chargeurs_donnees import get_pnf_coeur_shp_path
+                            from core.common.chargeurs_donnees import get_pnf_coeur_shp_path
                             coeur_path = get_pnf_coeur_shp_path(PROJECT_ROOT)
                             if coeur_path.exists():
                                 if layer:
@@ -2436,7 +2436,7 @@ def run_export(
                                     layer.setRenderer(QgsSingleSymbolRenderer(sym))
                                     get_qgis_project().addMapLayer(layer, True)
                         elif resolved_name in ("AOA_2021_PNForets", "AOA_2021_PNForet_21", "AOA_2021_PNForets.shp"):
-                            from ofbilan.common.chargeurs_donnees import get_pnf_aoa_shp_path
+                            from core.common.chargeurs_donnees import get_pnf_aoa_shp_path
                             aoa_path = get_pnf_aoa_shp_path(PROJECT_ROOT)
                             if aoa_path.exists():
                                 if layer:
@@ -2587,7 +2587,7 @@ def run_export(
                     logger.error("  Erreur de dessin de légende sur %s : %s", png_path.name, e)
 
                 # Marqueur département indépendant de la légende (requis hors SD21 legacy)
-                from ofbilan.cartographie.pochoir_helper import (
+                from core.cartographie.pochoir_helper import (
                     map_staleness_marker_path,
                     write_map_dept_marker,
                 )

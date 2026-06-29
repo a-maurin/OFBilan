@@ -5,8 +5,8 @@ Source de vérité : fichiers YAML dans config/profils_bilan/ et ref_themes_ctrl
 """
 from __future__ import annotations
 
-from ofbilan.common.chargeurs_donnees import load_ref_themes_ctrl
-from ofbilan.chemins_projet import PROJECT_ROOT
+from core.common.chargeurs_donnees import load_ref_themes_ctrl
+from core.chemins_projet import PROJECT_ROOT
 
 _HIDDEN_PROFILES: frozenset[str] = frozenset({"pnf_foret", "_defaults"})
 

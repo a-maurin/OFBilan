@@ -4,9 +4,9 @@ from pathlib import Path
 import pandas as pd
 from reportlab.platypus import Spacer, Paragraph
 
-from ofbilan.engine.pdf_context import PdfContext
-from ofbilan.common.pdf_presentation_config import is_section_enabled, is_block_enabled
-from ofbilan.common.pdf_table_sort import (
+from core.engine.pdf_context import PdfContext
+from core.common.pdf_presentation_config import is_section_enabled, is_block_enabled
+from core.common.pdf_table_sort import (
     PDF_LABEL_CTRL_LOCATIONS,
     PDF_LABEL_CTRL_LOCATIONS_SHORT,
     PDF_LABEL_NON_CONFORME_LOCATIONS,
@@ -14,20 +14,20 @@ from ofbilan.common.pdf_table_sort import (
     pdf_metric_caption,
     sort_dataframe_desc as _sort_desc,
 )
-from ofbilan.common.percent_format import format_pct_int_from_rate
-from ofbilan.engine.pdf_utils import (
+from core.common.percent_format import format_pct_int_from_rate
+from core.engine.pdf_utils import (
     nb_non_conformes_brut,
     truncate_with_dash,
     pct_table_cell as _pct_table_cell,
     truncate_with_dash as _truncate_with_dash,
 )
-from ofbilan.common.pdf_utils import truncate_text_to_width
-from ofbilan.common.rendus_graphiques import (
+from core.common.pdf_utils import truncate_text_to_width
+from core.common.rendus_graphiques import (
     chart_bar_stacked, chart_line_evolution, chart_pie, chart_stackplot_resultats_domaine,
     chart_bar_horizontal_stacked
 )
-from ofbilan.common.utilitaires_metier import _load_csv_opt
-from ofbilan.engine.generation_pdf_synthese import (
+from core.common.utilitaires_metier import _load_csv_opt
+from core.engine.generation_pdf_synthese import (
     _nb_non_conformes_brut, _build_synthese_key_figure_rows, _rollup_small_categories,
     _wrap_table_label, _resultats_controles_pie_data, _pie_data_controles_par_type_usager,
     _display_type_usager, _chart_pie_compact_legend_kw, _format_pve_natinf_label,
@@ -35,7 +35,7 @@ from ofbilan.engine.generation_pdf_synthese import (
     _build_rows_resultats_controles_pdf, _build_usager_theme_table_rows
 )
 from xml.sax.saxutils import escape
-from ofbilan.common.pdf_shared_sections import (
+from core.common.pdf_shared_sections import (
     build_sec6_methodology_html,
     build_sec6_methodology_context,
     load_glossary_config,
@@ -388,7 +388,7 @@ def render_sec3_procedures(ctx: PdfContext) -> None:
     pej_top = _load_csv_opt(ctx.out_dir, "pej_global_par_natinf.csv")
     if pej_top is not None and not pej_top.empty:
         pej_top = _sort_desc(pej_top, ["nb"])
-        from ofbilan.common.chargeurs_donnees import load_natinf_ref
+        from core.common.chargeurs_donnees import load_natinf_ref
         natinf_ref = load_natinf_ref(_ROOT)
         top_df = pej_top.copy()
         if "numero_natinf" not in top_df.columns:

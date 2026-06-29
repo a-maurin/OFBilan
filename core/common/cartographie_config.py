@@ -11,10 +11,10 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from ofbilan.chemins_projet import get_cartes_dir
+from core.chemins_projet import get_cartes_dir
 
 logger = logging.getLogger(__name__)
-from ofbilan.common.carte_helper import resolve_map_layout
+from core.common.carte_helper import resolve_map_layout
 
 
 def parse_cartography_catalog(profile: dict | None) -> list[dict[str, str]]:
@@ -340,7 +340,7 @@ def resolve_selected_map_paths(
     Si *carto_dept* est fourni, seules les cartes valides pour ce département
     (marqueur ``.XX.dept`` ou rétrocompatibilité département 21) sont retenues.
     """
-    from ofbilan.cartographie.pochoir_helper import is_map_valid_for_dept, read_map_dept_marker
+    from core.cartographie.pochoir_helper import is_map_valid_for_dept, read_map_dept_marker
 
     by_id = _catalog_by_id(profile)
     catalog_order = [e["id"] for e in parse_cartography_catalog(profile)]

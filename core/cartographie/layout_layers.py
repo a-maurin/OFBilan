@@ -11,10 +11,10 @@ import re
 import xml.etree.ElementTree as ET
 from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Sequence
 
-from ofbilan.cartographie.layer_resolver import infer_layer_role
+from core.cartographie.layer_resolver import infer_layer_role
 
 if TYPE_CHECKING:
-    from ofbilan.cartographie.config_cartes_model import LayerSymbologyConfig, ProfileConfig
+    from core.cartographie.config_cartes_model import LayerSymbologyConfig, ProfileConfig
 
 # Fonds cartographiques / tuiles — exclus du traitement métier
 BASEMAP_KEYWORDS = (
@@ -125,7 +125,7 @@ def build_layer_configs_from_names(
     yaml_overrides: Optional[Dict[str, "LayerSymbologyConfig"]] = None,
 ) -> Dict[str, "LayerSymbologyConfig"]:
     """Construit la config de traitement à partir des noms découverts dans le layout."""
-    from ofbilan.cartographie.config_cartes_model import LayerSymbologyConfig
+    from core.cartographie.config_cartes_model import LayerSymbologyConfig
 
     overrides = yaml_overrides or {}
     result: Dict[str, LayerSymbologyConfig] = {}

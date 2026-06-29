@@ -8,8 +8,8 @@ import geopandas as gpd
 import pandas as pd
 import re
 
-from ofbilan.chemins_projet import ref_programme
-from ofbilan.common.utilitaires_metier import (
+from core.chemins_projet import ref_programme
+from core.common.utilitaires_metier import (
     coalesced_insee_series,
     extract_insee_code_series,
     filtre_periode,
@@ -247,7 +247,7 @@ def load_point_ctrl(
     if _SESSION_CACHE["active"] and _SESSION_CACHE["point_ctrl"] is not None:
         df_all = _SESSION_CACHE["point_ctrl"].copy()
         if echelle is not None and code is not None:
-            from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre, get_bmi_filters
+            from core.common.utilitaires_metier import get_departements_pour_perimetre, get_bmi_filters
             echelle_norm = str(echelle).strip().lower()
             if echelle_norm == "bmi" and "entit_ctrl" in df_all.columns:
                 bmi_filters = get_bmi_filters(code)
@@ -357,7 +357,7 @@ def load_point_ctrl(
 
     selected_paths = [tpl[1] for tpl in per_year.values()]
     frames: List[pd.DataFrame] = []
-    from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre
+    from core.common.utilitaires_metier import get_departements_pour_perimetre
     target_depts = get_departements_pour_perimetre(echelle, code)
     
     for path in selected_paths:
@@ -464,7 +464,7 @@ def load_point_ctrl(
 
     # Filtrage optionnel par périmètre et période
     if echelle is not None and code is not None:
-        from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre, get_bmi_filters
+        from core.common.utilitaires_metier import get_departements_pour_perimetre, get_bmi_filters
         echelle_norm = str(echelle).strip().lower()
         if echelle_norm == "bmi" and "entit_ctrl" in df_all.columns:
             bmi_filters = get_bmi_filters(code)
@@ -516,7 +516,7 @@ def load_pej(
             fin_ts = pd.to_datetime(date_fin)
             df = filtre_periode(df, "DATE_REF", deb_ts, fin_ts)
         if echelle is not None and code is not None:
-            from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre, get_bmi_filters
+            from core.common.utilitaires_metier import get_departements_pour_perimetre, get_bmi_filters
             echelle_norm = str(echelle).strip().lower()
             if echelle_norm == "bmi" and "ENTITE_ORIGINE_PROCEDURE" in df.columns:
                 bmi_filters = get_bmi_filters(code)
@@ -581,7 +581,7 @@ def load_pej(
         df = filtre_periode(df, "DATE_REF", deb_ts, fin_ts)
 
     if echelle is not None and code is not None:
-        from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre, get_bmi_filters
+        from core.common.utilitaires_metier import get_departements_pour_perimetre, get_bmi_filters
         echelle_norm = str(echelle).strip().lower()
         if echelle_norm == "bmi" and "ENTITE_ORIGINE_PROCEDURE" in df.columns:
             bmi_filters = get_bmi_filters(code)
@@ -631,7 +631,7 @@ def load_pa(
             fin_ts = pd.to_datetime(date_fin)
             df = filtre_periode(df, "DATE_REF", deb_ts, fin_ts)
         if echelle is not None and code is not None:
-            from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre, get_bmi_filters
+            from core.common.utilitaires_metier import get_departements_pour_perimetre, get_bmi_filters
             echelle_norm = str(echelle).strip().lower()
             if echelle_norm == "bmi" and "ENTITE_ORIGINE_PROCEDURE" in df.columns:
                 bmi_filters = get_bmi_filters(code)
@@ -1909,7 +1909,7 @@ def load_pve(
                 f.write(f"Max date INTG in cache: {df['INF-DATE-INTG'].max()}\n")
 
         if echelle is not None and code is not None:
-            from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre, get_bmi_filters
+            from core.common.utilitaires_metier import get_departements_pour_perimetre, get_bmi_filters
             echelle_norm = str(echelle).strip().lower()
             if echelle_norm == "bmi" and "nom_site" in df.columns:
                 bmi_filters = get_bmi_filters(code)
@@ -2005,7 +2005,7 @@ def load_pve(
         _PVE_RAW_CACHE[path] = df.copy()
 
     if echelle is not None and code is not None:
-        from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre, get_bmi_filters
+        from core.common.utilitaires_metier import get_departements_pour_perimetre, get_bmi_filters
         echelle_norm = str(echelle).strip().lower()
         if echelle_norm == "bmi" and "nom_site" in df.columns:
             bmi_filters = get_bmi_filters(code)
@@ -2145,12 +2145,12 @@ def merge_pej_faits_locations(
     if ent_col is None:
         lg.warning("Couche FAITS : pas de colonne entite — jointure PEJ ignorée.")
         return pej.copy()
-    from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre
+    from core.common.utilitaires_metier import get_departements_pour_perimetre
     dept_codes = get_departements_pour_perimetre(echelle, code)
     if dept_codes and "FR" not in dept_codes:
         sd_list = [f"SD{d}" for d in dept_codes]
         if str(echelle).strip().lower() == "bmi":
-            from ofbilan.common.utilitaires_metier import get_bmi_filters
+            from core.common.utilitaires_metier import get_bmi_filters
             bmi_filters = get_bmi_filters(code)
             sd_list.append(str(bmi_filters.get("entite_pej", code)).upper())
         gdf = gdf[gdf[ent_col].astype(str).str.strip().isin(sd_list)].copy()
@@ -2306,12 +2306,12 @@ def load_points_infrac_pj(
     natinf_vals = [int(n) for n in natinf_list]
     # Filtre à la lecture si possible (pyogrio) pour éviter de charger tout le GPKG
     try:
-        from ofbilan.common.utilitaires_metier import get_departements_pour_perimetre
+        from core.common.utilitaires_metier import get_departements_pour_perimetre
         target_depts = get_departements_pour_perimetre(echelle, code)
         if target_depts and "FR" not in target_depts:
             entite_list = [f"SD{d}" for d in target_depts]
             if str(echelle).strip().lower() == "bmi":
-                from ofbilan.common.utilitaires_metier import get_bmi_filters
+                from core.common.utilitaires_metier import get_bmi_filters
                 bmi_filters = get_bmi_filters(code)
                 entite_list.append(str(bmi_filters.get("entite_pej", code)).upper())
             entite_clause = "entite IN ('" + "', '".join(entite_list) + "')"
@@ -2325,7 +2325,7 @@ def load_points_infrac_pj(
         if target_depts and "FR" not in target_depts:
             entite_list = [f"SD{d}" for d in target_depts]
             if str(echelle).strip().lower() == "bmi":
-                from ofbilan.common.utilitaires_metier import get_bmi_filters
+                from core.common.utilitaires_metier import get_bmi_filters
                 bmi_filters = get_bmi_filters(code)
                 entite_list.append(str(bmi_filters.get("entite_pej", code)).upper())
             mask = (gdf["entite"].isin(entite_list)) & (gdf["natinf"].isin(natinf_vals))
