@@ -23,7 +23,7 @@ class OFBilanPlugin:
         icon_path = ':/images/themes/default/mActionStart.svg' # Fallback QGIS icon
         
         # Si OFBilan possède un icône, on l'utilise
-        local_icon = os.path.join(self.plugin_dir, 'icon.svg')
+        local_icon = os.path.join(self.plugin_dir, 'icon.png')
         if os.path.exists(local_icon):
             icon_path = local_icon
             
