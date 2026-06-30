@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import pandas as pd
 
-from ofbilan.common.pdf_table_sort import build_resultats_par_usager_domaine_pdf_rows
-from ofbilan.common.utilitaires_metier import agg_resultats_par_type_usager_domaine
+from core.common.pdf_table_sort import build_resultats_par_usager_domaine_pdf_rows
+from core.common.utilitaires_metier import agg_resultats_par_type_usager_domaine
 
 
 def test_agg_resultats_domaine_conforme_infraction_manquement() -> None:

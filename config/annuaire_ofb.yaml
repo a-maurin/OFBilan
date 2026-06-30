@@ -36,6 +36,20 @@ departements:
     telephone: "03 84 21 00 00"
 
 regions:
+  "01":
+    nom: "Direction régionale Guadeloupe"
+  "02":
+    nom: "Direction régionale Martinique"
+  "03":
+    nom: "Direction régionale Guyane"
+  "04":
+    nom: "Direction régionale La Réunion"
+  "06":
+    nom: "Direction régionale Mayotte"
+  "11":
+    nom: "Direction régionale Île-de-France"
+  "24":
+    nom: "Direction régionale Centre-Val de Loire"
   "27":
     nom: "Direction régionale Bourgogne-Franche-Comté"
     adresse: "Immeuble Le Richelieu, 10 Bd Carnot"
@@ -43,6 +57,26 @@ regions:
     ville: "Dijon"
     email: "dr.bfc@ofb.gouv.fr"
     telephone: "03 80 29 43 90"
+  "28":
+    nom: "Direction régionale Normandie"
+  "32":
+    nom: "Direction régionale Hauts-de-France"
+  "44":
+    nom: "Direction régionale Grand Est"
+  "52":
+    nom: "Direction régionale Pays de la Loire"
+  "53":
+    nom: "Direction régionale Bretagne"
+  "75":
+    nom: "Direction régionale Nouvelle-Aquitaine"
+  "76":
+    nom: "Direction régionale Occitanie"
+  "84":
+    nom: "Direction régionale Auvergne-Rhône-Alpes"
+  "93":
+    nom: "Direction régionale Provence-Alpes-Côte d'Azur"
+  "94":
+    nom: "Direction régionale Corse"
 
 national:
   "FR":

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from ofbilan.common.utilitaires_metier import (
+from core.common.utilitaires_metier import (
     build_tab_resultats_controles,
     classify_resultat_controle,
 )

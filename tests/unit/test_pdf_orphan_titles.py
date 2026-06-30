@@ -1,6 +1,6 @@
 import pytest
 from reportlab.platypus import Paragraph, Spacer, Image as RLImage, KeepTogether
-from ofbilan.common.pdf_report_builder import PDFReportBuilder
+from core.common.pdf_report_builder import PDFReportBuilder
 from reportlab.lib.styles import getSampleStyleSheet
 import tempfile
 from pathlib import Path

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from ofbilan.engine.agregations_profil import analyse_pej_pa_global
+from core.engine.agregations_profil import analyse_pej_pa_global
 
 
 def test_pa_par_domaine_depuis_controles_manquement(tmp_path: Path) -> None:

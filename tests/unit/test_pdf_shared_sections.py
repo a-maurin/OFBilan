@@ -1,4 +1,4 @@
-from ofbilan.common.pdf_shared_sections import (
+from core.common.pdf_shared_sections import (
     build_filtered_glossary_rows,
     build_sec6_methodology_context,
     build_sec6_methodology_html,

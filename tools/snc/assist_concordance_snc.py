@@ -6,7 +6,7 @@ from pathlib import Path
 from complete_concordance_snc import normaliser_texte
 
 
-BASE = Path(__file__).resolve().parents[1]
+BASE = Path(__file__).resolve().parents[2]
 
 REF_PATH = (
     BASE

@@ -30,11 +30,16 @@ ofbilan = "ofbilan.point_entree_cli:main"
 
 [tool.setuptools]
 include-package-data = true
-
-[tool.setuptools.packages.find]
-where = ["src"]
-include = ["ofbilan*"]
+package-dir = { "ofbilan" = "core" }
+packages = [
+  "ofbilan",
+  "ofbilan.cartographie",
+  "ofbilan.common",
+  "ofbilan.engine",
+  "ofbilan.web"
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests/unit", "tests/smoke"]
 pythonpath = ["."]
+addopts = ["--ignore=__init__.py", "--ignore=ofbilan_plugin.py"]

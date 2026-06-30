@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from ofbilan.cartographie.config_cartes_model import LayerSymbologyConfig, ProfileConfig
-from ofbilan.cartographie.layout_layers import (
+from core.cartographie.config_cartes_model import LayerSymbologyConfig, ProfileConfig
+from core.cartographie.layout_layers import (
     build_layer_configs_from_names,
     discover_layers_from_qgs_file,
     filter_operational_layer_names,

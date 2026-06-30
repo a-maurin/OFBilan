@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OFBilan - Générateur de Bilans et Cartes</title>
+    <link rel="stylesheet" href="style.css?v=1.1.1">
+</head>
+
+<body class="page-editor">
+    <header class="app-header">
+        <div class="header-container">
+            <div class="logo-area">
+                <img src="logo.svg" alt="Bandeau OFBilan" class="header-logo">
+            </div>
+            <nav class="app-nav">
+                <a href="explorer.html" class="nav-item">Analyse Interactive</a>
+                <a href="index.html" class="nav-item active">Éditeur de Bilans</a>
+                <a href="#" onclick="restartServer(); return false;" class="nav-item" style="margin-left: auto; color: #F4A261; font-weight: 600;" title="Redémarrer le serveur local (Utile après mise à jour des données brutes)">↻ Redémarrer</a>
+                <a href="#" onclick="shutdownServer(); return false;" class="nav-item" style="color: #D95C4A; font-weight: 600;" title="Éteindre le serveur">⏻ Éteindre</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="app-container">
+        <!-- Panneau de Configuration -->
+        <section class="control-panel">
+            <div class="card">
+                <h2>Configuration du Bilan</h2>
+                <form id="config-form">
+                    <div class="form-group">
+                        <label for="profil">Profil thématique</label>
+                        <div class="custom-select-container">
+                            <input type="text" id="profil" name="profil"
+                                placeholder="Rechercher ou sélectionner un profil..." required value="global"
+                                autocomplete="off">
+                            <button type="button" id="btn-toggle-profils" class="select-arrow-btn">▼</button>
+                            <div id="profils-dropdown" class="select-dropdown hidden"></div>
+                        </div>
+                    </div>
+
+                    <!-- Période temporelle -->
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="date-deb">Date de début</label>
+                            <input type="date" id="date-deb" name="date-deb" value="2025-01-01" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="date-fin">Date de fin</label>
+                            <input type="date" id="date-fin" name="date-fin" value="2025-12-31" required>
+                        </div>
+                    </div>
+
+                    <!-- Périmètre géographique -->
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="echelle">Échelle spatiale</label>
+                            <select id="echelle" name="echelle" required>
+                                <option value="departement" selected>Département</option>
+                                <option value="region">Région</option>
+                                <option value="bmi">BMI (Interrégional)</option>
+                                <option value="national">National</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="code" id="label-code">Code géographique</label>
+                            <div class="custom-select-container">
+                                <input type="text" id="code" name="code" value="21"
+                                    placeholder="Rechercher ou sélectionner..." required autocomplete="off">
+                                <button type="button" id="btn-toggle-codes" class="select-arrow-btn">▼</button>
+                                <div id="codes-dropdown" class="select-dropdown hidden"></div>
+                            </div>
+                            <div id="code-helper" class="code-helper">Exemples : 21, 27</div>
+                        </div>
+                    </div>
+
+                    <!-- Filtres optionnels (accordéon) -->
+                    <div class="accordion-section" id="accordion-filtres">
+                        <div class="accordion-header" id="accordion-filtres-header">
+                            <span class="accordion-title">
+                                <span>Filtres optionnels</span>
+                                <span class="accordion-badge hidden" id="filtres-badge">0</span>
+                            </span>
+                            <span class="accordion-arrow">&#9660;</span>
+                        </div>
+                        <div class="accordion-body" id="accordion-filtres-body">
+                            <!-- Type usager cible -->
+                            <div class="form-group">
+                                <label for="type-usager">Type d'usager cible</label>
+                                <div class="custom-select-container">
+                                    <input type="text" id="type-usager" name="type-usager"
+                                        placeholder="Tous les types d'usagers" autocomplete="off">
+                                    <button type="button" id="btn-toggle-usagers" class="select-arrow-btn">&#9660;</button>
+                                    <div id="usagers-dropdown" class="select-dropdown hidden"></div>
+                                </div>
+                            </div>
+
+                            <!-- Domaines de la SNC -->
+                            <div class="form-group">
+                                <label for="domaine-snc">Domaines de la SNC</label>
+                                <div class="custom-select-container">
+                                    <input type="text" id="domaine-snc" name="domaine-snc"
+                                        placeholder="Tous les domaines" autocomplete="off">
+                                    <button type="button" id="btn-toggle-domaines-snc" class="select-arrow-btn">&#9660;</button>
+                                    <div id="domaines-snc-dropdown" class="select-dropdown hidden"></div>
+                                </div>
+                            </div>
+
+                            <!-- Thèmes de la SNC -->
+                            <div class="form-group">
+                                <label for="theme-snc">Thèmes de la SNC</label>
+                                <div class="custom-select-container">
+                                    <input type="text" id="theme-snc" name="theme-snc"
+                                        placeholder="Tous les thèmes" autocomplete="off">
+                                    <button type="button" id="btn-toggle-themes-snc" class="select-arrow-btn">&#9660;</button>
+                                    <div id="themes-snc-dropdown" class="select-dropdown hidden"></div>
+                                </div>
+                            </div>
+
+                            <!-- Type d'action -->
+                            <div class="form-group">
+                                <label for="type-action-snc">Type d'action</label>
+                                <div class="custom-select-container">
+                                    <input type="text" id="type-action-snc" name="type-action-snc"
+                                        placeholder="Tous les types d'action" autocomplete="off">
+                                    <button type="button" id="btn-toggle-types-action" class="select-arrow-btn">&#9660;</button>
+                                    <div id="types-action-dropdown" class="select-dropdown hidden"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Options Carto & Analyse -->
+                    <div class="options-group">
+                        <h3>Options de rendu</h3>
+                        <div class="checkbox-row">
+                            <label class="switch">
+                                <input type="checkbox" id="cartes" name="cartes" checked>
+                                <span class="slider"></span>
+                            </label>
+                            <span class="checkbox-label">Générer et intégrer les cartes QGIS</span>
+                        </div>
+
+                        <!-- Sélection des cartes et chemins personnalisés -->
+                        <div id="cartes-sub-options" class="sub-options-container">
+                            <div class="sub-options-title">Cartes à intégrer au PDF :</div>
+                            <div class="sub-options-grid">
+                                <label class="checkbox-inline-row">
+                                    <input type="checkbox" id="carte-domaines" name="carte-domaines" checked>
+                                    <span>Domaines</span>
+                                </label>
+                                <label class="checkbox-inline-row">
+                                    <input type="checkbox" id="carte-resultats" name="carte-resultats" checked>
+                                    <span>Résultats</span>
+                                </label>
+                                <label class="checkbox-inline-row">
+                                    <input type="checkbox" id="carte-usagers" name="carte-usagers" checked>
+                                    <span>Usagers</span>
+                                </label>
+                                <label class="checkbox-inline-row">
+                                    <input type="checkbox" id="carte-procedures" name="carte-procedures" checked>
+                                    <span>Procédures</span>
+                                </label>
+                            </div>
+                            <div class="cartes-perso-container">
+                                <div class="sub-options-title">Cartes personnalisées (fichiers locaux PNG) :</div>
+                                <textarea id="cartes-perso"
+                                    placeholder="Un chemin absolu de fichier PNG par ligne (ex: C:\Cartes\ma_carte.png)"></textarea>
+                            </div>
+                        </div>
+
+                        <div class="checkbox-row">
+                            <label class="switch">
+                                <input type="checkbox" id="pnf" name="pnf">
+                                <span class="slider"></span>
+                            </label>
+                            <span class="checkbox-label">Activer l'analyse PNF (cœur de parc)</span>
+                        </div>
+
+                        <div class="checkbox-row">
+                            <label class="switch">
+                                <input type="checkbox" id="brochure" name="brochure">
+                                <span class="slider"></span>
+                            </label>
+                            <span class="checkbox-label">Générer le format brochure</span>
+                        </div>
+                    </div>
+
+                    <!-- Publication / Diffusion & Taille -->
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="diffusion">Type de diffusion</label>
+                            <select id="diffusion" name="diffusion">
+                                <option value="interne" selected>Interne (Détaillé)</option>
+                                <option value="externe">Externe (Anonymisé)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="preset">Taille des graphiques</label>
+                            <select id="preset" name="preset">
+                                <option value="standard" selected>Standard</option>
+                                <option value="compact">Compact</option>
+                                <option value="large">Large</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Bouton de lancement (sticky) -->
+                    <div class="form-footer-sticky">
+                        <button type="button" id="btn-generate" class="btn btn-primary">Générer le Bilan</button>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+        <!-- Console de Suivi et Résultats -->
+        <section class="status-panel">
+            <div class="card">
+                <h2>Suivi de Génération</h2>
+
+                <div class="progress-container">
+                    <div class="progress-bar-bg">
+                        <div id="progress-bar" class="progress-bar" style="width: 0%;"></div>
+                    </div>
+                    <div class="progress-text-row">
+                        <span id="status-text">En attente de lancement...</span>
+                        <span id="percent-text">0%</span>
+                    </div>
+                </div>
+
+                <div class="console-wrapper">
+                    <div class="console-header">
+                        <span>Terminal d'exécution</span>
+                        <button id="btn-clear" class="btn-clear-console">Effacer</button>
+                    </div>
+                    <pre id="console-output"
+                        class="console-output">> Prêt à générer. Sélectionnez vos paramètres à gauche et cliquez sur "Générer le Bilan".</pre>
+                </div>
+
+                <div id="result-card" class="result-card hidden">
+                    <div class="result-icon">✓</div>
+                    <div class="result-details">
+                        <h3>Bilan généré avec succès !</h3>
+                        <p>Le fichier PDF et les cartes associées sont disponibles dans le dossier de sortie.</p>
+                        <div class="result-actions">
+                            <button id="btn-open-pdf" class="btn btn-secondary">Ouvrir le PDF</button>
+                            <button id="btn-open-folder" class="btn btn-outline">Dossier de sortie</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="app-footer">
+        <p>OFBilan - <span id="app-version">v1.0.1</span> | Office Français de la Biodiversité | Auteur : Aguirre MAURIN - SD21 | Contact : aguirre.maurin@ofb.gouv.Fr</p>
+    </footer>
+    <script src="app.js?v=1.1.0"></script>
+    <script>
+        function restartServer() {
+            if(confirm('Voulez-vous vraiment redémarrer le serveur local ?\n(Nécessaire uniquement si vous avez mis à jour les données géographiques brutes)')) {
+                // Montrer l'écran de chargement immédiatement
+                document.body.innerHTML = `
+                <div style="display:flex;justify-content:center;align-items:center;height:100vh;background-color:#003A76;color:white;flex-direction:column;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+                    <img src="logo.svg" alt="OFBilan Logo" style="width:350px;height:auto;margin-bottom:30px;">
+                    <div style="width:40px;height:40px;border:4px solid rgba(255,255,255,0.3);border-radius:50%;border-top-color:#fff;animation:spin 1s ease-in-out infinite;"></div>
+                    <div style="margin-top:20px;letter-spacing:2px;font-weight:300;font-size:1.2rem;">REDÉMARRAGE DU SERVEUR...</div>
+                    <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+                </div>`;
+                
+                fetch('/api/restart').catch(() => {});
+                
+                let retries = 0;
+                function pollServer() {
+                    setTimeout(() => {
+                        fetch('/api/version?t=' + Date.now())
+                        .then(response => {
+                            if (response.ok) {
+                                setTimeout(() => window.location.reload(), 1000);
+                            } else {
+                                pollServer();
+                            }
+                        })
+                        .catch(() => {
+                            retries++;
+                            if (retries < 120) {
+                                pollServer();
+                            } else {
+                                const msg = document.createElement('div');
+                                msg.style = 'color:#D95C4A;margin-top:20px;font-size:1.2rem;';
+                                msg.innerText = 'Délai d\'attente dépassé. Veuillez recharger manuellement.';
+                                document.body.appendChild(msg);
+                            }
+                        });
+                    }, 500);
+                }
+                
+                // Attendre un peu que le serveur s'éteigne avant de commencer le polling
+                setTimeout(pollServer, 2000);
+            }
+        }
+
+        function shutdownServer() {
+            if(confirm('Voulez-vous vraiment éteindre le serveur local ?\nVous devrez relancer le script pour utiliser à nouveau l\'application.')) {
+                document.body.innerHTML = `
+                <div style="display:flex;justify-content:center;align-items:center;height:100vh;background-color:#1e293b;color:white;flex-direction:column;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+                    <div style="font-size: 3rem; margin-bottom: 20px;">⏻</div>
+                    <div style="letter-spacing:2px;font-weight:300;font-size:1.2rem;">SERVEUR ÉTEINT</div>
+                    <div style="margin-top: 15px; color: #94a3b8;">Vous pouvez fermer cet onglet.</div>
+                </div>`;
+                
+                fetch('/api/shutdown').catch(() => {});
+            }
+        }
+    </script>
+</body>
+
+</html>

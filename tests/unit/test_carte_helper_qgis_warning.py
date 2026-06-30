@@ -3,13 +3,13 @@ from __future__ import annotations
 
 import logging
 
-from ofbilan.common import carte_helper
+from core.common import carte_helper
 
 
 def test_generate_maps_warns_when_qgis_unavailable(monkeypatch, caplog) -> None:
     monkeypatch.setattr(carte_helper, "qgis_available", lambda: False)
     monkeypatch.setattr(
-        "ofbilan.cartographie.qgis_runtime.run_cartography_export_subprocess",
+        "core.cartographie.qgis_runtime.run_cartography_export_subprocess",
         lambda *a, **k: False,
     )
     with caplog.at_level(logging.WARNING):

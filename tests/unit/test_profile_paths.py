@@ -6,7 +6,7 @@ import pytest
 
 
 def test_load_profile_config_reads_config_profiles_dir(tmp_path: Path) -> None:
-    import ofbilan.engine.orchestrateur_profils as engine
+    import core.engine.orchestrateur_profils as engine
 
     profils_dir = tmp_path / "config" / "profils_bilan"
     profils_dir.mkdir(parents=True, exist_ok=True)
@@ -43,7 +43,7 @@ def test_load_profile_config_reads_config_profiles_dir(tmp_path: Path) -> None:
 
 
 def test_run_engine_accepts_global_profile_via_yaml(monkeypatch) -> None:
-    import ofbilan.engine.orchestrateur_profils as engine
+    import core.engine.orchestrateur_profils as engine
 
     called: dict[str, object] = {}
 
@@ -69,7 +69,7 @@ def test_run_engine_accepts_global_profile_via_yaml(monkeypatch) -> None:
 
 
 def test_load_profile_config_does_not_fallback_to_ref(tmp_path: Path) -> None:
-    import ofbilan.engine.orchestrateur_profils as engine
+    import core.engine.orchestrateur_profils as engine
 
     legacy_dir = tmp_path / "ref" / "profils_bilan"
     legacy_dir.mkdir(parents=True, exist_ok=True)
@@ -80,8 +80,8 @@ def test_load_profile_config_does_not_fallback_to_ref(tmp_path: Path) -> None:
 
 
 def test_run_profiles_batch_combine_uses_data_out_dir(tmp_path: Path, monkeypatch) -> None:
-    import ofbilan.common.carte_helper as carte_helper
-    import ofbilan.engine.execution_lots_profils as runner
+    import core.common.carte_helper as carte_helper
+    import core.engine.execution_lots_profils as runner
 
     calls: list[str] = []
 
@@ -97,11 +97,11 @@ def test_run_profiles_batch_combine_uses_data_out_dir(tmp_path: Path, monkeypatc
     monkeypatch.setattr(runner, "run_profile", _fake_run_profile)
     monkeypatch.setattr(carte_helper, "ensure_maps_for_profiles", lambda *a, **k: None)
     monkeypatch.setattr(
-        "ofbilan.engine.execution_lots_profils.get_out_dir", lambda subdir: tmp_path / "data" / "out" / subdir
+        "core.engine.execution_lots_profils.get_out_dir", lambda subdir: tmp_path / "data" / "out" / subdir
     )
     revealed: list[object] = []
     monkeypatch.setattr(
-        "ofbilan.engine.execution_lots_profils.reveal_path_in_file_manager",
+        "core.engine.execution_lots_profils.reveal_path_in_file_manager",
         lambda p: revealed.append(p),
     )
 
@@ -125,8 +125,8 @@ def test_run_profiles_batch_combine_uses_data_out_dir(tmp_path: Path, monkeypatc
 
 
 def test_run_profiles_batch_sequential_reveals_last_output(tmp_path: Path, monkeypatch) -> None:
-    import ofbilan.common.carte_helper as carte_helper
-    import ofbilan.engine.execution_lots_profils as runner
+    import core.common.carte_helper as carte_helper
+    import core.engine.execution_lots_profils as runner
 
     def _fake_run_profile(
         profil_id: str, date_deb: str, date_fin: str, echelle: str, code: str, options: dict | None = None
@@ -139,11 +139,11 @@ def test_run_profiles_batch_sequential_reveals_last_output(tmp_path: Path, monke
     monkeypatch.setattr(runner, "run_profile", _fake_run_profile)
     monkeypatch.setattr(carte_helper, "ensure_maps_for_profiles", lambda *a, **k: None)
     monkeypatch.setattr(
-        "ofbilan.engine.execution_lots_profils.get_out_dir", lambda subdir: tmp_path / "data" / "out" / subdir
+        "core.engine.execution_lots_profils.get_out_dir", lambda subdir: tmp_path / "data" / "out" / subdir
     )
     revealed: list[object] = []
     monkeypatch.setattr(
-        "ofbilan.engine.execution_lots_profils.reveal_path_in_file_manager",
+        "core.engine.execution_lots_profils.reveal_path_in_file_manager",
         lambda p: revealed.append(p),
     )
 
@@ -162,7 +162,7 @@ def test_run_profiles_batch_sequential_reveals_last_output(tmp_path: Path, monke
 
 
 def test_run_profiles_batch_rejects_global_mixed_with_other_profile() -> None:
-    import ofbilan.engine.execution_lots_profils as eng
+    import core.engine.execution_lots_profils as eng
 
     ret = eng.run_profiles_batch(
         profils=["global", "chasse"],
@@ -179,8 +179,8 @@ def test_run_profiles_batch_rejects_global_mixed_with_other_profile() -> None:
 def test_run_profiles_batch_opens_all_generated_pdfs_for_last_profile(
     tmp_path: Path, monkeypatch
 ) -> None:
-    import ofbilan.common.carte_helper as carte_helper
-    import ofbilan.engine.execution_lots_profils as runner
+    import core.common.carte_helper as carte_helper
+    import core.engine.execution_lots_profils as runner
 
     def _fake_run_profile(
         profil_id: str, date_deb: str, date_fin: str, echelle: str, code: str, options: dict | None = None
@@ -195,11 +195,11 @@ def test_run_profiles_batch_opens_all_generated_pdfs_for_last_profile(
     monkeypatch.setattr(runner, "run_profile", _fake_run_profile)
     monkeypatch.setattr(carte_helper, "ensure_maps_for_profiles", lambda *a, **k: None)
     monkeypatch.setattr(
-        "ofbilan.engine.execution_lots_profils.get_out_dir", lambda subdir: tmp_path / "data" / "out" / subdir
+        "core.engine.execution_lots_profils.get_out_dir", lambda subdir: tmp_path / "data" / "out" / subdir
     )
     revealed: list[Path] = []
     monkeypatch.setattr(
-        "ofbilan.engine.execution_lots_profils.reveal_path_in_file_manager",
+        "core.engine.execution_lots_profils.reveal_path_in_file_manager",
         lambda p: revealed.append(Path(p)),
     )
 

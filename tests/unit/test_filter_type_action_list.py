@@ -1,5 +1,5 @@
 import pandas as pd
-from ofbilan.engine.orchestrateur_profils import _filter_point_ctrl
+from core.engine.orchestrateur_profils import _filter_point_ctrl
 
 def test_filter_type_action_list():
     # Création d'un jeu de données factice avec des types d'action réels et modifiés

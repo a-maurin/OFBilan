@@ -1,4 +1,4 @@
-from ofbilan.common.pdf_utils import wrap_plain_text_for_pdf_paragraph
+from core.common.pdf_utils import wrap_plain_text_for_pdf_paragraph
 
 
 def test_wrap_plain_text_for_pdf_paragraph_inserts_breaks() -> None:
