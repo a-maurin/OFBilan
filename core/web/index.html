@@ -269,17 +269,35 @@
                     <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
                 </div>`;
                 
-                fetch('/api/restart')
-                .then(() => {
+                fetch('/api/restart').catch(() => {});
+                
+                let retries = 0;
+                function pollServer() {
                     setTimeout(() => {
-                        window.location.href = 'loading.html';
+                        fetch('/api/version?t=' + Date.now())
+                        .then(response => {
+                            if (response.ok) {
+                                setTimeout(() => window.location.reload(), 1000);
+                            } else {
+                                pollServer();
+                            }
+                        })
+                        .catch(() => {
+                            retries++;
+                            if (retries < 120) {
+                                pollServer();
+                            } else {
+                                const msg = document.createElement('div');
+                                msg.style = 'color:#D95C4A;margin-top:20px;font-size:1.2rem;';
+                                msg.innerText = 'Délai d\'attente dépassé. Veuillez recharger manuellement.';
+                                document.body.appendChild(msg);
+                            }
+                        });
                     }, 500);
-                })
-                .catch(() => {
-                    setTimeout(() => {
-                        window.location.href = 'loading.html';
-                    }, 500);
-                });
+                }
+                
+                // Attendre un peu que le serveur s'éteigne avant de commencer le polling
+                setTimeout(pollServer, 2000);
             }
         }
 

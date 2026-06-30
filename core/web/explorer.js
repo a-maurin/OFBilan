@@ -683,6 +683,42 @@ document.addEventListener('DOMContentLoaded', () => {
         attribution: '&copy; <a href="https://www.ign.fr/">IGN</a>'
     }).addTo(map);
 
+    // Application des paramètres (Code Géo, Thème, Zoom...) après init de la map
+    fetch('/api/settings').then(res => res.json()).then(settings => {
+        if (settings.geo && settings.geo.code_geo_defaut) {
+            const code = settings.geo.code_geo_defaut.toLowerCase();
+            if (code === 'fr') selectEchelle.value = 'national';
+            else if (code.startsWith('r')) selectEchelle.value = 'region';
+            else if (code.startsWith('bmi')) selectEchelle.value = 'bmi';
+            else selectEchelle.value = 'departement';
+            
+            inputCode.value = settings.geo.code_geo_defaut;
+            selectEchelle.dispatchEvent(new Event('change'));
+        }
+
+        if (settings.geo && settings.geo.annee_reference) {
+            const refYear = settings.geo.annee_reference;
+            const mo = String(now.getMonth() + 1).padStart(2, '0');
+            const da = String(now.getDate()).padStart(2, '0');
+            if (dateDebEl) dateDebEl.value = `${refYear}-01-01`;
+            if (dateFinEl) dateFinEl.value = `${refYear}-${mo}-${da}`;
+            
+            if (compareDateDebEl && compareDateFinEl) {
+                const lastYear = refYear - 1;
+                compareDateDebEl.value = `${lastYear}-01-01`;
+                compareDateFinEl.value = `${lastYear}-${mo}-${da}`;
+            }
+        }
+
+        if (settings.ui && settings.ui.zoom_defaut) {
+            map.setZoom(settings.ui.zoom_defaut);
+        }
+
+        if (settings.ui && settings.ui.theme === "sombre") {
+            document.body.classList.add("theme-sombre");
+        }
+    }).catch(e => console.warn("Paramètres non appliqués:", e));
+
     const markersGroup = L.layerGroup(); // Les points individuels sans cluster (si besoin de bascule)
     const markersClusterGroup = L.markerClusterGroup({ 
         chunkedLoading: true,
@@ -908,6 +944,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             Résultat: <span style="font-weight:bold;color:${color}">${pt.resultat || 'N/A'}</span><br>
                             Domaine: ${pt.domaine || 'N/A'}<br>
                             Thème: ${pt.theme || 'N/A'}<br>
+                            Action: ${pt.type_action || 'N/A'}<br>
                             Usager: ${pt.type_usager || 'N/A'}<br>
                             Commune: ${pt.nom_commun || 'N/A'}
                         `;
@@ -1541,8 +1578,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 {
                     label: 'Contrôles (N)',
                     data: seasonalityN.controls,
-                    borderColor: '#003A76',
-                    backgroundColor: 'rgba(0, 58, 118, 0.05)',
+                    borderColor: '#003A76',                    backgroundColor: 'rgba(0, 58, 118, 0.05)',
                     fill: true,
                     tension: 0.3
                 },

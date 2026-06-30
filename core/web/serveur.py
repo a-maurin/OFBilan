@@ -74,12 +74,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             print(f"  [Réseau] Connexion interrompue par le navigateur ({e.__class__.__name__})")
 
     def do_GET(self):
-        if self.path == "/favicon.ico":
+        parsed_path = self.path.split('?')[0]
+        if parsed_path == "/favicon.ico":
             self.send_response(204)
             self.end_headers()
             return
 
-        if self.path == "/api/preload-status":
+        if parsed_path == "/api/preload-status":
             self.send_response(200)
             self.send_header('Content-Type', 'application/json; charset=utf-8')
             self.send_header('Cache-Control', 'no-cache')
@@ -90,7 +91,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             }).encode('utf-8'))
             return
 
-        if self.path == '/api/restart':
+        if parsed_path == '/api/restart':
             # Endpoint pour redémarrer le serveur
             import time
             import threading
@@ -110,7 +111,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             threading.Thread(target=restart, daemon=True).start()
             return
             
-        elif self.path == '/api/shutdown':
+        elif parsed_path == '/api/shutdown':
             # Endpoint pour éteindre le serveur
             import time
             import threading
@@ -123,19 +124,34 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             
             def shutdown():
                 time.sleep(0.5)
-                os._exit(0)
+                self.server.shutdown()
                 
             threading.Thread(target=shutdown, daemon=True).start()
             return
 
-        if self.path == "/api/version":
+        if parsed_path == "/api/version":
             self.send_response(200)
             self.send_header('Content-Type', 'application/json; charset=utf-8')
             self.end_headers()
             self.wfile.write(json.dumps({"version": get_latest_version()}).encode('utf-8'))
             return
 
-        if self.path == "/api/profils":
+        if parsed_path == "/api/settings":
+            try:
+                from core.parametres_utilisateur import lire_parametres
+                parametres = lire_parametres()
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps(parametres).encode('utf-8'))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
+            return
+
+        if parsed_path == "/api/profils":
             try:
                 import yaml
                 def yaml_include_dummy_constructor(loader, node):
@@ -210,6 +226,28 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             super().do_GET()
 
     def do_POST(self):
+        if self.path == "/api/settings":
+            try:
+                content_length = int(self.headers['Content-Length'])
+                post_data = self.rfile.read(content_length)
+                nouveaux_parametres = json.loads(post_data.decode('utf-8'))
+                
+                from core.parametres_utilisateur import sauvegarder_parametres, lire_parametres
+                sauvegarder_parametres(nouveaux_parametres)
+                
+                parametres_mis_a_jour = lire_parametres()
+                
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps(parametres_mis_a_jour).encode('utf-8'))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
+            return
+
         if self.path == "/api/generate":
             content_length = int(self.headers['Content-Length'])
             post_data = self.rfile.read(content_length)
@@ -755,6 +793,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         com_val = row.get("nom_commun")
                         dc_val = row.get("dc_id")
                         date_val = row.get("date_ctrl")
+                        action_val = row.get("type_action")
 
                         points.append({
                             "dc_id": str(dc_val).strip() if pd.notna(dc_val) else "",
@@ -762,6 +801,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                             "resultat": str(res_val).strip() if pd.notna(res_val) else "",
                             "domaine": str(dom_val).strip() if pd.notna(dom_val) else "",
                             "theme": str(theme_val).strip() if pd.notna(theme_val) else "",
+                            "type_action": str(action_val).strip() if pd.notna(action_val) else "",
                             "type_usager": str(usager_val).strip() if pd.notna(usager_val) else "",
                             "nom_commun": str(com_val).strip() if pd.notna(com_val) else "",
                             "x": float(row["x"]) if pd.notna(row.get("x")) else 0.0,

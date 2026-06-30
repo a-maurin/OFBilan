@@ -63,6 +63,7 @@
         .control-panel {
             position: sticky;
             top: 10px;
+            z-index: 10; /* Empêche les canvas/cartes de passer devant lors du scroll */
             max-height: calc(100vh - 30px); /* Hauteur max augmentée pour afficher tous les boutons */
             overflow-y: auto;
             scrollbar-width: thin;
@@ -87,6 +88,11 @@
         @media (max-width: 1200px) {
             .explorer-container {
                 grid-template-columns: 1fr;
+            }
+            .control-panel {
+                position: static !important;
+                max-height: none !important;
+                height: auto !important;
             }
         }
 
@@ -226,6 +232,9 @@
                 <a href="index.html" class="nav-item">Éditeur de Bilans</a>
                 <a href="#" onclick="restartServer(); return false;" class="nav-item" style="margin-left: auto; color: #F4A261; font-weight: 600;" title="Redémarrer le serveur local (Utile après mise à jour des données brutes)">↻ Redémarrer</a>
                 <a href="#" onclick="shutdownServer(); return false;" class="nav-item" style="color: #D95C4A; font-weight: 600;" title="Éteindre le serveur">⏻ Éteindre</a>
+                <a href="#" onclick="openSettingsModal(); return false;" class="nav-item" style="margin-left: 15px; color: #cbd5e1; display: flex; align-items: center;" title="Paramètres">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                </a>
             </nav>
         </div>
     </header>
@@ -554,7 +563,167 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- Frontend controller script -->
     <script src="explorer.js?v=1.2.0"></script>
+    <!-- Modal Paramètres -->
+    <div id="settings-modal" class="hidden" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 999999; display: flex; justify-content: center; align-items: center;">
+        <div style="background: white; border-radius: 8px; width: 800px; max-width: 95vw; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 4px 20px rgba(0,0,0,0.2);">
+            <div style="padding: 15px 20px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border-radius: 8px 8px 0 0;">
+                <h2 style="margin: 0; font-size: 18px; color: #1e293b;">Paramètres OFBilan</h2>
+                <button type="button" onclick="closeSettingsModal()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #64748b;">&times;</button>
+            </div>
+            
+            <div style="padding: 20px; overflow-y: auto; flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; text-align: left;">
+                <!-- Colonne Gauche -->
+                <div style="display: flex; flex-direction: column; gap: 15px;">
+                    <div class="card" style="margin: 0;">
+                        <h3 style="font-size: 14px; margin-bottom: 10px; color: #3b82f6;">Profil Utilisateur</h3>
+                        <div class="form-group"><label>Nom</label><input type="text" id="set-profil-nom"></div>
+                        <div class="form-group"><label>Prénom</label><input type="text" id="set-profil-prenom"></div>
+                        <div class="form-group"><label>Service / Unité</label><input type="text" id="set-profil-service"></div>
+                    </div>
+                    <div class="card" style="margin: 0;">
+                        <h3 style="font-size: 14px; margin-bottom: 10px; color: #3b82f6;">Géo & Temps</h3>
+                        <div class="form-group"><label>Code Geo par défaut</label><input type="text" id="set-geo-code" placeholder="ex: 21, r27, FR"></div>
+                        <div class="form-group"><label>Année de référence par défaut</label><input type="number" id="set-geo-annee" value="2024"></div>
+                    </div>
+                    <div class="card" style="margin: 0;">
+                        <h3 style="font-size: 14px; margin-bottom: 10px; color: #3b82f6;">Export & Rapports</h3>
+                        <div class="form-group"><label>Qualité des cartes (DPI)</label><input type="number" id="set-export-dpi" value="300"></div>
+                        <div class="form-group" style="display: flex; align-items: center; gap: 8px;">
+                            <input type="checkbox" id="set-export-brutes" style="margin:0;">
+                            <label for="set-export-brutes" style="margin:0; cursor:pointer;">Inclure les données brutes en annexe</label>
+                        </div>
+                    </div>
+                </div>
+                <!-- Colonne Droite -->
+                <div style="display: flex; flex-direction: column; gap: 15px;">
+                    <div class="card" style="margin: 0;">
+                        <h3 style="font-size: 14px; margin-bottom: 10px; color: #3b82f6;">Interface (UI)</h3>
+                        <div class="form-group">
+                            <label>Vue au lancement</label>
+                            <select id="set-ui-vue">
+                                <option value="explorer">Analyse Interactive</option>
+                                <option value="pdf">Édition PDF</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Thème</label>
+                            <select id="set-ui-theme">
+                                <option value="clair">Clair</option>
+                                <option value="sombre">Sombre</option>
+                            </select>
+                        </div>
+                        <div class="form-group"><label>Zoom carte par défaut</label><input type="number" id="set-ui-zoom" value="8"></div>
+                    </div>
+                    <div class="card" style="margin: 0;">
+                        <h3 style="font-size: 14px; margin-bottom: 10px; color: #3b82f6;">Système & Technique</h3>
+                        <div class="form-group"><label>Dossier d'export</label><input type="text" id="set-sys-dossier" placeholder="~/Documents/OFBilan_Exports"></div>
+                        <div class="form-group"><label>Proxy</label><input type="text" id="set-sys-proxy" placeholder="http://proxy:port"></div>
+                        <div class="form-group"><label>Port Serveur Local</label><input type="number" id="set-tech-port" value="5000"></div>
+                        <div class="form-group" style="display: flex; align-items: center; gap: 8px; margin-top: 10px;">
+                            <input type="checkbox" id="set-tech-debug" style="margin:0;">
+                            <label for="set-tech-debug" style="margin:0; cursor:pointer;">Activer le mode Débogage</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="padding: 15px 20px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 10px; background: #f8fafc; border-radius: 0 0 8px 8px;">
+                <button type="button" class="btn btn-secondary" onclick="closeSettingsModal()">Annuler</button>
+                <button type="button" class="btn btn-primary" id="btn-save-settings" onclick="saveSettings()">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+
     <script>
+        function openSettingsModal() {
+            document.getElementById('settings-modal').classList.remove('hidden');
+            loadSettings();
+        }
+
+        function closeSettingsModal() {
+            document.getElementById('settings-modal').classList.add('hidden');
+        }
+
+        async function loadSettings() {
+            try {
+                const res = await fetch('/api/settings');
+                const data = await res.json();
+                
+                document.getElementById('set-profil-nom').value = data.profil?.nom || '';
+                document.getElementById('set-profil-prenom').value = data.profil?.prenom || '';
+                document.getElementById('set-profil-service').value = data.profil?.service || '';
+                
+                document.getElementById('set-geo-code').value = data.geo?.code_geo_defaut || '';
+                document.getElementById('set-geo-annee').value = data.geo?.annee_reference || 2024;
+                
+                document.getElementById('set-ui-vue').value = data.ui?.vue_lancement || 'explorer';
+                document.getElementById('set-ui-theme').value = data.ui?.theme || 'clair';
+                document.getElementById('set-ui-zoom').value = data.ui?.zoom_defaut || 8;
+                
+                document.getElementById('set-export-dpi').value = data.export?.dpi || 300;
+                document.getElementById('set-export-brutes').checked = !!data.export?.inclure_donnees_brutes;
+                
+                document.getElementById('set-sys-dossier').value = data.systeme?.dossier_export || '';
+                document.getElementById('set-sys-proxy').value = data.systeme?.proxy || '';
+                
+                document.getElementById('set-tech-port').value = data.tech?.port_serveur || 5000;
+                document.getElementById('set-tech-debug').checked = !!data.tech?.mode_debug;
+            } catch (err) {
+                console.error("Erreur chargement paramètres:", err);
+            }
+        }
+
+        async function saveSettings() {
+            const btn = document.getElementById('btn-save-settings');
+            const originalText = btn.innerText;
+            btn.innerText = "Enregistrement...";
+            btn.disabled = true;
+
+            const payload = {
+                profil: {
+                    nom: document.getElementById('set-profil-nom').value,
+                    prenom: document.getElementById('set-profil-prenom').value,
+                    service: document.getElementById('set-profil-service').value
+                },
+                geo: {
+                    code_geo_defaut: document.getElementById('set-geo-code').value,
+                    annee_reference: parseInt(document.getElementById('set-geo-annee').value) || 2024
+                },
+                ui: {
+                    vue_lancement: document.getElementById('set-ui-vue').value,
+                    theme: document.getElementById('set-ui-theme').value,
+                    zoom_defaut: parseInt(document.getElementById('set-ui-zoom').value) || 8
+                },
+                export: {
+                    dpi: parseInt(document.getElementById('set-export-dpi').value) || 300,
+                    inclure_donnees_brutes: document.getElementById('set-export-brutes').checked
+                },
+                systeme: {
+                    dossier_export: document.getElementById('set-sys-dossier').value,
+                    proxy: document.getElementById('set-sys-proxy').value
+                },
+                tech: {
+                    port_serveur: parseInt(document.getElementById('set-tech-port').value) || 5000,
+                    mode_debug: document.getElementById('set-tech-debug').checked
+                }
+            };
+
+            try {
+                await fetch('/api/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                closeSettingsModal();
+            } catch (err) {
+                console.error("Erreur sauvegarde paramètres:", err);
+                alert("Erreur lors de la sauvegarde.");
+            } finally {
+                btn.innerText = originalText;
+                btn.disabled = false;
+            }
+        }
+        
         function restartServer() {
             if(confirm('Voulez-vous vraiment redémarrer le serveur local ?\n(Nécessaire uniquement si vous avez mis à jour les données géographiques brutes)')) {
                 // Montrer l'écran de chargement immédiatement
@@ -566,17 +735,35 @@
                     <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
                 </div>`;
                 
-                fetch('/api/restart')
-                .then(() => {
+                fetch('/api/restart').catch(() => {});
+                
+                let retries = 0;
+                function pollServer() {
                     setTimeout(() => {
-                        window.location.href = 'loading.html';
+                        fetch('/api/version?t=' + Date.now())
+                        .then(response => {
+                            if (response.ok) {
+                                setTimeout(() => window.location.reload(), 1000);
+                            } else {
+                                pollServer();
+                            }
+                        })
+                        .catch(() => {
+                            retries++;
+                            if (retries < 120) {
+                                pollServer();
+                            } else {
+                                const msg = document.createElement('div');
+                                msg.style = 'color:#D95C4A;margin-top:20px;font-size:1.2rem;';
+                                msg.innerText = 'Délai d\'attente dépassé. Veuillez recharger manuellement.';
+                                document.body.appendChild(msg);
+                            }
+                        });
                     }, 500);
-                })
-                .catch(() => {
-                    setTimeout(() => {
-                        window.location.href = 'loading.html';
-                    }, 500);
-                });
+                }
+                
+                // Attendre un peu que le serveur s'éteigne avant de commencer le polling
+                setTimeout(pollServer, 2000);
             }
         }
 

@@ -720,3 +720,22 @@ input:checked+.slider:before {
     border-color: var(--color-accent);
     box-shadow: 0 0 0 3px rgba(66, 150, 206, 0.15);
 }
+
+/* --- Mode Sombre --- */
+body.theme-sombre {
+    --color-bg-light: #121212;
+    --color-bg-card: #1E1E1E;
+    --color-text-dark: #E0E0E0;
+    --color-text-muted: #A0A0A0;
+    --color-border: #333333;
+    --shadow-soft: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+body.theme-sombre .app-header {
+    background-color: #0b2239;
+}
+body.theme-sombre .leaflet-container {
+    background: #1e1e1e;
+}
+body.theme-sombre .leaflet-tile-pane {
+    filter: invert(1) hue-rotate(180deg) brightness(95%) contrast(90%);
+}
