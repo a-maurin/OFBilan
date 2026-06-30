@@ -4,10 +4,10 @@ import traceback
 import os
 from pathlib import Path
 
-project_root = r"c:\Users\aguirre.maurin\Documents\GitHub\OFBilan"
-sys.path.insert(0, str(Path(project_root) / "src"))
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
 
-out_path = Path(project_root) / "test_output.txt"
+out_path = project_root / "test_output.txt"
 with open(out_path, "w", encoding="utf-8") as f:
     try:
         from ofbilan.common.chargeurs_donnees import load_pnf_aoa_gdf

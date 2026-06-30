@@ -5274,24 +5274,45 @@ def _generate_pdf(
                     f"des cartes pour les intégrer au bilan régional.</i>"
                 )
         else:
-            map_paths = resolve_profile_map_paths(
-                str(map_id),
-                profile=profile,
-                presentation_cfg=presentation_cfg,
-                target_dir=out_dir,
-            )
-            map_layout = resolve_map_layout(profile=profile, presentation_cfg=presentation_cfg)
-            if map_paths and is_block_enabled(presentation_cfg, "sec5.show_map", True):
-                builder.add_maps(map_paths, layout=map_layout)
-            elif show_placeholder and is_block_enabled(presentation_cfg, "sec5.show_map_fallback_message", True):
-                expected = expected_map_filenames(
-                    str(map_id), profile=profile, presentation_cfg=presentation_cfg
+            if has_cartography_catalog(profile):
+                selected = list(profile.get("_cartes_selection") or [])
+                from core.common.utilitaires_metier import resolve_carto_dept_code
+                carto_dept = resolve_carto_dept_code(cfg.echelle, cfg.code)
+                map_paths, map_captions = resolve_selected_map_paths(
+                    profile, selected, carto_dept=carto_dept, target_dir=out_dir
                 )
-                files_hint = ", ".join(f"<b>{name}</b>" for name in expected) or f"<b>carte_{map_id}.png</b>"
-                builder.add_paragraph(
-                    f"<i>Carte(s) non disponible(s). Déposez {files_hint} dans le dossier "
-                    f"des cartes pour les intégrer au bilan.</i>"
+                map_layout = resolve_map_layout(profile=profile, presentation_cfg=presentation_cfg)
+                if map_paths and is_block_enabled(presentation_cfg, "sec5.show_map", True):
+                    builder.add_maps(map_paths, layout=map_layout)
+                elif show_placeholder and is_block_enabled(presentation_cfg, "sec5.show_map_fallback_message", True):
+                    from core.common.cartographie_config import expected_map_filenames_for_selection
+                    expected = expected_map_filenames_for_selection(profile, selected)
+                    files_hint = ", ".join(f"<b>{name}</b>" for name in expected)
+                    if not files_hint:
+                        files_hint = "les cartes sélectionnées"
+                    builder.add_paragraph(
+                        f"<i>Carte(s) non disponible(s). Déposez {files_hint} dans le dossier "
+                        f"des cartes pour les intégrer au bilan.</i>"
+                    )
+            else:
+                map_paths = resolve_profile_map_paths(
+                    str(map_id),
+                    profile=profile,
+                    presentation_cfg=presentation_cfg,
+                    target_dir=out_dir,
                 )
+                map_layout = resolve_map_layout(profile=profile, presentation_cfg=presentation_cfg)
+                if map_paths and is_block_enabled(presentation_cfg, "sec5.show_map", True):
+                    builder.add_maps(map_paths, layout=map_layout)
+                elif show_placeholder and is_block_enabled(presentation_cfg, "sec5.show_map_fallback_message", True):
+                    expected = expected_map_filenames(
+                        str(map_id), profile=profile, presentation_cfg=presentation_cfg
+                    )
+                    files_hint = ", ".join(f"<b>{name}</b>" for name in expected) or f"<b>carte_{map_id}.png</b>"
+                    builder.add_paragraph(
+                        f"<i>Carte(s) non disponible(s). Déposez {files_hint} dans le dossier "
+                        f"des cartes pour les intégrer au bilan.</i>"
+                    )
     elif show_placeholder:
         builder.add_paragraph("<i>Cartographie désactivée pour ce bilan.</i>")
 

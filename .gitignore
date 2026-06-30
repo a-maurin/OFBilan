@@ -83,3 +83,10 @@ Thumbs.db
 pack_configuration_referentiels.zip
 installer_pack.bat
 installer_pack.7z
+
+############################
+# Fichiers temporaires & archives
+############################
+temp/
+releases/
+_*.json
