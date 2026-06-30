@@ -717,7 +717,19 @@ document.addEventListener('DOMContentLoaded', () => {
         if (settings.ui && settings.ui.theme === "sombre") {
             document.body.classList.add("theme-sombre");
         }
-    }).catch(e => console.warn("Paramètres non appliqués:", e));
+    }).catch(e => console.warn("Paramètres non appliqués:", e)).finally(() => {
+        // Chargement initial
+        const stateFromURL = loadStateFromURL();
+        const stateFromLS = loadStateFromLocalStorage();
+        
+        if (stateFromURL) {
+            applyFiltersState(stateFromURL);
+        } else if (stateFromLS) {
+            applyFiltersState(stateFromLS);
+        }
+
+        loadData();
+    });
 
     const markersGroup = L.layerGroup(); // Les points individuels sans cluster (si besoin de bascule)
     const markersClusterGroup = L.markerClusterGroup({ 
@@ -2199,16 +2211,4 @@ document.addEventListener('DOMContentLoaded', () => {
             alert('La génération PDF à partir des données de l\'explorateur sera implémentée ultérieurement.');
         });
     }
-
-    // Chargement initial
-    const stateFromURL = loadStateFromURL();
-    const stateFromLS = loadStateFromLocalStorage();
-    
-    if (stateFromURL) {
-        applyFiltersState(stateFromURL);
-    } else if (stateFromLS) {
-        applyFiltersState(stateFromLS);
-    }
-
-    loadData();
 });
