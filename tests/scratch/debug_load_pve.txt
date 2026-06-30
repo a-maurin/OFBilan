@@ -1,0 +1,5 @@
+1. Total in cache: 83
+Max date MIF in cache: 2026-05-18 00:00:00
+Max date INTG in cache: 2026-05-19 00:00:00
+2. After Dept filter: 83
+3. After Date filter (INF-DATE-MIF between 2025-07-01 00:00:00 and 2026-06-30 23:59:59): 83
