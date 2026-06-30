@@ -1130,7 +1130,18 @@ document.addEventListener('DOMContentLoaded', () => {
                         label = context.label ? context.label + ' : ' : '';
                     }
                     const val = context.raw;
-                    const total = context.dataset.data.reduce((sum, v) => sum + (v || 0), 0);
+                    let total = 0;
+                    if (context.chart.config.type === 'bar' && context.dataset.stack) {
+                        const currentStack = context.dataset.stack;
+                        context.chart.data.datasets.forEach(ds => {
+                            if (ds.stack === currentStack) {
+                                total += (ds.data[context.dataIndex] || 0);
+                            }
+                        });
+                    } else {
+                        total = context.dataset.data.reduce((sum, v) => sum + (v || 0), 0);
+                    }
+                    
                     if (total > 0) {
                         const percentage = ((val / total) * 100).toFixed(1);
                         return `${label}${val} (${percentage}%)`;
@@ -1152,7 +1163,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 data: Object.values(resultsN),
                 backgroundColor: ['#53AB60', '#EF4444', '#64748B'],
                 borderWidth: 1,
-                label: 'Période N'
+                label: isCompare ? 'Période N' : 'Période'
             }];
 
             if (isCompare && resultsN1) {
@@ -1226,7 +1237,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 data: Object.values(usagersN),
                 backgroundColor: usagersColors,
                 borderWidth: 1,
-                label: 'Période N'
+                label: isCompare ? 'Période N' : 'Période'
             }];
 
             if (isCompare && usagersN1) {
@@ -1345,7 +1356,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 depts.forEach((dept, idx) => {
                     domainsDatasets.push({
-                        label: `${getDeptName(dept)} N`,
+                        label: isCompare ? `${getDeptName(dept)} N` : getDeptName(dept),
                         data: sortedDomainsN.map(([_, counts]) => (counts[dept] || 0)),
                         backgroundColor: deptColorsDom[idx % deptColorsDom.length],
                         borderColor: '#ffffff',
@@ -1377,7 +1388,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } else {
                 domainsDatasets.push({
-                    label: 'Période N',
+                    label: isCompare ? 'Période N' : 'Période',
                     data: sortedDomainsN.map(d => getDomainTotal(d[1])),
                     backgroundColor: '#003A76',
                     borderRadius: 4,
@@ -1468,7 +1479,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 depts.forEach((dept, idx) => {
                     themesDatasets.push({
-                        label: `${getDeptName(dept)} N`,
+                        label: isCompare ? `${getDeptName(dept)} N` : getDeptName(dept),
                         data: sortedThemesN.map(([_, counts]) => (counts[dept] || 0)),
                         backgroundColor: deptColorsTh[idx % deptColorsTh.length],
                         borderColor: '#ffffff',
@@ -1500,7 +1511,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } else {
                 themesDatasets.push({
-                    label: 'Période N',
+                    label: isCompare ? 'Période N' : 'Période',
                     data: sortedThemesN.map(d => getDomainTotal(d[1])),
                     backgroundColor: '#4296CE',
                     borderRadius: 4,
@@ -1576,14 +1587,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const seasonalityDatasets = [
                 {
-                    label: 'Contrôles (N)',
+                    label: isCompare ? 'Contrôles (N)' : 'Contrôles',
                     data: seasonalityN.controls,
                     borderColor: '#003A76',                    backgroundColor: 'rgba(0, 58, 118, 0.05)',
                     fill: true,
                     tension: 0.3
                 },
                 {
-                    label: 'Infractions (N)',
+                    label: isCompare ? 'Infractions (N)' : 'Infractions',
                     data: seasonalityN.infractions,
                     borderColor: '#EF4444',
                     backgroundColor: 'rgba(239, 68, 68, 0.05)',
@@ -2004,6 +2015,59 @@ document.addEventListener('DOMContentLoaded', () => {
                     map.invalidateSize();
                 }, 200);
             }
+        });
+    }
+
+    const btnExportMapPng = document.getElementById('btn-export-map-png');
+    if (btnExportMapPng) {
+        btnExportMapPng.addEventListener('click', () => {
+            const mapContainer = document.getElementById('map');
+            if (!mapContainer) return;
+            
+            const originalText = btnExportMapPng.innerHTML;
+            btnExportMapPng.innerHTML = '⏳...';
+            btnExportMapPng.disabled = true;
+            
+            setTimeout(() => {
+                html2canvas(mapContainer, {
+                    useCORS: true,
+                    allowTaint: false,
+                    backgroundColor: '#e5e7eb', // Map background color
+                    scale: 2 // Higher resolution
+                }).then(canvas => {
+                    // Create a composite canvas like charts to add a title
+                    const headerHeight = 60;
+                    const tempCanvas = document.createElement('canvas');
+                    tempCanvas.width = canvas.width;
+                    tempCanvas.height = canvas.height + headerHeight;
+                    const tempCtx = tempCanvas.getContext('2d');
+                    
+                    tempCtx.fillStyle = '#FFFFFF';
+                    tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+                    
+                    tempCtx.fillStyle = '#003A76';
+                    tempCtx.font = 'bold 24px sans-serif'; // Scaled up font
+                    tempCtx.textAlign = 'center';
+                    tempCtx.fillText('Localisation des contrôles', tempCanvas.width / 2, 40);
+                    
+                    tempCtx.drawImage(canvas, 0, headerHeight);
+                    
+                    const link = document.createElement('a');
+                    link.download = `OFBilan_Carte_${new Date().toISOString().split('T')[0]}.png`;
+                    link.href = tempCanvas.toDataURL('image/png', 1.0);
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    
+                    btnExportMapPng.innerHTML = originalText;
+                    btnExportMapPng.disabled = false;
+                }).catch(err => {
+                    console.error("Erreur lors de l'export de la carte:", err);
+                    alert("Une erreur est survenue lors de l'export de la carte.");
+                    btnExportMapPng.innerHTML = originalText;
+                    btnExportMapPng.disabled = false;
+                });
+            }, 100);
         });
     }
 

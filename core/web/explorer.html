@@ -484,6 +484,10 @@
                                 <button type="button" id="btn-fullscreen-map"
                                     style="background: none; border: none; cursor: pointer; padding: 0; font-size: 11px; display: flex; align-items: center; gap: 2px; font-weight: 600; color: var(--color-primary);"
                                     title="Plein écran">⛶ Plein écran</button>
+                                <span style="color: var(--color-border);">|</span>
+                                <button type="button" id="btn-export-map-png"
+                                    style="background: none; border: none; cursor: pointer; padding: 0; font-size: 11px; display: flex; align-items: center; gap: 2px; font-weight: 600; color: var(--color-primary);"
+                                    title="Télécharger l'image de la carte">📥 PNG</button>
                             </div>
                         </div>
                         <div id="map" style="flex: 1; min-height: 380px; margin-bottom: 0;"></div>
@@ -640,6 +644,8 @@
     <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
     <!-- Chart.js Javascript -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- HTML2Canvas for Map Export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <!-- Frontend controller script -->
     <script src="explorer.js?v=1.2.0"></script>
     <!-- Modal Paramètres -->
