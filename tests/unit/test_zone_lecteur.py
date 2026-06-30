@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from ofbilan.common.utilitaires_metier import (
+from core.common.utilitaires_metier import (
     ZONE_LECTEUR_AIRE,
     ZONE_LECTEUR_COEUR,
     ZONE_LECTEUR_HORS,
@@ -17,7 +17,7 @@ from ofbilan.common.utilitaires_metier import (
     zone_lecteur_counts_for_pdf_cell,
     zone_lecteur_label,
 )
-from ofbilan.common.pdf_table_sort import sort_zone_pej_for_pdf
+from core.common.pdf_table_sort import sort_zone_pej_for_pdf
 
 
 def test_zone_lecteur_label_priorite_sig_puis_tub() -> None:
@@ -48,7 +48,7 @@ def test_build_zone_pej_from_proc_detail_lecteur_includes_attente() -> None:
 
 
 def test_coalesced_insee_ignores_empty_column_phantom_00000() -> None:
-    from ofbilan.engine.orchestrateur_profils import _coalesced_insee_for_pnf_mask
+    from core.engine.orchestrateur_profils import _coalesced_insee_for_pnf_mask
 
     df = pd.DataFrame({"insee_comm": [pd.NA]})
     assert _coalesced_insee_for_pnf_mask(df).isna().all()

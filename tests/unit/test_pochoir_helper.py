@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from ofbilan.cartographie.layer_resolver import resolve_layer_name
-from ofbilan.cartographie.pochoir_helper import (
+from core.cartographie.layer_resolver import resolve_layer_name
+from core.cartographie.pochoir_helper import (
     adapt_text_for_department,
     department_bounds,
     get_departements_admin_shp,
@@ -15,7 +15,7 @@ from ofbilan.cartographie.pochoir_helper import (
     warn_if_unknown_carto_dept,
     write_map_dept_marker,
 )
-from ofbilan.chemins_projet import PROJECT_ROOT
+from core.chemins_projet import PROJECT_ROOT
 
 ADMIN_SHP = PROJECT_ROOT / "ref/programme/sig/limites_admin_dep/DEPARTEMENT_ADMIN_Express_200207.shp"
 
@@ -93,7 +93,7 @@ def test_resolve_pochoir_no_wrong_dept_fallback():
 
 
 def test_legacy_map_without_marker_valid_for_dept_21_only(tmp_path, monkeypatch):
-    monkeypatch.setattr("ofbilan.chemins_projet.get_cartes_dir", lambda: tmp_path)
+    monkeypatch.setattr("core.chemins_projet.get_cartes_dir", lambda: tmp_path)
     png = tmp_path / "carte_global.png"
     png.write_bytes(b"x")
     assert is_map_valid_for_dept(png, "21")
@@ -101,7 +101,7 @@ def test_legacy_map_without_marker_valid_for_dept_21_only(tmp_path, monkeypatch)
 
 
 def test_map_dept_marker_roundtrip(tmp_path, monkeypatch):
-    monkeypatch.setattr("ofbilan.chemins_projet.get_cartes_dir", lambda: tmp_path)
+    monkeypatch.setattr("core.chemins_projet.get_cartes_dir", lambda: tmp_path)
     png = tmp_path / "carte_agrainage.png"
     png.write_bytes(b"x")
     write_map_dept_marker(png, "25")

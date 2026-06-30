@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from ofbilan.cartographie.config_cartes_model import GlobalConfig, PerimetreConfig
+from core.cartographie.config_cartes_model import GlobalConfig, PerimetreConfig
 
 
 def test_global_config_default_departement_code() -> None:
@@ -12,14 +12,14 @@ def test_global_config_default_departement_code() -> None:
 
 
 def test_resolve_departement_code_from_attribute() -> None:
-    from ofbilan.cartographie.production_cartographique import _resolve_departement_code
+    from core.cartographie.production_cartographique import _resolve_departement_code
 
     cfg = GlobalConfig(departement_code="89")
     assert _resolve_departement_code(cfg) == "89"
 
 
 def test_resolve_departement_code_from_perimetre() -> None:
-    from ofbilan.cartographie.production_cartographique import _resolve_departement_code
+    from core.cartographie.production_cartographique import _resolve_departement_code
 
     @dataclass
     class _Cfg:
@@ -29,7 +29,7 @@ def test_resolve_departement_code_from_perimetre() -> None:
 
 
 def test_get_effective_config_with_yaml_profiles() -> None:
-    from ofbilan.cartographie.production_cartographique import get_effective_config
+    from core.cartographie.production_cartographique import get_effective_config
 
     cfg = get_effective_config()
     assert hasattr(cfg, "departement_code")
@@ -38,7 +38,7 @@ def test_get_effective_config_with_yaml_profiles() -> None:
 
 
 def test_config_dept_override() -> None:
-    from ofbilan.cartographie.production_cartographique import _ConfigExportOverride
+    from core.cartographie.production_cartographique import _ConfigExportOverride
 
     base = GlobalConfig(departement_code="21")
     wrapped = _ConfigExportOverride(base, "89")
@@ -47,15 +47,15 @@ def test_config_dept_override() -> None:
 
 
 def test_depart_attr_condition_int_compat() -> None:
-    from ofbilan.cartographie.production_cartographique import _depart_attr_condition
+    from core.cartographie.production_cartographique import _depart_attr_condition
 
     assert _depart_attr_condition("num_depart", "89") == '"num_depart" IN (\'89\', 89)'
     assert _depart_attr_condition("num_depart", "2A") == '"num_depart" = \'2A\''
 
 
 def test_resolve_map_title_custom_title_main() -> None:
-    from ofbilan.cartographie.production_cartographique import resolve_map_title
-    from ofbilan.cartographie.config_cartes_model import ProfileConfig
+    from core.cartographie.production_cartographique import resolve_map_title
+    from core.cartographie.config_cartes_model import ProfileConfig
 
     prof = ProfileConfig(
         id="demo",

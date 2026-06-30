@@ -4,7 +4,7 @@ import sys
 
 
 def test_bilans_cli_list_themes(monkeypatch, capsys) -> None:
-    import ofbilan.point_entree_cli as cli
+    import core.point_entree_cli as cli
 
     monkeypatch.setattr(sys, "argv", ["bilans", "--list-themes"])
     monkeypatch.setattr(cli, "_list_themes", lambda: ["demo_a", "demo_b"])
@@ -15,7 +15,7 @@ def test_bilans_cli_list_themes(monkeypatch, capsys) -> None:
 
 
 def test_bilans_cli_interactive_profile_prompt(monkeypatch) -> None:
-    import ofbilan.point_entree_cli as cli
+    import core.point_entree_cli as cli
 
     captured: dict[str, object] = {}
 
@@ -40,8 +40,8 @@ def test_bilans_cli_interactive_profile_prompt(monkeypatch) -> None:
         captured["args"] = (profils, date_deb, date_fin, echelle, code, combine, cli_options)
         return 0
 
-    monkeypatch.setattr("ofbilan.engine.catalogue_profils.resolve_profile_ids", _fake_resolve)
-    monkeypatch.setattr("ofbilan.engine.execution_lots_profils.run_profiles_batch", _fake_run_batch)
+    monkeypatch.setattr("core.engine.catalogue_profils.resolve_profile_ids", _fake_resolve)
+    monkeypatch.setattr("core.engine.execution_lots_profils.run_profiles_batch", _fake_run_batch)
     assert cli.main() == 0
     assert captured["args"] == (
         ["chasse"],
@@ -55,7 +55,7 @@ def test_bilans_cli_interactive_profile_prompt(monkeypatch) -> None:
 
 
 def test_bilans_cli_delegates_profile_compatibility_to_engine(monkeypatch) -> None:
-    import ofbilan.point_entree_cli as cli
+    import core.point_entree_cli as cli
 
     captured: dict[str, object] = {}
     monkeypatch.setattr(
@@ -64,18 +64,18 @@ def test_bilans_cli_delegates_profile_compatibility_to_engine(monkeypatch) -> No
         ["bilans", "--profil", "global", "--profil", "chasse", "--date-deb", "2025-01-01", "--date-fin", "2025-12-31"],
     )
     monkeypatch.setattr(cli, "_check_deps", lambda: None)
-    monkeypatch.setattr("ofbilan.engine.catalogue_profils.resolve_profile_ids", lambda ids: ids)
+    monkeypatch.setattr("core.engine.catalogue_profils.resolve_profile_ids", lambda ids: ids)
     def _fake_run_batch(*args, **kwargs):
         captured["called"] = True
         return 1
-    monkeypatch.setattr("ofbilan.engine.execution_lots_profils.run_profiles_batch", _fake_run_batch)
+    monkeypatch.setattr("core.engine.execution_lots_profils.run_profiles_batch", _fake_run_batch)
 
     assert cli.main() == 1
     assert captured.get("called") is True
 
 
 def test_bilans_cli_type_usager_and_cartes_options(monkeypatch) -> None:
-    import ofbilan.point_entree_cli as cli
+    import core.point_entree_cli as cli
 
     captured: dict[str, object] = {}
     monkeypatch.setattr(
@@ -104,7 +104,7 @@ def test_bilans_cli_type_usager_and_cartes_options(monkeypatch) -> None:
         lambda: ["Particulier", "Agriculteur et autres acteurs agricoles"],
     )
     monkeypatch.setattr(
-        "ofbilan.engine.catalogue_profils.resolve_profile_ids",
+        "core.engine.catalogue_profils.resolve_profile_ids",
         lambda ids: ids,
     )
 
@@ -124,7 +124,7 @@ def test_bilans_cli_type_usager_and_cartes_options(monkeypatch) -> None:
         return 0
 
     monkeypatch.setattr(
-        "ofbilan.engine.execution_lots_profils.run_profiles_batch",
+        "core.engine.execution_lots_profils.run_profiles_batch",
         _fake_run_batch,
     )
 
@@ -138,7 +138,7 @@ def test_bilans_cli_type_usager_and_cartes_options(monkeypatch) -> None:
 
 
 def test_bilans_cli_brochure_option(monkeypatch) -> None:
-    import ofbilan.point_entree_cli as cli
+    import core.point_entree_cli as cli
 
     captured: dict[str, object] = {}
     monkeypatch.setattr(
@@ -157,7 +157,7 @@ def test_bilans_cli_brochure_option(monkeypatch) -> None:
     )
     monkeypatch.setattr(cli, "_check_deps", lambda: None)
     monkeypatch.setattr(
-        "ofbilan.engine.catalogue_profils.resolve_profile_ids",
+        "core.engine.catalogue_profils.resolve_profile_ids",
         lambda ids: ids,
     )
 
@@ -175,7 +175,7 @@ def test_bilans_cli_brochure_option(monkeypatch) -> None:
         return 0
 
     monkeypatch.setattr(
-        "ofbilan.engine.execution_lots_profils.run_profiles_batch",
+        "core.engine.execution_lots_profils.run_profiles_batch",
         _fake_run_batch,
     )
     assert cli.main() == 0
@@ -183,7 +183,7 @@ def test_bilans_cli_brochure_option(monkeypatch) -> None:
 
 
 def test_list_type_usagers(monkeypatch, capsys) -> None:
-    import ofbilan.point_entree_cli as cli
+    import core.point_entree_cli as cli
 
     monkeypatch.setattr(sys, "argv", ["bilans", "--list-type-usagers"])
     monkeypatch.setattr(
@@ -196,7 +196,7 @@ def test_list_type_usagers(monkeypatch, capsys) -> None:
 
 
 def test_bilans_cli_multi_codes(monkeypatch) -> None:
-    import ofbilan.point_entree_cli as cli
+    import core.point_entree_cli as cli
 
     captured_codes = []
     monkeypatch.setattr(
@@ -216,7 +216,7 @@ def test_bilans_cli_multi_codes(monkeypatch) -> None:
     )
     monkeypatch.setattr(cli, "_check_deps", lambda: None)
     monkeypatch.setattr(
-        "ofbilan.engine.catalogue_profils.resolve_profile_ids",
+        "core.engine.catalogue_profils.resolve_profile_ids",
         lambda ids: ids,
     )
 
@@ -234,7 +234,7 @@ def test_bilans_cli_multi_codes(monkeypatch) -> None:
         return 0
 
     monkeypatch.setattr(
-        "ofbilan.engine.execution_lots_profils.run_profiles_batch",
+        "core.engine.execution_lots_profils.run_profiles_batch",
         _fake_run_batch,
     )
 
@@ -243,7 +243,7 @@ def test_bilans_cli_multi_codes(monkeypatch) -> None:
 
 
 def test_bilans_cli_multi_codes_shares_options(monkeypatch) -> None:
-    import ofbilan.point_entree_cli as cli
+    import core.point_entree_cli as cli
 
     captured_opts_list = []
     monkeypatch.setattr(
@@ -263,7 +263,7 @@ def test_bilans_cli_multi_codes_shares_options(monkeypatch) -> None:
     )
     monkeypatch.setattr(cli, "_check_deps", lambda: None)
     monkeypatch.setattr(
-        "ofbilan.engine.catalogue_profils.resolve_profile_ids",
+        "core.engine.catalogue_profils.resolve_profile_ids",
         lambda ids: ids,
     )
 
@@ -283,7 +283,7 @@ def test_bilans_cli_multi_codes_shares_options(monkeypatch) -> None:
         return 0
 
     monkeypatch.setattr(
-        "ofbilan.engine.execution_lots_profils.run_profiles_batch",
+        "core.engine.execution_lots_profils.run_profiles_batch",
         _fake_run_batch,
     )
 
@@ -294,7 +294,7 @@ def test_bilans_cli_multi_codes_shares_options(monkeypatch) -> None:
 
 
 def test_bilans_cli_debug_option(monkeypatch) -> None:
-    import ofbilan.point_entree_cli as cli
+    import core.point_entree_cli as cli
     import logging
 
     captured_level = []

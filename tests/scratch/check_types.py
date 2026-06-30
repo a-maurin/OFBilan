@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 import pandas as pd
-from ofbilan.common.chargeurs_donnees import load_point_ctrl, load_pej
+from core.common.chargeurs_donnees import load_point_ctrl, load_pej
 
 project_root = Path(os.getcwd())
 df_pts = load_point_ctrl(project_root, echelle="national", code="FR")

@@ -6,12 +6,12 @@ from pathlib import Path
 
 import pandas as pd
 
-from ofbilan.common.pdf_presentation_config import (
+from core.common.pdf_presentation_config import (
     apply_diffusion_pdf_suffix,
     resolve_pdf_presentation_config,
     resolve_section_titles,
 )
-from ofbilan.common.pdf_toc_inspection import (
+from core.common.pdf_toc_inspection import (
     assert_section_headings_order,
     extract_pdf_section_headings,
 )
@@ -47,7 +47,7 @@ def test_global_scope_section_titles_from_yaml() -> None:
 
 
 def test_global_pdf_section_headings_order(tmp_path: Path, monkeypatch) -> None:
-    import ofbilan.engine.generation_pdf_profil as global_pdf
+    import core.engine.generation_pdf_profil as global_pdf
 
     out_dir = tmp_path / "out_global"
     _seed_global_out_dir(out_dir)

@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def list_pve_detail_csv_paths(out_dir: Path) -> list[Path]:

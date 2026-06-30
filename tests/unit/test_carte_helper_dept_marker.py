@@ -4,8 +4,8 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from ofbilan.cartographie.pochoir_helper import write_map_dept_marker
-from ofbilan.common import carte_helper
+from core.cartographie.pochoir_helper import write_map_dept_marker
+from core.common import carte_helper
 
 
 def _global_profile() -> dict:
@@ -26,11 +26,11 @@ def test_ensure_maps_rejects_stale_dept21_for_dept89(monkeypatch, caplog, tmp_pa
     write_map_dept_marker(png, "21")
 
     monkeypatch.setattr(carte_helper, "get_cartes_dir", lambda: cartes)
-    monkeypatch.setattr("ofbilan.chemins_projet.get_cartes_dir", lambda: cartes)
+    monkeypatch.setattr("core.chemins_projet.get_cartes_dir", lambda: cartes)
     monkeypatch.setattr(carte_helper, "qgis_available", lambda: False)
     monkeypatch.setattr(carte_helper, "generate_maps", lambda *a, **k: [])
     monkeypatch.setattr(
-        "ofbilan.cartographie.pochoir_helper.warn_if_unknown_carto_dept",
+        "core.cartographie.pochoir_helper.warn_if_unknown_carto_dept",
         lambda _c: True,
     )
 
@@ -56,7 +56,7 @@ def test_generate_maps_only_returns_valid_dept(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(carte_helper, "qgis_available", lambda: True)
     monkeypatch.setattr(carte_helper, "get_qgis_app", lambda: object())
     monkeypatch.setattr(
-        "ofbilan.cartographie.production_cartographique.run_export",
+        "core.cartographie.production_cartographique.run_export",
         lambda *a, **k: None,
     )
 
@@ -81,11 +81,11 @@ def test_generate_maps_logs_exception_traceback(monkeypatch, caplog, tmp_path) -
     monkeypatch.setattr(carte_helper, "qgis_available", lambda: True)
     monkeypatch.setattr(carte_helper, "get_qgis_app", lambda: object())
     monkeypatch.setattr(
-        "ofbilan.cartographie.production_cartographique.run_export",
+        "core.cartographie.production_cartographique.run_export",
         _boom,
     )
     monkeypatch.setattr(
-        "ofbilan.cartographie.pochoir_helper.warn_if_unknown_carto_dept",
+        "core.cartographie.pochoir_helper.warn_if_unknown_carto_dept",
         lambda _c: True,
     )
 

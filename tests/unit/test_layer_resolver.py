@@ -1,5 +1,5 @@
 """Tests unitaires — résolution dynamique des couches QGIS."""
-from ofbilan.cartographie.layer_resolver import (
+from core.cartographie.layer_resolver import (
     candidates_for_role,
     infer_layer_role,
     resolve_layer_name,

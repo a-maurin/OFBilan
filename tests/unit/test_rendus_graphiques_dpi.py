@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from ofbilan.common import rendus_graphiques as rg
-from ofbilan.common.ofb_charte import COLOR_CHART_4, COLOR_GREY
+from core.common import rendus_graphiques as rg
+from core.common.ofb_charte import COLOR_CHART_4, COLOR_GREY
 
 
 class _FakeFigure:

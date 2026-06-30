@@ -29,7 +29,7 @@ def test_debug_bat_file():
     print("STDERR:")
     print(res.stderr)
     print(f"RETURNCODE: {res.returncode}")
-    from ofbilan.chemins_projet import PROJECT_ROOT
+    from core.chemins_projet import PROJECT_ROOT
     rel = PROJECT_ROOT / "src" / "ofbilan" / "cartographie" / "qgis_python_path.txt"
     print(f"File exists: {rel.exists()}")
     if rel.exists():
@@ -38,7 +38,7 @@ def test_debug_bat_file():
         content_utf8 = rel.read_text(encoding="utf-8")
         print("UTF-8 decoded repr:", repr(content_utf8))
         
-    from ofbilan.cartographie.qgis_runtime import find_qgis_python_executable
+    from core.cartographie.qgis_runtime import find_qgis_python_executable
     exe = find_qgis_python_executable()
     print(f"QGIS Executable: {exe}")
     

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from ofbilan.common.pdf_table_sort import (
+from core.common.pdf_table_sort import (
     PDF_LABEL_PEJ,
     pdf_column_label,
     prepare_pdf_results_sec23_sorting,
@@ -58,7 +58,7 @@ def test_pdf_column_label_coeur_hors_coeur_is_zone() -> None:
 
 
 def test_pdf_metric_caption_suffixes() -> None:
-    from ofbilan.common.pdf_table_sort import pdf_metric_caption
+    from core.common.pdf_table_sort import pdf_metric_caption
 
     assert "localisation" in pdf_metric_caption("Résultats des contrôles", "ctrl").lower()
     assert "procédure" in pdf_metric_caption("Synthèse par domaine", "proc").lower()
