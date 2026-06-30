@@ -20,7 +20,12 @@ try:
 except ImportError:
     pass
 
-PORT = 8000
+try:
+    from core.parametres_utilisateur import lire_parametres
+    _params = lire_parametres()
+    PORT = int(_params.get("tech", {}).get("port_serveur", 8000))
+except Exception:
+    PORT = 8000
 
 _PRELOAD_LOGS = []
 _PRELOAD_STATUS = "loading"
@@ -45,7 +50,7 @@ def clean_nan(obj):
 
 def get_latest_version():
     """Extrait le numéro de version de la release la plus récente dans CHANGELOG.md."""
-    changelog_path = Path(__file__).resolve().parents[3] / "CHANGELOG.md"
+    changelog_path = Path(__file__).resolve().parents[2] / "CHANGELOG.md"
     if changelog_path.exists():
         try:
             import re
@@ -91,8 +96,56 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             }).encode('utf-8'))
             return
 
+        if parsed_path == "/api/check_update":
+            import urllib.request
+            import ssl
+            
+            metadata_path = Path(__file__).resolve().parents[2] / "metadata.txt"
+            current_version = "0.0.0"
+            if metadata_path.exists():
+                try:
+                    with open(metadata_path, 'r', encoding='utf8') as f:
+                        for line in f:
+                            if line.startswith('version='):
+                                current_version = line.strip().split('=')[1]
+                                break
+                except Exception:
+                    pass
+
+            update_data = {"update_available": False, "latest_version": current_version, "zip_url": ""}
+            
+            try:
+                req = urllib.request.Request('https://api.github.com/repos/a-maurin/OFBilan/releases/latest')
+                req.add_header('User-Agent', 'OFBilan-Web-App')
+                ctx = ssl.create_default_context()
+                ctx.check_hostname = False
+                ctx.verify_mode = ssl.CERT_NONE
+                
+                response = urllib.request.urlopen(req, timeout=5, context=ctx)
+                data = json.loads(response.read().decode('utf-8'))
+                latest_version = data.get('tag_name', '').lstrip('v')
+                
+                if latest_version and latest_version > current_version:
+                    zip_url = data.get('html_url')
+                    for asset in data.get('assets', []):
+                        if asset.get('name', '').endswith('.zip'):
+                            zip_url = asset.get('browser_download_url')
+                            break
+                    update_data["update_available"] = True
+                    update_data["latest_version"] = latest_version
+                    update_data["zip_url"] = zip_url
+            except Exception as e:
+                print(f"  [Update] Impossible de vérifier la mise à jour: {e}")
+                
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json; charset=utf-8')
+            self.send_header('Cache-Control', 'no-cache')
+            self.end_headers()
+            self.wfile.write(json.dumps(update_data).encode('utf-8'))
+            return
+
         if parsed_path == '/api/restart':
-            # Endpoint pour redémarrer le serveur
+            # Endpoint pour recharger les données (simule un redémarrage)
             import time
             import threading
             self.send_response(200)
@@ -100,15 +153,26 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
             self.wfile.write(json.dumps({"status": "restarting"}).encode('utf-8'))
-            print("Redémarrage du serveur demandé via l'interface web...")
+            print("Rechargement des données demandé via l'interface web...")
             
-            def restart():
+            def reload_data():
                 time.sleep(0.5)
-                # On utilise sys.executable pour relancer exactement le même script
-                os.environ["OFBILAN_RESTART"] = "1"
-                os.execv(sys.executable, [sys.executable] + sys.argv)
+                try:
+                    from core.common.chargeurs_donnees import (
+                        _POINT_CTRL_RAW_CACHE, _PEJ_RAW_CACHE, 
+                        _PA_RAW_CACHE, _PVE_RAW_CACHE, clear_session_cache
+                    )
+                    _POINT_CTRL_RAW_CACHE.clear()
+                    _PEJ_RAW_CACHE.clear()
+                    _PA_RAW_CACHE.clear()
+                    _PVE_RAW_CACHE.clear()
+                    clear_session_cache()
+                except Exception as e:
+                    print("Erreur clear cache:", e)
                 
-            threading.Thread(target=restart, daemon=True).start()
+                preload_data_async()
+                
+            threading.Thread(target=reload_data, daemon=True).start()
             return
             
         elif parsed_path == '/api/shutdown':

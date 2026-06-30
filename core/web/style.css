@@ -68,7 +68,7 @@ body.page-editor {
 
 .nav-item.active {
     color: var(--color-primary);
-    background-color: #FFFFFF;
+    background-color: var(--color-bg-card);
     font-weight: 600;
 }
 
@@ -196,7 +196,7 @@ input[type="date"] {
     border-radius: 6px;
     font-family: var(--font-family);
     font-size: 14px;
-    background-color: #FFFFFF;
+    background-color: var(--color-bg-card);
     color: var(--color-text-dark);
     transition: border-color 0.2s, box-shadow 0.2s;
 }
@@ -248,7 +248,7 @@ input:focus {
     top: 100%;
     left: 0;
     width: 100%;
-    background-color: #FFFFFF;
+    background-color: var(--color-bg-card);
     border: 1px solid var(--color-border);
     border-radius: 6px;
     box-shadow: 0 10px 25px rgba(0, 58, 118, 0.15);
@@ -712,7 +712,7 @@ input:checked+.slider:before {
     resize: vertical;
     font-family: Consolas, Monaco, monospace;
     color: var(--color-text-dark);
-    background-color: #FFFFFF;
+    background-color: var(--color-bg-card);
 }
 
 .cartes-perso-container textarea:focus {
@@ -738,4 +738,17 @@ body.theme-sombre .leaflet-container {
 }
 body.theme-sombre .leaflet-tile-pane {
     filter: invert(1) hue-rotate(180deg) brightness(95%) contrast(90%);
+}
+body.theme-sombre .dropdown-option:hover {
+    background-color: #333333;
+    color: #FFFFFF;
+}
+body.theme-sombre .leaflet-control-layers,
+body.theme-sombre .leaflet-bar a {
+    background-color: var(--color-bg-card);
+    color: var(--color-text-dark);
+    border-color: var(--color-border);
+}
+body.theme-sombre .leaflet-control-layers-list {
+    color: var(--color-text-dark);
 }

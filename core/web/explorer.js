@@ -692,8 +692,8 @@ document.addEventListener('DOMContentLoaded', () => {
             else if (code.startsWith('bmi')) selectEchelle.value = 'bmi';
             else selectEchelle.value = 'departement';
             
-            inputCode.value = settings.geo.code_geo_defaut;
             selectEchelle.dispatchEvent(new Event('change'));
+            inputCode.value = settings.geo.code_geo_defaut;
         }
 
         if (settings.geo && settings.geo.annee_reference) {

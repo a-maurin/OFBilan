@@ -23,9 +23,10 @@
             z-index: 99999 !important;
             margin: 0 !important;
             border-radius: 0 !important;
-            background: #FFFFFF !important;
+            background: var(--color-bg-card) !important;
             padding: 10px !important;
         }
+
         .map-fullscreen #map {
             height: calc(100vh - 45px) !important;
             border-radius: 0 !important;
@@ -63,13 +64,15 @@
         .control-panel {
             position: sticky;
             top: 10px;
-            z-index: 10; /* Empêche les canvas/cartes de passer devant lors du scroll */
-            max-height: calc(100vh - 30px); /* Hauteur max augmentée pour afficher tous les boutons */
+            z-index: 10;
+            /* Empêche les canvas/cartes de passer devant lors du scroll */
+            max-height: calc(100vh - 30px);
+            /* Hauteur max augmentée pour afficher tous les boutons */
             overflow-y: auto;
             scrollbar-width: thin;
             scrollbar-color: var(--color-border) transparent;
             padding-right: 4px;
-            padding-bottom: 40px; 
+            padding-bottom: 40px;
         }
 
         .control-panel::-webkit-scrollbar {
@@ -89,6 +92,7 @@
             .explorer-container {
                 grid-template-columns: 1fr;
             }
+
             .control-panel {
                 position: static !important;
                 max-height: none !important;
@@ -159,7 +163,7 @@
         }
 
         .stat-card {
-            background: #FFFFFF;
+            background: var(--color-bg-card);
             padding: 6px 10px !important;
             border-radius: 6px;
             border: 1px solid var(--color-border);
@@ -193,6 +197,7 @@
         .hidden {
             display: none !important;
         }
+
         .data-table th {
             font-weight: 600;
             color: var(--color-text-dark);
@@ -200,13 +205,16 @@
             border-bottom: 2px solid var(--color-border);
             user-select: none;
         }
+
         .data-table td {
             padding: 6px 8px;
             border-bottom: 1px solid var(--color-border);
         }
+
         .data-table tr:hover {
             background-color: #f1f5f9;
         }
+
         .results-count-badge {
             margin-top: 10px;
             font-size: 11px;
@@ -230,35 +238,62 @@
             <nav class="app-nav">
                 <a href="explorer.html" class="nav-item active">Analyse Interactive</a>
                 <a href="index.html" class="nav-item">Éditeur de Bilans</a>
-                <a href="#" onclick="restartServer(); return false;" class="nav-item" style="margin-left: auto; color: #F4A261; font-weight: 600;" title="Redémarrer le serveur local (Utile après mise à jour des données brutes)">↻ Redémarrer</a>
-                <a href="#" onclick="shutdownServer(); return false;" class="nav-item" style="color: #D95C4A; font-weight: 600;" title="Éteindre le serveur">⏻ Éteindre</a>
-                <a href="#" onclick="openSettingsModal(); return false;" class="nav-item" style="margin-left: 15px; color: #cbd5e1; display: flex; align-items: center;" title="Paramètres">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                <a href="#" onclick="restartServer(); return false;" class="nav-item"
+                    style="margin-left: auto; color: #F4A261; font-weight: 600;"
+                    title="Redémarrer le serveur local (Utile après mise à jour des données brutes)">↻ Redémarrer</a>
+                <a href="#" onclick="shutdownServer(); return false;" class="nav-item"
+                    style="color: #D95C4A; font-weight: 600;" title="Éteindre le serveur">⏻ Éteindre</a>
+                <a href="#" onclick="openSettingsModal(); return false;" class="nav-item"
+                    style="margin-left: 15px; color: #cbd5e1; display: flex; align-items: center;" title="Paramètres">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path
+                            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+                        </path>
+                    </svg>
                 </a>
             </nav>
         </div>
     </header>
+
+    <div id="update-banner" class="hidden"
+        style="background-color: #003A76; color: #ffffff; text-align: center; padding: 10px; font-weight: bold; position: relative; z-index: 1000; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
+        Une nouvelle version (<span id="update-version"></span>) d'OFBilan est disponible !
+        <a id="update-link" href="#"
+            style="margin-left: 15px; background-color: #ffffff; color: #003A76; padding: 4px 10px; text-decoration: none; border-radius: 4px; font-size: 13px;">Télécharger
+            le ZIP</a>
+        <span onclick="document.getElementById('update-banner').style.display='none'"
+            style="position: absolute; right: 15px; cursor: pointer; font-size: 18px;">&times;</span>
+    </div>
+
 
     <main class="explorer-container">
         <!-- Panneau de Configuration Gauche -->
         <section class="control-panel">
             <div class="card">
                 <h2>Filtres d'exploration</h2>
-                <div id="profile-warning-banner" class="results-count-badge hidden" style="margin-bottom: 12px; background: #fffbeb; border-color: #f59e0b; color: #b45309; text-align: left; display: none;"></div>
+                <div id="profile-warning-banner" class="results-count-badge hidden"
+                    style="margin-bottom: 12px; background: #fffbeb; border-color: #f59e0b; color: #b45309; text-align: left; display: none;">
+                </div>
                 <form id="config-form">
 
                     <!-- Profil Thématique -->
-                    <div class="form-group" style="background: #eef2ff; padding: 8px; border-radius: 6px; border: 1px solid #c7d2fe; margin-bottom: 12px !important;">
+                    <div class="form-group"
+                        style="background: #eef2ff; padding: 8px; border-radius: 6px; border: 1px solid #c7d2fe; margin-bottom: 12px !important;">
                         <label for="profil-select" style="font-weight: 600; color: #4338ca;">Profil Thématique</label>
-                        <select id="profil-select" name="profil" style="width: 100%; border-color: #a5b4fc; font-weight: 500;">
+                        <select id="profil-select" name="profil"
+                            style="width: 100%; border-color: #a5b4fc; font-weight: 500;">
                             <option value="global">Tous (Sans profil)</option>
                         </select>
                     </div>
 
                     <!-- Filtre Département PNF -->
-                    <div id="pnf-dept-container" class="form-group hidden" style="background: #f0fdf4; padding: 8px; border-radius: 6px; border: 1px solid #bbf7d0; margin-bottom: 12px !important;">
+                    <div id="pnf-dept-container" class="form-group hidden"
+                        style="background: #f0fdf4; padding: 8px; border-radius: 6px; border: 1px solid #bbf7d0; margin-bottom: 12px !important;">
                         <label for="pnf-dept-select" style="font-weight: 600; color: #166534;">Département (PNF)</label>
-                        <select id="pnf-dept-select" name="pnf_dept" style="width: 100%; border-color: #86efac; font-weight: 500;">
+                        <select id="pnf-dept-select" name="pnf_dept"
+                            style="width: 100%; border-color: #86efac; font-weight: 500;">
                             <option value="">Tous (Total PNF)</option>
                             <option value="21">Côte-d'Or (21)</option>
                             <option value="52">Haute-Marne (52)</option>
@@ -278,10 +313,13 @@
                     </div>
 
                     <!-- Comparaison temporelle N vs N-1 -->
-                    <div class="form-group" style="background: #f8fafc; padding: 8px; border-radius: 6px; border: 1px solid var(--color-border); margin-bottom: 12px !important;">
+                    <div class="form-group"
+                        style="background: var(--color-bg-light); padding: 8px; border-radius: 6px; border: 1px solid var(--color-border); margin-bottom: 12px !important;">
                         <div style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
                             <input type="checkbox" id="compare-active" name="compare-active" style="margin: 0;">
-                            <label for="compare-active" style="margin: 0 !important; cursor: pointer; font-weight: 600; color: var(--color-primary);">Comparer deux périodes (N vs N-1)</label>
+                            <label for="compare-active"
+                                style="margin: 0 !important; cursor: pointer; font-weight: 600; color: var(--color-primary);">Comparer
+                                deux périodes (N vs N-1)</label>
                         </div>
                         <div id="compare-dates-container" class="hidden" style="margin-top: 8px;">
                             <div class="form-row" style="margin-bottom: 0 !important;">
@@ -324,7 +362,8 @@
                     <!-- Commune de recherche -->
                     <div class="form-group">
                         <label for="filter-commune">Commune (Optionnel)</label>
-                        <input type="text" id="filter-commune" name="filter-commune" placeholder="Toutes les communes" autocomplete="off">
+                        <input type="text" id="filter-commune" name="filter-commune" placeholder="Toutes les communes"
+                            autocomplete="off">
                     </div>
 
                     <!-- Type usager cible -->
@@ -375,15 +414,18 @@
                     <div class="form-group">
                         <label for="resultat-select">Résultat du contrôle (Optionnel)</label>
                         <div class="custom-select-container">
-                            <input type="text" id="resultat-select" name="resultat-select" placeholder="Tous les résultats" autocomplete="off" readonly>
+                            <input type="text" id="resultat-select" name="resultat-select"
+                                placeholder="Tous les résultats" autocomplete="off" readonly>
                             <button type="button" id="btn-toggle-resultats" class="select-arrow-btn">▼</button>
                             <div id="resultats-dropdown" class="select-dropdown hidden"></div>
                         </div>
                     </div>
                     <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">
                         <div style="display: flex; gap: 8px;">
-                            <button type="button" id="btn-update" class="btn btn-primary" style="flex: 1;">Charger les données</button>
-                            <button type="button" id="btn-reset" class="btn btn-secondary" style="padding: 8px !important;">Effacer</button>
+                            <button type="button" id="btn-update" class="btn btn-primary" style="flex: 1;">Charger les
+                                données</button>
+                            <button type="button" id="btn-reset" class="btn btn-secondary"
+                                style="flex: 1;">Effacer</button>
                         </div>
                         <button type="button" id="btn-pdf" class="btn btn-danger">Édition PDF</button>
                     </div>
@@ -424,25 +466,35 @@
                 <div style="display: flex; flex-direction: column; gap: 15px; min-width: 0;">
                     <div class="card"
                         style="margin-bottom: 0; display: flex; flex-direction: column; min-width: 0; flex: 1;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                             <h2 style="margin-bottom: 0 !important;">Localisation des données</h2>
-                            <div style="display: flex; gap: 10px; font-size: 11px; align-items: center; background: #f8fafc; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--color-border);">
-                                <label style="margin: 0 !important; cursor: pointer; display: flex; align-items: center; gap: 4px; font-weight: 500;">
-                                    <input type="radio" name="map-mode" value="markers" checked style="margin: 0;"> Points
+                            <div
+                                style="display: flex; gap: 10px; font-size: 11px; align-items: center; background: #f8fafc; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--color-border);">
+                                <label
+                                    style="margin: 0 !important; cursor: pointer; display: flex; align-items: center; gap: 4px; font-weight: 500;">
+                                    <input type="radio" name="map-mode" value="markers" checked style="margin: 0;">
+                                    Points
                                 </label>
-                                <label style="margin: 0 !important; cursor: pointer; display: flex; align-items: center; gap: 4px; font-weight: 500;">
+                                <label
+                                    style="margin: 0 !important; cursor: pointer; display: flex; align-items: center; gap: 4px; font-weight: 500;">
                                     <input type="radio" name="map-mode" value="heatmap" style="margin: 0;"> Chaleur
                                 </label>
                                 <span style="color: var(--color-border);">|</span>
-                                <button type="button" id="btn-fullscreen-map" style="background: none; border: none; cursor: pointer; padding: 0; font-size: 11px; display: flex; align-items: center; gap: 2px; font-weight: 600; color: var(--color-primary);" title="Plein écran">⛶ Plein écran</button>
+                                <button type="button" id="btn-fullscreen-map"
+                                    style="background: none; border: none; cursor: pointer; padding: 0; font-size: 11px; display: flex; align-items: center; gap: 2px; font-weight: 600; color: var(--color-primary);"
+                                    title="Plein écran">⛶ Plein écran</button>
                             </div>
                         </div>
                         <div id="map" style="flex: 1; min-height: 380px; margin-bottom: 0;"></div>
                     </div>
                     <div class="card" style="margin-bottom: 0; display: flex; flex-direction: column; min-width: 0;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                             <h2 style="margin-bottom: 0 !important;">Saisonnalité de l'activité</h2>
-                            <button type="button" class="btn-export-chart-png" data-chart="chart-seasonality" style="background: none; border: none; cursor: pointer; font-size: 11px; color: var(--color-primary); font-weight: 500;" title="Télécharger l'image">📥 PNG</button>
+                            <button type="button" class="btn-export-chart-png" data-chart="chart-seasonality"
+                                style="background: none; border: none; cursor: pointer; font-size: 11px; color: var(--color-primary); font-weight: 500;"
+                                title="Télécharger l'image">📥 PNG</button>
                         </div>
                         <div style="height: 180px; position: relative; width: 100%;">
                             <canvas id="chart-seasonality" style="max-height: 180px; width: 100%;"></canvas>
@@ -458,10 +510,15 @@
                     <!-- Graphiques Donuts Côte à Côte -->
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                         <div
-                            style="background:#FFFFFF; padding:10px; border:1px solid var(--color-border); border-radius:6px; min-height: 250px; display: flex; flex-direction: column; min-width: 0;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                                <h3 style="font-size:11px; margin-bottom: 0 !important; color:var(--color-primary); font-weight: 600;">Résultats des Contrôles</h3>
-                                <button type="button" class="btn-export-chart-png" data-chart="chart-results" style="background: none; border: none; cursor: pointer; font-size: 10px; color: var(--color-primary); font-weight: 500;" title="Télécharger l'image">📥 PNG</button>
+                            style="background:var(--color-bg-card); padding:10px; border:1px solid var(--color-border); border-radius:6px; min-height: 250px; display: flex; flex-direction: column; min-width: 0;">
+                            <div
+                                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                <h3
+                                    style="font-size:11px; margin-bottom: 0 !important; color:var(--color-primary); font-weight: 600;">
+                                    Résultats des Contrôles</h3>
+                                <button type="button" class="btn-export-chart-png" data-chart="chart-results"
+                                    style="background: none; border: none; cursor: pointer; font-size: 10px; color: var(--color-primary); font-weight: 500;"
+                                    title="Télécharger l'image">📥 PNG</button>
                             </div>
                             <div style="height: 140px; position: relative;">
                                 <canvas id="chart-results" style="max-height: 140px; width: 100%;"></canvas>
@@ -471,10 +528,15 @@
                             </div>
                         </div>
                         <div
-                            style="background:#FFFFFF; padding:10px; border:1px solid var(--color-border); border-radius:6px; min-height: 250px; display: flex; flex-direction: column; min-width: 0;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                                <h3 style="font-size:11px; margin-bottom: 0 !important; color:var(--color-primary); font-weight: 600;">Par Type d'Usager</h3>
-                                <button type="button" class="btn-export-chart-png" data-chart="chart-usagers" style="background: none; border: none; cursor: pointer; font-size: 10px; color: var(--color-primary); font-weight: 500;" title="Télécharger l'image">📥 PNG</button>
+                            style="background:var(--color-bg-card); padding:10px; border:1px solid var(--color-border); border-radius:6px; min-height: 250px; display: flex; flex-direction: column; min-width: 0;">
+                            <div
+                                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                <h3
+                                    style="font-size:11px; margin-bottom: 0 !important; color:var(--color-primary); font-weight: 600;">
+                                    Par Type d'Usager</h3>
+                                <button type="button" class="btn-export-chart-png" data-chart="chart-usagers"
+                                    style="background: none; border: none; cursor: pointer; font-size: 10px; color: var(--color-primary); font-weight: 500;"
+                                    title="Télécharger l'image">📥 PNG</button>
                             </div>
                             <div style="height: 140px; position: relative;">
                                 <canvas id="chart-usagers" style="max-height: 140px; width: 100%;"></canvas>
@@ -487,10 +549,15 @@
 
                     <!-- Domaines d'Activité -->
                     <div
-                        style="background:#FFFFFF; padding:10px; border:1px solid var(--color-border); border-radius:6px; flex: 1; display: flex; flex-direction: column; min-width: 0;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                            <h3 style="font-size:11px; margin-bottom: 0 !important; color:var(--color-primary); font-weight: 600;">Par Domaine d'Activité</h3>
-                            <button type="button" class="btn-export-chart-png" data-chart="chart-domains" style="background: none; border: none; cursor: pointer; font-size: 10px; color: var(--color-primary); font-weight: 500;" title="Télécharger l'image">📥 PNG</button>
+                        style="background:var(--color-bg-card); padding:10px; border:1px solid var(--color-border); border-radius:6px; flex: 1; display: flex; flex-direction: column; min-width: 0;">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                            <h3
+                                style="font-size:11px; margin-bottom: 0 !important; color:var(--color-primary); font-weight: 600;">
+                                Par Domaine d'Activité</h3>
+                            <button type="button" class="btn-export-chart-png" data-chart="chart-domains"
+                                style="background: none; border: none; cursor: pointer; font-size: 10px; color: var(--color-primary); font-weight: 500;"
+                                title="Télécharger l'image">📥 PNG</button>
                         </div>
                         <div id="wrapper-domains" style="position: relative; width: 100%;">
                             <canvas id="chart-domains" style="width: 100%;"></canvas>
@@ -499,10 +566,15 @@
 
                     <!-- Thématiques Fines -->
                     <div
-                        style="background:#FFFFFF; padding:10px; border:1px solid var(--color-border); border-radius:6px; flex: 1; display: flex; flex-direction: column; min-width: 0;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                            <h3 style="font-size:11px; margin-bottom: 0 !important; color:var(--color-primary); font-weight: 600;">Par Thématique (Top 5)</h3>
-                            <button type="button" class="btn-export-chart-png" data-chart="chart-themes" style="background: none; border: none; cursor: pointer; font-size: 10px; color: var(--color-primary); font-weight: 500;" title="Télécharger l'image">📥 PNG</button>
+                        style="background:var(--color-bg-card); padding:10px; border:1px solid var(--color-border); border-radius:6px; flex: 1; display: flex; flex-direction: column; min-width: 0;">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                            <h3
+                                style="font-size:11px; margin-bottom: 0 !important; color:var(--color-primary); font-weight: 600;">
+                                Par Thématique (Top 5)</h3>
+                            <button type="button" class="btn-export-chart-png" data-chart="chart-themes"
+                                style="background: none; border: none; cursor: pointer; font-size: 10px; color: var(--color-primary); font-weight: 500;"
+                                title="Télécharger l'image">📥 PNG</button>
                         </div>
                         <div id="wrapper-themes" style="position: relative; width: 100%;">
                             <canvas id="chart-themes" style="width: 100%;"></canvas>
@@ -512,14 +584,17 @@
             </div>
             <!-- Tableau détaillé des contrôles -->
             <div class="card" id="card-table-controles" style="margin-top: 15px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" id="toggle-table-header">
+                <div style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;"
+                    id="toggle-table-header">
                     <h2 style="margin-bottom: 0 !important; display: flex; align-items: center; gap: 8px;">
                         <span id="table-toggle-icon">▶</span> Détail des contrôles chargés
                     </h2>
-                    <button type="button" id="btn-export-csv" class="btn btn-secondary" style="padding: 4px 8px !important; font-size: 11px !important;">Exporter en CSV</button>
+                    <button type="button" id="btn-export-csv" class="btn btn-secondary"
+                        style="padding: 4px 8px !important; font-size: 11px !important;">Exporter en CSV</button>
                 </div>
                 <div id="table-container" class="hidden" style="margin-top: 15px; overflow-x: auto;">
-                    <table class="data-table" style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
+                    <table class="data-table"
+                        style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
                         <thead>
                             <tr style="border-bottom: 2px solid var(--color-border); background: #f8fafc;">
                                 <th style="padding: 8px; cursor: pointer;" data-sort="dc_id">ID ⇅</th>
@@ -536,11 +611,14 @@
                         </tbody>
                     </table>
                     <!-- Pagination -->
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: 11px;">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: 11px;">
                         <span id="table-pagination-info">Page 1 sur 1</span>
                         <div style="display: flex; gap: 5px;">
-                            <button type="button" id="btn-page-prev" class="btn" style="padding: 2px 6px !important; font-size: 10px !important;">Précédent</button>
-                            <button type="button" id="btn-page-next" class="btn" style="padding: 2px 6px !important; font-size: 10px !important;">Suivant</button>
+                            <button type="button" id="btn-page-prev" class="btn"
+                                style="padding: 2px 6px !important; font-size: 10px !important;">Précédent</button>
+                            <button type="button" id="btn-page-next" class="btn"
+                                style="padding: 2px 6px !important; font-size: 10px !important;">Suivant</button>
                         </div>
                     </div>
                 </div>
@@ -549,7 +627,8 @@
     </main>
 
     <footer class="app-footer">
-        <p>OFBilan - <span id="app-version">v1.0.1</span> | Office Français de la Biodiversité | Auteur : Aguirre MAURIN - SD21 | Contact : aguirre.maurin@ofb.gouv.Fr</p>
+        <p>OFBilan - <span id="app-version">v1.0.1</span> | Office Français de la Biodiversité | Auteur : Aguirre MAURIN
+            - SD21 | Contact : aguirre.maurin@ofb.gouv.Fr</p>
     </footer>
 
     <!-- Leaflet.js Javascript -->
@@ -564,40 +643,51 @@
     <!-- Frontend controller script -->
     <script src="explorer.js?v=1.2.0"></script>
     <!-- Modal Paramètres -->
-    <div id="settings-modal" class="hidden" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 999999; display: flex; justify-content: center; align-items: center;">
-        <div style="background: white; border-radius: 8px; width: 800px; max-width: 95vw; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 4px 20px rgba(0,0,0,0.2);">
-            <div style="padding: 15px 20px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border-radius: 8px 8px 0 0;">
+    <div id="settings-modal" class="hidden"
+        style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 999999; display: flex; justify-content: center; align-items: center;">
+        <div
+            style="background: var(--color-bg-card); border-radius: 8px; width: 800px; max-width: 95vw; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 4px 20px rgba(0,0,0,0.2);">
+            <div
+                style="padding: 15px 20px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border-radius: 8px 8px 0 0;">
                 <h2 style="margin: 0; font-size: 18px; color: #1e293b;">Paramètres OFBilan</h2>
-                <button type="button" onclick="closeSettingsModal()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #64748b;">&times;</button>
+                <button type="button" onclick="closeSettingsModal()"
+                    style="background: none; border: none; font-size: 24px; cursor: pointer; color: #64748b;">&times;</button>
             </div>
-            
-            <div style="padding: 20px; overflow-y: auto; flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; text-align: left;">
+
+            <div
+                style="padding: 20px; overflow-y: auto; flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; text-align: left;">
                 <!-- Colonne Gauche -->
                 <div style="display: flex; flex-direction: column; gap: 15px;">
                     <div class="card" style="margin: 0;">
                         <h3 style="font-size: 14px; margin-bottom: 10px; color: #3b82f6;">Profil Utilisateur</h3>
                         <div class="form-group"><label>Nom</label><input type="text" id="set-profil-nom"></div>
                         <div class="form-group"><label>Prénom</label><input type="text" id="set-profil-prenom"></div>
-                        <div class="form-group"><label>Service / Unité</label><input type="text" id="set-profil-service"></div>
+                        <div class="form-group"><label>Service / Unité</label><input type="text"
+                                id="set-profil-service"></div>
                     </div>
                     <div class="card" style="margin: 0;">
-                        <h3 style="font-size: 14px; margin-bottom: 10px; color: #3b82f6;">Géo & Temps</h3>
-                        <div class="form-group"><label>Code Geo par défaut</label><input type="text" id="set-geo-code" placeholder="ex: 21, r27, FR"></div>
-                        <div class="form-group"><label>Année de référence par défaut</label><input type="number" id="set-geo-annee" value="2024"></div>
+                        <h3 style="font-size: 14px; margin-bottom: 10px; color: #3b82f6;">Période et code service par
+                            défaut</h3>
+                        <div class="form-group"><label>Code géographique défaut</label><input type="text"
+                                id="set-geo-code" placeholder="ex: 21, r27, FR"></div>
+                        <div class="form-group"><label>Année de référence par défaut</label><input type="number"
+                                id="set-geo-annee" value="2024"></div>
                     </div>
                     <div class="card" style="margin: 0;">
                         <h3 style="font-size: 14px; margin-bottom: 10px; color: #3b82f6;">Export & Rapports</h3>
-                        <div class="form-group"><label>Qualité des cartes (DPI)</label><input type="number" id="set-export-dpi" value="300"></div>
+                        <div class="form-group"><label>Qualité des cartes (DPI)</label><input type="number"
+                                id="set-export-dpi" value="300"></div>
                         <div class="form-group" style="display: flex; align-items: center; gap: 8px;">
                             <input type="checkbox" id="set-export-brutes" style="margin:0;">
-                            <label for="set-export-brutes" style="margin:0; cursor:pointer;">Inclure les données brutes en annexe</label>
+                            <label for="set-export-brutes" style="margin:0; cursor:pointer;">Inclure les données brutes
+                                en annexe</label>
                         </div>
                     </div>
                 </div>
                 <!-- Colonne Droite -->
                 <div style="display: flex; flex-direction: column; gap: 15px;">
                     <div class="card" style="margin: 0;">
-                        <h3 style="font-size: 14px; margin-bottom: 10px; color: #3b82f6;">Interface (UI)</h3>
+                        <h3 style="font-size: 14px; margin-bottom: 10px; color: #3b82f6;">Interface</h3>
                         <div class="form-group">
                             <label>Vue au lancement</label>
                             <select id="set-ui-vue">
@@ -612,24 +702,31 @@
                                 <option value="sombre">Sombre</option>
                             </select>
                         </div>
-                        <div class="form-group"><label>Zoom carte par défaut</label><input type="number" id="set-ui-zoom" value="8"></div>
+                        <div class="form-group"><label>Zoom carte par défaut</label><input type="number"
+                                id="set-ui-zoom" value="8"></div>
                     </div>
                     <div class="card" style="margin: 0;">
-                        <h3 style="font-size: 14px; margin-bottom: 10px; color: #3b82f6;">Système & Technique</h3>
-                        <div class="form-group"><label>Dossier d'export</label><input type="text" id="set-sys-dossier" placeholder="~/Documents/OFBilan_Exports"></div>
-                        <div class="form-group"><label>Proxy</label><input type="text" id="set-sys-proxy" placeholder="http://proxy:port"></div>
-                        <div class="form-group"><label>Port Serveur Local</label><input type="number" id="set-tech-port" value="5000"></div>
+                        <h3 style="font-size: 14px; margin-bottom: 10px; color: #3b82f6;">Paramètres avancés</h3>
+                        <div class="form-group"><label>Dossier d'export</label><input type="text" id="set-sys-dossier"
+                                placeholder="~/Documents/OFBilan_Exports"></div>
+                        <div class="form-group"><label>Proxy</label><input type="text" id="set-sys-proxy"
+                                placeholder="http://proxy:port"></div>
+                        <div class="form-group"><label>Port Serveur Local</label><input type="number" id="set-tech-port"
+                                value="8000"></div>
                         <div class="form-group" style="display: flex; align-items: center; gap: 8px; margin-top: 10px;">
                             <input type="checkbox" id="set-tech-debug" style="margin:0;">
-                            <label for="set-tech-debug" style="margin:0; cursor:pointer;">Activer le mode Débogage</label>
+                            <label for="set-tech-debug" style="margin:0; cursor:pointer;">Activer le mode
+                                Débogage</label>
                         </div>
                     </div>
                 </div>
             </div>
-            
-            <div style="padding: 15px 20px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 10px; background: #f8fafc; border-radius: 0 0 8px 8px;">
+
+            <div
+                style="padding: 15px 20px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 10px; background: #f8fafc; border-radius: 0 0 8px 8px;">
                 <button type="button" class="btn btn-secondary" onclick="closeSettingsModal()">Annuler</button>
-                <button type="button" class="btn btn-primary" id="btn-save-settings" onclick="saveSettings()">Enregistrer</button>
+                <button type="button" class="btn btn-primary" id="btn-save-settings"
+                    onclick="saveSettings()">Enregistrer</button>
             </div>
         </div>
     </div>
@@ -648,26 +745,32 @@
             try {
                 const res = await fetch('/api/settings');
                 const data = await res.json();
-                
-                document.getElementById('set-profil-nom').value = data.profil?.nom || '';
-                document.getElementById('set-profil-prenom').value = data.profil?.prenom || '';
-                document.getElementById('set-profil-service').value = data.profil?.service || '';
-                
-                document.getElementById('set-geo-code').value = data.geo?.code_geo_defaut || '';
-                document.getElementById('set-geo-annee').value = data.geo?.annee_reference || 2024;
-                
-                document.getElementById('set-ui-vue').value = data.ui?.vue_lancement || 'explorer';
-                document.getElementById('set-ui-theme').value = data.ui?.theme || 'clair';
-                document.getElementById('set-ui-zoom').value = data.ui?.zoom_defaut || 8;
-                
-                document.getElementById('set-export-dpi').value = data.export?.dpi || 300;
-                document.getElementById('set-export-brutes').checked = !!data.export?.inclure_donnees_brutes;
-                
-                document.getElementById('set-sys-dossier').value = data.systeme?.dossier_export || '';
-                document.getElementById('set-sys-proxy').value = data.systeme?.proxy || '';
-                
-                document.getElementById('set-tech-port').value = data.tech?.port_serveur || 5000;
-                document.getElementById('set-tech-debug').checked = !!data.tech?.mode_debug;
+
+                const profil = data.profil || {};
+                document.getElementById('set-profil-nom').value = profil.nom || '';
+                document.getElementById('set-profil-prenom').value = profil.prenom || '';
+                document.getElementById('set-profil-service').value = profil.service || '';
+
+                const geo = data.geo || {};
+                document.getElementById('set-geo-code').value = geo.code_geo_defaut || '';
+                document.getElementById('set-geo-annee').value = geo.annee_reference || 2024;
+
+                const ui = data.ui || {};
+                document.getElementById('set-ui-vue').value = ui.vue_lancement || 'explorer';
+                document.getElementById('set-ui-theme').value = ui.theme || 'clair';
+                document.getElementById('set-ui-zoom').value = ui.zoom_defaut || 8;
+
+                const exportData = data.export || {};
+                document.getElementById('set-export-dpi').value = exportData.dpi || 300;
+                document.getElementById('set-export-brutes').checked = !!exportData.inclure_donnees_brutes;
+
+                const systeme = data.systeme || {};
+                document.getElementById('set-sys-dossier').value = systeme.dossier_export || '';
+                document.getElementById('set-sys-proxy').value = systeme.proxy || '';
+
+                const tech = data.tech || {};
+                document.getElementById('set-tech-port').value = tech.port_serveur || 5000;
+                document.getElementById('set-tech-debug').checked = !!tech.mode_debug;
             } catch (err) {
                 console.error("Erreur chargement paramètres:", err);
             }
@@ -723,62 +826,70 @@
                 btn.disabled = false;
             }
         }
-        
+
         function restartServer() {
-            if(confirm('Voulez-vous vraiment redémarrer le serveur local ?\n(Nécessaire uniquement si vous avez mis à jour les données géographiques brutes)')) {
-                // Montrer l'écran de chargement immédiatement
-                document.body.innerHTML = `
-                <div style="display:flex;justify-content:center;align-items:center;height:100vh;background-color:#003A76;color:white;flex-direction:column;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-                    <img src="logo.svg" alt="OFBilan Logo" style="width:350px;height:auto;margin-bottom:30px;">
-                    <div style="width:40px;height:40px;border:4px solid rgba(255,255,255,0.3);border-radius:50%;border-top-color:#fff;animation:spin 1s ease-in-out infinite;"></div>
-                    <div style="margin-top:20px;letter-spacing:2px;font-weight:300;font-size:1.2rem;">REDÉMARRAGE DU SERVEUR...</div>
-                    <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
-                </div>`;
-                
-                fetch('/api/restart').catch(() => {});
-                
+            if (confirm('Voulez-vous vraiment redémarrer le serveur local ?\n(Nécessaire uniquement si vous avez mis à jour les données géographiques brutes)')) {
+                document.body.innerHTML = '<div style="display:flex;justify-content:center;align-items:center;height:100vh;background-color:#003A76;color:white;flex-direction:column;font-family:-apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, Helvetica, Arial, sans-serif;">' +
+                    '<img src="logo.svg" alt="OFBilan Logo" style="width:350px;height:auto;margin-bottom:30px;">' +
+                    '<div style="width:40px;height:40px;border:4px solid rgba(255,255,255,0.3);border-radius:50%;border-top-color:#fff;animation:spin 1s ease-in-out infinite;"><\/div>' +
+                    '<div style="margin-top:20px;letter-spacing:2px;font-weight:300;font-size:1.2rem;">REDÉMARRAGE DU SERVEUR...<\/div>' +
+                    '<style>@keyframes spin { to { transform: rotate(360deg); } }<\/style>' +
+                '<\/div>';
+
+                fetch('/api/restart').catch(() => { });
+
                 let retries = 0;
                 function pollServer() {
                     setTimeout(() => {
-                        fetch('/api/version?t=' + Date.now())
-                        .then(response => {
-                            if (response.ok) {
-                                setTimeout(() => window.location.reload(), 1000);
-                            } else {
-                                pollServer();
-                            }
-                        })
-                        .catch(() => {
-                            retries++;
-                            if (retries < 120) {
-                                pollServer();
-                            } else {
-                                const msg = document.createElement('div');
-                                msg.style = 'color:#D95C4A;margin-top:20px;font-size:1.2rem;';
-                                msg.innerText = 'Délai d\'attente dépassé. Veuillez recharger manuellement.';
-                                document.body.appendChild(msg);
-                            }
-                        });
+                        fetch('/api/preload-status?t=' + Date.now())
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data && data.status === 'ready') {
+                                    setTimeout(() => window.location.reload(), 1000);
+                                } else {
+                                    pollServer();
+                                }
+                            })
+                            .catch(() => {
+                                retries++;
+                                if (retries < 120) {
+                                    pollServer();
+                                } else {
+                                    const msg = document.createElement('div');
+                                    msg.style = 'color:#D95C4A;margin-top:20px;font-size:1.2rem;';
+                                    msg.innerText = 'Délai d\'attente dépassé. Veuillez recharger manuellement.';
+                                    document.body.appendChild(msg);
+                                }
+                            });
                     }, 500);
                 }
-                
-                // Attendre un peu que le serveur s'éteigne avant de commencer le polling
+
                 setTimeout(pollServer, 2000);
             }
         }
 
         function shutdownServer() {
-            if(confirm('Voulez-vous vraiment éteindre le serveur local ?\nVous devrez relancer le script pour utiliser à nouveau l\'application.')) {
-                document.body.innerHTML = `
-                <div style="display:flex;justify-content:center;align-items:center;height:100vh;background-color:#1e293b;color:white;flex-direction:column;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-                    <div style="font-size: 3rem; margin-bottom: 20px;">⏻</div>
-                    <div style="letter-spacing:2px;font-weight:300;font-size:1.2rem;">SERVEUR ÉTEINT</div>
-                    <div style="margin-top: 15px; color: #94a3b8;">Vous pouvez fermer cet onglet.</div>
-                </div>`;
-                
-                fetch('/api/shutdown').catch(() => {});
+            if (confirm('Voulez-vous vraiment éteindre le serveur local ?\nVous devrez relancer le script pour utiliser à nouveau l\'application.')) {
+                document.body.innerHTML = '<div style="display:flex;justify-content:center;align-items:center;height:100vh;background-color:#1e293b;color:white;flex-direction:column;font-family:-apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, Helvetica, Arial, sans-serif;">' +
+                    '<div style="font-size: 3rem; margin-bottom: 20px;">⏻<\/div>' +
+                    '<div style="letter-spacing:2px;font-weight:300;font-size:1.2rem;">SERVEUR ÉTEINT<\/div>' +
+                    '<div style="margin-top: 15px; color: #94a3b8;">Vous pouvez fermer cet onglet.<\/div>' +
+                '<\/div>';
+
+                fetch('/api/shutdown').catch(() => { });
             }
         }
+        // Vérification des mises à jour
+        fetch('/api/check_update')
+            .then(res => res.json())
+            .then(data => {
+                if (data.update_available) {
+                    document.getElementById('update-version').innerText = data.latest_version;
+                    document.getElementById('update-link').href = data.zip_url;
+                    document.getElementById('update-banner').classList.remove('hidden');
+                }
+            })
+            .catch(err => console.error("Erreur vérification MAJ :", err));
     </script>
 </body>
 

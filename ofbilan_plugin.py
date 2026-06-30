@@ -46,9 +46,16 @@ class OFBilanPlugin:
 
     def run(self):
         """Logique exécutée au clic sur le bouton."""
+        port = 8000
+        try:
+            from .core.parametres_utilisateur import lire_parametres
+            port = int(lire_parametres().get("tech", {}).get("port_serveur", 8000))
+        except Exception:
+            pass
+
         if self.server_process and self.server_process.poll() is None:
             QMessageBox.information(self.iface.mainWindow(), "OFBilan", "Le serveur OFBilan est déjà en cours d'exécution.\nOuverture du navigateur...")
-            webbrowser.open('http://localhost:8000/explorer.html')
+            webbrowser.open(f'http://localhost:{port}/explorer.html')
             return
 
         # Configuration de l'environnement pour importer 'core'
@@ -76,7 +83,7 @@ class OFBilanPlugin:
             
             # Ouverture immédiate de la page de chargement (qui attendra le serveur)
             loading_html = os.path.join(self.plugin_dir, 'core', 'web', 'loading.html')
-            webbrowser.open(f"file:///{loading_html.replace(os.sep, '/')}")
+            webbrowser.open(f"file:///{loading_html.replace(os.sep, '/')}?port={port}")
             
             self.iface.messageBar().pushMessage("OFBilan", "Démarrage du serveur web...", level=0, duration=3)
             

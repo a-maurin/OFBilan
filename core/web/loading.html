@@ -82,8 +82,16 @@
     </div>
 
     <script>
-        const targetUrl = 'http://localhost:8000/explorer.html';
-        const statusUrl = 'http://localhost:8000/api/preload-status';
+        const urlParams = new URLSearchParams(window.location.search);
+        let port = urlParams.get('port');
+        if (!port && window.location.port) {
+            port = window.location.port;
+        }
+        if (!port) {
+            port = '8000';
+        }
+        const targetUrl = `http://localhost:${port}/explorer.html`;
+        const statusUrl = `http://localhost:${port}/api/preload-status`;
         let retries = 0;
         const maxRetries = 120; // 60 secondes (120 * 500ms)
 
