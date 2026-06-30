@@ -290,140 +290,150 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             super().do_GET()
 
     def do_POST(self):
-        if self.path == "/api/settings":
+        import urllib.parse
+        from pathlib import Path
+        parsed_path = urllib.parse.urlparse(self.path).path
+
+        if parsed_path == "/api/settings":
+            content_length = int(self.headers['Content-Length'])
+            post_data = self.rfile.read(content_length)
+            nouveaux_parametres = json.loads(post_data.decode('utf-8'))
+            
+            from core.parametres_utilisateur import lire_parametres, sauvegarder_parametres
+            sauvegarder_parametres(nouveaux_parametres)
+            
+            parametres_mis_a_jour = lire_parametres()
+            
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json; charset=utf-8')
+            self.end_headers()
+            self.wfile.write(json.dumps(parametres_mis_a_jour).encode('utf-8'))
+            return
+
+        elif parsed_path == "/api/generate":
             try:
                 content_length = int(self.headers['Content-Length'])
                 post_data = self.rfile.read(content_length)
-                nouveaux_parametres = json.loads(post_data.decode('utf-8'))
-                
-                from core.parametres_utilisateur import sauvegarder_parametres, lire_parametres
-                sauvegarder_parametres(nouveaux_parametres)
-                
-                parametres_mis_a_jour = lire_parametres()
-                
+                params = json.loads(post_data.decode('utf-8'))
+
+                # Construction des arguments pour point_entree_cli.py
+                cli_path = Path(__file__).resolve().parents[1] / "point_entree_cli.py"
+                cmd = [sys.executable, str(cli_path)]
+
+                # Paramètres de base
+                if params.get("profil"):
+                    cmd.extend(["--profil", str(params["profil"])])
+                if params.get("date-deb"):
+                    cmd.extend(["--date-deb", str(params["date-deb"])])
+                if params.get("date-fin"):
+                    cmd.extend(["--date-fin", str(params["date-fin"])])
+                if params.get("echelle"):
+                    cmd.extend(["--echelle", str(params["echelle"])])
+                if params.get("code"):
+                    cmd.extend(["--code", str(params["code"])])
+                if params.get("type-usager"):
+                    cmd.extend(["--type-usager", str(params["type-usager"])])
+                if params.get("domaines"):
+                    for d in params["domaines"]:
+                        if str(d).strip():
+                            cmd.extend(["--domaine", str(d).strip()])
+                if params.get("themes"):
+                    for t in params["themes"]:
+                        if str(t).strip():
+                            cmd.extend(["--theme", str(t).strip()])
+                if params.get("types_action"):
+                    for a in params["types_action"]:
+                        if str(a).strip():
+                            cmd.extend(["--type-action", str(a).strip()])
+                if params.get("diffusion"):
+                    cmd.extend(["--diffusion", str(params["diffusion"])])
+                if params.get("preset"):
+                    cmd.extend(["--preset", str(params["preset"])])
+
+                # Options oui/non (cartes, pnf, brochure)
+                if params.get("cartes") is True:
+                    cmd.append("--cartes")
+                    if isinstance(params.get("cartes_selection"), list):
+                        for c in params["cartes_selection"]:
+                            c_clean = str(c).strip()
+                            if c_clean:
+                                cmd.extend(["--carte", c_clean])
+                elif params.get("cartes") is False:
+                    cmd.append("--no-cartes")
+
+                if params.get("pnf") is True:
+                    cmd.append("--pnf")
+                elif params.get("pnf") is False:
+                    cmd.append("--no-pnf")
+
+                if params.get("brochure") is True:
+                    cmd.append("--brochure")
+                elif params.get("brochure") is False:
+                    cmd.append("--no-brochure")
+
+                # Désactiver l'ouverture automatique du PDF sous Windows lors du run de la GUI
+                cmd.append("--no-open")
+
+                # Répondre avec un flux de texte en temps réel (chunked)
                 self.send_response(200)
-                self.send_header('Content-Type', 'application/json; charset=utf-8')
+                self.send_header('Content-Type', 'text/plain; charset=utf-8')
+                self.send_header('Cache-Control', 'no-cache')
                 self.end_headers()
-                self.wfile.write(json.dumps(parametres_mis_a_jour).encode('utf-8'))
+
+                # Lancement du processus
+                self.wfile.write(f"> Commande : {' '.join(cmd)}\n\n".encode('utf-8'))
+                self.wfile.flush()
+
+                try:
+                    # On force PYTHONPATH pour que le module ofbilan soit résolu correctement
+                    env = os.environ.copy()
+                    project_root = str(Path(__file__).resolve().parents[2])
+                    src_dir = str(Path(__file__).resolve().parents[2])
+                    env["PYTHONPATH"] = src_dir + os.pathsep + project_root + os.pathsep + env.get("PYTHONPATH", "")
+                    env["PYTHONIOENCODING"] = "utf-8"
+
+                    process = subprocess.Popen(
+                        cmd,
+                        stdin=subprocess.DEVNULL,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        text=True,
+                        bufsize=1,
+                        encoding='utf-8',
+                        errors='replace',
+                        cwd=project_root,
+                        env=env
+                    )
+
+                    while True:
+                        line = process.stdout.readline()
+                        if not line and process.poll() is not None:
+                            break
+                        if line:
+                            self.wfile.write(line.encode('utf-8'))
+                            self.wfile.flush()
+
+                    process.wait()
+                    if process.returncode == 0:
+                        self.wfile.write("\n[SUCCESS] Génération terminée avec succès.\n".encode('utf-8'))
+                    else:
+                        self.wfile.write(f"\n[ERREUR] Le processus s'est arrêté avec le code d'erreur {process.returncode}.\n".encode('utf-8'))
+                except Exception as e:
+                    self.wfile.write(f"\n[ERREUR] Impossible de lancer le traitement : {e}\n".encode('utf-8'))
+                self.wfile.flush()
+
             except Exception as e:
-                self.send_response(500)
-                self.send_header('Content-Type', 'application/json; charset=utf-8')
-                self.end_headers()
-                self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
-            return
+                import traceback
+                traceback.print_exc()
+                try:
+                    self.send_response(500)
+                    self.send_header('Content-Type', 'text/plain; charset=utf-8')
+                    self.end_headers()
+                    self.wfile.write(f"ERREUR CATASTROPHIQUE SERVEUR: {str(e)}".encode('utf-8'))
+                except Exception:
+                    pass
 
-        if self.path == "/api/generate":
-            content_length = int(self.headers['Content-Length'])
-            post_data = self.rfile.read(content_length)
-            params = json.loads(post_data.decode('utf-8'))
-
-            # Construction des arguments pour point_entree_cli.py
-            cli_path = Path(__file__).resolve().parents[1] / "point_entree_cli.py"
-            cmd = [sys.executable, str(cli_path)]
-
-            # Paramètres de base
-            if params.get("profil"):
-                cmd.extend(["--profil", str(params["profil"])])
-            if params.get("date-deb"):
-                cmd.extend(["--date-deb", str(params["date-deb"])])
-            if params.get("date-fin"):
-                cmd.extend(["--date-fin", str(params["date-fin"])])
-            if params.get("echelle"):
-                cmd.extend(["--echelle", str(params["echelle"])])
-            if params.get("code"):
-                cmd.extend(["--code", str(params["code"])])
-            if params.get("type-usager"):
-                cmd.extend(["--type-usager", str(params["type-usager"])])
-            if params.get("domaines"):
-                for d in params["domaines"]:
-                    if str(d).strip():
-                        cmd.extend(["--domaine", str(d).strip()])
-            if params.get("themes"):
-                for t in params["themes"]:
-                    if str(t).strip():
-                        cmd.extend(["--theme", str(t).strip()])
-            if params.get("types_action"):
-                for a in params["types_action"]:
-                    if str(a).strip():
-                        cmd.extend(["--type-action", str(a).strip()])
-            if params.get("diffusion"):
-                cmd.extend(["--diffusion", str(params["diffusion"])])
-            if params.get("preset"):
-                cmd.extend(["--preset", str(params["preset"])])
-
-            # Options oui/non (cartes, pnf, brochure)
-            if params.get("cartes") is True:
-                cmd.append("--cartes")
-                if isinstance(params.get("cartes_selection"), list):
-                    for c in params["cartes_selection"]:
-                        c_clean = str(c).strip()
-                        if c_clean:
-                            cmd.extend(["--carte", c_clean])
-            elif params.get("cartes") is False:
-                cmd.append("--no-cartes")
-
-            if params.get("pnf") is True:
-                cmd.append("--pnf")
-            elif params.get("pnf") is False:
-                cmd.append("--no-pnf")
-
-            if params.get("brochure") is True:
-                cmd.append("--brochure")
-            elif params.get("brochure") is False:
-                cmd.append("--no-brochure")
-
-            # Désactiver l'ouverture automatique du PDF sous Windows lors du run de la GUI
-            cmd.append("--no-open")
-
-            # Répondre avec un flux de texte en temps réel (chunked)
-            self.send_response(200)
-            self.send_header('Content-Type', 'text/plain; charset=utf-8')
-            self.send_header('Cache-Control', 'no-cache')
-            self.end_headers()
-
-            # Lancement du processus
-            self.wfile.write(f"> Commande : {' '.join(cmd)}\n\n".encode('utf-8'))
-            self.wfile.flush()
-
-            try:
-                # On force PYTHONPATH pour que le module ofbilan soit résolu correctement
-                env = os.environ.copy()
-                project_root = str(Path(__file__).resolve().parents[3])
-                src_dir = str(Path(__file__).resolve().parents[2])
-                env["PYTHONPATH"] = src_dir + os.pathsep + project_root + os.pathsep + env.get("PYTHONPATH", "")
-                env["PYTHONIOENCODING"] = "utf-8"
-
-                process = subprocess.Popen(
-                    cmd,
-                    stdin=subprocess.DEVNULL,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    bufsize=1,
-                    encoding='utf-8',
-                    errors='replace',
-                    cwd=project_root,
-                    env=env
-                )
-
-                while True:
-                    line = process.stdout.readline()
-                    if not line and process.poll() is not None:
-                        break
-                    if line:
-                        self.wfile.write(line.encode('utf-8'))
-                        self.wfile.flush()
-
-                process.wait()
-                if process.returncode == 0:
-                    self.wfile.write("\n[SUCCESS] Génération terminée avec succès.\n".encode('utf-8'))
-                else:
-                    self.wfile.write(f"\n[ERREUR] Le processus s'est arrêté avec le code d'erreur {process.returncode}.\n".encode('utf-8'))
-            except Exception as e:
-                self.wfile.write(f"\n[ERREUR] Impossible de lancer le traitement : {e}\n".encode('utf-8'))
-            
-            self.wfile.flush()
-        elif self.path == "/api/data":
+        elif parsed_path == "/api/data":
             try:
                 import datetime
                 from pathlib import Path
