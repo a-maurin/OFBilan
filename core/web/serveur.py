@@ -96,6 +96,39 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             }).encode('utf-8'))
             return
 
+        if parsed_path == "/api/update-sources":
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/event-stream; charset=utf-8')
+            self.send_header('Cache-Control', 'no-cache')
+            self.send_header('Connection', 'keep-alive')
+            self.end_headers()
+            
+            script_path = SRC_DIR / "scripts" / "fetch_sources.py"
+            import subprocess
+            try:
+                process = subprocess.Popen(
+                    [sys.executable, "-u", str(script_path)],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1,
+                    cwd=str(SRC_DIR)
+                )
+                for line in iter(process.stdout.readline, ''):
+                    if not line: break
+                    msg = f"data: {line.strip()}\n\n"
+                    self.wfile.write(msg.encode('utf-8'))
+                    self.wfile.flush()
+                process.wait()
+                msg = f"data: [TERMINE] Code de retour: {process.returncode}\n\n"
+                self.wfile.write(msg.encode('utf-8'))
+                self.wfile.flush()
+            except Exception as e:
+                msg = f"data: [ERREUR] {str(e)}\n\n"
+                self.wfile.write(msg.encode('utf-8'))
+                self.wfile.flush()
+            return
+
         if parsed_path == "/api/check_update":
             import urllib.request
             import ssl

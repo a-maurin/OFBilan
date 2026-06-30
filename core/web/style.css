@@ -49,6 +49,50 @@ body.page-editor {
 .app-nav {
     display: flex;
     gap: 15px;
+    align-items: center;
+}
+
+.burger-btn {
+    display: none;
+    background: none;
+    border: none;
+    color: white;
+    font-size: 24px;
+    cursor: pointer;
+    margin-left: auto;
+}
+
+@media (max-width: 900px) {
+    .burger-btn {
+        display: block;
+    }
+    
+    .app-nav {
+        display: none;
+        flex-direction: column;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background-color: var(--color-primary);
+        padding: 15px;
+        z-index: 1000;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+    }
+    
+    .app-nav.open {
+        display: flex;
+    }
+    
+    .header-container {
+        position: relative;
+    }
+    
+    .nav-item {
+        margin-left: 0 !important;
+        width: 100%;
+        text-align: left;
+    }
 }
 
 .nav-item {
@@ -59,6 +103,7 @@ body.page-editor {
     padding: 6px 20px;
     border-radius: 20px;
     transition: all 0.2s ease;
+    white-space: nowrap;
 }
 
 .nav-item:hover {
