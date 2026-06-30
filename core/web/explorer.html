@@ -235,7 +235,19 @@
             <div class="logo-area">
                 <img src="logo.svg" alt="Bandeau OFBilan" class="header-logo">
             </div>
+            
+            <div id="update-console-container" class="hidden" style="position: absolute; top: 10px; right: 20px; width: 350px; background: #1e1e1e; border: 1px solid #333; border-radius: 6px; z-index: 9999; box-shadow: 0 4px 12px rgba(0,0,0,0.5); display: flex; flex-direction: column;">
+                <div style="background: #333; color: white; padding: 5px 10px; font-size: 12px; border-top-left-radius: 6px; border-top-right-radius: 6px; font-family: monospace;">Terminal - Mise à jour</div>
+                <div id="update-console-output" style="padding: 10px; height: 200px; overflow-y: auto; color: #00ff00; font-family: monospace; font-size: 11px; white-space: pre-wrap;"></div>
+            </div>
+
             <nav class="app-nav">
+                <button id="btn-update-sources" class="nav-item" style="margin-left: auto; background:none; border:none; cursor:pointer; color: #cbd5e1; display:flex; align-items:center; gap:5px; font-weight:600;" title="Mettre à jour les sources">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                      <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5"/>
+                      <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708z"/>
+                    </svg>
+                </button>
                 <a href="explorer.html" class="nav-item active">Analyse Interactive</a>
                 <a href="index.html" class="nav-item">Éditeur de Bilans</a>
                 <a href="#" onclick="restartServer(); return false;" class="nav-item"
@@ -256,6 +268,46 @@
             </nav>
         </div>
     </header>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const btnUpdate = document.getElementById('btn-update-sources');
+            if(btnUpdate) {
+                btnUpdate.addEventListener('click', function() {
+                    const consoleContainer = document.getElementById('update-console-container');
+                    const consoleOutput = document.getElementById('update-console-output');
+                    
+                    consoleContainer.classList.remove('hidden');
+                    consoleContainer.style.display = 'flex';
+                    consoleOutput.innerHTML = "Démarrage de la mise à jour...\n";
+                    
+                    const evtSource = new EventSource("/api/update-sources");
+                    
+                    evtSource.onmessage = function(event) {
+                        consoleOutput.innerHTML += event.data + "\n";
+                        consoleOutput.scrollTop = consoleOutput.scrollHeight;
+                        
+                        if (event.data.startsWith("[TERMINE]") || event.data.startsWith("[ERREUR]")) {
+                            evtSource.close();
+                            setTimeout(() => {
+                                consoleContainer.style.display = 'none';
+                                consoleContainer.classList.add('hidden');
+                            }, 3000);
+                        }
+                    };
+                    
+                    evtSource.onerror = function() {
+                        consoleOutput.innerHTML += "[ERREUR] Connexion SSE perdue.\n";
+                        evtSource.close();
+                        setTimeout(() => {
+                            consoleContainer.style.display = 'none';
+                            consoleContainer.classList.add('hidden');
+                        }, 3000);
+                    };
+                });
+            }
+        });
+    </script>
 
     <div id="update-banner" class="hidden"
         style="background-color: #003A76; color: #ffffff; text-align: center; padding: 10px; font-weight: bold; position: relative; z-index: 1000; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
