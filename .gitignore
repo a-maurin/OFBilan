@@ -147,3 +147,6 @@ secrets.*
 # Archives et fichiers lourds
 ############################
 data/sources_archive/
+releases/
+*.zip
+*.7z
