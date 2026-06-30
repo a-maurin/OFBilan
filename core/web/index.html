@@ -54,12 +54,18 @@
                         consoleOutput.innerHTML += event.data + "\n";
                         consoleOutput.scrollTop = consoleOutput.scrollHeight;
                         
-                        if (event.data.startsWith("[TERMINE]") || event.data.startsWith("[ERREUR]")) {
+                        if (event.data.startsWith("[TERMINE]")) {
+                            evtSource.close();
+                            consoleOutput.innerHTML += "\nMise à jour terminée. Redémarrage du serveur...\n";
+                            setTimeout(() => {
+                                restartServer();
+                            }, 2000);
+                        } else if (event.data.startsWith("[ERREUR]")) {
                             evtSource.close();
                             setTimeout(() => {
                                 consoleContainer.style.display = 'none';
                                 consoleContainer.classList.add('hidden');
-                            }, 3000); // Disparaît après 3s
+                            }, 3000);
                         }
                     };
                     
