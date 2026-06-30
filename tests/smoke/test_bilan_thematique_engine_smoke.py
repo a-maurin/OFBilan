@@ -9,9 +9,11 @@ def _minimal_point_df() -> pd.DataFrame:
                 "date_ctrl": pd.Timestamp("2025-01-15"),
                 "dc_id": 1,
                 "num_depart": "21",
+                "insee_comm": "21000",
                 "theme": "Chasse",
                 "type_actio": "Contrôle",
                 "type_usager": "Particulier",
+                "resultat": "Sans manquement",
             }
         ]
     )
@@ -28,7 +30,7 @@ def test_run_engine_smoke(monkeypatch, tmp_path: Path) -> None:
     Ce test ne vérifie pas le contenu des résultats, seulement que le moteur
     peut s'exécuter sur un profil simple sans dépendre des sources réelles.
     """
-    import ofbilan.engine.orchestrateur_profils as engine
+    import core.engine.orchestrateur_profils as engine
 
     # Profils : on force un profil minimal en surchargeant load_profile_config.
     def _dummy_profile(root: Path, profil_id: str) -> dict:
@@ -107,9 +109,9 @@ def test_run_engine_smoke(monkeypatch, tmp_path: Path) -> None:
 
 def test_run_engine_global_pipeline_smoke(monkeypatch, tmp_path: Path) -> None:
     """Test de fumée explicite du pipeline global via run_engine('global')."""
-    import ofbilan.engine.orchestrateur_profils as engine
-    core_mod = __import__("ofbilan.engine.agregations_profil", fromlist=["_dummy"])
-    pdf_mod = __import__("ofbilan.engine.generation_pdf_profil", fromlist=["_dummy"])
+    import core.engine.orchestrateur_profils as engine
+    core_mod = __import__("core.engine.agregations_profil", fromlist=["_dummy"])
+    pdf_mod = __import__("core.engine.generation_pdf_profil", fromlist=["_dummy"])
 
     def _dummy_profile(root: Path, profil_id: str) -> dict:
         return {
@@ -130,13 +132,18 @@ def test_run_engine_global_pipeline_smoke(monkeypatch, tmp_path: Path) -> None:
 
     monkeypatch.setattr(engine, "load_profile_config", _dummy_profile)
     monkeypatch.setattr(engine, "load_point_ctrl", lambda *args, **kwargs: _minimal_point_df())
-    monkeypatch.setattr(engine, "load_pej", lambda *args, **kwargs: _minimal_empty_df())
-    monkeypatch.setattr(engine, "load_pa", lambda *args, **kwargs: _minimal_empty_df())
-    monkeypatch.setattr(engine, "load_pve", lambda *args, **kwargs: _minimal_empty_df())
+    monkeypatch.setattr(engine, "load_pej", lambda *args, **kwargs: pd.DataFrame(columns=["DC_ID"]))
+    monkeypatch.setattr(engine, "load_pa", lambda *args, **kwargs: pd.DataFrame(columns=["DC_ID"]))
+    monkeypatch.setattr(engine, "load_pve", lambda *args, **kwargs: pd.DataFrame(columns=["INF-INSEE", "inf_gps_long", "inf_gps_lat"]))
     monkeypatch.setattr(engine, "ensure_insee_from_communes_shp", lambda df, *args, **kwargs: df)
     monkeypatch.setattr(core_mod, "run_profile_aggregations", lambda *args, **kwargs: None)
     monkeypatch.setattr(pdf_mod, "generate_" + "profile" + "_pdf_report", lambda *args, **kwargs: None)
-    monkeypatch.setattr(engine, "get_out_dir", lambda subdir: tmp_path / subdir)
+    def _dummy_get_out(subdir: str) -> Path:
+        d = tmp_path / subdir
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+        
+    monkeypatch.setattr(engine, "get_out_dir", _dummy_get_out)
 
     ret = engine.run_engine("global", "2025-01-01", "2025-12-31", "departement", "21", options={})
     assert isinstance(ret, int)
@@ -147,7 +154,7 @@ def test_restrict_geo_pnf_pa_uses_manquement_controls(monkeypatch) -> None:
     Vérifie la règle métier PA : sous restriction PNF, seuls les DC_ID des
     contrôles en Manquement sont conservés pour les PA.
     """
-    import ofbilan.engine.orchestrateur_profils as engine
+    import core.engine.orchestrateur_profils as engine
 
     point = pd.DataFrame(
         [
@@ -178,7 +185,7 @@ def test_restrict_geo_pnf_sig_mask_or_insee(monkeypatch) -> None:
     Si l'INSEE n'est pas dans le référentiel tabulaire PNF mais que le masque
     SIG indique une localisation dans le parc, les lignes doivent être conservées.
     """
-    import ofbilan.engine.orchestrateur_profils as engine
+    import core.engine.orchestrateur_profils as engine
 
     point = pd.DataFrame(
         [

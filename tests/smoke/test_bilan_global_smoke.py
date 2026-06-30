@@ -25,7 +25,7 @@ def _minimal_point_df() -> pd.DataFrame:
 
 def test_analyse_controles_global_minimal(tmp_path: Path) -> None:
     """Vérifie que l'agrégation des contrôles globaux fonctionne sur un jeu réduit."""
-    core_mod = __import__("ofbilan.engine.agregations_profil", fromlist=["_dummy"])
+    core_mod = __import__("core.engine.agregations_profil", fromlist=["_dummy"])
     analyse_controles = getattr(core_mod, "analyse_controles_" + "global")
 
     df = _minimal_point_df()
@@ -48,7 +48,7 @@ def test_analyse_controles_global_minimal(tmp_path: Path) -> None:
 
 
 def test_analyse_controles_global_consolide_exports_usagers_par_fc_id(tmp_path: Path) -> None:
-    core_mod = __import__("ofbilan.engine.agregations_profil", fromlist=["_dummy"])
+    core_mod = __import__("core.engine.agregations_profil", fromlist=["_dummy"])
     analyse_controles = getattr(core_mod, "analyse_controles_" + "global")
 
     df = pd.DataFrame(
@@ -103,8 +103,8 @@ def test_run_global_smoke(monkeypatch, tmp_path: Path) -> None:
     L'objectif est uniquement de vérifier que la fonction s'exécute sans erreur
     sur un jeu minimal, sans dépendre des fichiers sources réels.
     """
-    import ofbilan.engine.orchestrateur_profils as engine
-    pdf_mod = __import__("ofbilan.engine.generation_pdf_profil", fromlist=["_dummy"])
+    import core.engine.orchestrateur_profils as engine
+    pdf_mod = __import__("core.engine.generation_pdf_profil", fromlist=["_dummy"])
 
     # Chargeurs minimaux : renvoient de petits DataFrame ou des DataFrame vides.
     minimal_point = _minimal_point_df()

@@ -1,7 +1,7 @@
 from reportlab.pdfbase import pdfmetrics
 
-from ofbilan.common.ofb_charte import FONT_FAMILY
-from ofbilan.common.pdf_utils import truncate_text_to_width
+from core.common.ofb_charte import FONT_FAMILY
+from core.common.pdf_utils import truncate_text_to_width
 
 
 def test_truncate_text_to_width_fits_one_line() -> None:

@@ -11,7 +11,7 @@ def test_load_point_ctrl_missing_required_columns(monkeypatch, tmp_path: Path) -
     Vérifie que load_point_ctrl lève une erreur explicite si une colonne
     obligatoire est absente du GPKG.
     """
-    import ofbilan.common.chargeurs_donnees as loaders
+    import core.common.chargeurs_donnees as loaders
 
     root = tmp_path
     sources_sig = root / "data" / "sources" / "sig"
@@ -41,7 +41,7 @@ def test_load_point_ctrl_missing_required_columns(monkeypatch, tmp_path: Path) -
         )
         return gpd.GeoDataFrame(df)
 
-    monkeypatch.setattr("ofbilan.common.chargeurs_donnees.gpd.read_file", fake_read_file)
+    monkeypatch.setattr("core.common.chargeurs_donnees.gpd.read_file", fake_read_file)
 
     # Appel : on s'attend à une KeyError pour date_ctrl manquant.
     with pytest.raises(KeyError):
@@ -55,7 +55,7 @@ def test_load_communes_centroides_missing_insee_column(monkeypatch, tmp_path: Pa
     Vérifie que load_communes_centroides signale proprement l'absence de
     colonne de code INSEE dans le CSV.
     """
-    import ofbilan.common.chargeurs_donnees as loaders
+    import core.common.chargeurs_donnees as loaders
 
     root = tmp_path
     sig_dir = root / "ref" / "programme" / "sig"
@@ -70,7 +70,7 @@ def test_load_communes_centroides_missing_insee_column(monkeypatch, tmp_path: Pa
 
 def test_enrich_with_commune_from_geometry_adds_insee_and_name(monkeypatch, tmp_path: Path) -> None:
     """Vérifie la jointure spatiale commune -> INSEE + nom."""
-    import ofbilan.common.chargeurs_donnees as loaders
+    import core.common.chargeurs_donnees as loaders
 
     root = tmp_path
     shp_dir = root / "ref" / "programme" / "sig" / "communes_21"
@@ -94,7 +94,7 @@ def test_enrich_with_commune_from_geometry_adds_insee_and_name(monkeypatch, tmp_
     def fake_read_file(*args: Any, **kwargs: Any) -> gpd.GeoDataFrame:
         return communes
 
-    monkeypatch.setattr("ofbilan.common.chargeurs_donnees.gpd.read_file", fake_read_file)
+    monkeypatch.setattr("core.common.chargeurs_donnees.gpd.read_file", fake_read_file)
 
     out = loaders.enrich_with_commune_from_geometry(point, root)
 
@@ -106,7 +106,7 @@ def test_enrich_with_commune_from_geometry_adds_insee_and_name(monkeypatch, tmp_
 
 def test_enrich_with_commune_from_geometry_requires_geometry_column(tmp_path: Path) -> None:
     """Vérifie le message d'erreur explicite sans géométrie."""
-    import ofbilan.common.chargeurs_donnees as loaders
+    import core.common.chargeurs_donnees as loaders
 
     root = tmp_path
     df = pd.DataFrame({"id": [1]})
@@ -116,7 +116,7 @@ def test_enrich_with_commune_from_geometry_requires_geometry_column(tmp_path: Pa
 
 def test_ensure_insee_from_communes_shp_builds_from_xy(monkeypatch, tmp_path: Path) -> None:
     """Lot 2 : points de contrôle sans insee_comm mais avec x/y -> jointure communes.shp."""
-    import ofbilan.common.chargeurs_donnees as loaders
+    import core.common.chargeurs_donnees as loaders
 
     root = tmp_path
     shp_dir = root / "ref" / "programme" / "sig" / "communes_21"
@@ -135,7 +135,7 @@ def test_ensure_insee_from_communes_shp_builds_from_xy(monkeypatch, tmp_path: Pa
     def fake_read_file(*args: Any, **kwargs: Any) -> gpd.GeoDataFrame:
         return communes
 
-    monkeypatch.setattr("ofbilan.common.chargeurs_donnees.gpd.read_file", fake_read_file)
+    monkeypatch.setattr("core.common.chargeurs_donnees.gpd.read_file", fake_read_file)
 
     df = pd.DataFrame({"dc_id": ["a"], "x": [5.04], "y": [47.32]})
     out = loaders.ensure_insee_from_communes_shp(df, root, context="test")
@@ -146,7 +146,7 @@ def test_ensure_insee_from_communes_shp_builds_from_xy(monkeypatch, tmp_path: Pa
 
 def test_ensure_insee_from_communes_shp_builds_from_xy_faits(monkeypatch, tmp_path: Path) -> None:
     """PEJ : x_faits / y_faits sans insee_comm -> jointure communes.shp."""
-    import ofbilan.common.chargeurs_donnees as loaders
+    import core.common.chargeurs_donnees as loaders
 
     root = tmp_path
     shp_dir = root / "ref" / "programme" / "sig" / "communes_21"
@@ -165,7 +165,7 @@ def test_ensure_insee_from_communes_shp_builds_from_xy_faits(monkeypatch, tmp_pa
     def fake_read_file(*args: Any, **kwargs: Any) -> gpd.GeoDataFrame:
         return communes
 
-    monkeypatch.setattr("ofbilan.common.chargeurs_donnees.gpd.read_file", fake_read_file)
+    monkeypatch.setattr("core.common.chargeurs_donnees.gpd.read_file", fake_read_file)
 
     df = pd.DataFrame(
         {
@@ -189,7 +189,7 @@ def test_enrich_pej_commune_from_faits_coordinates_fills_nom_com(
     monkeypatch, tmp_path: Path
 ) -> None:
     """enrich_pej_commune_from_faits_coordinates propage nom_commune vers NOM_COM."""
-    import ofbilan.common.chargeurs_donnees as loaders
+    import core.common.chargeurs_donnees as loaders
 
     root = tmp_path
     shp_dir = root / "ref" / "programme" / "sig" / "communes_21"
@@ -208,7 +208,7 @@ def test_enrich_pej_commune_from_faits_coordinates_fills_nom_com(
     def fake_read_file(*args: Any, **kwargs: Any) -> gpd.GeoDataFrame:
         return communes
 
-    monkeypatch.setattr("ofbilan.common.chargeurs_donnees.gpd.read_file", fake_read_file)
+    monkeypatch.setattr("core.common.chargeurs_donnees.gpd.read_file", fake_read_file)
 
     pej = pd.DataFrame({"DC_ID": ["OF001"], "NOM_COM": [""], "x_faits": [5.04], "y_faits": [47.32]})
     out = loaders.enrich_pej_commune_from_faits_coordinates(pej, root, log=None)
@@ -217,7 +217,7 @@ def test_enrich_pej_commune_from_faits_coordinates_fills_nom_com(
 
 
 def test_enrich_pej_commune_from_faits_coordinates_noop_without_coords(tmp_path: Path) -> None:
-    import ofbilan.common.chargeurs_donnees as loaders
+    import core.common.chargeurs_donnees as loaders
 
     pej = pd.DataFrame({"DC_ID": ["OF001"], "NOM_COM": ["Beaune"]})
     out = loaders.enrich_pej_commune_from_faits_coordinates(pej, tmp_path, log=None)
@@ -226,7 +226,7 @@ def test_enrich_pej_commune_from_faits_coordinates_noop_without_coords(tmp_path:
 
 def test_merge_pej_faits_locations_joins_dossier_to_dc_id(tmp_path: Path) -> None:
     """Jointure PEJ (ODS) ↔ FAITS : DC_ID = dossier, entité SD{dept}, x/y faits."""
-    import ofbilan.common.chargeurs_donnees as loaders
+    import core.common.chargeurs_donnees as loaders
 
     root = tmp_path
     pj = root / "data" / "sources" / "sig" / "points_infractions_pj"
@@ -258,7 +258,7 @@ def test_enrich_pve_positions_from_pnf_commune_centroids_joins_insee(
     monkeypatch, tmp_path: Path
 ) -> None:
     """PVe : INF-INSEE joint au shapefile centroïdes PNF → x/y WGS84."""
-    import ofbilan.common.chargeurs_donnees as loaders
+    import core.common.chargeurs_donnees as loaders
 
     root = tmp_path
     ref_dir = root / "ref" / "programme" / "sig" / "communes_pnf"
@@ -276,7 +276,7 @@ def test_enrich_pve_positions_from_pnf_commune_centroids_joins_insee(
             crs="EPSG:4326",
         )
 
-    monkeypatch.setattr("ofbilan.common.chargeurs_donnees.gpd.read_file", fake_read_file)
+    monkeypatch.setattr("core.common.chargeurs_donnees.gpd.read_file", fake_read_file)
 
     # Colonnes GPS en chaînes (comme read_excel dtype=str) : doit accepter des floats centroïde.
     df = pd.DataFrame(
@@ -297,7 +297,7 @@ def test_enrich_pve_positions_from_pnf_commune_centroids_joins_insee(
 
 def test_date_parsing_dayfirst_in_loaders(monkeypatch, tmp_path: Path) -> None:
     """Vérifie que les dates avec jour en premier (DD/MM/YYYY) et au format ISO (YYYY-MM-DD) sont correctement lues."""
-    import ofbilan.common.chargeurs_donnees as loaders
+    import core.common.chargeurs_donnees as loaders
 
     pej_dir = tmp_path / "data" / "sources"
     pej_dir.mkdir(parents=True)
@@ -380,7 +380,7 @@ def test_date_parsing_dayfirst_in_loaders(monkeypatch, tmp_path: Path) -> None:
 
 def test_safe_to_datetime_with_nan() -> None:
     """Vérifie que safe_to_datetime gère les valeurs non-string (float, None, NaN) et hors limites sans crash."""
-    import ofbilan.common.chargeurs_donnees as loaders
+    import core.common.chargeurs_donnees as loaders
     s = pd.Series(["2025-01-01", "0202-03-15", None, pd.NA, float("nan"), "15/05/0202", "15/05/2025"])
     res = loaders.safe_to_datetime(s)
     assert res.iloc[0] == pd.Timestamp("2025-01-01")

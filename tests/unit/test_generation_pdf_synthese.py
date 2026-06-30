@@ -1,13 +1,13 @@
 import pandas as pd
 
-from ofbilan.engine.generation_pdf_synthese import (
+from core.engine.generation_pdf_synthese import (
     _KEY_FIGURES_GRAIN_NOTE,
     _build_usager_theme_table_rows,
     _resultats_controles_pie_data,
     _rollup_small_categories,
     _wrap_table_label,
 )
-from ofbilan.engine.generation_pdf_synthese_brochure import (
+from core.engine.generation_pdf_synthese_brochure import (
     _brochure_methodology_html,
     _theme_pct_strings_brochure,
 )

@@ -4,7 +4,7 @@ from pathlib import Path
 # Add src/ to sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "core"))
 
-from ofbilan.web.serveur import get_latest_version
+from core.web.serveur import get_latest_version
 
 def test_get_latest_version():
     version = get_latest_version()

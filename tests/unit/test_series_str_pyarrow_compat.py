@@ -3,7 +3,7 @@
 import pandas as pd
 import pytest
 
-from ofbilan.common.utilitaires_metier import (
+from core.common.utilitaires_metier import (
     coalesced_insee_series,
     extract_insee_code_series,
     series_str_contains,
