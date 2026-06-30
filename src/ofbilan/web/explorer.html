@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OFBilan Explorer - Office Français de la Biodiversité</title>
+    <link rel="stylesheet" href="style.css?v=1.1.1">
+    <!-- Leaflet.js CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <!-- Leaflet.markercluster CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
+    <style>
+        /* Style Plein Écran Carte */
+        .map-fullscreen {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            z-index: 99999 !important;
+            margin: 0 !important;
+            border-radius: 0 !important;
+            background: #FFFFFF !important;
+            padding: 10px !important;
+        }
+        .map-fullscreen #map {
+            height: calc(100vh - 45px) !important;
+            border-radius: 0 !important;
+        }
+
+        /* Compact styling overrides to avoid scrolling */
+
+        .app-footer {
+            padding: 4px !important;
+            margin-top: 10px !important;
+        }
+
+        /* Réduit la hauteur du bloc des indicateurs clés */
+        .explorer-panel>.card:first-of-type {
+            padding: 8px 12px !important;
+            height: auto !important;
+        }
+
+        .explorer-panel>.card:first-of-type h2 {
+            margin-bottom: 6px !important;
+            font-size: 13px !important;
+        }
+
+        .explorer-container {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 15px;
+            max-width: 1780px;
+            margin: 10px auto;
+            padding: 0 15px;
+            flex: 1;
+            width: 100%;
+        }
+
+        .control-panel {
+            position: sticky;
+            top: 10px;
+            max-height: calc(100vh - 30px); /* Hauteur max augmentée pour afficher tous les boutons */
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: var(--color-border) transparent;
+            padding-right: 4px;
+            padding-bottom: 40px; 
+        }
+
+        .control-panel::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .control-panel::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .control-panel::-webkit-scrollbar-thumb {
+            background-color: var(--color-border);
+            border-radius: 3px;
+        }
+
+        @media (max-width: 1200px) {
+            .explorer-container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .explorer-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        @media (max-width: 992px) {
+            .dashboard-split-grid {
+                grid-template-columns: 1fr !important;
+            }
+        }
+
+        /* Card-specific compact styles */
+        .card {
+            padding: 14px !important;
+        }
+
+        .card h2 {
+            font-size: 14px !important;
+            margin-bottom: 10px !important;
+            padding-bottom: 5px !important;
+        }
+
+        .form-group {
+            margin-bottom: 8px !important;
+        }
+
+        .form-row {
+            gap: 8px !important;
+            margin-bottom: 8px !important;
+        }
+
+        label {
+            font-size: 11px !important;
+            margin-bottom: 3px !important;
+        }
+
+        select,
+        input[type="text"],
+        input[type="date"] {
+            padding: 5px 8px !important;
+            font-size: 12px !important;
+        }
+
+        .code-helper {
+            font-size: 10px !important;
+            margin-top: 3px !important;
+        }
+
+        .btn {
+            padding: 8px 12px !important;
+            font-size: 12px !important;
+        }
+
+        /* Stats indicators compact styles */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+            gap: 10px;
+            margin-bottom: 0px !important;
+        }
+
+        .stat-card {
+            background: #FFFFFF;
+            padding: 6px 10px !important;
+            border-radius: 6px;
+            border: 1px solid var(--color-border);
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.01);
+        }
+
+        .stat-card .value {
+            font-size: 20px !important;
+            font-weight: bold;
+            color: var(--color-primary);
+            line-height: 1.2;
+        }
+
+        .stat-card .label {
+            font-size: 9px !important;
+            color: var(--color-text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Map styling */
+        #map {
+            height: 410px;
+            width: 100%;
+            border-radius: var(--border-radius);
+            border: 1px solid var(--color-border);
+            z-index: 1;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+        .data-table th {
+            font-weight: 600;
+            color: var(--color-text-dark);
+            background: #f8fafc;
+            border-bottom: 2px solid var(--color-border);
+            user-select: none;
+        }
+        .data-table td {
+            padding: 6px 8px;
+            border-bottom: 1px solid var(--color-border);
+        }
+        .data-table tr:hover {
+            background-color: #f1f5f9;
+        }
+        .results-count-badge {
+            margin-top: 10px;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--color-primary);
+            text-align: center;
+            padding: 6px;
+            background: #f0fdf4;
+            border: 1px dashed #10b981;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+
+<body>
+    <header class="app-header">
+        <div class="header-container explorer-header-container">
+            <div class="logo-area">
+                <img src="logo.svg" alt="Bandeau OFBilan" class="header-logo">
+            </div>
+            
+            <div id="update-console-container" class="hidden" style="position: absolute; top: 10px; right: 20px; width: 350px; background: #1e1e1e; border: 1px solid #333; border-radius: 6px; z-index: 9999; box-shadow: 0 4px 12px rgba(0,0,0,0.5); display: flex; flex-direction: column;">
+                <div style="background: #333; color: white; padding: 5px 10px; font-size: 12px; border-top-left-radius: 6px; border-top-right-radius: 6px; font-family: monospace;">Terminal - Mise à jour</div>
+                <div id="update-console-output" style="padding: 10px; height: 200px; overflow-y: auto; color: #00ff00; font-family: monospace; font-size: 11px; white-space: pre-wrap;"></div>
+            </div>
+
+            <nav class="app-nav">
+                <a href="explorer.html" class="nav-item active">Analyse Interactive</a>
+                <a href="index.html" class="nav-item">Éditeur de Bilans</a>
+                <button id="btn-update-sources" class="nav-item" style="background:none; border:none; cursor:pointer; color: #cbd5e1; display:flex; align-items:center; gap:5px; font-weight:600;" title="Mettre à jour les sources">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                      <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5"/>
+                      <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708z"/>
+                    </svg>
+                </button>
+            </nav>
+        </div>
+    </header>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const btnUpdate = document.getElementById('btn-update-sources');
+            if(btnUpdate) {
+                btnUpdate.addEventListener('click', function() {
+                    const consoleContainer = document.getElementById('update-console-container');
+                    const consoleOutput = document.getElementById('update-console-output');
+                    
+                    consoleContainer.classList.remove('hidden');
+                    consoleContainer.style.display = 'flex';
+                    consoleOutput.innerHTML = "Démarrage de la mise à jour...\n";
+                    
+                    const evtSource = new EventSource("/api/update-sources");
+                    
+                    evtSource.onmessage = function(event) {
+                        consoleOutput.innerHTML += event.data + "\n";
+                        consoleOutput.scrollTop = consoleOutput.scrollHeight;
+                        
+                        if (event.data.startsWith("[TERMINE]") || event.data.startsWith("[ERREUR]")) {
+                            evtSource.close();
+                            setTimeout(() => {
+                                consoleContainer.style.display = 'none';
+                                consoleContainer.classList.add('hidden');
+                            }, 3000); // Disparaît après 3s
+                        }
+                    };
+                    
+                    evtSource.onerror = function() {
+                        consoleOutput.innerHTML += "[ERREUR] Connexion SSE perdue.\n";
+                        evtSource.close();
+                        setTimeout(() => {
+                            consoleContainer.style.display = 'none';
+                            consoleContainer.classList.add('hidden');
+                        }, 3000);
+                    };
+                });
+            }
+        });
+    </script>
+
+    <main class="explorer-container">
+        <!-- Panneau de Configuration Gauche -->
+        <section class="control-panel">
+            <div class="card">
+                <h2>Filtres d'exploration</h2>
+                <div id="profile-warning-banner" class="results-count-badge hidden" style="margin-bottom: 12px; background: #fffbeb; border-color: #f59e0b; color: #b45309; text-align: left; display: none;"></div>
+                <form id="config-form">
+
+                    <!-- Profil Thématique -->
+                    <div class="form-group" style="background: #eef2ff; padding: 8px; border-radius: 6px; border: 1px solid #c7d2fe; margin-bottom: 12px !important;">
+                        <label for="profil-select" style="font-weight: 600; color: #4338ca;">Profil Thématique</label>
+                        <select id="profil-select" name="profil" style="width: 100%; border-color: #a5b4fc; font-weight: 500;">
+                            <option value="global">Tous (Sans profil)</option>
+                        </select>
+                    </div>
+
+                    <!-- Filtre Département PNF -->
+                    <div id="pnf-dept-container" class="form-group hidden" style="background: #f0fdf4; padding: 8px; border-radius: 6px; border: 1px solid #bbf7d0; margin-bottom: 12px !important;">
+                        <label for="pnf-dept-select" style="font-weight: 600; color: #166534;">Département (PNF)</label>
+                        <select id="pnf-dept-select" name="pnf_dept" style="width: 100%; border-color: #86efac; font-weight: 500;">
+                            <option value="">Tous (Total PNF)</option>
+                            <option value="21">Côte-d'Or (21)</option>
+                            <option value="52">Haute-Marne (52)</option>
+                        </select>
+                    </div>
+
+                    <!-- Période temporelle -->
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="date-deb">Date de début</label>
+                            <input type="date" id="date-deb" name="date-deb" value="2025-01-01" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="date-fin">Date de fin</label>
+                            <input type="date" id="date-fin" name="date-fin" value="2025-12-31" required>
+                        </div>
+                    </div>
+
+                    <!-- Comparaison temporelle N vs N-1 -->
+                    <div class="form-group" style="background: #f8fafc; padding: 8px; border-radius: 6px; border: 1px solid var(--color-border); margin-bottom: 12px !important;">
+                        <div style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                            <input type="checkbox" id="compare-active" name="compare-active" style="margin: 0;">
+                            <label for="compare-active" style="margin: 0 !important; cursor: pointer; font-weight: 600; color: var(--color-primary);">Comparer deux périodes (N vs N-1)</label>
+                        </div>
+                        <div id="compare-dates-container" class="hidden" style="margin-top: 8px;">
+                            <div class="form-row" style="margin-bottom: 0 !important;">
+                                <div class="form-group">
+                                    <label for="compare-date-deb">Date début N-1</label>
+                                    <input type="date" id="compare-date-deb" name="compare-date-deb" value="2024-01-01">
+                                </div>
+                                <div class="form-group">
+                                    <label for="compare-date-fin">Date fin N-1</label>
+                                    <input type="date" id="compare-date-fin" name="compare-date-fin" value="2024-12-31">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Périmètre géographique -->
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="echelle">Échelle spatiale</label>
+                            <select id="echelle" name="echelle" required>
+                                <option value="departement" selected>Département</option>
+                                <option value="region">Région</option>
+                                <option value="bmi">BMI (Interrégional)</option>
+                                <option value="national">National</option>
+                                <option value="pnf">PNF (Parc National)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="code" id="label-code">Code géographique</label>
+                            <div class="custom-select-container">
+                                <input type="text" id="code" name="code" value="21"
+                                    placeholder="Rechercher ou sélectionner..." required autocomplete="off">
+                                <button type="button" id="btn-toggle-codes" class="select-arrow-btn">▼</button>
+                                <div id="codes-dropdown" class="select-dropdown hidden"></div>
+                            </div>
+                            <div id="code-helper" class="code-helper">Exemples : 21, 27</div>
+                        </div>
+                    </div>
+
+                    <!-- Commune de recherche -->
+                    <div class="form-group">
+                        <label for="filter-commune">Commune (Optionnel)</label>
+                        <input type="text" id="filter-commune" name="filter-commune" placeholder="Toutes les communes" autocomplete="off">
+                    </div>
+
+                    <!-- Type usager cible -->
+                    <div class="form-group">
+                        <label for="type-usager">Type d'usager cible (Optionnel)</label>
+                        <div class="custom-select-container">
+                            <input type="text" id="type-usager" name="type-usager"
+                                placeholder="Tous les types d'usagers" autocomplete="off">
+                            <button type="button" id="btn-toggle-usagers" class="select-arrow-btn">▼</button>
+                            <div id="usagers-dropdown" class="select-dropdown hidden"></div>
+                        </div>
+                    </div>
+
+                    <!-- Domaines de la SNC -->
+                    <div class="form-group">
+                        <label for="domaine-snc">Domaines de la SNC (Optionnel)</label>
+                        <div class="custom-select-container">
+                            <input type="text" id="domaine-snc" name="domaine-snc" placeholder="Tous les domaines"
+                                autocomplete="off">
+                            <button type="button" id="btn-toggle-domaines-snc" class="select-arrow-btn">▼</button>
+                            <div id="domaines-snc-dropdown" class="select-dropdown hidden"></div>
+                        </div>
+                    </div>
+
+                    <!-- Thèmes de la SNC -->
+                    <div class="form-group">
+                        <label for="theme-snc">Thèmes de la SNC (Optionnel)</label>
+                        <div class="custom-select-container">
+                            <input type="text" id="theme-snc" name="theme-snc" placeholder="Tous les thèmes"
+                                autocomplete="off">
+                            <button type="button" id="btn-toggle-themes-snc" class="select-arrow-btn">▼</button>
+                            <div id="themes-snc-dropdown" class="select-dropdown hidden"></div>
+                        </div>
+                    </div>
+
+                    <!-- Type d'action (Optionnel) -->
+                    <div class="form-group">
+                        <label for="type-action-snc">Type d'action (Optionnel)</label>
+                        <div class="custom-select-container">
+                            <input type="text" id="type-action-snc" name="type-action-snc"
+                                placeholder="Tous les types d'action" autocomplete="off">
+                            <button type="button" id="btn-toggle-types-action" class="select-arrow-btn">▼</button>
+                            <div id="types-action-dropdown" class="select-dropdown hidden"></div>
+                        </div>
+                    </div>
+
+                    <!-- Résultat du contrôle (Optionnel) -->
+                    <div class="form-group">
+                        <label for="resultat-select">Résultat du contrôle (Optionnel)</label>
+                        <div class="custom-select-container">
+                            <input type="text" id="resultat-select" name="resultat-select" placeholder="Tous les résultats" autocomplete="off" readonly>
+                            <button type="button" id="btn-toggle-resultats" class="select-arrow-btn">▼</button>
+                            <div id="resultats-dropdown" class="select-dropdown hidden"></div>
+                        </div>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">
+                        <div style="display: flex; gap: 8px;">
+                            <button type="button" id="btn-update" class="btn btn-primary" style="flex: 1;">Charger les données</button>
+                            <button type="button" id="btn-reset" class="btn btn-secondary" style="padding: 8px !important;">Effacer</button>
+                        </div>
+                        <button type="button" id="btn-pdf" class="btn btn-danger">Édition PDF</button>
+                    </div>
+                    <div id="results-count" class="results-count-badge hidden">0 contrôle chargé</div>
+                </form>
+            </div>
+        </section>
+
+        <!-- Tableau de bord Droite -->
+        <section class="explorer-panel">
+            <!-- Indicateurs Clés en pleine largeur -->
+            <div class="card" style="margin-bottom: 0;">
+                <h2>Indicateurs Clés</h2>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="value" id="val-controles">-</div>
+                        <div class="label">Contrôles</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="value" id="val-pej">-</div>
+                        <div class="label">Procédures Judiciaires</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="value" id="val-pa">-</div>
+                        <div class="label">Procédures Adm.</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="value" id="val-pve">-</div>
+                        <div class="label">Verbalisations</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Grille Carte (Gauche) / Statistiques (Droite) -->
+            <div class="dashboard-split-grid"
+                style="display: grid; grid-template-columns: 1.6fr 1fr; gap: 20px; flex: 1;">
+                <!-- Bloc Carte & Saisonnalité -->
+                <div style="display: flex; flex-direction: column; gap: 15px; min-width: 0;">
+                    <div class="card"
+                        style="margin-bottom: 0; display: flex; flex-direction: column; min-width: 0; flex: 1;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <h2 style="margin-bottom: 0 !important;">Localisation des données</h2>
+                            <div style="display: flex; gap: 10px; font-size: 11px; align-items: center; background: #f8fafc; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--color-border);">
+                                <label style="margin: 0 !important; cursor: pointer; display: flex; align-items: center; gap: 4px; font-weight: 500;">
+                                    <input type="radio" name="map-mode" value="markers" checked style="margin: 0;"> Points
+                                </label>
+                                <label style="margin: 0 !important; cursor: pointer; display: flex; align-items: center; gap: 4px; font-weight: 500;">
+                                    <input type="radio" name="map-mode" value="heatmap" style="margin: 0;"> Chaleur
+                                </label>
+                                <span style="color: var(--color-border);">|</span>
+                                <button type="button" id="btn-fullscreen-map" style="background: none; border: none; cursor: pointer; padding: 0; font-size: 11px; display: flex; align-items: center; gap: 2px; font-weight: 600; color: var(--color-primary);" title="Plein écran">⛶ Plein écran</button>
+                            </div>
+                        </div>
+                        <div id="map" style="flex: 1; min-height: 380px; margin-bottom: 0;"></div>
+                    </div>
+                    <div class="card" style="margin-bottom: 0; display: flex; flex-direction: column; min-width: 0;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <h2 style="margin-bottom: 0 !important;">Saisonnalité de l'activité</h2>
+                            <button type="button" class="btn-export-chart-png" data-chart="chart-seasonality" style="background: none; border: none; cursor: pointer; font-size: 11px; color: var(--color-primary); font-weight: 500;" title="Télécharger l'image">📥 PNG</button>
+                        </div>
+                        <div style="height: 180px; position: relative; width: 100%;">
+                            <canvas id="chart-seasonality" style="max-height: 180px; width: 100%;"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bloc Statistiques -->
+                <div class="card"
+                    style="margin-bottom: 0; display: flex; flex-direction: column; gap: 10px; min-width: 0;">
+                    <h2>Répartitions et Statistiques</h2>
+
+                    <!-- Graphiques Donuts Côte à Côte -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <div
+                            style="background:#FFFFFF; padding:10px; border:1px solid var(--color-border); border-radius:6px; min-height: 250px; display: flex; flex-direction: column; min-width: 0;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                <h3 style="font-size:11px; margin-bottom: 0 !important; color:var(--color-primary); font-weight: 600;">Résultats des Contrôles</h3>
+                                <button type="button" class="btn-export-chart-png" data-chart="chart-results" style="background: none; border: none; cursor: pointer; font-size: 10px; color: var(--color-primary); font-weight: 500;" title="Télécharger l'image">📥 PNG</button>
+                            </div>
+                            <div style="height: 140px; position: relative;">
+                                <canvas id="chart-results" style="max-height: 140px; width: 100%;"></canvas>
+                            </div>
+                            <div id="legend-results"
+                                style="display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 12px; margin-top: 10px; flex: 1; align-items: center; align-content: center;">
+                            </div>
+                        </div>
+                        <div
+                            style="background:#FFFFFF; padding:10px; border:1px solid var(--color-border); border-radius:6px; min-height: 250px; display: flex; flex-direction: column; min-width: 0;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                <h3 style="font-size:11px; margin-bottom: 0 !important; color:var(--color-primary); font-weight: 600;">Par Type d'Usager</h3>
+                                <button type="button" class="btn-export-chart-png" data-chart="chart-usagers" style="background: none; border: none; cursor: pointer; font-size: 10px; color: var(--color-primary); font-weight: 500;" title="Télécharger l'image">📥 PNG</button>
+                            </div>
+                            <div style="height: 140px; position: relative;">
+                                <canvas id="chart-usagers" style="max-height: 140px; width: 100%;"></canvas>
+                            </div>
+                            <div id="legend-usagers"
+                                style="display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 12px; margin-top: 10px; flex: 1; align-items: center; align-content: center;">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Domaines d'Activité -->
+                    <div
+                        style="background:#FFFFFF; padding:10px; border:1px solid var(--color-border); border-radius:6px; flex: 1; display: flex; flex-direction: column; min-width: 0;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                            <h3 style="font-size:11px; margin-bottom: 0 !important; color:var(--color-primary); font-weight: 600;">Par Domaine d'Activité</h3>
+                            <button type="button" class="btn-export-chart-png" data-chart="chart-domains" style="background: none; border: none; cursor: pointer; font-size: 10px; color: var(--color-primary); font-weight: 500;" title="Télécharger l'image">📥 PNG</button>
+                        </div>
+                        <div id="wrapper-domains" style="position: relative; width: 100%;">
+                            <canvas id="chart-domains" style="width: 100%;"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Thématiques Fines -->
+                    <div
+                        style="background:#FFFFFF; padding:10px; border:1px solid var(--color-border); border-radius:6px; flex: 1; display: flex; flex-direction: column; min-width: 0;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                            <h3 style="font-size:11px; margin-bottom: 0 !important; color:var(--color-primary); font-weight: 600;">Par Thématique (Top 5)</h3>
+                            <button type="button" class="btn-export-chart-png" data-chart="chart-themes" style="background: none; border: none; cursor: pointer; font-size: 10px; color: var(--color-primary); font-weight: 500;" title="Télécharger l'image">📥 PNG</button>
+                        </div>
+                        <div id="wrapper-themes" style="position: relative; width: 100%;">
+                            <canvas id="chart-themes" style="width: 100%;"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Tableau détaillé des contrôles -->
+            <div class="card" id="card-table-controles" style="margin-top: 15px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" id="toggle-table-header">
+                    <h2 style="margin-bottom: 0 !important; display: flex; align-items: center; gap: 8px;">
+                        <span id="table-toggle-icon">▶</span> Détail des contrôles chargés
+                    </h2>
+                    <button type="button" id="btn-export-csv" class="btn btn-secondary" style="padding: 4px 8px !important; font-size: 11px !important;">Exporter en CSV</button>
+                </div>
+                <div id="table-container" class="hidden" style="margin-top: 15px; overflow-x: auto;">
+                    <table class="data-table" style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
+                        <thead>
+                            <tr style="border-bottom: 2px solid var(--color-border); background: #f8fafc;">
+                                <th style="padding: 8px; cursor: pointer;" data-sort="dc_id">ID ⇅</th>
+                                <th style="padding: 8px; cursor: pointer;" data-sort="date_ctrl">Date ⇅</th>
+                                <th style="padding: 8px; cursor: pointer;" data-sort="resultat">Résultat ⇅</th>
+                                <th style="padding: 8px; cursor: pointer;" data-sort="domaine">Domaine ⇅</th>
+                                <th style="padding: 8px; cursor: pointer;" data-sort="theme">Thème ⇅</th>
+                                <th style="padding: 8px; cursor: pointer;" data-sort="type_usager">Usager ⇅</th>
+                                <th style="padding: 8px; cursor: pointer;" data-sort="nom_commun">Commune ⇅</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-body">
+                            <!-- Rempli par le JS -->
+                        </tbody>
+                    </table>
+                    <!-- Pagination -->
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: 11px;">
+                        <span id="table-pagination-info">Page 1 sur 1</span>
+                        <div style="display: flex; gap: 5px;">
+                            <button type="button" id="btn-page-prev" class="btn" style="padding: 2px 6px !important; font-size: 10px !important;">Précédent</button>
+                            <button type="button" id="btn-page-next" class="btn" style="padding: 2px 6px !important; font-size: 10px !important;">Suivant</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="app-footer">
+        <p>OFBilan - <span id="app-version">v1.0.1</span> | Office Français de la Biodiversité | Auteur : Aguirre MAURIN - SD21 | Contact : aguirre.maurin@ofb.gouv.Fr</p>
+    </footer>
+
+    <!-- Leaflet.js Javascript -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- Leaflet.markercluster JS -->
+    <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
+    <!-- Leaflet.heat JS -->
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+    <!-- Chart.js Javascript -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Frontend controller script -->
+    <script src="explorer.js?v=1.2.0"></script>
+</body>
+
+</html>
