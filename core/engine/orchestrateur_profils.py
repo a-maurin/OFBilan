@@ -3819,6 +3819,13 @@ def _generate_pdf(
                         col_aligns=col_a_sec21,
                     )
                 period_labels = [str(v) for v in agg_annuelle["periode"].tolist()]
+                
+                titre_ctrl = "Résultats des contrôles" if not is_month else "Résultats des contrôles par mois"
+                if is_trim:
+                    titre_ctrl = "Résultats des contrôles par trimestre"
+                elif is_week:
+                    titre_ctrl = "Résultats des contrôles par semaine"
+                    
                 if profil_id == "ppp":
                     titre_proc = "Nombre de PEJ" if not is_month else "Nombre de PEJ par mois"
                     if is_trim:
@@ -3829,6 +3836,12 @@ def _generate_pdf(
                         "PEJ": [int(v) for v in agg_annuelle["nb_pej"].tolist()],
                     }
                 else:
+                    titre_proc = "Nombre de procédures" if not is_month else "Nombre de procédures par mois"
+                    if is_trim:
+                        titre_proc = "Nombre de procédures par trimestre"
+                    elif is_week:
+                        titre_proc = "Nombre de procédures par semaine"
+
                     series_proc = {
                         "PEJ": [int(v) for v in agg_annuelle["nb_pej"].tolist()],
                         "PA": [int(v) for v in agg_annuelle["nb_pa"].tolist()],
