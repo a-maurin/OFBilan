@@ -4,24 +4,24 @@
 
 **OFBilan** est un outil d'aide à la décision et de communication s'appuyant sur les données de contrôles (OSCEAN) et les procédures (PVe / PEJ / PA) de l'Office Français de la Biodiversité (OFB).
 
-Initialement conçu comme un script autonome, **OFBilan est désormais intégré sous la forme d'une extension (plugin) QGIS**.
+Initialement conçu comme un script autonome, **OFBilan est désormais intégré sous la forme d'une extension QGIS**.
 
 ---
 
-## 🌟 Avantages de l'intégration QGIS & Portabilité
+## Avantages de l'intégration QGIS & Portabilité
 
-L'intégration sous forme de plugin QGIS apporte des bénéfices majeurs :
-*   **Portabilité totale** : Plus besoin d'installer et de configurer manuellement un environnement Python complexe, PyQt ou les liaisons PyQGIS sur chaque poste. L'outil utilise directement l'interpréteur Python et les bibliothèques embarqués de QGIS.
-*   **Simplicité de déploiement** : Tout agent disposant de QGIS installé sur son poste peut instantanément installer et exécuter le programme.
-*   **Automatisation cartographique native** : L'extension s'appuie directement sur le moteur de QGIS pour générer et mettre en page des cartes statistiques et territoriales de manière transparente.
+L'intégration sous forme de plugin QGIS permet :
+*   **Une portabilité totale** : Plus besoin d'installer et de configurer manuellement un environnement Python complexe, PyQt ou les liaisons PyQGIS sur chaque poste. L'outil utilise directement l'interpréteur Python et les bibliothèques embarqués de QGIS.
+*   **Une simplicité de déploiement** : Tout agent disposant de QGIS installé sur son poste peut instantanément installer et exécuter le programme.
+*   **L'automatisation cartographique native** : L'extension s'appuie directement sur le moteur de QGIS pour générer et mettre en page des cartes statistiques et territoriales de manière transparente.
 
 ---
 
 ## Installation et Configuration
 
-La mise en place de l'outil s'effectue en deux étapes simples.
+La mise en place de l'outil s'effectue en deux étapes.
 
-### Étape 1 : Installation du plugin dans QGIS
+### Étape 1 : Installation
 
 Deux méthodes de déploiement sont possibles :
 
@@ -56,7 +56,7 @@ L'utilisation principale s'effectue directement depuis l'interface utilisateur d
 
 1.  Ouvrez **QGIS**.
 2.  Activez l'extension **OFBilan** dans le gestionnaire d'extensions si son icône n'apparaît pas.
-3.  Cliquez sur le bouton **OFBilan** (icône OFB) dans votre barre d'outils, ou allez dans le menu **Extensions > OFBilan > Lancer OFBilan Explorer**.
+3.  Cliquez sur le bouton **OFBilan** dans votre barre d'outils, ou allez dans le menu **Extensions > OFBilan > Lancer OFBilan Explorer**.
 4.  L'extension effectue alors les actions suivantes de manière transparente :
     *   Elle démarre un serveur web local léger en tâche de fond (sans ouvrir de console noire).
     *   Elle ouvre automatiquement votre navigateur internet par défaut sur l'interface interactive : `http://localhost:8000/explorer.html`.
@@ -64,9 +64,9 @@ L'utilisation principale s'effectue directement depuis l'interface utilisateur d
 
 ### 2. Démarrage en mode autonome (Sans ouvrir QGIS)
 
-Si vous ne souhaitez pas ouvrir QGIS, vous pouvez exécuter le serveur de manière totalement autonome en utilisant le script de démarrage rapide :
+Si vous ne souhaitez pas ouvrir QGIS, vous pouvez exécuter le serveur de manière autonome en utilisant le script dédié :
 
-1.  Double-cliquez sur le fichier `lancer_serveur_autonome.bat` situé à la racine du projet.
+1.  Double-cliquez sur le fichier `demarrer_serveur_OFBilane.bat` situé à la racine du projet.
 2.  Le script va automatiquement rechercher l'interpréteur Python de votre installation QGIS locale (ex: dans `C:\Program Files\QGIS 3.44.8`).
 3.  Une fois trouvé, il lance le serveur web d'OFBilan et vous pouvez alors accéder à l'interface via votre navigateur à l'adresse : `http://localhost:8000/explorer.html`.
 4.  Pour arrêter le serveur, il vous suffit de fermer la fenêtre de commande ouverte par le script `.bat`.
@@ -75,20 +75,20 @@ Si vous ne souhaitez pas ouvrir QGIS, vous pouvez exécuter le serveur de maniè
 
 L'application web s'articule autour de deux onglets :
 
-*   **Analyse dynamique (OFBilan Explorer)** :
+*   **Analyse dynamique** :
     *   *Cartographie interactive (Leaflet.js)* : Visualisation géographique instantanée des points de contrôle OSCEAN.
     *   *Tableaux de bord (Chart.js)* : Visualisation des statistiques clés (Top 5 thématiques, résultats des contrôles, etc.).
     *   *Filtrage à la volée* : Filtrez instantanément par période, département, BMI, ou type d'usager avec une mise à jour immédiate des cartes et des graphiques.
 
-*   **Génération de rapports PDF** :
-    *   *Catalogue complet (+35 profils activable par yaml)* : Bilans globaux, thématiques (eau, chasse, espèces, pollutions...) ou ciblés par type d'usager.
+*   **Edition de bilans PDF** :
+    *   *Catalogue complet (profils activable par yaml)* : Bilans globaux, thématiques (eau, chasse, espèces, pollutions...) ou ciblés par type d'usager.
     *   *Mise en page professionnelle* : Rapports détaillés ou brochures A4 synthétiques (4 pages).
     *   *Double périmètre de diffusion* : Générez des versions *Internes* (détaillées) ou *Externes* (anonymisées/masquées pour les partenaires).
     *   *Intégration cartographique automatique* : Le serveur communique avec QGIS pour générer des cartes personnalisées à l'échelle du département, de la région ou de la BMI sélectionnée et les insérer dans le rapport PDF final.
 
 ---
 
-## Utilisation avancée (Ligne de commande)
+## Utilisation en ligne de commande
 
 Pour les automatisations ou les tâches de traitement par lots, vous pouvez exécuter le programme en ligne de commande (CLI) en exploitant l'interprète Python de QGIS.
 
@@ -115,7 +115,7 @@ Pour les automatisations ou les tâches de traitement par lots, vous pouvez exé
 
 ---
 
-## 📂 Structure du projet
+## Structure du projet
 
 *   `ofbilan_plugin.py` : Point d'entrée et intégration dans l'interface de QGIS.
 *   `metadata.txt` : Métadonnées d'identification du plugin pour QGIS.
@@ -130,5 +130,5 @@ Pour les automatisations ou les tâches de traitement par lots, vous pouvez exé
 ## Contact & Support
 
 *   **Auteur** : Aguirre Maurin
-*   **Service** : Office Français de la Biodiversité (OFB), Service Départemental de la Côte-d'Or (SD 21)
+*   **Service** : Office Français de la Biodiversité (OFB), Service Départemental de la Côte-d'Or
 *   **Courriel** : [aguirre.maurin@ofb.gouv.fr](mailto:aguirre.maurin@ofb.gouv.fr)
