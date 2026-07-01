@@ -55,7 +55,7 @@ L'utilisation principale s'effectue directement depuis l'interface utilisateur d
 
 1.  Ouvrez **QGIS**.
 2.  Activez l'extension **OFBilan** dans le gestionnaire d'extensions si son icône n'apparaît pas.
-3.  Cliquez sur le bouton **OFBilan** dans votre barre d'outils, ou allez dans le menu **Extensions > OFBilan > Lancer OFBilan Explorer**.
+3.  Cliquez sur le bouton **OFBilan** dans votre barre d'outils, ou allez dans le menu **Extensions > OFBilan > scripts > Lancer OFBilan Explorer**.
 4.  L'extension effectue alors les actions suivantes de manière transparente :
     *   Elle démarre un serveur web local léger en tâche de fond (sans ouvrir de console noire).
     *   Elle ouvre automatiquement votre navigateur internet par défaut sur l'interface interactive : `http://localhost:8000/explorer.html`.
