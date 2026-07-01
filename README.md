@@ -68,7 +68,7 @@ Si vous ne souhaitez pas ouvrir QGIS, vous pouvez exécuter le serveur de maniè
 1.  Double-cliquez sur le fichier `demarrer_serveur_OFBilane.bat` situé à la racine du projet.
 2.  Le script va automatiquement rechercher l'interpréteur Python de votre installation QGIS locale (ex: dans `C:\Program Files\QGIS 3.44.8`).
 3.  Une fois trouvé, il lance le serveur web d'OFBilan et vous pouvez alors accéder à l'interface via votre navigateur à l'adresse : `http://localhost:8000/explorer.html`.
-4.  Pour arrêter le serveur, il vous suffit de fermer la fenêtre de commande ouverte par le script `.bat`.
+4.  Pour arrêter le serveur, il vous suffit de cliquer sur le bouton éteindre de l'interface graphique ou de fermer la fenêtre de commande ouverte par le script `.bat`.
 
 ### 3. Fonctionnalités de l'interface web
 
