@@ -25,18 +25,17 @@ La mise en place de l'outil s'effectue en deux étapes.
 
 Deux méthodes de déploiement sont possibles :
 
-*   **Méthode A : Installation par fichier ZIP (Recommandée)**
-    1.  Téléchargez la version packagée au foramt .zip.
-    2.  Ouvrez QGIS.
-    3.  Allez dans le menu **Extensions > Installer/Gérer les extensions**.
-    4.  Sélectionnez l'onglet **Installer depuis un ZIP**.
-    5.  Choisissez votre fichier ZIP et cliquez sur **Installer l'extension**.
+**Méthode A : Installation par fichier ZIP (Recommandée)**
+1.  Téléchargez la version packagée au foramt .zip.
+2.  Ouvrez QGIS.
+3.  Allez dans le menu **Extensions > Installer/Gérer les extensions**.
+4.  Sélectionnez l'onglet **Installer depuis un ZIP**.
+5.  Choisissez votre fichier ZIP et cliquez sur **Installer l'extension**.
 
-*   **Méthode B : Copie manuelle du répertoire**
-    1.  Copiez l'intégralité du dossier `OFBilan-Plugin-QGIS` dans le dossier des extensions QGIS de votre profil utilisateur.
-    2.  Sur **Windows**, le chemin standard est :
-        `%APPDATA%\QGIS\QGIS3\profiles\default\python\plugins\OFBilan-Plugin-QGIS`
-    3.  Redémarrez QGIS.
+**Méthode B : Copie manuelle du répertoire**
+1. Copiez l'intégralité du dossier `OFBilan-Plugin-QGIS` dans le dossier des extensions QGIS de votre profil utilisateur.
+2. Sur **Windows**, le chemin standard est :`%APPDATA%\QGIS\QGIS3\profiles\default\python\plugins\OFBilan-Plugin-QGIS`
+3. Redémarrez QGIS.
 
 ### Étape 2 : Récupération des référentiels et données (Pack de configuration)
 
@@ -56,7 +55,7 @@ L'utilisation principale s'effectue directement depuis l'interface utilisateur d
 
 1.  Ouvrez **QGIS**.
 2.  Activez l'extension **OFBilan** dans le gestionnaire d'extensions si son icône n'apparaît pas.
-3.  Cliquez sur le bouton **OFBilan** dans votre barre d'outils, ou allez dans le menu **Extensions > OFBilan > Lancer OFBilan Explorer**.
+3.  Cliquez sur le bouton **OFBilan** dans votre barre d'outils, ou allez dans le menu **Extensions > OFBilan > scripts > Lancer OFBilan Explorer**.
 4.  L'extension effectue alors les actions suivantes de manière transparente :
     *   Elle démarre un serveur web local léger en tâche de fond (sans ouvrir de console noire).
     *   Elle ouvre automatiquement votre navigateur internet par défaut sur l'interface interactive : `http://localhost:8000/explorer.html`.
@@ -69,7 +68,7 @@ Si vous ne souhaitez pas ouvrir QGIS, vous pouvez exécuter le serveur de maniè
 1.  Double-cliquez sur le fichier `demarrer_serveur_OFBilane.bat` situé à la racine du projet.
 2.  Le script va automatiquement rechercher l'interpréteur Python de votre installation QGIS locale (ex: dans `C:\Program Files\QGIS 3.44.8`).
 3.  Une fois trouvé, il lance le serveur web d'OFBilan et vous pouvez alors accéder à l'interface via votre navigateur à l'adresse : `http://localhost:8000/explorer.html`.
-4.  Pour arrêter le serveur, il vous suffit de fermer la fenêtre de commande ouverte par le script `.bat`.
+4.  Pour arrêter le serveur, il vous suffit de cliquer sur le bouton éteindre de l'interface graphique ou de fermer la fenêtre de commande ouverte par le script `.bat`.
 
 ### 3. Fonctionnalités de l'interface web
 
