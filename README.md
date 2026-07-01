@@ -25,19 +25,17 @@ La mise en place de l'outil s'effectue en deux étapes.
 
 Deux méthodes de déploiement sont possibles :
 
-## Méthode A : Installation par fichier ZIP (Recommandée)
-
-    1.  Téléchargez la version packagée au foramt .zip.
-    2.  Ouvrez QGIS.
-    3.  Allez dans le menu **Extensions > Installer/Gérer les extensions**.
-    4.  Sélectionnez l'onglet **Installer depuis un ZIP**.
-    5.  Choisissez votre fichier ZIP et cliquez sur **Installer l'extension**.
+**Méthode A : Installation par fichier ZIP (Recommandée)**
+1.  Téléchargez la version packagée au foramt .zip.
+2.  Ouvrez QGIS.
+3.  Allez dans le menu **Extensions > Installer/Gérer les extensions**.
+4.  Sélectionnez l'onglet **Installer depuis un ZIP**.
+5.  Choisissez votre fichier ZIP et cliquez sur **Installer l'extension**.
 
 **Méthode B : Copie manuelle du répertoire**
-
-    1. Copiez l'intégralité du dossier `OFBilan-Plugin-QGIS` dans le dossier des extensions QGIS de votre profil utilisateur.
-    2. Sur **Windows**, le chemin standard est :`%APPDATA%\QGIS\QGIS3\profiles\default\python\plugins\OFBilan-Plugin-QGIS`
-    3. Redémarrez QGIS.
+1. Copiez l'intégralité du dossier `OFBilan-Plugin-QGIS` dans le dossier des extensions QGIS de votre profil utilisateur.
+2. Sur **Windows**, le chemin standard est :`%APPDATA%\QGIS\QGIS3\profiles\default\python\plugins\OFBilan-Plugin-QGIS`
+3. Redémarrez QGIS.
 
 ### Étape 2 : Récupération des référentiels et données (Pack de configuration)
 
