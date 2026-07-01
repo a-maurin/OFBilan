@@ -47,12 +47,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (compareDateDebEl && compareDateFinEl) {
         const lastYear = currentYear - 1;
         compareDateDebEl.value = `${lastYear}-01-01`;
-        
+
         const month = String(now.getMonth() + 1).padStart(2, '0');
         const day = String(now.getDate()).padStart(2, '0');
         compareDateFinEl.value = `${lastYear}-${month}-${day}`;
     }
-    
+
     if (compareActiveCheck && compareDatesContainer) {
         compareActiveCheck.addEventListener('change', () => {
             if (compareActiveCheck.checked) {
@@ -77,7 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     opt.textContent = p.label;
                     selectProfil.appendChild(opt);
                 });
-                
+
                 selectProfil.addEventListener('change', updateUIForProfile);
                 updateUIForProfile();
             }
@@ -110,7 +110,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('type-action-snc'),
             document.getElementById('btn-toggle-types-action')
         ];
-        
+
         filterControls.forEach(el => {
             if (el) {
                 el.disabled = meta.has_action_filter;
@@ -162,7 +162,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 warnings.push("Ce profil cible un nombre restreint de procédures et verrouille la sélection des thèmes et actions.");
             }
             if (meta.has_custom_stats) warnings.push("Attention : l'affichage Web est simplifié. Reportez-vous au PDF pour les statistiques consolidées de ce profil.");
-            
+
             // Logique PNF : Forcer l'échelle et bloquer le code géographique
             const pnfDeptContainer = document.getElementById('pnf-dept-container');
             if (val === 'pnf') {
@@ -185,10 +185,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (selectEchelle.value === 'pnf') selectEchelle.value = 'departement';
                 }
                 if (inputCode) {
-                    inputCode.disabled = false;
-                    inputCode.placeholder = 'Rechercher ou sélectionner...';
+                    inputCode.disabled = selectEchelle.value === 'national';
+                    inputCode.placeholder = selectEchelle.value === 'national' ? 'France entière' : 'Rechercher ou sélectionner...';
                 }
-                if (btnToggleCodes) btnToggleCodes.disabled = false;
+                if (btnToggleCodes) btnToggleCodes.disabled = selectEchelle.value === 'national';
                 if (pnfDeptContainer) pnfDeptContainer.classList.add('hidden');
             }
 
@@ -502,7 +502,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     return found ? found.label : val;
                 })
                 .filter(Boolean);
-            
+
             if (isMultiSelect) {
                 if (selectedValues.length === 0) {
                     inputEl.value = '';
@@ -521,7 +521,7 @@ document.addEventListener('DOMContentLoaded', () => {
             dropdownEl.innerHTML = '';
             const search = filterText.toLowerCase().trim();
             const listData = getListDataFn();
-            const filtered = listData.filter(p => 
+            const filtered = listData.filter(p =>
                 p.label.toLowerCase().includes(search) || p.value.toLowerCase().includes(search)
             );
 
@@ -551,11 +551,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         toggleValue(p.value, chk.checked);
                     });
                     opt.appendChild(chk);
-                    
+
                     const labelSpan = document.createElement('span');
                     labelSpan.textContent = p.label;
                     opt.appendChild(labelSpan);
-                    
+
                     opt.addEventListener('click', (e) => {
                         e.stopPropagation();
                         const nextState = !chk.checked;
@@ -650,6 +650,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     selectEchelle.addEventListener('change', () => {
         const val = selectEchelle.value;
+        
+        inputCode.disabled = false;
+        if (btnToggleCodes) btnToggleCodes.disabled = false;
+
         if (val === 'departement') {
             inputCode.value = '21';
             inputCode.placeholder = 'ex : 21';
@@ -663,15 +667,17 @@ document.addEventListener('DOMContentLoaded', () => {
             inputCode.placeholder = 'ex : BMI-NEC';
             codeHelper.textContent = 'Codes possibles : BMI-NEC, BMI-SO, BMI-SE, BMI-NO, BMI-IFE, BMI-IFO, BMI-TIP';
         } else if (val === 'national') {
-            inputCode.value = 'FR';
-            inputCode.placeholder = 'ex : FR';
-            codeHelper.textContent = 'Code national : FR';
+            inputCode.value = '';
+            inputCode.placeholder = 'France entière';
+            codeHelper.textContent = 'Échelle nationale sélectionnée';
+            inputCode.disabled = true;
+            if (btnToggleCodes) btnToggleCodes.disabled = true;
         }
     });
 
     // --- LEAFLET MAP INITIALIZATION ---
     // France Center
-    const map = L.map('map', { 
+    const map = L.map('map', {
         preferCanvas: true,
         zoomSnap: 0.25,
         zoomDelta: 0.25,
@@ -691,9 +697,11 @@ document.addEventListener('DOMContentLoaded', () => {
             else if (code.startsWith('r')) selectEchelle.value = 'region';
             else if (code.startsWith('bmi')) selectEchelle.value = 'bmi';
             else selectEchelle.value = 'departement';
-            
+
             selectEchelle.dispatchEvent(new Event('change'));
-            inputCode.value = settings.geo.code_geo_defaut;
+            if (selectEchelle.value !== 'national') {
+                inputCode.value = settings.geo.code_geo_defaut;
+            }
         }
 
         if (settings.geo && settings.geo.annee_reference) {
@@ -702,7 +710,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const da = String(now.getDate()).padStart(2, '0');
             if (dateDebEl) dateDebEl.value = `${refYear}-01-01`;
             if (dateFinEl) dateFinEl.value = `${refYear}-${mo}-${da}`;
-            
+
             if (compareDateDebEl && compareDateFinEl) {
                 const lastYear = refYear - 1;
                 compareDateDebEl.value = `${lastYear}-01-01`;
@@ -721,7 +729,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Chargement initial
         const stateFromURL = loadStateFromURL();
         const stateFromLS = loadStateFromLocalStorage();
-        
+
         if (stateFromURL) {
             applyFiltersState(stateFromURL);
         } else if (stateFromLS) {
@@ -732,7 +740,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     const markersGroup = L.layerGroup(); // Les points individuels sans cluster (si besoin de bascule)
-    const markersClusterGroup = L.markerClusterGroup({ 
+    const markersClusterGroup = L.markerClusterGroup({
         chunkedLoading: true,
         disableClusteringAtZoom: 14,
         maxClusterRadius: function (zoom) { return (zoom < 8) ? 80 : (zoom < 11) ? 50 : 30; }
@@ -741,7 +749,7 @@ document.addEventListener('DOMContentLoaded', () => {
         chunkedLoading: true,
         disableClusteringAtZoom: 14,
         maxClusterRadius: function (zoom) { return (zoom < 8) ? 80 : (zoom < 11) ? 50 : 30; },
-        iconCreateFunction: function(cluster) {
+        iconCreateFunction: function (cluster) {
             const count = cluster.getChildCount();
             return L.divIcon({
                 html: `<div style="background-color:rgba(59, 130, 246, 0.85);border:2px solid white;border-radius:50%;text-align:center;color:white;font-weight:bold;line-height:26px;width:30px;height:30px;box-shadow: 0 1px 3px rgba(0,0,0,0.3);">${count}</div>`,
@@ -755,7 +763,7 @@ document.addEventListener('DOMContentLoaded', () => {
         chunkedLoading: true,
         disableClusteringAtZoom: 14,
         maxClusterRadius: function (zoom) { return (zoom < 8) ? 80 : (zoom < 11) ? 50 : 30; },
-        iconCreateFunction: function(cluster) {
+        iconCreateFunction: function (cluster) {
             const count = cluster.getChildCount();
             return L.divIcon({
                 html: `<div style="background-color:rgba(139, 92, 246, 0.85);border:2px solid white;border-radius:50%;text-align:center;color:white;font-weight:bold;line-height:26px;width:30px;height:30px;box-shadow: 0 1px 3px rgba(0,0,0,0.3);">${count}</div>`,
@@ -769,7 +777,7 @@ document.addEventListener('DOMContentLoaded', () => {
         chunkedLoading: true,
         disableClusteringAtZoom: 14,
         maxClusterRadius: function (zoom) { return (zoom < 8) ? 80 : (zoom < 11) ? 50 : 30; },
-        iconCreateFunction: function(cluster) {
+        iconCreateFunction: function (cluster) {
             const count = cluster.getChildCount();
             return L.divIcon({
                 html: `<div style="background-color:rgba(249, 115, 22, 0.85);border:2px solid white;border-radius:50%;text-align:center;color:white;font-weight:bold;line-height:26px;width:30px;height:30px;box-shadow: 0 1px 3px rgba(0,0,0,0.3);">${count}</div>`,
@@ -846,7 +854,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 try {
                     const data = await response.json();
                     if (data.error) errMsg += ' : ' + data.error;
-                } catch (e) {}
+                } catch (e) { }
                 throw new Error(errMsg);
             }
             return response.json();
@@ -862,94 +870,94 @@ document.addEventListener('DOMContentLoaded', () => {
                 try {
                     const data = await response.json();
                     if (data.error) errMsg += ' : ' + data.error;
-                } catch (e) {}
+                } catch (e) { }
                 throw new Error(errMsg);
             }
             return response.json();
         }) : Promise.resolve(null);
 
         Promise.all([reqN, reqN1])
-        .then(([resN, resN1]) => {
-            // Mémorisation de l'état (localStorage et URL)
-            saveStateToLocalStorage();
-            updateURLWithState();
+            .then(([resN, resN1]) => {
+                // Mémorisation de l'état (localStorage et URL)
+                saveStateToLocalStorage();
+                updateURLWithState();
 
-            // Rendu des valeurs d'indicateurs clés
-            function updateStatElement(elementId, valN, valN1) {
-                const el = document.getElementById(elementId);
-                if (!el) return;
-                if (valN1 === undefined || valN1 === null) {
-                    el.innerHTML = valN;
-                } else {
-                    const pct = valN1 > 0 ? ((valN - valN1) / valN1 * 100).toFixed(1) : 0;
-                    const arrow = valN > valN1 ? '▲' : (valN < valN1 ? '▼' : '■');
-                    const color = valN > valN1 ? '#10B981' : (valN < valN1 ? '#EF4444' : '#64748B');
-                    el.innerHTML = `<span style="font-size: 16px;">${valN}</span> <div style="font-size: 9px; font-weight: 600; color: ${color}; margin-top: 2px;">vs ${valN1} (${pct >= 0 ? '+' : ''}${pct}% ${arrow})</div>`;
+                // Rendu des valeurs d'indicateurs clés
+                function updateStatElement(elementId, valN, valN1) {
+                    const el = document.getElementById(elementId);
+                    if (!el) return;
+                    if (valN1 === undefined || valN1 === null) {
+                        el.innerHTML = valN;
+                    } else {
+                        const pct = valN1 > 0 ? ((valN - valN1) / valN1 * 100).toFixed(1) : 0;
+                        const arrow = valN > valN1 ? '▲' : (valN < valN1 ? '▼' : '■');
+                        const color = valN > valN1 ? '#10B981' : (valN < valN1 ? '#EF4444' : '#64748B');
+                        el.innerHTML = `<span style="font-size: 16px;">${valN}</span> <div style="font-size: 9px; font-weight: 600; color: ${color}; margin-top: 2px;">vs ${valN1} (${pct >= 0 ? '+' : ''}${pct}% ${arrow})</div>`;
+                    }
                 }
-            }
 
-            updateStatElement('val-controles', resN.stats.total_controles, isCompare ? resN1.stats.total_controles : null);
-            updateStatElement('val-pej', resN.stats.total_pej, isCompare ? resN1.stats.total_pej : null);
-            updateStatElement('val-pa', resN.stats.total_pa, isCompare ? resN1.stats.total_pa : null);
-            updateStatElement('val-pve', resN.stats.total_pve, isCompare ? resN1.stats.total_pve : null);
+                updateStatElement('val-controles', resN.stats.total_controles, isCompare ? resN1.stats.total_controles : null);
+                updateStatElement('val-pej', resN.stats.total_pej, isCompare ? resN1.stats.total_pej : null);
+                updateStatElement('val-pa', resN.stats.total_pa, isCompare ? resN1.stats.total_pa : null);
+                updateStatElement('val-pve', resN.stats.total_pve, isCompare ? resN1.stats.total_pve : null);
 
-            // Mise à jour des points actifs et du compteur (uniquement basés sur la période principale N)
-            activePoints = resN.points || [];
-            currentTablePage = 1;
-            
-            const resultsCountEl = document.getElementById('results-count');
-            if (resultsCountEl) {
-                const count = activePoints.length;
-                resultsCountEl.textContent = `${count} contrôle${count > 1 ? 's' : ''} chargé${count > 1 ? 's' : ''}`;
-                resultsCountEl.classList.remove('hidden');
-            }
+                // Mise à jour des points actifs et du compteur (uniquement basés sur la période principale N)
+                activePoints = resN.points || [];
+                currentTablePage = 1;
 
-            if (isTableExpanded) {
-                renderTable();
-            }
+                const resultsCountEl = document.getElementById('results-count');
+                if (resultsCountEl) {
+                    const count = activePoints.length;
+                    resultsCountEl.textContent = `${count} contrôle${count > 1 ? 's' : ''} chargé${count > 1 ? 's' : ''}`;
+                    resultsCountEl.classList.remove('hidden');
+                }
 
-            markersGroup.clearLayers();
-            markersClusterGroup.clearLayers();
-            pejGroup.clearLayers();
-            paGroup.clearLayers();
-            pveGroup.clearLayers();
-            if (heatmapLayer) {
-                map.removeLayer(heatmapLayer);
-                heatmapLayer = null;
-            }
-            if (boundaryLayer) {
-                map.removeLayer(boundaryLayer);
-                boundaryLayer = null;
-            }
-            const coordinates = [];
-            const heatData = [];
-            const isHeatmapMode = document.querySelector('input[name="map-mode"]:checked')?.value === 'heatmap';
-            
-            const newMarkers = [];
-            const newPejMarkers = [];
-            const newPaMarkers = [];
-            const newPveMarkers = [];
+                if (isTableExpanded) {
+                    renderTable();
+                }
 
-            if (resN.points && resN.points.length > 0) {
-                resN.points.forEach(pt => {
-                    const lat = parseFloat(pt.y);
-                    const lng = parseFloat(pt.x);
+                markersGroup.clearLayers();
+                markersClusterGroup.clearLayers();
+                pejGroup.clearLayers();
+                paGroup.clearLayers();
+                pveGroup.clearLayers();
+                if (heatmapLayer) {
+                    map.removeLayer(heatmapLayer);
+                    heatmapLayer = null;
+                }
+                if (boundaryLayer) {
+                    map.removeLayer(boundaryLayer);
+                    boundaryLayer = null;
+                }
+                const coordinates = [];
+                const heatData = [];
+                const isHeatmapMode = document.querySelector('input[name="map-mode"]:checked')?.value === 'heatmap';
 
-                    if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
-                        coordinates.push([lat, lng]);
-                        heatData.push([lat, lng, 1.0]);
+                const newMarkers = [];
+                const newPejMarkers = [];
+                const newPaMarkers = [];
+                const newPveMarkers = [];
 
-                        const color = getMarkerColor(pt.resultat);
-                        const marker = L.circleMarker([lat, lng], {
-                            radius: 6,
-                            fillColor: color,
-                            color: '#FFFFFF',
-                            weight: 1.5,
-                            opacity: 1,
-                            fillOpacity: 1
-                        });
+                if (resN.points && resN.points.length > 0) {
+                    resN.points.forEach(pt => {
+                        const lat = parseFloat(pt.y);
+                        const lng = parseFloat(pt.x);
 
-                        const popupContent = `
+                        if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+                            coordinates.push([lat, lng]);
+                            heatData.push([lat, lng, 1.0]);
+
+                            const color = getMarkerColor(pt.resultat);
+                            const marker = L.circleMarker([lat, lng], {
+                                radius: 6,
+                                fillColor: color,
+                                color: '#FFFFFF',
+                                weight: 1.5,
+                                opacity: 1,
+                                fillOpacity: 1
+                            });
+
+                            const popupContent = `
                             <strong>Contrôle OSCEAN</strong><br>
                             ID: ${pt.dc_id || 'N/A'}<br>
                             Date: ${pt.date_ctrl || 'N/A'}<br>
@@ -960,86 +968,86 @@ document.addEventListener('DOMContentLoaded', () => {
                             Usager: ${pt.type_usager || 'N/A'}<br>
                             Commune: ${pt.nom_commun || 'N/A'}
                         `;
-                        marker.bindPopup(popupContent);
-                        markersGroup.addLayer(marker);
-                        newMarkers.push(marker);
-                    }
-                });
-            }
-
-            if (isHeatmapMode) {
-                map.removeLayer(markersClusterGroup);
-                heatmapLayer = L.heatLayer(heatData, {
-                    radius: 20,
-                    blur: 15,
-                    maxZoom: 12
-                }).addTo(map);
-            } else {
-                if (!map.hasLayer(markersClusterGroup)) {
-                    markersClusterGroup.addTo(map);
-                }
-            }
-            // Render procedure markers (if any)
-            if (resN.procedures && resN.procedures.length > 0) {
-                resN.procedures.forEach(p => {
-                    let lat = parseFloat(p.y);
-                    let lng = parseFloat(p.x);
-                    if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
-                        let procColor = '#3B82F6';
-                        const ptype = (p.type || '').toUpperCase();
-                        let targetGroup = pejGroup;
-                        if (ptype.includes('PEJ')) {
-                            procColor = '#3B82F6';
-                            targetGroup = pejGroup;
-                        } else if (ptype.includes('PA')) {
-                            procColor = '#8B5CF6';
-                            targetGroup = paGroup;
-                        } else if (ptype.includes('PVE')) {
-                            procColor = '#F97316';
-                            targetGroup = pveGroup;
+                            marker.bindPopup(popupContent);
+                            markersGroup.addLayer(marker);
+                            newMarkers.push(marker);
                         }
+                    });
+                }
 
-                        const marker = L.circleMarker([lat, lng], {
-                            radius: 6,
-                            color: procColor,
-                            fillColor: procColor,
-                            fillOpacity: 1,
-                            weight: 1.5,
-                            interactive: true
-                        });
-                        const popup = `
+                if (isHeatmapMode) {
+                    map.removeLayer(markersClusterGroup);
+                    heatmapLayer = L.heatLayer(heatData, {
+                        radius: 20,
+                        blur: 15,
+                        maxZoom: 12
+                    }).addTo(map);
+                } else {
+                    if (!map.hasLayer(markersClusterGroup)) {
+                        markersClusterGroup.addTo(map);
+                    }
+                }
+                // Render procedure markers (if any)
+                if (resN.procedures && resN.procedures.length > 0) {
+                    resN.procedures.forEach(p => {
+                        let lat = parseFloat(p.y);
+                        let lng = parseFloat(p.x);
+                        if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+                            let procColor = '#3B82F6';
+                            const ptype = (p.type || '').toUpperCase();
+                            let targetGroup = pejGroup;
+                            if (ptype.includes('PEJ')) {
+                                procColor = '#3B82F6';
+                                targetGroup = pejGroup;
+                            } else if (ptype.includes('PA')) {
+                                procColor = '#8B5CF6';
+                                targetGroup = paGroup;
+                            } else if (ptype.includes('PVE')) {
+                                procColor = '#F97316';
+                                targetGroup = pveGroup;
+                            }
+
+                            const marker = L.circleMarker([lat, lng], {
+                                radius: 6,
+                                color: procColor,
+                                fillColor: procColor,
+                                fillOpacity: 1,
+                                weight: 1.5,
+                                interactive: true
+                            });
+                            const popup = `
                             <strong>${p.type}</strong><br>
                             N° Oscean : ${p.dc_id || 'N/A'}<br>
                             Date: ${p.date_ctrl || 'N/A'}<br>
                             Type d'action de la ${p.type} : ${p.type_action || 'Non renseigné'}<br>
                             Usager visé : ${p.type_usager || 'Non renseigné'}
                         `;
-                        marker.bindPopup(popup);
-                        if (targetGroup === pejGroup) newPejMarkers.push(marker);
-                        else if (targetGroup === paGroup) newPaMarkers.push(marker);
-                        else if (targetGroup === pveGroup) newPveMarkers.push(marker);
-                    }
-                });
-            }
+                            marker.bindPopup(popup);
+                            if (targetGroup === pejGroup) newPejMarkers.push(marker);
+                            else if (targetGroup === paGroup) newPaMarkers.push(marker);
+                            else if (targetGroup === pveGroup) newPveMarkers.push(marker);
+                        }
+                    });
+                }
 
-            // Render points N-1
-            if (isCompare && resN1 && resN1.points && resN1.points.length > 0) {
-                resN1.points.forEach(pt => {
-                    const lat = parseFloat(pt.y);
-                    const lng = parseFloat(pt.x);
+                // Render points N-1
+                if (isCompare && resN1 && resN1.points && resN1.points.length > 0) {
+                    resN1.points.forEach(pt => {
+                        const lat = parseFloat(pt.y);
+                        const lng = parseFloat(pt.x);
 
-                    if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
-                        const color = getMarkerColor(pt.resultat);
-                        const marker = L.circleMarker([lat, lng], {
-                            radius: 6,
-                            fillColor: color,
-                            color: '#FFFFFF',
-                            weight: 1.5,
-                            opacity: 0.5,
-                            fillOpacity: 0.4
-                        });
+                        if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+                            const color = getMarkerColor(pt.resultat);
+                            const marker = L.circleMarker([lat, lng], {
+                                radius: 6,
+                                fillColor: color,
+                                color: '#FFFFFF',
+                                weight: 1.5,
+                                opacity: 0.5,
+                                fillOpacity: 0.4
+                            });
 
-                        const popupContent = `
+                            const popupContent = `
                             <strong>Contrôle OSCEAN (N-1)</strong><br>
                             ID: ${pt.dc_id || 'N/A'}<br>
                             Date: ${pt.date_ctrl || 'N/A'}<br>
@@ -1049,636 +1057,636 @@ document.addEventListener('DOMContentLoaded', () => {
                             Usager: ${pt.type_usager || 'N/A'}<br>
                             Commune: ${pt.nom_commun || 'N/A'}
                         `;
-                        marker.bindPopup(popupContent);
-                        markersGroup.addLayer(marker);
-                        newMarkers.push(marker);
-                    }
-                });
-            }
-
-            // Render procedure markers N-1
-            if (isCompare && resN1 && resN1.procedures && resN1.procedures.length > 0) {
-                resN1.procedures.forEach(p => {
-                    let lat = parseFloat(p.y);
-                    let lng = parseFloat(p.x);
-                    if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
-                        let procColor = '#3B82F6';
-                        const ptype = (p.type || '').toUpperCase();
-                        let targetGroup = pejGroup;
-                        if (ptype.includes('PEJ')) {
-                            procColor = '#3B82F6';
-                            targetGroup = pejGroup;
-                        } else if (ptype.includes('PA')) {
-                            procColor = '#8B5CF6';
-                            targetGroup = paGroup;
-                        } else if (ptype.includes('PVE')) {
-                            procColor = '#F97316';
-                            targetGroup = pveGroup;
+                            marker.bindPopup(popupContent);
+                            markersGroup.addLayer(marker);
+                            newMarkers.push(marker);
                         }
+                    });
+                }
 
-                        const marker = L.circleMarker([lat, lng], {
-                            radius: 6,
-                            color: procColor,
-                            fillColor: procColor,
-                            opacity: 0.5,
-                            fillOpacity: 0.35,
-                            weight: 1.5,
-                            interactive: true
-                        });
-                        const popup = `
+                // Render procedure markers N-1
+                if (isCompare && resN1 && resN1.procedures && resN1.procedures.length > 0) {
+                    resN1.procedures.forEach(p => {
+                        let lat = parseFloat(p.y);
+                        let lng = parseFloat(p.x);
+                        if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+                            let procColor = '#3B82F6';
+                            const ptype = (p.type || '').toUpperCase();
+                            let targetGroup = pejGroup;
+                            if (ptype.includes('PEJ')) {
+                                procColor = '#3B82F6';
+                                targetGroup = pejGroup;
+                            } else if (ptype.includes('PA')) {
+                                procColor = '#8B5CF6';
+                                targetGroup = paGroup;
+                            } else if (ptype.includes('PVE')) {
+                                procColor = '#F97316';
+                                targetGroup = pveGroup;
+                            }
+
+                            const marker = L.circleMarker([lat, lng], {
+                                radius: 6,
+                                color: procColor,
+                                fillColor: procColor,
+                                opacity: 0.5,
+                                fillOpacity: 0.35,
+                                weight: 1.5,
+                                interactive: true
+                            });
+                            const popup = `
                             <strong>${p.type} (N-1)</strong><br>
                             N° Oscean : ${p.dc_id || 'N/A'}<br>
                             Date: ${p.date_ctrl || 'N/A'}<br>
                             Type d'action de la ${p.type} : ${p.type_action || 'Non renseigné'}<br>
                             Usager visé : ${p.type_usager || 'Non renseigné'}
                         `;
-                        marker.bindPopup(popup);
-                        if (targetGroup === pejGroup) newPejMarkers.push(marker);
-                        else if (targetGroup === paGroup) newPaMarkers.push(marker);
-                        else if (targetGroup === pveGroup) newPveMarkers.push(marker);
-                    }
-                });
-            }
-            
-            // Ajout en masse aux clusters
-            markersClusterGroup.addLayers(newMarkers);
-            pejGroup.addLayers(newPejMarkers);
-            paGroup.addLayers(newPaMarkers);
-            pveGroup.addLayers(newPveMarkers);
-
-            // Render boundary if available
-            if (resN.geojson) {
-                boundaryLayer = L.geoJSON(resN.geojson, {
-                    style: {
-                        color: '#003A76',
-                        weight: 2.5,
-                        opacity: 0.85,
-                        fillColor: '#003A76',
-                        fillOpacity: 0.05
-                    }
-                }).addTo(map);
-            }
-
-            // Center/zoom map
-            if (boundaryLayer) {
-                map.fitBounds(boundaryLayer.getBounds(), { padding: [20, 20] });
-            } else if (coordinates.length > 0) {
-                const bounds = L.latLngBounds(coordinates);
-                map.fitBounds(bounds, { padding: [30, 30] });
-            } else {
-                // If no points, reset view to France
-                map.setView([46.2276, 2.2137], 6);
-            }
-
-            // --- CHARTS GENERATION ---
-            const chartData = resN.charts || {};
-
-            const tooltipPercentageCallback = {
-                label: function(context) {
-                    let label = context.dataset.label || '';
-                    if (label) {
-                        label += ' : ';
-                    } else {
-                        label = context.label ? context.label + ' : ' : '';
-                    }
-                    const val = context.raw;
-                    let total = 0;
-                    if (context.chart.config.type === 'bar' && context.dataset.stack) {
-                        const currentStack = context.dataset.stack;
-                        context.chart.data.datasets.forEach(ds => {
-                            if (ds.stack === currentStack) {
-                                total += (ds.data[context.dataIndex] || 0);
-                            }
-                        });
-                    } else {
-                        total = context.dataset.data.reduce((sum, v) => sum + (v || 0), 0);
-                    }
-                    
-                    if (total > 0) {
-                        const percentage = ((val / total) * 100).toFixed(1);
-                        return `${label}${val} (${percentage}%)`;
-                    }
-                    return `${label}${val}`;
+                            marker.bindPopup(popup);
+                            if (targetGroup === pejGroup) newPejMarkers.push(marker);
+                            else if (targetGroup === paGroup) newPaMarkers.push(marker);
+                            else if (targetGroup === pveGroup) newPveMarkers.push(marker);
+                        }
+                    });
                 }
-            };
 
-            // --- CHARTS GENERATION ---
-            
-            // 1. Résultats des Contrôles (Doughnut concentrique)
-            if (chartResults) {
-                chartResults.destroy();
-            }
-            const resultsN = chartData.results || {};
-            const resultsN1 = isCompare ? (resN1.charts.results || {}) : null;
+                // Ajout en masse aux clusters
+                markersClusterGroup.addLayers(newMarkers);
+                pejGroup.addLayers(newPejMarkers);
+                paGroup.addLayers(newPaMarkers);
+                pveGroup.addLayers(newPveMarkers);
 
-            const resultsDatasets = [{
-                data: Object.values(resultsN),
-                backgroundColor: ['#53AB60', '#EF4444', '#64748B'],
-                borderWidth: 1,
-                label: isCompare ? 'Période N' : 'Période'
-            }];
+                // Render boundary if available
+                if (resN.geojson) {
+                    boundaryLayer = L.geoJSON(resN.geojson, {
+                        style: {
+                            color: '#003A76',
+                            weight: 2.5,
+                            opacity: 0.85,
+                            fillColor: '#003A76',
+                            fillOpacity: 0.05
+                        }
+                    }).addTo(map);
+                }
 
-            if (isCompare && resultsN1) {
-                resultsDatasets.push({
-                    data: Object.values(resultsN1),
-                    backgroundColor: ['rgba(83, 171, 96, 0.5)', 'rgba(239, 68, 68, 0.5)', 'rgba(100, 116, 139, 0.5)'],
+                // Center/zoom map
+                if (boundaryLayer) {
+                    map.fitBounds(boundaryLayer.getBounds(), { padding: [20, 20] });
+                } else if (coordinates.length > 0) {
+                    const bounds = L.latLngBounds(coordinates);
+                    map.fitBounds(bounds, { padding: [30, 30] });
+                } else {
+                    // If no points, reset view to France
+                    map.setView([46.2276, 2.2137], 6);
+                }
+
+                // --- CHARTS GENERATION ---
+                const chartData = resN.charts || {};
+
+                const tooltipPercentageCallback = {
+                    label: function (context) {
+                        let label = context.dataset.label || '';
+                        if (label) {
+                            label += ' : ';
+                        } else {
+                            label = context.label ? context.label + ' : ' : '';
+                        }
+                        const val = context.raw;
+                        let total = 0;
+                        if (context.chart.config.type === 'bar' && context.dataset.stack) {
+                            const currentStack = context.dataset.stack;
+                            context.chart.data.datasets.forEach(ds => {
+                                if (ds.stack === currentStack) {
+                                    total += (ds.data[context.dataIndex] || 0);
+                                }
+                            });
+                        } else {
+                            total = context.dataset.data.reduce((sum, v) => sum + (v || 0), 0);
+                        }
+
+                        if (total > 0) {
+                            const percentage = ((val / total) * 100).toFixed(1);
+                            return `${label}${val} (${percentage}%)`;
+                        }
+                        return `${label}${val}`;
+                    }
+                };
+
+                // --- CHARTS GENERATION ---
+
+                // 1. Résultats des Contrôles (Doughnut concentrique)
+                if (chartResults) {
+                    chartResults.destroy();
+                }
+                const resultsN = chartData.results || {};
+                const resultsN1 = isCompare ? (resN1.charts.results || {}) : null;
+
+                const resultsDatasets = [{
+                    data: Object.values(resultsN),
+                    backgroundColor: ['#53AB60', '#EF4444', '#64748B'],
                     borderWidth: 1,
-                    label: 'Période N-1'
-                });
-            }
+                    label: isCompare ? 'Période N' : 'Période'
+                }];
 
-            const ctxResults = document.getElementById('chart-results').getContext('2d');
-            chartResults = new Chart(ctxResults, {
-                type: 'doughnut',
-                data: {
-                    labels: Object.keys(resultsN),
-                    datasets: resultsDatasets
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            callbacks: tooltipPercentageCallback
+                if (isCompare && resultsN1) {
+                    resultsDatasets.push({
+                        data: Object.values(resultsN1),
+                        backgroundColor: ['rgba(83, 171, 96, 0.5)', 'rgba(239, 68, 68, 0.5)', 'rgba(100, 116, 139, 0.5)'],
+                        borderWidth: 1,
+                        label: 'Période N-1'
+                    });
+                }
+
+                const ctxResults = document.getElementById('chart-results').getContext('2d');
+                chartResults = new Chart(ctxResults, {
+                    type: 'doughnut',
+                    data: {
+                        labels: Object.keys(resultsN),
+                        datasets: resultsDatasets
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: tooltipPercentageCallback
+                            }
                         }
                     }
-                }
-            });
+                });
 
-            // Populate custom results legend
-            const legendResults = document.getElementById('legend-results');
-            if (legendResults) {
-                legendResults.innerHTML = '';
-                const resultsLabels = Object.keys(resultsN);
-                const resultsColors = ['#53AB60', '#EF4444', '#64748B'];
-                resultsLabels.forEach((label, idx) => {
-                    const color = resultsColors[idx] || '#64748B';
-                    legendResults.innerHTML += `
+                // Populate custom results legend
+                const legendResults = document.getElementById('legend-results');
+                if (legendResults) {
+                    legendResults.innerHTML = '';
+                    const resultsLabels = Object.keys(resultsN);
+                    const resultsColors = ['#53AB60', '#EF4444', '#64748B'];
+                    resultsLabels.forEach((label, idx) => {
+                        const color = resultsColors[idx] || '#64748B';
+                        legendResults.innerHTML += `
                         <div style="display: flex; align-items: center; gap: 5px; font-size: 9px; font-weight: 500; color: var(--color-text-dark);">
                             <span style="display: inline-block; width: 8px; height: 8px; background-color: ${color}; border-radius: 50%; flex-shrink: 0;"></span>
                             <span>${label}</span>
                         </div>
                     `;
+                    });
+                }
+
+                // 2. Usagers (Doughnut concentrique)
+                if (chartUsagers) {
+                    chartUsagers.destroy();
+                }
+                const usagersN = chartData.usagers || {};
+                const usagersN1 = isCompare ? (resN1.charts.usagers || {}) : null;
+                const rawLabels = Object.keys(usagersN);
+                const usagersLabels = rawLabels.map(label => {
+                    if (label.toLowerCase().includes('agriculteur')) return 'Agriculteur';
+                    if (label.toLowerCase().includes('particulier')) return 'Particulier';
+                    return label;
                 });
-            }
+                const usagersColors = rawLabels.map(label => {
+                    const l = label.toLowerCase();
+                    if (l.includes('agriculteur')) return '#F1C40F';
+                    if (l.includes('particulier')) return '#2980B9';
+                    if (l.includes('collectiv')) return '#27AE60';
+                    if (l.includes('entreprise')) return '#E74C3C';
+                    if (l.includes('sylvic')) return '#16A085';
+                    return '#95A5A6';
+                });
 
-            // 2. Usagers (Doughnut concentrique)
-            if (chartUsagers) {
-                chartUsagers.destroy();
-            }
-            const usagersN = chartData.usagers || {};
-            const usagersN1 = isCompare ? (resN1.charts.usagers || {}) : null;
-            const rawLabels = Object.keys(usagersN);
-            const usagersLabels = rawLabels.map(label => {
-                if (label.toLowerCase().includes('agriculteur')) return 'Agriculteur';
-                if (label.toLowerCase().includes('particulier')) return 'Particulier';
-                return label;
-            });
-            const usagersColors = rawLabels.map(label => {
-                const l = label.toLowerCase();
-                if (l.includes('agriculteur')) return '#F1C40F';
-                if (l.includes('particulier')) return '#2980B9';
-                if (l.includes('collectiv')) return '#27AE60';
-                if (l.includes('entreprise')) return '#E74C3C';
-                if (l.includes('sylvic')) return '#16A085';
-                return '#95A5A6';
-            });
-
-            const usagersDatasets = [{
-                data: Object.values(usagersN),
-                backgroundColor: usagersColors,
-                borderWidth: 1,
-                label: isCompare ? 'Période N' : 'Période'
-            }];
-
-            if (isCompare && usagersN1) {
-                const alignedN1Data = rawLabels.map(lbl => usagersN1[lbl] || 0);
-                usagersDatasets.push({
-                    data: alignedN1Data,
-                    backgroundColor: usagersColors.map(c => c + '80'),
+                const usagersDatasets = [{
+                    data: Object.values(usagersN),
+                    backgroundColor: usagersColors,
                     borderWidth: 1,
-                    label: 'Période N-1'
-                });
-            }
+                    label: isCompare ? 'Période N' : 'Période'
+                }];
 
-            const ctxUsagers = document.getElementById('chart-usagers').getContext('2d');
-            chartUsagers = new Chart(ctxUsagers, {
-                type: 'doughnut',
-                data: {
-                    labels: usagersLabels,
-                    datasets: usagersDatasets
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    onClick: (event, elements) => {
-                        if (elements && elements.length > 0) {
-                            const index = elements[0].index;
-                            const shortLabel = chartUsagers.data.labels[index];
-                            const matched = usagersList.find(u => u.label.toLowerCase().includes(shortLabel.toLowerCase()) || u.value.toLowerCase().includes(shortLabel.toLowerCase()));
-                            if (matched && matched.value) {
-                                if (inputUsager.setSelectedValues) {
-                                    inputUsager.setSelectedValues([matched.value]);
+                if (isCompare && usagersN1) {
+                    const alignedN1Data = rawLabels.map(lbl => usagersN1[lbl] || 0);
+                    usagersDatasets.push({
+                        data: alignedN1Data,
+                        backgroundColor: usagersColors.map(c => c + '80'),
+                        borderWidth: 1,
+                        label: 'Période N-1'
+                    });
+                }
+
+                const ctxUsagers = document.getElementById('chart-usagers').getContext('2d');
+                chartUsagers = new Chart(ctxUsagers, {
+                    type: 'doughnut',
+                    data: {
+                        labels: usagersLabels,
+                        datasets: usagersDatasets
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        onClick: (event, elements) => {
+                            if (elements && elements.length > 0) {
+                                const index = elements[0].index;
+                                const shortLabel = chartUsagers.data.labels[index];
+                                const matched = usagersList.find(u => u.label.toLowerCase().includes(shortLabel.toLowerCase()) || u.value.toLowerCase().includes(shortLabel.toLowerCase()));
+                                if (matched && matched.value) {
+                                    if (inputUsager.setSelectedValues) {
+                                        inputUsager.setSelectedValues([matched.value]);
+                                    } else {
+                                        inputUsager.value = matched.value;
+                                    }
+                                    loadData();
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: tooltipPercentageCallback
+                            }
+                        }
+                    }
+                });
+
+                // Populate custom usagers legend
+                const legendUsagers = document.getElementById('legend-usagers');
+                if (legendUsagers) {
+                    legendUsagers.innerHTML = '';
+                    usagersLabels.forEach((label, idx) => {
+                        const color = usagersColors[idx];
+                        legendUsagers.innerHTML += `
+                        <div style="display: flex; align-items: center; gap: 5px; font-size: 9px; font-weight: 500; color: var(--color-text-dark);">
+                            <span style="display: inline-block; width: 8px; height: 8px; background-color: ${color}; border-radius: 50%; flex-shrink: 0;"></span>
+                            <span>${label}</span>
+                        </div>
+                    `;
+                    });
+                }
+
+                // 3. Domaines d'Activité (Barres groupées ou empilées par département)
+                if (chartDomains) {
+                    chartDomains.destroy();
+                }
+
+                const pnfDeptElChart = document.getElementById('pnf-dept-select');
+                const isRegion = selectEchelle.value === 'region' || (selectEchelle.value === 'pnf' && (!pnfDeptElChart || pnfDeptElChart.value === ''));
+                const getDomainTotal = (val) => typeof val === 'number' ? val : Object.values(val).reduce((sum, v) => sum + v, 0);
+
+                const sortedDomainsN = Object.entries(chartData.domains || {})
+                    .sort((a, b) => getDomainTotal(b[1]) - getDomainTotal(a[1]))
+                    .slice(0, 5);
+
+                const domainsN1 = isCompare ? (resN1.charts.domains || {}) : null;
+                const domainLabels = sortedDomainsN.map(d => splitLabel(d[0], 25));
+
+                const deptNames = {
+                    "01": "Ain", "02": "Aisne", "03": "Allier", "04": "Alpes-de-Haute-Provence", "05": "Hautes-Alpes",
+                    "06": "Alpes-Maritimes", "07": "Ardèche", "08": "Ardennes", "09": "Ariège", "10": "Aube",
+                    "11": "Aude", "12": "Aveyron", "13": "Bouches-du-Rhône", "14": "Calvados", "15": "Cantal",
+                    "16": "Charente", "17": "Charente-Maritime", "18": "Cher", "19": "Corrèze", "2A": "Corse-du-Sud",
+                    "2B": "Haute-Corse", "21": "Côte-d'Or", "22": "Côtes-d'Armor", "23": "Creuse", "24": "Dordogne",
+                    "25": "Doubs", "26": "Drôme", "27": "Eure", "28": "Eure-et-Loir", "29": "Finistère",
+                    "30": "Gard", "31": "Haute-Garonne", "32": "Gers", "33": "Gironde", "34": "Hérault",
+                    "35": "Ille-et-Vilaine", "36": "Indre", "37": "Indre-et-Loire", "38": "Isère", "39": "Jura",
+                    "40": "Landes", "41": "Loir-et-Cher", "42": "Loire", "43": "Haute-Loire", "44": "Loire-Atlantique",
+                    "45": "Loiret", "46": "Lot", "47": "Lot-et-Garonne", "48": "Lozère", "49": "Maine-et-Loire",
+                    "50": "Manche", "51": "Marne", "52": "Haute-Marne", "53": "Mayenne", "54": "Meurthe-et-Moselle",
+                    "55": "Meuse", "56": "Morbihan", "57": "Moselle", "58": "Nièvre", "59": "Nord", "60": "Oise",
+                    "61": "Orne", "62": "Pas-de-Calais", "63": "Puy-de-Dôme", "64": "Pyrénées-Atlantiques", "65": "Hautes-Pyrénées",
+                    "66": "Pyrénées-Orientales", "67": "Bas-Rhin", "68": "Haut-Rhin", "69": "Rhône", "70": "Haute-Saône",
+                    "71": "Saône-et-Loire", "72": "Sarthe", "73": "Savoie", "74": "Haute-Savoie", "75": "Paris",
+                    "76": "Seine-Maritime", "77": "Seine-et-Marne", "78": "Yvelines", "79": "Deux-Sèvres", "80": "Somme",
+                    "81": "Tarn", "82": "Tarn-et-Garonne", "83": "Var", "84": "Vaucluse", "85": "Vendée",
+                    "86": "Vienne", "87": "Haute-Vienne", "88": "Vosges", "89": "Yonne", "90": "Territoire de Belfort",
+                    "91": "Essonne", "92": "Hauts-de-Seine", "93": "Seine-Saint-Denis", "94": "Val-de-Marne", "95": "Val-d'Oise",
+                    "971": "Guadeloupe", "972": "Martinique", "973": "Guyane", "974": "La Réunion", "976": "Mayotte"
+                };
+                const getDeptName = (code) => {
+                    const c = String(code).trim().padStart(2, '0');
+                    return deptNames[c] || code;
+                };
+
+                let domainsDatasets = [];
+                // Palette colorée distincte (Type D3 Category10) pour bien différencier les départements
+                const deptColorsDom = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'];
+                const deptColorsDomN1 = ['#aec7e8', '#ffbb78', '#98df8a', '#ff9896', '#c5b0d5', '#c49c94', '#f7b6d2', '#c7c7c7', '#dbdb8d', '#9edae5'];
+
+                if (isRegion) {
+                    const allDepts = new Set();
+                    sortedDomainsN.forEach(([_, counts]) => {
+                        if (typeof counts === 'object') Object.keys(counts).forEach(d => allDepts.add(d));
+                    });
+                    const depts = Array.from(allDepts).sort();
+
+                    depts.forEach((dept, idx) => {
+                        domainsDatasets.push({
+                            label: isCompare ? `${getDeptName(dept)} N` : getDeptName(dept),
+                            data: sortedDomainsN.map(([_, counts]) => (counts[dept] || 0)),
+                            backgroundColor: deptColorsDom[idx % deptColorsDom.length],
+                            borderColor: '#ffffff',
+                            borderWidth: 1,
+                            stack: 'Stack N',
+                            borderRadius: 4,
+                            barThickness: isCompare ? 16 : 24
+                        });
+                    });
+
+                    if (isCompare && domainsN1) {
+                        const deptsN1 = new Set();
+                        sortedDomainsN.forEach(([domain]) => {
+                            const counts = domainsN1[domain] || {};
+                            if (typeof counts === 'object') Object.keys(counts).forEach(d => deptsN1.add(d));
+                        });
+                        Array.from(deptsN1).sort().forEach((dept, idx) => {
+                            domainsDatasets.push({
+                                label: `${getDeptName(dept)} N-1`,
+                                data: sortedDomainsN.map(([domain]) => ((domainsN1[domain] || {})[dept] || 0)),
+                                backgroundColor: deptColorsDomN1[idx % deptColorsDomN1.length],
+                                borderColor: '#ffffff',
+                                borderWidth: 1,
+                                stack: 'Stack N-1',
+                                borderRadius: 4,
+                                barThickness: 16
+                            });
+                        });
+                    }
+                } else {
+                    domainsDatasets.push({
+                        label: isCompare ? 'Période N' : 'Période',
+                        data: sortedDomainsN.map(d => getDomainTotal(d[1])),
+                        backgroundColor: '#003A76',
+                        borderRadius: 4,
+                        barThickness: isCompare ? 8 : 12
+                    });
+
+                    if (isCompare && domainsN1) {
+                        const alignedN1 = sortedDomainsN.map(d => getDomainTotal(domainsN1[d[0]] || 0));
+                        domainsDatasets.push({
+                            label: 'Période N-1',
+                            data: alignedN1,
+                            backgroundColor: '#93C5FD',
+                            borderRadius: 4,
+                            barThickness: 8
+                        });
+                    }
+                }
+
+                const domainTotalLines = domainLabels.reduce((sum, lines) => sum + lines.length, 0);
+                const domainHeight = Math.max(100, 45 + (domainLabels.length * (isCompare ? 36 : 24)) + (domainTotalLines - domainLabels.length) * 11);
+                const wrapperDomains = document.getElementById('wrapper-domains');
+                if (wrapperDomains) {
+                    wrapperDomains.style.height = `${domainHeight}px`;
+                }
+
+                const ctxDomains = document.getElementById('chart-domains').getContext('2d');
+                chartDomains = new Chart(ctxDomains, {
+                    type: 'bar',
+                    data: {
+                        labels: domainLabels,
+                        datasets: domainsDatasets
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        indexAxis: 'y',
+                        onClick: (event, elements) => {
+                            if (elements && elements.length > 0) {
+                                const index = elements[0].index;
+                                const domainName = sortedDomainsN[index][0];
+                                if (inputDomaineSNC.setSelectedValues) {
+                                    inputDomaineSNC.setSelectedValues([domainName]);
                                 } else {
-                                    inputUsager.value = matched.value;
+                                    inputDomaineSNC.value = domainName;
                                 }
                                 loadData();
                             }
-                        }
-                    },
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            callbacks: tooltipPercentageCallback
-                        }
-                    }
-                }
-            });
-
-            // Populate custom usagers legend
-            const legendUsagers = document.getElementById('legend-usagers');
-            if (legendUsagers) {
-                legendUsagers.innerHTML = '';
-                usagersLabels.forEach((label, idx) => {
-                    const color = usagersColors[idx];
-                    legendUsagers.innerHTML += `
-                        <div style="display: flex; align-items: center; gap: 5px; font-size: 9px; font-weight: 500; color: var(--color-text-dark);">
-                            <span style="display: inline-block; width: 8px; height: 8px; background-color: ${color}; border-radius: 50%; flex-shrink: 0;"></span>
-                            <span>${label}</span>
-                        </div>
-                    `;
-                });
-            }
-
-            // 3. Domaines d'Activité (Barres groupées ou empilées par département)
-            if (chartDomains) {
-                chartDomains.destroy();
-            }
-            
-            const pnfDeptElChart = document.getElementById('pnf-dept-select');
-            const isRegion = selectEchelle.value === 'region' || (selectEchelle.value === 'pnf' && (!pnfDeptElChart || pnfDeptElChart.value === ''));
-            const getDomainTotal = (val) => typeof val === 'number' ? val : Object.values(val).reduce((sum, v) => sum + v, 0);
-
-            const sortedDomainsN = Object.entries(chartData.domains || {})
-                .sort((a, b) => getDomainTotal(b[1]) - getDomainTotal(a[1]))
-                .slice(0, 5);
-            
-            const domainsN1 = isCompare ? (resN1.charts.domains || {}) : null;
-            const domainLabels = sortedDomainsN.map(d => splitLabel(d[0], 25));
-
-            const deptNames = {
-                "01": "Ain", "02": "Aisne", "03": "Allier", "04": "Alpes-de-Haute-Provence", "05": "Hautes-Alpes",
-                "06": "Alpes-Maritimes", "07": "Ardèche", "08": "Ardennes", "09": "Ariège", "10": "Aube",
-                "11": "Aude", "12": "Aveyron", "13": "Bouches-du-Rhône", "14": "Calvados", "15": "Cantal",
-                "16": "Charente", "17": "Charente-Maritime", "18": "Cher", "19": "Corrèze", "2A": "Corse-du-Sud",
-                "2B": "Haute-Corse", "21": "Côte-d'Or", "22": "Côtes-d'Armor", "23": "Creuse", "24": "Dordogne",
-                "25": "Doubs", "26": "Drôme", "27": "Eure", "28": "Eure-et-Loir", "29": "Finistère",
-                "30": "Gard", "31": "Haute-Garonne", "32": "Gers", "33": "Gironde", "34": "Hérault",
-                "35": "Ille-et-Vilaine", "36": "Indre", "37": "Indre-et-Loire", "38": "Isère", "39": "Jura",
-                "40": "Landes", "41": "Loir-et-Cher", "42": "Loire", "43": "Haute-Loire", "44": "Loire-Atlantique",
-                "45": "Loiret", "46": "Lot", "47": "Lot-et-Garonne", "48": "Lozère", "49": "Maine-et-Loire",
-                "50": "Manche", "51": "Marne", "52": "Haute-Marne", "53": "Mayenne", "54": "Meurthe-et-Moselle",
-                "55": "Meuse", "56": "Morbihan", "57": "Moselle", "58": "Nièvre", "59": "Nord", "60": "Oise",
-                "61": "Orne", "62": "Pas-de-Calais", "63": "Puy-de-Dôme", "64": "Pyrénées-Atlantiques", "65": "Hautes-Pyrénées",
-                "66": "Pyrénées-Orientales", "67": "Bas-Rhin", "68": "Haut-Rhin", "69": "Rhône", "70": "Haute-Saône",
-                "71": "Saône-et-Loire", "72": "Sarthe", "73": "Savoie", "74": "Haute-Savoie", "75": "Paris",
-                "76": "Seine-Maritime", "77": "Seine-et-Marne", "78": "Yvelines", "79": "Deux-Sèvres", "80": "Somme",
-                "81": "Tarn", "82": "Tarn-et-Garonne", "83": "Var", "84": "Vaucluse", "85": "Vendée",
-                "86": "Vienne", "87": "Haute-Vienne", "88": "Vosges", "89": "Yonne", "90": "Territoire de Belfort",
-                "91": "Essonne", "92": "Hauts-de-Seine", "93": "Seine-Saint-Denis", "94": "Val-de-Marne", "95": "Val-d'Oise",
-                "971": "Guadeloupe", "972": "Martinique", "973": "Guyane", "974": "La Réunion", "976": "Mayotte"
-            };
-            const getDeptName = (code) => {
-                const c = String(code).trim().padStart(2, '0');
-                return deptNames[c] || code;
-            };
-
-            let domainsDatasets = [];
-            // Palette colorée distincte (Type D3 Category10) pour bien différencier les départements
-            const deptColorsDom = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'];
-            const deptColorsDomN1 = ['#aec7e8', '#ffbb78', '#98df8a', '#ff9896', '#c5b0d5', '#c49c94', '#f7b6d2', '#c7c7c7', '#dbdb8d', '#9edae5'];
-            
-            if (isRegion) {
-                const allDepts = new Set();
-                sortedDomainsN.forEach(([_, counts]) => {
-                    if (typeof counts === 'object') Object.keys(counts).forEach(d => allDepts.add(d));
-                });
-                const depts = Array.from(allDepts).sort();
-                
-                depts.forEach((dept, idx) => {
-                    domainsDatasets.push({
-                        label: isCompare ? `${getDeptName(dept)} N` : getDeptName(dept),
-                        data: sortedDomainsN.map(([_, counts]) => (counts[dept] || 0)),
-                        backgroundColor: deptColorsDom[idx % deptColorsDom.length],
-                        borderColor: '#ffffff',
-                        borderWidth: 1,
-                        stack: 'Stack N',
-                        borderRadius: 4,
-                        barThickness: isCompare ? 16 : 24
-                    });
-                });
-                
-                if (isCompare && domainsN1) {
-                    const deptsN1 = new Set();
-                    sortedDomainsN.forEach(([domain]) => {
-                        const counts = domainsN1[domain] || {};
-                        if (typeof counts === 'object') Object.keys(counts).forEach(d => deptsN1.add(d));
-                    });
-                    Array.from(deptsN1).sort().forEach((dept, idx) => {
-                        domainsDatasets.push({
-                            label: `${getDeptName(dept)} N-1`,
-                            data: sortedDomainsN.map(([domain]) => ((domainsN1[domain] || {})[dept] || 0)),
-                            backgroundColor: deptColorsDomN1[idx % deptColorsDomN1.length],
-                            borderColor: '#ffffff',
-                            borderWidth: 1,
-                            stack: 'Stack N-1',
-                            borderRadius: 4,
-                            barThickness: 16
-                        });
-                    });
-                }
-            } else {
-                domainsDatasets.push({
-                    label: isCompare ? 'Période N' : 'Période',
-                    data: sortedDomainsN.map(d => getDomainTotal(d[1])),
-                    backgroundColor: '#003A76',
-                    borderRadius: 4,
-                    barThickness: isCompare ? 8 : 12
-                });
-
-                if (isCompare && domainsN1) {
-                    const alignedN1 = sortedDomainsN.map(d => getDomainTotal(domainsN1[d[0]] || 0));
-                    domainsDatasets.push({
-                        label: 'Période N-1',
-                        data: alignedN1,
-                        backgroundColor: '#93C5FD',
-                        borderRadius: 4,
-                        barThickness: 8
-                    });
-                }
-            }
-
-            const domainTotalLines = domainLabels.reduce((sum, lines) => sum + lines.length, 0);
-            const domainHeight = Math.max(100, 45 + (domainLabels.length * (isCompare ? 36 : 24)) + (domainTotalLines - domainLabels.length) * 11);
-            const wrapperDomains = document.getElementById('wrapper-domains');
-            if (wrapperDomains) {
-                wrapperDomains.style.height = `${domainHeight}px`;
-            }
-            
-            const ctxDomains = document.getElementById('chart-domains').getContext('2d');
-            chartDomains = new Chart(ctxDomains, {
-                type: 'bar',
-                data: {
-                    labels: domainLabels,
-                    datasets: domainsDatasets
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    indexAxis: 'y',
-                    onClick: (event, elements) => {
-                        if (elements && elements.length > 0) {
-                            const index = elements[0].index;
-                            const domainName = sortedDomainsN[index][0];
-                            if (inputDomaineSNC.setSelectedValues) {
-                                inputDomaineSNC.setSelectedValues([domainName]);
-                            } else {
-                                inputDomaineSNC.value = domainName;
+                        },
+                        plugins: {
+                            legend: { display: isCompare || isRegion, position: 'top', labels: { boxWidth: 10, font: { size: 9 } } },
+                            tooltip: {
+                                callbacks: tooltipPercentageCallback
                             }
-                            loadData();
-                        }
-                    },
-                    plugins: {
-                        legend: { display: isCompare || isRegion, position: 'top', labels: { boxWidth: 10, font: { size: 9 } } },
-                        tooltip: {
-                            callbacks: tooltipPercentageCallback
-                        }
-                    },
-                    scales: {
-                        x: { stacked: isRegion, beginAtZero: true, ticks: { font: { size: 9 } } },
-                        y: { 
-                            stacked: isRegion,
-                            grid: { display: false },
-                            ticks: { autoSkip: false, font: { size: 9 } } 
+                        },
+                        scales: {
+                            x: { stacked: isRegion, beginAtZero: true, ticks: { font: { size: 9 } } },
+                            y: {
+                                stacked: isRegion,
+                                grid: { display: false },
+                                ticks: { autoSkip: false, font: { size: 9 } }
+                            }
                         }
                     }
+                });
+
+                // 4. Thématiques (Barres groupées ou empilées)
+                if (chartThemes) {
+                    chartThemes.destroy();
                 }
-            });
+                const sortedThemesN = Object.entries(chartData.themes || {})
+                    .sort((a, b) => getDomainTotal(b[1]) - getDomainTotal(a[1]))
+                    .slice(0, 5);
 
-            // 4. Thématiques (Barres groupées ou empilées)
-            if (chartThemes) {
-                chartThemes.destroy();
-            }
-            const sortedThemesN = Object.entries(chartData.themes || {})
-                .sort((a, b) => getDomainTotal(b[1]) - getDomainTotal(a[1]))
-                .slice(0, 5);
-            
-            const themesN1 = isCompare ? (resN1.charts.themes || {}) : null;
-            const themeLabels = sortedThemesN.map(d => splitLabel(d[0], 25));
+                const themesN1 = isCompare ? (resN1.charts.themes || {}) : null;
+                const themeLabels = sortedThemesN.map(d => splitLabel(d[0], 25));
 
-            let themesDatasets = [];
-            // Palette colorée distincte (Type D3 Category10) pour bien différencier les départements
-            const deptColorsTh = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'];
-            const deptColorsThN1 = ['#aec7e8', '#ffbb78', '#98df8a', '#ff9896', '#c5b0d5', '#c49c94', '#f7b6d2', '#c7c7c7', '#dbdb8d', '#9edae5'];
-            
-            if (isRegion) {
-                const allDepts = new Set();
-                sortedThemesN.forEach(([_, counts]) => {
-                    if (typeof counts === 'object') Object.keys(counts).forEach(d => allDepts.add(d));
-                });
-                const depts = Array.from(allDepts).sort();
-                
-                depts.forEach((dept, idx) => {
-                    themesDatasets.push({
-                        label: isCompare ? `${getDeptName(dept)} N` : getDeptName(dept),
-                        data: sortedThemesN.map(([_, counts]) => (counts[dept] || 0)),
-                        backgroundColor: deptColorsTh[idx % deptColorsTh.length],
-                        borderColor: '#ffffff',
-                        borderWidth: 1,
-                        stack: 'Stack N',
-                        borderRadius: 4,
-                        barThickness: isCompare ? 16 : 24
+                let themesDatasets = [];
+                // Palette colorée distincte (Type D3 Category10) pour bien différencier les départements
+                const deptColorsTh = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'];
+                const deptColorsThN1 = ['#aec7e8', '#ffbb78', '#98df8a', '#ff9896', '#c5b0d5', '#c49c94', '#f7b6d2', '#c7c7c7', '#dbdb8d', '#9edae5'];
+
+                if (isRegion) {
+                    const allDepts = new Set();
+                    sortedThemesN.forEach(([_, counts]) => {
+                        if (typeof counts === 'object') Object.keys(counts).forEach(d => allDepts.add(d));
                     });
-                });
-                
-                if (isCompare && themesN1) {
-                    const deptsN1 = new Set();
-                    sortedThemesN.forEach(([theme]) => {
-                        const counts = themesN1[theme] || {};
-                        if (typeof counts === 'object') Object.keys(counts).forEach(d => deptsN1.add(d));
-                    });
-                    Array.from(deptsN1).sort().forEach((dept, idx) => {
+                    const depts = Array.from(allDepts).sort();
+
+                    depts.forEach((dept, idx) => {
                         themesDatasets.push({
-                            label: `${getDeptName(dept)} N-1`,
-                            data: sortedThemesN.map(([theme]) => ((themesN1[theme] || {})[dept] || 0)),
-                            backgroundColor: deptColorsThN1[idx % deptColorsThN1.length],
+                            label: isCompare ? `${getDeptName(dept)} N` : getDeptName(dept),
+                            data: sortedThemesN.map(([_, counts]) => (counts[dept] || 0)),
+                            backgroundColor: deptColorsTh[idx % deptColorsTh.length],
                             borderColor: '#ffffff',
                             borderWidth: 1,
-                            stack: 'Stack N-1',
+                            stack: 'Stack N',
                             borderRadius: 4,
-                            barThickness: 16
+                            barThickness: isCompare ? 16 : 24
                         });
                     });
+
+                    if (isCompare && themesN1) {
+                        const deptsN1 = new Set();
+                        sortedThemesN.forEach(([theme]) => {
+                            const counts = themesN1[theme] || {};
+                            if (typeof counts === 'object') Object.keys(counts).forEach(d => deptsN1.add(d));
+                        });
+                        Array.from(deptsN1).sort().forEach((dept, idx) => {
+                            themesDatasets.push({
+                                label: `${getDeptName(dept)} N-1`,
+                                data: sortedThemesN.map(([theme]) => ((themesN1[theme] || {})[dept] || 0)),
+                                backgroundColor: deptColorsThN1[idx % deptColorsThN1.length],
+                                borderColor: '#ffffff',
+                                borderWidth: 1,
+                                stack: 'Stack N-1',
+                                borderRadius: 4,
+                                barThickness: 16
+                            });
+                        });
+                    }
+                } else {
+                    themesDatasets.push({
+                        label: isCompare ? 'Période N' : 'Période',
+                        data: sortedThemesN.map(d => getDomainTotal(d[1])),
+                        backgroundColor: '#4296CE',
+                        borderRadius: 4,
+                        barThickness: isCompare ? 8 : 12
+                    });
+
+                    if (isCompare && themesN1) {
+                        const alignedN1 = sortedThemesN.map(d => getDomainTotal(themesN1[d[0]] || 0));
+                        themesDatasets.push({
+                            label: 'Période N-1',
+                            data: alignedN1,
+                            backgroundColor: '#FCA5A5',
+                            borderRadius: 4,
+                            barThickness: 8
+                        });
+                    }
                 }
-            } else {
-                themesDatasets.push({
-                    label: isCompare ? 'Période N' : 'Période',
-                    data: sortedThemesN.map(d => getDomainTotal(d[1])),
-                    backgroundColor: '#4296CE',
-                    borderRadius: 4,
-                    barThickness: isCompare ? 8 : 12
+
+                const themeTotalLines = themeLabels.reduce((sum, lines) => sum + lines.length, 0);
+                const themeHeight = Math.max(100, 45 + (themeLabels.length * (isCompare ? 36 : 24)) + (themeTotalLines - themeLabels.length) * 11);
+                const wrapperThemes = document.getElementById('wrapper-themes');
+                if (wrapperThemes) {
+                    wrapperThemes.style.height = `${themeHeight}px`;
+                }
+
+                const ctxThemes = document.getElementById('chart-themes').getContext('2d');
+                chartThemes = new Chart(ctxThemes, {
+                    type: 'bar',
+                    data: {
+                        labels: themeLabels,
+                        datasets: themesDatasets
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        indexAxis: 'y',
+                        onClick: (event, elements) => {
+                            if (elements && elements.length > 0) {
+                                const index = elements[0].index;
+                                const themeName = sortedThemesN[index][0];
+                                if (inputThemeSNC.setSelectedValues) {
+                                    inputThemeSNC.setSelectedValues([themeName]);
+                                } else {
+                                    inputThemeSNC.value = themeName;
+                                }
+                                loadData();
+                            }
+                        },
+                        plugins: {
+                            legend: { display: isCompare || isRegion, position: 'top', labels: { boxWidth: 10, font: { size: 9 } } },
+                            tooltip: {
+                                callbacks: tooltipPercentageCallback
+                            }
+                        },
+                        scales: {
+                            x: { stacked: isRegion, beginAtZero: true, ticks: { font: { size: 9 } } },
+                            y: {
+                                stacked: isRegion,
+                                grid: { display: false },
+                                ticks: { autoSkip: false, font: { size: 9 } }
+                            }
+                        }
+                    }
                 });
 
-                if (isCompare && themesN1) {
-                    const alignedN1 = sortedThemesN.map(d => getDomainTotal(themesN1[d[0]] || 0));
-                    themesDatasets.push({
-                        label: 'Période N-1',
-                        data: alignedN1,
-                        backgroundColor: '#FCA5A5',
-                        borderRadius: 4,
-                        barThickness: 8
+                // 5. Saisonnalité de l'activité (Double Courbe Line)
+                if (chartSeasonality) {
+                    chartSeasonality.destroy();
+                }
+                const monthsLabels = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sept', 'Oct', 'Nov', 'Déc'];
+                const seasonalityN = chartData.seasonality || { controls: Array(12).fill(0), infractions: Array(12).fill(0) };
+                const seasonalityN1 = isCompare ? (resN1.charts.seasonality || { controls: Array(12).fill(0), infractions: Array(12).fill(0) }) : null;
+
+                const seasonalityDatasets = [
+                    {
+                        label: isCompare ? 'Contrôles (N)' : 'Contrôles',
+                        data: seasonalityN.controls,
+                        borderColor: '#003A76', backgroundColor: 'rgba(0, 58, 118, 0.05)',
+                        fill: true,
+                        tension: 0.3
+                    },
+                    {
+                        label: isCompare ? 'Infractions (N)' : 'Infractions',
+                        data: seasonalityN.infractions,
+                        borderColor: '#EF4444',
+                        backgroundColor: 'rgba(239, 68, 68, 0.05)',
+                        fill: true,
+                        tension: 0.3
+                    }
+                ];
+
+                if (isCompare && seasonalityN1) {
+                    seasonalityDatasets.push({
+                        label: 'Contrôles (N-1)',
+                        data: seasonalityN1.controls,
+                        borderColor: '#93C5FD',
+                        backgroundColor: 'transparent',
+                        borderDash: [5, 5],
+                        fill: false,
+                        tension: 0.3
+                    });
+                    seasonalityDatasets.push({
+                        label: 'Infractions (N-1)',
+                        data: seasonalityN1.infractions,
+                        borderColor: '#FCA5A5',
+                        backgroundColor: 'transparent',
+                        borderDash: [5, 5],
+                        fill: false,
+                        tension: 0.3
                     });
                 }
-            }
 
-            const themeTotalLines = themeLabels.reduce((sum, lines) => sum + lines.length, 0);
-            const themeHeight = Math.max(100, 45 + (themeLabels.length * (isCompare ? 36 : 24)) + (themeTotalLines - themeLabels.length) * 11);
-            const wrapperThemes = document.getElementById('wrapper-themes');
-            if (wrapperThemes) {
-                wrapperThemes.style.height = `${themeHeight}px`;
-            }
-            
-            const ctxThemes = document.getElementById('chart-themes').getContext('2d');
-            chartThemes = new Chart(ctxThemes, {
-                type: 'bar',
-                data: {
-                    labels: themeLabels,
-                    datasets: themesDatasets
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    indexAxis: 'y',
-                    onClick: (event, elements) => {
-                        if (elements && elements.length > 0) {
-                            const index = elements[0].index;
-                            const themeName = sortedThemesN[index][0];
-                            if (inputThemeSNC.setSelectedValues) {
-                                inputThemeSNC.setSelectedValues([themeName]);
-                            } else {
-                                inputThemeSNC.value = themeName;
+                const ctxSeasonality = document.getElementById('chart-seasonality').getContext('2d');
+                chartSeasonality = new Chart(ctxSeasonality, {
+                    type: 'line',
+                    data: {
+                        labels: monthsLabels,
+                        datasets: seasonalityDatasets
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { position: 'top', labels: { boxWidth: 12, font: { size: 10 } } },
+                            tooltip: {
+                                callbacks: tooltipPercentageCallback
                             }
-                            loadData();
-                        }
-                    },
-                    plugins: {
-                        legend: { display: isCompare || isRegion, position: 'top', labels: { boxWidth: 10, font: { size: 9 } } },
-                        tooltip: {
-                            callbacks: tooltipPercentageCallback
-                        }
-                    },
-                    scales: {
-                        x: { stacked: isRegion, beginAtZero: true, ticks: { font: { size: 9 } } },
-                        y: { 
-                            stacked: isRegion,
-                            grid: { display: false },
-                            ticks: { autoSkip: false, font: { size: 9 } } 
+                        },
+                        scales: {
+                            x: { ticks: { font: { size: 9 } } },
+                            y: { beginAtZero: true, ticks: { font: { size: 9 } } }
                         }
                     }
-                }
-            });
-
-            // 5. Saisonnalité de l'activité (Double Courbe Line)
-            if (chartSeasonality) {
-                chartSeasonality.destroy();
-            }
-            const monthsLabels = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sept', 'Oct', 'Nov', 'Déc'];
-            const seasonalityN = chartData.seasonality || { controls: Array(12).fill(0), infractions: Array(12).fill(0) };
-            const seasonalityN1 = isCompare ? (resN1.charts.seasonality || { controls: Array(12).fill(0), infractions: Array(12).fill(0) }) : null;
-
-            const seasonalityDatasets = [
-                {
-                    label: isCompare ? 'Contrôles (N)' : 'Contrôles',
-                    data: seasonalityN.controls,
-                    borderColor: '#003A76',                    backgroundColor: 'rgba(0, 58, 118, 0.05)',
-                    fill: true,
-                    tension: 0.3
-                },
-                {
-                    label: isCompare ? 'Infractions (N)' : 'Infractions',
-                    data: seasonalityN.infractions,
-                    borderColor: '#EF4444',
-                    backgroundColor: 'rgba(239, 68, 68, 0.05)',
-                    fill: true,
-                    tension: 0.3
-                }
-            ];
-
-            if (isCompare && seasonalityN1) {
-                seasonalityDatasets.push({
-                    label: 'Contrôles (N-1)',
-                    data: seasonalityN1.controls,
-                    borderColor: '#93C5FD',
-                    backgroundColor: 'transparent',
-                    borderDash: [5, 5],
-                    fill: false,
-                    tension: 0.3
                 });
-                seasonalityDatasets.push({
-                    label: 'Infractions (N-1)',
-                    data: seasonalityN1.infractions,
-                    borderColor: '#FCA5A5',
-                    backgroundColor: 'transparent',
-                    borderDash: [5, 5],
-                    fill: false,
-                    tension: 0.3
-                });
-            }
-
-            const ctxSeasonality = document.getElementById('chart-seasonality').getContext('2d');
-            chartSeasonality = new Chart(ctxSeasonality, {
-                type: 'line',
-                data: {
-                    labels: monthsLabels,
-                    datasets: seasonalityDatasets
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { position: 'top', labels: { boxWidth: 12, font: { size: 10 } } },
-                        tooltip: {
-                            callbacks: tooltipPercentageCallback
-                        }
-                    },
-                    scales: {
-                        x: { ticks: { font: { size: 9 } } },
-                        y: { beginAtZero: true, ticks: { font: { size: 9 } } }
-                    }
-                }
+            })
+            .catch(err => {
+                if (isUnloading) return;
+                console.error(err);
+                alert('Impossible de charger les données : ' + err.message);
+            })
+            .finally(() => {
+                btnUpdate.disabled = false;
+                btnUpdate.innerHTML = 'Charger les données';
             });
-        })
-        .catch(err => {
-            if (isUnloading) return;
-            console.error(err);
-            alert('Impossible de charger les données : ' + err.message);
-        })
-        .finally(() => {
-            btnUpdate.disabled = false;
-            btnUpdate.innerHTML = 'Charger les données';
-        });
     }
 
     // --- GESTION DU TABLEAU DÉTAILLÉ DES CONTRÔLES (LOT 1) ---
     const toggleTableHeader = document.getElementById('toggle-table-header');
     const tableContainer = document.getElementById('table-container');
     const tableToggleIcon = document.getElementById('table-toggle-icon');
-    
+
     if (toggleTableHeader && tableContainer && tableToggleIcon) {
         toggleTableHeader.addEventListener('click', (e) => {
             if (e.target.id === 'btn-export-csv' || e.target.closest('#btn-export-csv')) return;
-            
+
             isTableExpanded = !isTableExpanded;
             if (isTableExpanded) {
                 tableContainer.classList.remove('hidden');
@@ -1694,17 +1702,17 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderTable() {
         const tableBody = document.getElementById('table-body');
         if (!tableBody) return;
-        
+
         tableBody.innerHTML = '';
-        
+
         let data = [...activePoints];
-        
+
         // Tri
         if (tableSortColumn) {
             data.sort((a, b) => {
                 let valA = a[tableSortColumn] || '';
                 let valB = b[tableSortColumn] || '';
-                
+
                 if (typeof valA === 'string') {
                     return tableSortAsc ? valA.localeCompare(valB) : valB.localeCompare(valA);
                 } else {
@@ -1712,16 +1720,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
         }
-        
+
         // Pagination
         const totalRows = data.length;
         const totalPages = Math.max(1, Math.ceil(totalRows / tableRowsPerPage));
         if (currentTablePage > totalPages) currentTablePage = totalPages;
-        
+
         const startIndex = (currentTablePage - 1) * tableRowsPerPage;
         const endIndex = Math.min(startIndex + tableRowsPerPage, totalRows);
         const pageData = data.slice(startIndex, endIndex);
-        
+
         if (pageData.length === 0) {
             tableBody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--color-text-muted); padding: 20px;">Aucun contrôle à afficher.</td></tr>`;
         } else {
@@ -1740,13 +1748,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 tableBody.appendChild(tr);
             });
         }
-        
+
         // Mise à jour de l'UI pagination
         const infoEl = document.getElementById('table-pagination-info');
         if (infoEl) {
             infoEl.textContent = `Affichage de ${totalRows ? startIndex + 1 : 0} à ${endIndex} sur ${totalRows} contrôle${totalRows > 1 ? 's' : ''} (Page ${currentTablePage}/${totalPages})`;
         }
-        
+
         const btnPrev = document.getElementById('btn-page-prev');
         const btnNext = document.getElementById('btn-page-next');
         if (btnPrev) btnPrev.disabled = (currentTablePage === 1);
@@ -1772,7 +1780,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-    
+
     // Événements de tri sur les en-têtes
     document.querySelectorAll('.data-table th[data-sort]').forEach(th => {
         th.addEventListener('click', () => {
@@ -1783,7 +1791,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 tableSortColumn = col;
                 tableSortAsc = true;
             }
-            
+
             document.querySelectorAll('.data-table th[data-sort]').forEach(header => {
                 const baseText = header.textContent.replace(/[⇅▲▼]/g, '').trim();
                 if (header.dataset.sort === tableSortColumn) {
@@ -1805,7 +1813,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert('Aucun contrôle à exporter.');
                 return;
             }
-            
+
             const headers = ['ID', 'Date', 'Resultat', 'Domaine', 'Theme', 'Type Usager', 'Commune', 'X', 'Y'];
             const rows = activePoints.map(row => [
                 row.dc_id || '',
@@ -1818,17 +1826,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 row.x || 0.0,
                 row.y || 0.0
             ]);
-            
+
             const csvContent = "\uFEFF" + [
                 headers.join(';'),
                 ...rows.map(r => r.map(val => `"${String(val).replace(/"/g, '""')}"`).join(';'))
             ].join('\n');
-            
+
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.setAttribute('href', url);
-            link.setAttribute('download', `export_controles_${new Date().toISOString().slice(0,10)}.csv`);
+            link.setAttribute('download', `export_controles_${new Date().toISOString().slice(0, 10)}.csv`);
             link.style.visibility = 'hidden';
             document.body.appendChild(link);
             link.click();
@@ -1851,11 +1859,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 const day = String(now.getDate()).padStart(2, '0');
                 dateFinEl.value = `${currentYear}-${month}-${day}`;
             }
-            
+
             selectEchelle.value = 'departement';
             inputCode.value = '21';
             codeHelper.textContent = 'Exemples : 21, 27, 39';
-            
+
             // Réinitialisation des filtres multi-sélections
             if (inputUsager.setSelectedValues) inputUsager.setSelectedValues([]);
             else inputUsager.value = '';
@@ -1873,7 +1881,7 @@ document.addEventListener('DOMContentLoaded', () => {
             else inputResultat.value = '';
 
             if (inputCommune) inputCommune.value = '';
-            
+
             loadData();
         });
     }
@@ -1889,7 +1897,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const heatData = activePoints
                     .map(pt => [parseFloat(pt.y), parseFloat(pt.x), 1.0])
                     .filter(coords => !isNaN(coords[0]) && !isNaN(coords[1]) && coords[0] !== 0 && coords[1] !== 0);
-                
+
                 if (heatmapLayer) {
                     map.removeLayer(heatmapLayer);
                 }
@@ -1931,23 +1939,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function applyFiltersState(state) {
         if (!state) return;
-        
+
         if (state['date-deb']) document.getElementById('date-deb').value = state['date-deb'];
         if (state['date-fin']) document.getElementById('date-fin').value = state['date-fin'];
-        
+
         if (state.echelle) {
             selectEchelle.value = state.echelle;
             selectEchelle.dispatchEvent(new Event('change'));
         }
         if (state.code) inputCode.value = state.code;
-        
+
         if (state['type-usager'] && inputUsager.setSelectedValues) inputUsager.setSelectedValues(state['type-usager']);
         if (state['domaines'] && inputDomaineSNC.setSelectedValues) inputDomaineSNC.setSelectedValues(state['domaines']);
         if (state['themes'] && inputThemeSNC.setSelectedValues) inputThemeSNC.setSelectedValues(state['themes']);
         if (state['types_action'] && inputTypeAction.setSelectedValues) inputTypeAction.setSelectedValues(state['types_action']);
         if (state['resultats'] && inputResultat.setSelectedValues) inputResultat.setSelectedValues(state['resultats']);
         if (state['commune'] && inputCommune) inputCommune.value = state['commune'];
-        
+
         if (compareActiveCheck && state['compare-active'] !== undefined) {
             compareActiveCheck.checked = state['compare-active'];
             compareActiveCheck.dispatchEvent(new Event('change'));
@@ -1977,7 +1985,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateURLWithState() {
         const state = getFiltersState();
         const searchParams = new URLSearchParams();
-        
+
         Object.entries(state).forEach(([key, val]) => {
             if (Array.isArray(val)) {
                 if (val.length > 0) searchParams.set(key, val.join(','));
@@ -1985,7 +1993,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 searchParams.set(key, val);
             }
         });
-        
+
         const newRelativePathQuery = window.location.pathname + '?' + searchParams.toString();
         window.history.replaceState(null, '', newRelativePathQuery);
     }
@@ -1993,7 +2001,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function loadStateFromURL() {
         const searchParams = new URLSearchParams(window.location.search);
         if (searchParams.toString() === '') return null;
-        
+
         const state = {};
         searchParams.forEach((value, key) => {
             if (['type-usager', 'domaines', 'themes', 'types_action', 'resultats'].includes(key)) {
@@ -2035,11 +2043,11 @@ document.addEventListener('DOMContentLoaded', () => {
         btnExportMapPng.addEventListener('click', () => {
             const mapContainer = document.getElementById('map');
             if (!mapContainer) return;
-            
+
             const originalText = btnExportMapPng.innerHTML;
             btnExportMapPng.innerHTML = '⏳...';
             btnExportMapPng.disabled = true;
-            
+
             setTimeout(() => {
                 html2canvas(mapContainer, {
                     useCORS: true,
@@ -2053,24 +2061,24 @@ document.addEventListener('DOMContentLoaded', () => {
                     tempCanvas.width = canvas.width;
                     tempCanvas.height = canvas.height + headerHeight;
                     const tempCtx = tempCanvas.getContext('2d');
-                    
+
                     tempCtx.fillStyle = '#FFFFFF';
                     tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
-                    
+
                     tempCtx.fillStyle = '#003A76';
                     tempCtx.font = 'bold 24px sans-serif'; // Scaled up font
                     tempCtx.textAlign = 'center';
                     tempCtx.fillText('Localisation des contrôles', tempCanvas.width / 2, 40);
-                    
+
                     tempCtx.drawImage(canvas, 0, headerHeight);
-                    
+
                     const link = document.createElement('a');
                     link.download = `OFBilan_Carte_${new Date().toISOString().split('T')[0]}.png`;
                     link.href = tempCanvas.toDataURL('image/png', 1.0);
                     document.body.appendChild(link);
                     link.click();
                     document.body.removeChild(link);
-                    
+
                     btnExportMapPng.innerHTML = originalText;
                     btnExportMapPng.disabled = false;
                 }).catch(err => {
@@ -2102,57 +2110,57 @@ document.addEventListener('DOMContentLoaded', () => {
             const headerHeight = 60;
             const labels = (chartInstance && chartInstance.data && chartInstance.data.labels) ? chartInstance.data.labels : [];
             const footerHeight = (chartId === 'chart-results' || chartId === 'chart-usagers') ? (labels.length * 20) + 15 : 60;
-            
+
             const tempCanvas = document.createElement('canvas');
             tempCanvas.width = canvas.width;
             tempCanvas.height = canvas.height + headerHeight + footerHeight;
             const tempCtx = tempCanvas.getContext('2d');
-            
+
             // Fond blanc
             tempCtx.fillStyle = '#FFFFFF';
             tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
-            
+
             // 1. Dessiner le titre
             tempCtx.fillStyle = '#003A76';
             tempCtx.font = 'bold 16px sans-serif';
             tempCtx.textAlign = 'center';
             tempCtx.fillText(chartTitleText, tempCanvas.width / 2, 35);
-            
+
             // 2. Dessiner le graphique au centre
             tempCtx.drawImage(canvas, 0, headerHeight);
-            
+
             // 3. Dessiner la légende en bas
             if (chartInstance && chartInstance.data) {
                 tempCtx.textAlign = 'left';
                 tempCtx.font = '11px sans-serif';
-                
+
                 const datasets = chartInstance.data.datasets || [];
-                
+
                 if (chartId === 'chart-results' || chartId === 'chart-usagers') {
                     // Pour les Donuts : on a une couleur par élément
                     const ds = datasets[0] || {};
                     const data = ds.data || [];
                     const bgColors = ds.backgroundColor || [];
-                    
+
                     // Calcul du total de la période principale N
                     const total = data.reduce((a, b) => a + (b || 0), 0);
-                    
+
                     let startX = 25;
                     let startY = canvas.height + headerHeight + 20;
-                    
+
                     labels.forEach((lbl, idx) => {
                         const val = data[idx] || 0;
                         const pct = total > 0 ? ((val / total) * 100).toFixed(1) : 0;
                         const color = bgColors[idx] || '#64748B';
-                        
+
                         // Carré de couleur
                         tempCtx.fillStyle = color;
                         tempCtx.fillRect(startX, startY - 10, 12, 12);
-                        
+
                         // Texte de la légende avec les valeurs
                         tempCtx.fillStyle = '#1E293B';
                         const displayLabel = Array.isArray(lbl) ? lbl.join(' ') : lbl;
-                        
+
                         // Si une comparaison est active, on ajoute la valeur N-1 dans la légende
                         let valText = `${displayLabel}: ${val} (${pct}%)`;
                         if (datasets.length > 1) {
@@ -2162,7 +2170,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             const pctN1 = totalN1 > 0 ? ((valN1 / totalN1) * 100).toFixed(1) : 0;
                             valText += ` (vs période comp. : ${valN1} [${pctN1}%])`;
                         }
-                        
+
                         tempCtx.fillText(valText, startX + 20, startY);
                         startY += 20; // Saut de ligne
                     });
@@ -2171,7 +2179,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     let startY = canvas.height + headerHeight + 30;
                     tempCtx.fillStyle = '#64748B';
                     tempCtx.font = 'italic 11px sans-serif';
-                    
+
                     let text = "Données issues de la recherche active de l'explorateur OFBilan.";
                     if (datasets.length > 1) {
                         text += ` Comparaison : ${datasets[0].label || 'Période N'} vs ${datasets[1].label || 'Période N-1'}`;
@@ -2181,11 +2189,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     // Pour la saisonnalité
                     let startX = 20;
                     let startY = canvas.height + headerHeight + 30;
-                    
+
                     datasets.forEach((ds) => {
                         tempCtx.fillStyle = ds.borderColor || '#64748B';
                         tempCtx.fillRect(startX, startY - 8, 20, 4);
-                        
+
                         tempCtx.fillStyle = '#1E293B';
                         tempCtx.fillText(ds.label, startX + 25, startY);
                         startX += 130;
