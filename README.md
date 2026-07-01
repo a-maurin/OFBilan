@@ -25,7 +25,7 @@ La mise en place de l'outil s'effectue en deux étapes.
 
 Deux méthodes de déploiement sont possibles :
 
-**Méthode A : Installation par fichier ZIP (Recommandée)**
+##Méthode A : Installation par fichier ZIP (Recommandée)##
 
     1.  Téléchargez la version packagée au foramt .zip.
     2.  Ouvrez QGIS.
