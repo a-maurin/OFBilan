@@ -528,7 +528,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (filtered.length === 0) {
                 const noRes = document.createElement('div');
                 noRes.className = 'dropdown-option-empty';
-                noRes.textContent = 'Aucun élément trouvé';
+                // Multi-codes : virgule dans la saisie → mode comparaison spatiale, pas d'erreur
+                noRes.textContent = filterText.includes(',') ? '✦ Mode comparaison spatiale' : 'Aucun élément trouvé';
                 dropdownEl.appendChild(noRes);
                 return;
             }
@@ -635,6 +636,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initialisation des comboboxes
     setupCombobox(inputCode, btnToggleCodes, codesDropdown, getActiveCodesList, false);
+
+    /**
+     * Retourne un tableau des codes géographiques saisis (séparés par virgule).
+     * Ex: "21, 25" → ["21", "25"] | "r27" → ["r27"]
+     */
+    function getParsedCodes() {
+        const raw = (inputCode.value || '').trim();
+        if (!raw) return [];
+        return raw.split(',').map(c => c.trim()).filter(c => c.length > 0);
+    }
+
     setupCombobox(inputUsager, btnToggleUsagers, usagersDropdown, () => usagersList, true);
     setupCombobox(inputDomaineSNC, btnToggleDomainesSNC, domainesSNCDropdown, () => domainesSNCList, true);
     setupCombobox(inputThemeSNC, btnToggleThemesSNC, themesSNCDropdown, () => themesSNCList, true);
@@ -840,7 +852,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const isCompare = compareActiveCheck && compareActiveCheck.checked;
 
-        const getParams = (isComparePeriod = false) => {
+        const parsedCodes = getParsedCodes();
+        // Mode comparaison spatiale : plusieurs codes, sans comparaison temporelle
+        const isSpatial = parsedCodes.length > 1 && !isCompare;
+
+        const getParams = (isComparePeriod = false, overrideCode = null) => {
             const debEl = isComparePeriod ? compareDateDebEl : dateDebEl;
             const finEl = isComparePeriod ? compareDateFinEl : dateFinEl;
             const selectProfil = document.getElementById('profil-select');
@@ -851,7 +867,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 'date-deb': debEl ? debEl.value : '',
                 'date-fin': finEl ? finEl.value : '',
                 echelle: selectEchelle.value,
-                code: inputCode.value,
+                // overrideCode : utilisé en mode spatial pour isoler chaque unité
+                code: overrideCode !== null ? overrideCode : (parsedCodes[0] || inputCode.value),
                 'type-usager': inputUsager.getSelectedValues ? inputUsager.getSelectedValues() : (inputUsager.value ? [inputUsager.value] : []),
                 'domaines': inputDomaineSNC.getSelectedValues ? inputDomaineSNC.getSelectedValues() : (inputDomaineSNC.value ? [inputDomaineSNC.value] : []),
                 'themes': inputThemeSNC.getSelectedValues ? inputThemeSNC.getSelectedValues() : (inputThemeSNC.value ? [inputThemeSNC.value] : []),
@@ -861,40 +878,40 @@ document.addEventListener('DOMContentLoaded', () => {
             };
         };
 
-        const reqN = fetch('/api/data', {
+        // Helper fetch unique
+        const fetchOne = (params) => fetch('/api/data', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(getParams(false))
+            body: JSON.stringify(params)
         }).then(async response => {
             if (!response.ok) {
-                let errMsg = 'Erreur lors du chargement de la période principale';
-                try {
-                    const data = await response.json();
-                    if (data.error) errMsg += ' : ' + data.error;
-                } catch (e) { }
+                let errMsg = 'Erreur API';
+                try { const d = await response.json(); if (d.error) errMsg += ' : ' + d.error; } catch (e) {}
                 throw new Error(errMsg);
             }
             return response.json();
         });
 
-        const reqN1 = isCompare ? fetch('/api/data', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(getParams(true))
-        }).then(async response => {
-            if (!response.ok) {
-                let errMsg = 'Erreur lors du chargement de la période de comparaison';
-                try {
-                    const data = await response.json();
-                    if (data.error) errMsg += ' : ' + data.error;
-                } catch (e) { }
-                throw new Error(errMsg);
-            }
-            return response.json();
-        }) : Promise.resolve(null);
+        // Résolution des promises selon le mode actif
+        let allPromises;
+        if (isSpatial) {
+            // Un fetch par code géographique (ex: "21", "25")
+            allPromises = parsedCodes.map(code => fetchOne(getParams(false, code)));
+        } else {
+            // Mode normal ou comparaison temporelle N vs N-1
+            const reqN = fetchOne(getParams(false));
+            const reqN1 = isCompare ? fetchOne(getParams(true)) : Promise.resolve(null);
+            allPromises = [reqN, reqN1];
+        }
 
-        Promise.all([reqN, reqN1])
-            .then(([resN, resN1]) => {
+        Promise.all(allPromises)
+            .then(results => {
+                // Normalisation : en mode spatial resGeoUnits = tableau des résultats par unité
+                // En mode normal/temporel : resN = results[0], resN1 = results[1]
+                const resGeoUnits = isSpatial ? results : null;
+                const resN  = isSpatial ? results[0] : results[0];
+                const resN1 = isSpatial ? null        : results[1];
+
                 // Mémorisation de l'état (localStorage et URL)
                 saveStateToLocalStorage();
                 updateURLWithState();
@@ -1196,27 +1213,50 @@ document.addEventListener('DOMContentLoaded', () => {
                 const resultsN = chartData.results || {};
                 const resultsN1 = isCompare ? (resN1.charts.results || {}) : null;
 
-                const resultsDatasets = [{
-                    data: Object.values(resultsN),
-                    backgroundColor: ['#53AB60', '#EF4444', '#64748B'],
-                    borderWidth: 1,
-                    label: isCompare ? 'Période N' : 'Période'
-                }];
+                // Palette pour les anneaux spatiaux (opacités décroissantes)
+                const spatialRingsAlpha = ['ff', 'aa', '66', '44'];
+                const spatialResultsColors = [
+                    ['#53AB60', '#EF4444', '#64748B'],
+                    ['#53AB60aa', '#EF4444aa', '#64748Baa'],
+                    ['#53AB6066', '#EF444466', '#64748B66'],
+                    ['#53AB6044', '#EF444444', '#64748B44']
+                ];
 
-                if (isCompare && resultsN1) {
-                    resultsDatasets.push({
-                        data: Object.values(resultsN1),
-                        backgroundColor: ['rgba(83, 171, 96, 0.5)', 'rgba(239, 68, 68, 0.5)', 'rgba(100, 116, 139, 0.5)'],
-                        borderWidth: 1,
-                        label: 'Période N-1'
+                const resultsDatasets = [];
+                if (isSpatial) {
+                    // Un dataset (anneau) par unité géo — extérieur = unité 0
+                    resGeoUnits.forEach((unit, idx) => {
+                        const unitResults = unit.charts.results || {};
+                        const colors = spatialResultsColors[idx] || spatialResultsColors[spatialResultsColors.length - 1];
+                        resultsDatasets.push({
+                            data: Object.values(unitResults),
+                            backgroundColor: colors,
+                            borderWidth: 1,
+                            label: parsedCodes[idx]
+                        });
                     });
+                } else {
+                    resultsDatasets.push({
+                        data: Object.values(resultsN),
+                        backgroundColor: ['#53AB60', '#EF4444', '#64748B'],
+                        borderWidth: 1,
+                        label: isCompare ? 'Période N' : 'Période'
+                    });
+                    if (isCompare && resultsN1) {
+                        resultsDatasets.push({
+                            data: Object.values(resultsN1),
+                            backgroundColor: ['rgba(83, 171, 96, 0.5)', 'rgba(239, 68, 68, 0.5)', 'rgba(100, 116, 139, 0.5)'],
+                            borderWidth: 1,
+                            label: 'Période N-1'
+                        });
+                    }
                 }
 
                 const ctxResults = document.getElementById('chart-results').getContext('2d');
                 chartResults = new Chart(ctxResults, {
                     type: 'doughnut',
                     data: {
-                        labels: Object.keys(resultsN),
+                        labels: Object.keys(isSpatial ? (resGeoUnits[0].charts.results || {}) : resultsN),
                         datasets: resultsDatasets
                     },
                     options: {
@@ -1224,18 +1264,16 @@ document.addEventListener('DOMContentLoaded', () => {
                         maintainAspectRatio: false,
                         plugins: {
                             legend: { display: false },
-                            tooltip: {
-                                callbacks: tooltipPercentageCallback
-                            }
+                            tooltip: { callbacks: tooltipPercentageCallback }
                         }
                     }
                 });
 
-                // Populate custom results legend
+                // Légende résultats
                 const legendResults = document.getElementById('legend-results');
                 if (legendResults) {
                     legendResults.innerHTML = '';
-                    const resultsLabels = Object.keys(resultsN);
+                    const resultsLabels = Object.keys(isSpatial ? (resGeoUnits[0].charts.results || {}) : resultsN);
                     const resultsColors = ['#53AB60', '#EF4444', '#64748B'];
                     resultsLabels.forEach((label, idx) => {
                         const color = resultsColors[idx] || '#64748B';
@@ -1246,6 +1284,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         </div>
                     `;
                     });
+                    if (isSpatial) {
+                        legendResults.innerHTML += `<div style="font-size:8px;color:#888;margin-top:3px;">Anneau ext. = ${parsedCodes[0]}, int. = ${parsedCodes.slice(1).join(', ')}</div>`;
+                    }
                 }
 
                 // 2. Usagers (Doughnut concentrique)
@@ -1270,21 +1311,39 @@ document.addEventListener('DOMContentLoaded', () => {
                     return '#95A5A6';
                 });
 
-                const usagersDatasets = [{
-                    data: Object.values(usagersN),
-                    backgroundColor: usagersColors,
-                    borderWidth: 1,
-                    label: isCompare ? 'Période N' : 'Période'
-                }];
-
-                if (isCompare && usagersN1) {
-                    const alignedN1Data = rawLabels.map(lbl => usagersN1[lbl] || 0);
-                    usagersDatasets.push({
-                        data: alignedN1Data,
-                        backgroundColor: usagersColors.map(c => c + '80'),
-                        borderWidth: 1,
-                        label: 'Période N-1'
+                const usagersDatasets = [];
+                if (isSpatial) {
+                    // Un anneau par unité géo
+                    resGeoUnits.forEach((unit, idx) => {
+                        const unitUsagers = unit.charts.usagers || {};
+                        const opacity = idx === 0 ? 'ff' : idx === 1 ? 'aa' : idx === 2 ? '66' : '44';
+                        const colors = rawLabels.map(lbl => {
+                            const base = usagersColors[rawLabels.indexOf(lbl)];
+                            return idx === 0 ? base : base + opacity;
+                        });
+                        usagersDatasets.push({
+                            data: rawLabels.map(lbl => unitUsagers[lbl] || 0),
+                            backgroundColor: colors,
+                            borderWidth: 1,
+                            label: parsedCodes[idx]
+                        });
                     });
+                } else {
+                    usagersDatasets.push({
+                        data: Object.values(usagersN),
+                        backgroundColor: usagersColors,
+                        borderWidth: 1,
+                        label: isCompare ? 'Période N' : 'Période'
+                    });
+                    if (isCompare && usagersN1) {
+                        const alignedN1Data = rawLabels.map(lbl => usagersN1[lbl] || 0);
+                        usagersDatasets.push({
+                            data: alignedN1Data,
+                            backgroundColor: usagersColors.map(c => c + '80'),
+                            borderWidth: 1,
+                            label: 'Période N-1'
+                        });
+                    }
                 }
 
                 const ctxUsagers = document.getElementById('chart-usagers').getContext('2d');
@@ -1314,14 +1373,12 @@ document.addEventListener('DOMContentLoaded', () => {
                         },
                         plugins: {
                             legend: { display: false },
-                            tooltip: {
-                                callbacks: tooltipPercentageCallback
-                            }
+                            tooltip: { callbacks: tooltipPercentageCallback }
                         }
                     }
                 });
 
-                // Populate custom usagers legend
+                // Légende usagers
                 const legendUsagers = document.getElementById('legend-usagers');
                 if (legendUsagers) {
                     legendUsagers.innerHTML = '';
@@ -1334,9 +1391,12 @@ document.addEventListener('DOMContentLoaded', () => {
                         </div>
                     `;
                     });
+                    if (isSpatial) {
+                        legendUsagers.innerHTML += `<div style="font-size:8px;color:#888;margin-top:3px;">Anneau ext. = ${parsedCodes[0]}, int. = ${parsedCodes.slice(1).join(', ')}</div>`;
+                    }
                 }
 
-                // 3. Domaines d'Activité (Barres groupées ou empilées par département)
+                // 3. Domaines d'Activité (Barres groupées ou empilées)
                 if (chartDomains) {
                     chartDomains.destroy();
                 }
@@ -1379,18 +1439,30 @@ document.addEventListener('DOMContentLoaded', () => {
                     return deptNames[c] || code;
                 };
 
-                let domainsDatasets = [];
-                // Palette colorée distincte (Type D3 Category10) pour bien différencier les départements
-                const deptColorsDom = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'];
+                // Palette : unités spatiales (D3 Category10), N-1 pastel
+                const deptColorsDom  = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'];
                 const deptColorsDomN1 = ['#aec7e8', '#ffbb78', '#98df8a', '#ff9896', '#c5b0d5', '#c49c94', '#f7b6d2', '#c7c7c7', '#dbdb8d', '#9edae5'];
 
-                if (isRegion) {
+                let domainsDatasets = [];
+
+                if (isSpatial) {
+                    // Mode comparaison spatiale : une barre groupée par unité géo
+                    resGeoUnits.forEach((unit, idx) => {
+                        const unitDomains = unit.charts.domains || {};
+                        domainsDatasets.push({
+                            label: parsedCodes[idx],
+                            data: sortedDomainsN.map(([domain]) => getDomainTotal(unitDomains[domain] || 0)),
+                            backgroundColor: deptColorsDom[idx % deptColorsDom.length],
+                            borderRadius: 4,
+                            barThickness: Math.max(6, 14 - resGeoUnits.length * 2)
+                        });
+                    });
+                } else if (isRegion) {
                     const allDepts = new Set();
                     sortedDomainsN.forEach(([_, counts]) => {
                         if (typeof counts === 'object') Object.keys(counts).forEach(d => allDepts.add(d));
                     });
                     const depts = Array.from(allDepts).sort();
-
                     depts.forEach((dept, idx) => {
                         domainsDatasets.push({
                             label: isCompare ? `${getDeptName(dept)} N` : getDeptName(dept),
@@ -1403,7 +1475,6 @@ document.addEventListener('DOMContentLoaded', () => {
                             barThickness: isCompare ? 16 : 24
                         });
                     });
-
                     if (isCompare && domainsN1) {
                         const deptsN1 = new Set();
                         sortedDomainsN.forEach(([domain]) => {
@@ -1431,7 +1502,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         borderRadius: 4,
                         barThickness: isCompare ? 8 : 12
                     });
-
                     if (isCompare && domainsN1) {
                         const alignedN1 = sortedDomainsN.map(d => getDomainTotal(domainsN1[d[0]] || 0));
                         domainsDatasets.push({
@@ -1444,8 +1514,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
 
+                const showDomainsLegend = isCompare || isRegion || isSpatial;
                 const domainTotalLines = domainLabels.reduce((sum, lines) => sum + lines.length, 0);
-                const domainHeight = Math.max(100, 45 + (domainLabels.length * (isCompare ? 36 : 24)) + (domainTotalLines - domainLabels.length) * 11);
+                const domainHeight = Math.max(100, 45 + (domainLabels.length * (showDomainsLegend ? 36 : 24)) + (domainTotalLines - domainLabels.length) * 11);
                 const wrapperDomains = document.getElementById('wrapper-domains');
                 if (wrapperDomains) {
                     wrapperDomains.style.height = `${domainHeight}px`;
@@ -1475,15 +1546,13 @@ document.addEventListener('DOMContentLoaded', () => {
                             }
                         },
                         plugins: {
-                            legend: { display: isCompare || isRegion, position: 'top', labels: { boxWidth: 10, font: { size: 9 } } },
-                            tooltip: {
-                                callbacks: tooltipPercentageCallback
-                            }
+                            legend: { display: showDomainsLegend, position: 'top', labels: { boxWidth: 10, font: { size: 9 } } },
+                            tooltip: { callbacks: tooltipPercentageCallback }
                         },
                         scales: {
-                            x: { stacked: isRegion, beginAtZero: true, ticks: { font: { size: 9 } } },
+                            x: { stacked: isRegion && !isSpatial, beginAtZero: true, ticks: { font: { size: 9 } } },
                             y: {
-                                stacked: isRegion,
+                                stacked: isRegion && !isSpatial,
                                 grid: { display: false },
                                 ticks: { autoSkip: false, font: { size: 9 } }
                             }
@@ -1502,18 +1571,29 @@ document.addEventListener('DOMContentLoaded', () => {
                 const themesN1 = isCompare ? (resN1.charts.themes || {}) : null;
                 const themeLabels = sortedThemesN.map(d => splitLabel(d[0], 25));
 
-                let themesDatasets = [];
-                // Palette colorée distincte (Type D3 Category10) pour bien différencier les départements
-                const deptColorsTh = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'];
+                const deptColorsTh   = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'];
                 const deptColorsThN1 = ['#aec7e8', '#ffbb78', '#98df8a', '#ff9896', '#c5b0d5', '#c49c94', '#f7b6d2', '#c7c7c7', '#dbdb8d', '#9edae5'];
 
-                if (isRegion) {
+                let themesDatasets = [];
+
+                if (isSpatial) {
+                    // Mode comparaison spatiale : une barre groupée par unité géo
+                    resGeoUnits.forEach((unit, idx) => {
+                        const unitThemes = unit.charts.themes || {};
+                        themesDatasets.push({
+                            label: parsedCodes[idx],
+                            data: sortedThemesN.map(([theme]) => getDomainTotal(unitThemes[theme] || 0)),
+                            backgroundColor: deptColorsTh[idx % deptColorsTh.length],
+                            borderRadius: 4,
+                            barThickness: Math.max(6, 14 - resGeoUnits.length * 2)
+                        });
+                    });
+                } else if (isRegion) {
                     const allDepts = new Set();
                     sortedThemesN.forEach(([_, counts]) => {
                         if (typeof counts === 'object') Object.keys(counts).forEach(d => allDepts.add(d));
                     });
                     const depts = Array.from(allDepts).sort();
-
                     depts.forEach((dept, idx) => {
                         themesDatasets.push({
                             label: isCompare ? `${getDeptName(dept)} N` : getDeptName(dept),
@@ -1526,7 +1606,6 @@ document.addEventListener('DOMContentLoaded', () => {
                             barThickness: isCompare ? 16 : 24
                         });
                     });
-
                     if (isCompare && themesN1) {
                         const deptsN1 = new Set();
                         sortedThemesN.forEach(([theme]) => {
@@ -1554,7 +1633,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         borderRadius: 4,
                         barThickness: isCompare ? 8 : 12
                     });
-
                     if (isCompare && themesN1) {
                         const alignedN1 = sortedThemesN.map(d => getDomainTotal(themesN1[d[0]] || 0));
                         themesDatasets.push({
@@ -1567,8 +1645,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
 
+                const showThemesLegend = isCompare || isRegion || isSpatial;
                 const themeTotalLines = themeLabels.reduce((sum, lines) => sum + lines.length, 0);
-                const themeHeight = Math.max(100, 45 + (themeLabels.length * (isCompare ? 36 : 24)) + (themeTotalLines - themeLabels.length) * 11);
+                const themeHeight = Math.max(100, 45 + (themeLabels.length * (showThemesLegend ? 36 : 24)) + (themeTotalLines - themeLabels.length) * 11);
                 const wrapperThemes = document.getElementById('wrapper-themes');
                 if (wrapperThemes) {
                     wrapperThemes.style.height = `${themeHeight}px`;
@@ -1598,15 +1677,13 @@ document.addEventListener('DOMContentLoaded', () => {
                             }
                         },
                         plugins: {
-                            legend: { display: isCompare || isRegion, position: 'top', labels: { boxWidth: 10, font: { size: 9 } } },
-                            tooltip: {
-                                callbacks: tooltipPercentageCallback
-                            }
+                            legend: { display: showThemesLegend, position: 'top', labels: { boxWidth: 10, font: { size: 9 } } },
+                            tooltip: { callbacks: tooltipPercentageCallback }
                         },
                         scales: {
-                            x: { stacked: isRegion, beginAtZero: true, ticks: { font: { size: 9 } } },
+                            x: { stacked: isRegion && !isSpatial, beginAtZero: true, ticks: { font: { size: 9 } } },
                             y: {
-                                stacked: isRegion,
+                                stacked: isRegion && !isSpatial,
                                 grid: { display: false },
                                 ticks: { autoSkip: false, font: { size: 9 } }
                             }
@@ -1614,7 +1691,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 });
 
-                // 5. Saisonnalité de l'activité (Double Courbe Line)
+                // 5. Saisonnalité de l'activité
                 if (chartSeasonality) {
                     chartSeasonality.destroy();
                 }
@@ -1622,43 +1699,68 @@ document.addEventListener('DOMContentLoaded', () => {
                 const seasonalityN = chartData.seasonality || { controls: Array(12).fill(0), infractions: Array(12).fill(0) };
                 const seasonalityN1 = isCompare ? (resN1.charts.seasonality || { controls: Array(12).fill(0), infractions: Array(12).fill(0) }) : null;
 
-                const seasonalityDatasets = [
-                    {
-                        label: isCompare ? 'Contrôles (N)' : 'Contrôles',
-                        data: seasonalityN.controls,
-                        borderColor: '#003A76', backgroundColor: 'rgba(0, 58, 118, 0.05)',
-                        fill: true,
-                        tension: 0.3
-                    },
-                    {
-                        label: isCompare ? 'Infractions (N)' : 'Infractions',
-                        data: seasonalityN.infractions,
-                        borderColor: '#EF4444',
-                        backgroundColor: 'rgba(239, 68, 68, 0.05)',
-                        fill: true,
-                        tension: 0.3
-                    }
-                ];
+                // Palettes pour les courbes spatiales (contrôles + infractions par unité)
+                const seasonalColorsBorder   = ['#003A76', '#1f77b4', '#2ca02c', '#9467bd', '#8c564b'];
+                const seasonalColorsBorderInf = ['#EF4444', '#ff7f0e', '#d62728', '#e377c2', '#bcbd22'];
 
-                if (isCompare && seasonalityN1) {
-                    seasonalityDatasets.push({
-                        label: 'Contrôles (N-1)',
-                        data: seasonalityN1.controls,
-                        borderColor: '#93C5FD',
-                        backgroundColor: 'transparent',
-                        borderDash: [5, 5],
-                        fill: false,
-                        tension: 0.3
+                const seasonalityDatasets = [];
+
+                if (isSpatial) {
+                    // Une paire de courbes (contrôles + infractions) par unité géo
+                    resGeoUnits.forEach((unit, idx) => {
+                        const unitSeas = unit.charts.seasonality || { controls: Array(12).fill(0), infractions: Array(12).fill(0) };
+                        const bColor = seasonalColorsBorder[idx % seasonalColorsBorder.length];
+                        const iColor = seasonalColorsBorderInf[idx % seasonalColorsBorderInf.length];
+                        seasonalityDatasets.push({
+                            label: `Contrôles (${parsedCodes[idx]})`,
+                            data: unitSeas.controls,
+                            borderColor: bColor,
+                            backgroundColor: 'transparent',
+                            borderDash: idx > 0 ? [5, 3] : [],
+                            fill: false,
+                            tension: 0.3
+                        });
+                        seasonalityDatasets.push({
+                            label: `Infractions (${parsedCodes[idx]})`,
+                            data: unitSeas.infractions,
+                            borderColor: iColor,
+                            backgroundColor: 'transparent',
+                            borderDash: idx > 0 ? [5, 3] : [],
+                            fill: false,
+                            tension: 0.3
+                        });
                     });
-                    seasonalityDatasets.push({
-                        label: 'Infractions (N-1)',
-                        data: seasonalityN1.infractions,
-                        borderColor: '#FCA5A5',
-                        backgroundColor: 'transparent',
-                        borderDash: [5, 5],
-                        fill: false,
-                        tension: 0.3
-                    });
+                } else {
+                    seasonalityDatasets.push(
+                        {
+                            label: isCompare ? 'Contrôles (N)' : 'Contrôles',
+                            data: seasonalityN.controls,
+                            borderColor: '#003A76', backgroundColor: 'rgba(0, 58, 118, 0.05)',
+                            fill: true, tension: 0.3
+                        },
+                        {
+                            label: isCompare ? 'Infractions (N)' : 'Infractions',
+                            data: seasonalityN.infractions,
+                            borderColor: '#EF4444', backgroundColor: 'rgba(239, 68, 68, 0.05)',
+                            fill: true, tension: 0.3
+                        }
+                    );
+                    if (isCompare && seasonalityN1) {
+                        seasonalityDatasets.push(
+                            {
+                                label: 'Contrôles (N-1)',
+                                data: seasonalityN1.controls,
+                                borderColor: '#93C5FD', backgroundColor: 'transparent',
+                                borderDash: [5, 5], fill: false, tension: 0.3
+                            },
+                            {
+                                label: 'Infractions (N-1)',
+                                data: seasonalityN1.infractions,
+                                borderColor: '#FCA5A5', backgroundColor: 'transparent',
+                                borderDash: [5, 5], fill: false, tension: 0.3
+                            }
+                        );
+                    }
                 }
 
                 const ctxSeasonality = document.getElementById('chart-seasonality').getContext('2d');
