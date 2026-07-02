@@ -237,7 +237,7 @@ document.addEventListener('DOMContentLoaded', () => {
         { value: "04", label: "04 - Alpes-de-Haute-Provence" },
         { value: "05", label: "05 - Hautes-Alpes" },
         { value: "06", label: "06 - Alpes-Maritimes" },
-        { value: "07", label: "07 - Ordèche" },
+        { value: "07", label: "07 - Ardèche" },
         { value: "08", label: "08 - Ardennes" },
         { value: "09", label: "09 - Ariège" },
         { value: "10", label: "10 - Aube" },
@@ -820,6 +820,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 <path d="M12 2 A10 10 0 0 1 22 12" stroke="white" />
             </svg>
             Chargement...`;
+
+        // Point C : validation dates avant tout appel réseau
+        if (dateDebEl && dateFinEl && dateDebEl.value && dateFinEl.value && dateDebEl.value > dateFinEl.value) {
+            const banner = document.getElementById('profile-warning-banner');
+            if (banner) {
+                banner.innerHTML = '⚠️ La date de début doit être antérieure ou égale à la date de fin.';
+                banner.style.display = 'block';
+                banner.style.color = '#EF4444';
+            }
+            btnUpdate.disabled = false;
+            btnUpdate.innerHTML = 'Charger les données';
+            return;
+        }
+
+        // Point A : reset de la bannière avant chaque chargement
+        const _errBanner = document.getElementById('profile-warning-banner');
+        if (_errBanner) { _errBanner.style.display = 'none'; _errBanner.style.color = ''; }
 
         const isCompare = compareActiveCheck && compareActiveCheck.checked;
 
@@ -1667,10 +1684,23 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 });
             })
+            // Point A : reset bannière sur succès
+            .then(() => {
+                const banner = document.getElementById('profile-warning-banner');
+                if (banner && banner.style.color === 'rgb(239, 68, 68)') {
+                    banner.style.display = 'none';
+                    banner.style.color = '';
+                }
+            })
             .catch(err => {
                 if (isUnloading) return;
-                console.error(err);
-                alert('Impossible de charger les données : ' + err.message);
+                console.error('[OFBilan] Erreur chargement données:', err);
+                const banner = document.getElementById('profile-warning-banner');
+                if (banner) {
+                    banner.innerHTML = `⚠️ Impossible de charger les données : ${err.message}`;
+                    banner.style.display = 'block';
+                    banner.style.color = '#EF4444';
+                }
             })
             .finally(() => {
                 btnUpdate.disabled = false;

@@ -1,4 +1,5 @@
 import http.server
+import threading
 import socketserver
 import json
 import os
@@ -29,6 +30,7 @@ except Exception:
 
 _PRELOAD_LOGS = []
 _PRELOAD_STATUS = "loading"
+_preload_lock = threading.Lock()
 
 def clean_nan(obj):
     import math
@@ -90,10 +92,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_header('Content-Type', 'application/json; charset=utf-8')
             self.send_header('Cache-Control', 'no-cache')
             self.end_headers()
-            self.wfile.write(json.dumps({
-                "status": _PRELOAD_STATUS,
-                "logs": _PRELOAD_LOGS
-            }).encode('utf-8'))
+            with _preload_lock:
+                payload = {"status": _PRELOAD_STATUS, "logs": list(_PRELOAD_LOGS)}
+            self.wfile.write(json.dumps(payload).encode('utf-8'))
             return
 
         if parsed_path == "/api/update-sources":
@@ -532,6 +533,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 # Désactiver temporairement le cache pour pouvoir charger N-1 (évite le filtre de la session N)
                 _SESSION_CACHE["active"] = False
 
+                # Bug B : initialisation préventive pour éviter UnboundLocalError
+                tu_lower = set()
+
                 # 2. Chargement et filtrage des points de contrôle
                 log_debug(f"Début chargement Points de contrôle (load_pts_flag={load_pts_flag})")
                 df_pts_unfiltered = load_point_ctrl(project_root, echelle=echelle, code=code, date_deb=date_deb, date_fin=date_fin) if load_pts_flag else pd.DataFrame()
@@ -540,7 +544,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 if profile_cfg.get("pipeline") != "global":
                     df_pts = _filter_point_ctrl(df_pts, profile_cfg)
                 
-                # Filtrage multi-usagers ou simple
+                # Filtrage multi-usagers ou simple (tu_lower déjà initialisé à set() plus haut)
                 if type_usager:
                     if isinstance(type_usager, str):
                         type_usager = [type_usager]
@@ -686,20 +690,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 try:
                     df_pve = load_pve(project_root, echelle=echelle, code=code, date_deb=date_deb, date_fin=date_fin) if load_pve_flag else pd.DataFrame()
                     log_debug(f"PVe chargés : {len(df_pve)} lignes")
-                    
-                    # LOG DE DIAGNOSTIC
-                    debug_path = project_root / "tests" / "scratch"
-                    debug_path.mkdir(parents=True, exist_ok=True)
-                    with open(debug_path / "debug_pve.txt", "w", encoding="utf-8") as f:
-                        f.write(f"GET /data for {date_deb} to {date_fin}\n")
-                        f.write(f"load_pve returned {len(df_pve)} rows\n")
-                        if not df_pve.empty:
-                            f.write(f"Columns: {list(df_pve.columns)}\n")
-                            if "INF-DATE-MIF" in df_pve.columns:
-                                f.write(f"MIF head:\n{df_pve['INF-DATE-MIF'].head()}\n")
-                            if "INF-DATE-INTG" in df_pve.columns:
-                                f.write(f"INTG head:\n{df_pve['INF-DATE-INTG'].head()}\n")
-                                
+
                     if profile_cfg.get("pipeline") != "global":
                         df_pve = _filter_pve(df_pve, profile_cfg)
                     if themes:
@@ -716,15 +707,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                                 df_pve = df_pve[df_pve[col_ta].astype(str).str.strip().str.lower().apply(
                                     lambda val: any(t in str(val) for t in ta_lower)
                                 )].copy()
-                    
-                    # DIAGNOSTIC LOG AFTER FILTERS
-                    with open(project_root / "tests" / "scratch" / "debug_pve.txt", "a", encoding="utf-8") as f:
-                        f.write(f"After keyword filters: {len(df_pve)} rows\n")
-                        
+
                     total_pve = len(df_pve)
                 except Exception as e:
-                    with open(project_root / "tests" / "scratch" / "debug_pve.txt", "a", encoding="utf-8") as f:
-                        f.write(f"EXCEPTION: {e}\n")
+                    import logging
+                    logging.getLogger(__name__).error(f"Erreur chargement/filtrage PVe: {e}")
                     total_pve = 0
 
                 # 4.bis. Restriction spatiale si echelle == "pnf"
@@ -1182,31 +1169,32 @@ def preload_data_async():
     def target():
         def log_preload(msg):
             print(msg)
-            _PRELOAD_LOGS.append(msg)
-            if len(_PRELOAD_LOGS) > 20:
-                _PRELOAD_LOGS.pop(0)
-                
+            with _preload_lock:
+                _PRELOAD_LOGS.append(msg)
+                if len(_PRELOAD_LOGS) > 20:
+                    _PRELOAD_LOGS.pop(0)
+
         try:
             log_preload("  Démarrage du chargement des données en arrière-plan...")
             project_root = Path(__file__).resolve().parents[2]
             from core.common.chargeurs_donnees import load_point_ctrl, load_pej, load_pa, load_pve
-            
+
             # 1. Charger les points de contrôle (toutes les années disponibles)
             log_preload("  Chargement des points de contrôle...")
             load_point_ctrl(project_root)
-            
+
             # 2. Charger les procédures pénales (PEJ)
             log_preload("  Chargement des enquêtes judiciaires...")
             load_pej(project_root)
-            
+
             # 3. Charger les procédures administratives (PA)
             log_preload("  Chargement des procédures administratives...")
             load_pa(project_root)
-            
+
             # 4. Charger les PVe
             log_preload("  Chargement des PVe...")
             load_pve(project_root)
-            
+
             # 5. Charger le shapefile des départements
             try:
                 from core.cartographie.pochoir_helper import get_departements_admin_shp, _load_all_departements
@@ -1218,9 +1206,12 @@ def preload_data_async():
 
             log_preload("  Données chargées avec succès en mémoire. L'explorer est prêt !")
             global _PRELOAD_STATUS
-            _PRELOAD_STATUS = "ready"
+            with _preload_lock:
+                _PRELOAD_STATUS = "ready"
         except Exception as e:
             log_preload(f"  Erreur lors du pré-chargement : {e}")
+            with _preload_lock:
+                _PRELOAD_STATUS = "error"
 
     threading.Thread(target=target, daemon=True).start()
 

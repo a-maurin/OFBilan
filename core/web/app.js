@@ -423,6 +423,39 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let isRunning = false;
 
+    // Validation du formulaire avant envoi
+    function validateForm() {
+        const profil = inputProfil.value.trim();
+        const dateDeb = document.getElementById('date-deb').value;
+        const dateFin = document.getElementById('date-fin').value;
+        const echelle = selectEchelle.value;
+        const code = inputCode.value.trim();
+        const errEl = document.getElementById('form-error-msg');
+
+        function showErr(msg) {
+            if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; }
+            else { consoleOutput.textContent += `\n[VALIDATION] ${msg}\n`; }
+        }
+        if (errEl) errEl.style.display = 'none';
+
+        // Profil obligatoire et dans la liste
+        if (!profil) { showErr('Veuillez sélectionner un profil de bilan.'); return false; }
+        if (profilesList.length > 0 && !profilesList.some(p => p.value === profil)) {
+            showErr(`Profil "${profil}" inconnu. Choisissez un profil dans la liste.`); return false;
+        }
+
+        // Dates obligatoires et cohérentes
+        if (!dateDeb || !dateFin) { showErr('Les dates de début et de fin sont obligatoires.'); return false; }
+        if (dateDeb > dateFin) { showErr('La date de début doit être antérieure ou égale à la date de fin.'); return false; }
+
+        // Code géographique obligatoire sauf national
+        if (echelle !== 'national' && !code) {
+            showErr('Un code géographique est requis pour l\'échelle sélectionnée.'); return false;
+        }
+
+        return true;
+    }
+
     // Mise à jour dynamique de l'aide géographique
     selectEchelle.addEventListener('change', () => {
         const val = selectEchelle.value;
@@ -431,9 +464,9 @@ document.addEventListener('DOMContentLoaded', () => {
             inputCode.placeholder = 'ex : 21';
             codeHelper.textContent = 'Exemples : 21, 27, 39';
         } else if (val === 'region') {
-            inputCode.value = '27';
+            inputCode.value = 'r27';
             inputCode.placeholder = 'ex : r27';
-            codeHelper.textContent = 'Exemples : 27, 44 (ou r27, r44)';
+            codeHelper.textContent = 'Exemples : r27, r44';
         } else if (val === 'bmi') {
             inputCode.value = 'BMI-NEC';
             inputCode.placeholder = 'ex : BMI-NEC';
@@ -492,6 +525,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     btnGenerate.addEventListener('click', () => {
         if (isRunning) return;
+        if (!validateForm()) return;
 
         isRunning = true;
         btnGenerate.disabled = true;
