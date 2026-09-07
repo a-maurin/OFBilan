@@ -308,7 +308,7 @@ def import_gabarit_content(yaml_str: str, file_stem: str | None = None) -> tuple
 # CHARGEMENT ET VERIFICATION DE COMPATIBILITE DES GABARITS
 # ========================================================================================
 
-def load_gabarit(gabarit_id: str, root: Path | None = None) -> dict[str, Any] | None:
+def load_gabarit(gabarit_id: str, root: Path | None = None, *, warn_if_missing: bool = True) -> dict[str, Any] | None:
     """Charge la configuration complète d'un gabarit spécifique par son identifiant."""
     gid_clean = str(gabarit_id).strip()
     if not gid_clean or gid_clean.lower() in ("none", "null", "standard", "default"):
@@ -321,7 +321,7 @@ def load_gabarit(gabarit_id: str, root: Path | None = None) -> dict[str, Any] | 
             if data:
                 if "alias_of" in data:
                     target_id = str(data["alias_of"]).strip()
-                    return load_gabarit(target_id, root)
+                    return load_gabarit(target_id, root, warn_if_missing=warn_if_missing)
                 if data.get("gabarit_id") == gid_clean:
                     return data
 
@@ -332,10 +332,11 @@ def load_gabarit(gabarit_id: str, root: Path | None = None) -> dict[str, Any] | 
                 if data.get("gabarit_id") == gid_clean:
                     if "alias_of" in data:
                         target_id = str(data["alias_of"]).strip()
-                        return load_gabarit(target_id, root)
+                        return load_gabarit(target_id, root, warn_if_missing=warn_if_missing)
                     return data
 
-    logger.warning(f"Gabarit de présentation introuvable : '{gabarit_id}'. Bascule sur le profil standard.")
+    if warn_if_missing:
+        logger.warning(f"Gabarit de présentation introuvable : '{gabarit_id}'. Bascule sur le profil standard.")
     return None
 
 

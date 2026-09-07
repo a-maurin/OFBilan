@@ -1733,11 +1733,14 @@ def _apply_legend_labels(
 
 def _get_logo_bandeau_path() -> Optional[Path]:
     """Retourne le chemin du bandeau logos (République française + OFB), ref/programme/modele_ofb/word/media/image5."""
-    ref_media = PROJECT_ROOT / "ref" / "modele_ofb" / "word" / "media"
-    for ext in ("jpg", "jpeg", "png"):
-        p = ref_media / f"image5.{ext}"
-        if p.exists():
-            return p
+    for ref_media in (
+        PROJECT_ROOT / "ref" / "programme" / "modele_ofb" / "word" / "media",
+        PROJECT_ROOT / "ref" / "modele_ofb" / "word" / "media",
+    ):
+        for ext in ("jpg", "jpeg", "png"):
+            p = ref_media / f"image5.{ext}"
+            if p.exists():
+                return p
     return None
 
 
@@ -2582,9 +2585,10 @@ def _apply_qgis_override_to_profile(prof: "ProfileConfig", override: dict) -> "P
 
     prof = replace(prof, **updates)
     new_layers: dict = {}
+    has_keywords = bool(updates.get("keywords"))
     for key, lcfg in prof.layers.items():
         layer_name = str(getattr(lcfg, "layer_name", "") or key).lower()
-        if "point_ctrl" in layer_name and lcfg.filter_type in (
+        if has_keywords and "point_ctrl" in layer_name and lcfg.filter_type in (
             "point_ctrl_theme",
             "point_ctrl_global",
             "point_ctrl",

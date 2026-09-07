@@ -473,9 +473,6 @@ def main() -> int:
     # Forcer pnf=True pour les profils à restrict_geo=pnf, sauf si --no-pnf explicite
     if pnf is None and is_fixed_geo:
         pnf = True
-    elif pnf is None and _is_interactive():
-        pnf_rep = ask_choice_list("Analyse PNF (cœur / hors-cœur)", [(True, "Oui"), (False, "Non")], False)
-        pnf = bool(pnf_rep)
     if pnf is not None:
         cli_options["pnf"] = pnf
     if args.annexe_detaillee:

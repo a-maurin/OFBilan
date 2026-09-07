@@ -555,7 +555,10 @@ def ensure_maps_for_profiles(
     )
 
     carto_dept = _resolve_carto_dept(echelle, code, dept_code)
-    warn_if_unknown_carto_dept(carto_dept)
+    try:
+        warn_if_unknown_carto_dept(carto_dept, echelle=echelle)
+    except TypeError:
+        warn_if_unknown_carto_dept(carto_dept)
     qgis_ok = qgis_available()
 
     existing: List[Path] = []

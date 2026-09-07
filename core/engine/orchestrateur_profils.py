@@ -345,8 +345,8 @@ def _message_fin_generation_pdf(
             f"et data/out/{out_subdir}/{brochure_name}"
         )
     if resolved_opts.get("brochure"):
-        if not stem.endswith("_brochure"):
-            stem = f"{stem}_brochure"
+        clean_sub = out_subdir if str(out_subdir).startswith("bilan_") else f"bilan_{out_subdir}"
+        stem = f"{clean_sub}_brochure" if not clean_sub.endswith("_brochure") else clean_sub
         pdf_name = apply_diffusion_pdf_suffix(f"{stem}.pdf", diffusion).name
         return f"Brochure générée : data/out/{out_subdir}/{pdf_name}"
     pdf_name = apply_diffusion_pdf_suffix(base, diffusion).name
@@ -659,6 +659,7 @@ def _run_global_profile_via_yaml(
                         crs="EPSG:4326"
                     )
                     gdf_pts.columns = [str(c).lower() for c in gdf_pts.columns]
+                    gdf_pts = gdf_pts.loc[:, ~gdf_pts.columns.duplicated()].copy()
                     for col in gdf_pts.select_dtypes(include=['datetime64[ns, UTC]', 'datetime64[ns]', 'datetime64']).columns:
                         gdf_pts[col] = gdf_pts[col].astype(str)
                     if "num_depart" in gdf_pts.columns:
@@ -698,6 +699,8 @@ def _run_global_profile_via_yaml(
                         geometry=gpd.points_from_xy(df_geo.loc[mask_geo, "_lon"], df_geo.loc[mask_geo, "_lat"]),
                         crs="EPSG:4326"
                     )
+                    gdf.columns = [str(c).lower() for c in gdf.columns]
+                    gdf = gdf.loc[:, ~gdf.columns.duplicated()].copy()
                     for col in gdf.select_dtypes(include=['datetime64[ns, UTC]', 'datetime64[ns]', 'datetime64']).columns:
                         gdf[col] = gdf[col].astype(str)
                     gpkg_path = carto_dir / f"pve_{prefix}_export_automatique.gpkg"
@@ -733,29 +736,30 @@ def _run_global_profile_via_yaml(
     if resolved_opts.get("cartes", False) and map_profiles:
         print("[3/5] Préparation des cartes de localisation...")
         try:
-            gabarit_id_opt = options.get("gabarit")
-            from core.common.chargeur_gabarits import load_gabarit
-            g_data = load_gabarit(gabarit_id_opt) if gabarit_id_opt else None
-            brochure_opt = options.get("brochure")
-            if brochure_opt is True:
-                is_brochure_mode = True
-            elif brochure_opt is False:
-                is_brochure_mode = False
-            else:
-                layout_mode = (profile or {}).get("layout_mode") or "standard"
-                is_brochure_mode = layout_mode in ("brochure", "brochure_custom") or gabarit_id_opt in ("srp_r27", "brochure_defaut")
-            ensure_maps_for_profiles(
-                map_profiles,
-                date_deb=date_deb,
-                date_fin=date_fin,
-                echelle=echelle, code=code,
-                bilan_profiles={profil_id: profile},
-                target_dir=out_dir,
-                diffusion=str(resolved_opts.get("diffusion", "externe")),
-                force_regen=True,
-                is_brochure=is_brochure_mode,
-                gabarit_data=g_data,
-            )
+            if not resolved_opts.get("_maps_already_generated"):
+                gabarit_id_opt = options.get("gabarit")
+                from core.common.chargeur_gabarits import load_gabarit
+                g_data = load_gabarit(gabarit_id_opt) if gabarit_id_opt else None
+                brochure_opt = options.get("brochure")
+                if brochure_opt is True:
+                    is_brochure_mode = True
+                elif brochure_opt is False:
+                    is_brochure_mode = False
+                else:
+                    layout_mode = (profile or {}).get("layout_mode") or "standard"
+                    is_brochure_mode = layout_mode in ("brochure", "brochure_custom") or gabarit_id_opt in ("srp_r27", "brochure_defaut")
+                ensure_maps_for_profiles(
+                    map_profiles,
+                    date_deb=date_deb,
+                    date_fin=date_fin,
+                    echelle=echelle, code=code,
+                    bilan_profiles={profil_id: profile},
+                    target_dir=out_dir,
+                    diffusion=str(resolved_opts.get("diffusion", "externe")),
+                    force_regen=False,
+                    is_brochure=is_brochure_mode,
+                    gabarit_data=g_data,
+                )
         except Exception as e:
             logger = logging.getLogger("ofbilan.engine")
             logger.warning("Cartes profils : %s", e)
@@ -812,11 +816,16 @@ def _run_global_profile_via_yaml(
             pdf_prefix = f"{pdf_prefix}_{safe_filter}"
 
         is_brochure_opt = bool(resolved_opts.get("brochure")) or (options and bool(options.get("brochure")))
-        prefix_type = "brochure" if is_brochure_opt else "bilan"
-        if code_norm:
-            output_filename = f"{prefix_type}_{pdf_prefix}_{code_norm}.pdf"
+        if is_brochure_opt:
+            if code_norm:
+                output_filename = f"bilan_{pdf_prefix}_{code_norm}_brochure.pdf"
+            else:
+                output_filename = f"bilan_{pdf_prefix}_brochure.pdf"
         else:
-            output_filename = f"{prefix_type}_{pdf_prefix}.pdf"
+            if code_norm:
+                output_filename = f"bilan_{pdf_prefix}_{code_norm}.pdf"
+            else:
+                output_filename = f"bilan_{pdf_prefix}.pdf"
         pdf_kwargs: dict = {
             "profile": profile,
             "date_deb": date_deb_ts,
@@ -908,8 +917,16 @@ def _finalize_cartes_selection(
             bool((cli_options or {}).get("brochure"))
             or bool(resolved_opts.get("brochure"))
         )
+        maps_to_gen = selection
+        if is_brochure_mode:
+            # En mode brochure, seule la carte des résultats (ou la 1re compatible) est nécessaire
+            brochure_maps = [s for s in selection if "resultat" in s]
+            maps_to_gen = brochure_maps[:1] if brochure_maps else selection[:1]
+            resolved_opts["cartes_selection"] = maps_to_gen
+            profile["_cartes_selection"] = maps_to_gen
+
         ensure_maps_for_profiles(
-            selection,
+            maps_to_gen,
             date_deb=date_deb,
             date_fin=date_fin,
             echelle=echelle, code=code,
@@ -920,6 +937,7 @@ def _finalize_cartes_selection(
             is_brochure=is_brochure_mode,
             gabarit_data=g_data,
         )
+        resolved_opts["_maps_already_generated"] = True
     return resolved_opts
 
 

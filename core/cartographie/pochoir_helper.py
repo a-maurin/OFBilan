@@ -101,6 +101,7 @@ def load_department_gdf(
     *,
     project_root: Optional[Path] = None,
     dissolve: bool = True,
+    echelle: Optional[str] = None,
 ) -> gpd.GeoDataFrame:
     """
     Extrait le polygone du département cible depuis DEPARTEMENT_ADMIN_Express_200207.shp.
@@ -114,7 +115,7 @@ def load_department_gdf(
     from core.common.utilitaires_metier import get_departements_pour_perimetre
     
     code_upper = dept_code.upper()
-    echelle = os.environ.get("BILANS_CARTO_ECHELLE", "departement").lower()
+    echelle = (echelle or os.environ.get("BILANS_CARTO_ECHELLE", "departement")).lower()
     
     if code_upper in ("FR", "FRANCE", "NATIONAL", "ALL") or echelle in ("national", "france"):
         target_depts = [str(c).upper() for c in gdf[_INSEE_DEP_COL].unique() if pd.notna(c)]
@@ -425,7 +426,12 @@ def write_map_dept_marker(map_png: Path, dept_code: str) -> None:
     marker.write_text(normalize_dept_code(dept_code), encoding="utf-8")
 
 
-def warn_if_unknown_carto_dept(dept_code: str, *, project_root: Optional[Path] = None) -> bool:
+def warn_if_unknown_carto_dept(
+    dept_code: str,
+    *,
+    project_root: Optional[Path] = None,
+    echelle: Optional[str] = None,
+) -> bool:
     """
     Avertit si le département cartographique est absent du référentiel admin.
 
@@ -444,7 +450,7 @@ def warn_if_unknown_carto_dept(dept_code: str, *, project_root: Optional[Path] =
         )
         return False
     try:
-        load_department_gdf(code, project_root=project_root)
+        load_department_gdf(code, project_root=project_root, echelle=echelle)
         return True
     except ValueError:
         logger.warning(

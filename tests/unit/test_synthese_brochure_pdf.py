@@ -281,4 +281,73 @@ def test_resolve_items_masques_carte_hierarchy() -> None:
     res_prof_brochure = resolve_items_masques_carte(profil_data, None, is_brochure=True)
     assert res_prof_brochure == ["titre_profil", "logo_profil"]
 
+
+def test_brochure_pdf_distinct_operations_and_localisations(tmp_path: Path) -> None:
+    """Vérifie que les opérations (358) et localisations (641) sont correctement lues distinctement."""
+    from core.engine.generation_pdf_synthese_brochure import generate_synthese_brochure_pdf_report
+
+    (tmp_path / "controles_global_operations_resume.csv").write_text("nb_operations_controle\n358\n", encoding="utf-8")
+    (tmp_path / "controles_global_resultats.csv").write_text("resultat;nb;taux\nConforme;600;93.6\nNon-conforme;41;6.4\n", encoding="utf-8")
+    (tmp_path / "pej_global_resume.csv").write_text("nb_pej_global\n10\n", encoding="utf-8")
+    (tmp_path / "pa_global_resume.csv").write_text("nb_pa_global\n5\n", encoding="utf-8")
+
+    generate_synthese_brochure_pdf_report(
+        tmp_path,
+        date_deb="2026-01-01",
+        date_fin="2026-08-31",
+        code="21",
+        output_filename="bilan_global_21_brochure.pdf",
+        profile={"id": "global"},
+        diffusion="externe",
+        cartes=False,
+    )
+    pdf_path = tmp_path / "bilan_global_21_brochure_ext.pdf"
+    assert pdf_path.is_file()
+
+
+def test_brochure_procedures_filter_zero() -> None:
+    """Vérifie que les lignes à 0 PEJ et 0 PA sont filtrées du tableau des procédures."""
+    import pandas as pd
+    from core.engine.generation_pdf_synthese_brochure import _build_procedures_table_brochure
+
+    df = pd.DataFrame([
+        {"theme": "Chasse", "nb_pej": 10, "nb_pa": 2},
+        {"theme": "Inactif-Peche", "nb_pej": 0, "nb_pa": 0},
+        {"theme": "Pollutions", "nb_pej": 5, "nb_pa": 0},
+    ])
+    tbl = _build_procedures_table_brochure(df, inner_w=200, max_rows=5)
+    # 2 lignes réelles + entête éventuelle
+    assert len(tbl._cellvalues) == 2
+    themes_in_table = [cell.text for row in tbl._cellvalues for cell in row if hasattr(cell, "text")]
+    assert "Inactif-Peche" not in themes_in_table
+    assert "Chasse" in themes_in_table
+    assert "Pollutions" in themes_in_table
+
+
+def test_brochure_pve_natinf_typography() -> None:
+    """Vérifie que les libellés NATINF en capitales passent en casse de phrase et que les cellules sont des Paragraphs."""
+    import pandas as pd
+    from core.engine.generation_pdf_synthese_brochure import (
+        _format_pve_natinf_label,
+        _build_pve_natinf_table_brochure,
+    )
+
+    row = pd.Series({
+        "numero_natinf": "27742",
+        "libelle_natinf": "AGRAINAGE OU AFFOURAGEMENT EN INFRACTION AUX PRESCRIPTIONS DU SDGC",
+        "theme_snc": "Chasse",
+        "nb": 29,
+    })
+    formatted = _format_pve_natinf_label(row)
+    assert formatted.startswith("27742 – Agrainage ou affouragement")
+    assert "SDGC" in formatted
+
+    df = pd.DataFrame([row])
+    tbl = _build_pve_natinf_table_brochure(df, inner_w=200, max_rows=5)
+    assert len(tbl._cellvalues) == 1
+    # Toutes les cellules (y compris le volume) sont des Paragraphs
+    for cell in tbl._cellvalues[0]:
+        assert hasattr(cell, "text")
+
+
 

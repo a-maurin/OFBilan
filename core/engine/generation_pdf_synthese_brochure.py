@@ -36,19 +36,21 @@ from __future__ import annotations
 # --- IMPORTS STANDARDS PYTHON ---
 import logging  # Pour journaliser les messages d'information ou d'erreur
 import re  # Pour les expressions régulières (nettoyage des balises HTML, etc.)
+import textwrap  # Pour le retour à la ligne élégant des libellés longs
 from pathlib import Path  # Pour manipuler facilement les chemins de fichiers
 
 # --- MANIPULATION DE DONNEES ET GENERATION DE PDF (LIBRARIES TIERCES) ---
 import pandas as pd  # Bibliothèque de traitement de tableaux de données (CSV)
 from reportlab.lib import colors as rl_colors  # Gestion des couleurs pour ReportLab
 from reportlab.lib.pagesizes import A4, landscape  # Format de page A4 en mode Paysage (horizontal)
+from reportlab.lib.enums import TA_RIGHT  # Alignement du texte (droite pour les colonnes numériques)
 from reportlab.lib.styles import ParagraphStyle  # Style de texte (police, taille, couleur, alignement)
 from reportlab.lib.units import mm  # Conversion de millimètres en points PDF
 from reportlab.platypus import Flowable, Image as RLImage, Paragraph, Spacer, Table, TableStyle  # Éléments de mise en page ReportLab
 
 # --- MODULES INTERNES OFBILAN (OUTILS ET CHARTE OFB) ---
 from core.common.carte_helper import resolve_profile_map_paths  # Recherche des fichiers d'images de cartes QGIS
-from core.common.ofb_charte import COLOR_PRIMARY  # Couleur principale officielle (vert/bleu OFB)
+from core.common.ofb_charte import COLOR_PRIMARY, FONT_FAMILY  # Charte officielle OFB et police active
 
 logger = logging.getLogger(__name__)  # Journaliseur propre à ce fichier
 
@@ -115,15 +117,15 @@ def _load_csv_fallback(out_dir: Path, filenames: list[str]) -> pd.DataFrame | No
 
 # Limites du nombre de lignes dans les tableaux de la brochure pour éviter les dépassements de page
 _BROCHURE_MAX_THEMES = 5  # Maximum 5 thématiques affichées dans les tableaux principaux
-_BROCHURE_MAX_PROC_THEMES = 7  # Maximum 7 thématiques dans le tableau des procédures (PEJ/PA)
-_BROCHURE_MAX_PVE_NATINF = 9  # Maximum 9 infractions NATINF affichées dans la liste PV/E
+_BROCHURE_MAX_PROC_THEMES = 5  # Maximum 5 thématiques dans le tableau des procédures (PEJ/PA)
+_BROCHURE_MAX_PVE_NATINF = 5  # Maximum 5 infractions NATINF affichées dans la liste PV/E
 
 # Encombrements et hauteurs fixes (en millimètres) utilisées pour calculer l'espace disponible en Page 2
 _PAGE2_ENCADRE_OVERHEAD_MM = 14.0  # Hauteur occupée par les en-têtes et bordures d'un encadré en page 2
-_PAGE2_TABLE_ROW_MM = 5.4  # Hauteur estimée d'une ligne de tableau
+_PAGE2_TABLE_ROW_MM = 6.4  # Hauteur estimée d'une ligne de tableau
 _PAGE2_TABLE_FOOTER_MM = 10.0  # Hauteur du pied de tableau
 _PAGE2_TOP_ROW_MAX_RATIO = 0.44  # Ratio maximal de la hauteur de la zone supérieure de la page 2
-_PAGE2_BOTTOM_ROW_CAP = 7  # Plafond maximum de lignes dans les tableaux du bas de la page 2
+_PAGE2_BOTTOM_ROW_CAP = 5  # Plafond maximum de lignes dans les tableaux du bas de la page 2 (verrouillage strict 2 pages)
 
 # Seuils et filtres pour les catégories d'usagers
 _BROCHURE_MAX_USAGER_TYPES = 5  # Maximum 5 types d'usagers affichés individuellement
@@ -452,10 +454,14 @@ def _brochure_usager_figure_scale(n_rows: int) -> float:
 
 def _format_pve_natinf_label(row: pd.Series) -> str:
     """Formate le libellé d'une infraction NATINF (ex: '2548 – Chasse sans permis')."""
-    libelle = row.get("libelle_natinf") or row.get("LIBELLE_NATINF") or ""
+    libelle = str(row.get("libelle_natinf") or row.get("LIBELLE_NATINF") or "").strip()
     code = str(row.get("numero_natinf") or row.get("natinf") or "").strip()
     if libelle:
-        return f"{code} – {libelle}" if code else str(libelle)
+        if libelle.isupper():
+            libelle = libelle[0].upper() + libelle[1:].lower()
+            for acr in ("OFB", "SDGC", "PVe", "PEJ", "PA", "SNC", "CSD", "ZPS", "ZSC", "PPRN", "PLU"):
+                libelle = re.sub(rf"\b{re.escape(acr.lower())}\b", acr, libelle, flags=re.IGNORECASE)
+        return f"{code} – {libelle}" if code else libelle
     return code or "—"
 
 
@@ -468,24 +474,45 @@ def _build_pve_natinf_table_brochure(
 ) -> Table:
     """Génère le tableau des infractions PV/E les plus fréquentes (Codes NATINF, Thème SNC et volumes)."""
     col_widths = col_widths_from_fracs(inner_w, _BROCHURE_PVE_NATINF_COL_FRACS)
-    label_w = col_widths[0]
-    theme_w = col_widths[1]
     cap = max(1, min(int(max_rows), _BROCHURE_MAX_PVE_NATINF))
-    rows: list[list[str]] = []
+    rows: list[list[Any]] = []
+    p_style_desc = ParagraphStyle(
+        "BrochurePveDesc",
+        fontName=FONT_FAMILY,
+        fontSize=7.2,
+        leading=8.8,
+        textColor=rl_colors.HexColor("#1F2937"),
+    )
+    p_style_theme = ParagraphStyle(
+        "BrochurePveTheme",
+        fontName=FONT_FAMILY,
+        fontSize=7.2,
+        leading=8.8,
+        textColor=rl_colors.HexColor("#4B5563"),
+    )
+    p_style_num = ParagraphStyle(
+        "BrochurePveNum",
+        fontName=FONT_FAMILY,
+        fontSize=7.2,
+        leading=8.8,
+        textColor=rl_colors.HexColor("#1F2937"),
+        alignment=TA_RIGHT,
+    )
     if pve_natinf is not None and not pve_natinf.empty:
         for _, row in pve_natinf.head(cap).iterrows():
             theme_val = str(row.get("theme_snc") or row.get("THEME_SNC") or row.get("theme") or "Infractions hors périmètre SNC").strip()
             if theme_val in ["", "Hors thème", "Non Classé / Hors SNC", "nan", "None"]:
                 theme_val = "Infractions hors périmètre SNC"
+            label_text = _format_pve_natinf_label(row)
             rows.append(
                 [
-                    truncate_text_to_width(_format_pve_natinf_label(row), label_w),
-                    truncate_text_to_width(theme_val, theme_w),
-                    str(int(row["nb"])),
+                    Paragraph(label_text, p_style_desc),
+                    Paragraph(theme_val, p_style_theme),
+                    Paragraph(str(int(row["nb"])), p_style_num),
                 ]
             )
     else:
-        rows.append(["—", "—", "0"])
+        rows.append(["—", "—", Paragraph("0", p_style_num)])
     return brochure_table(
         rows,
         col_widths=col_widths,
@@ -500,18 +527,37 @@ def _build_procedures_table_brochure(
 ) -> Table:
     """Génère le tableau synthétique des procédures administratives (PA) et judiciaires (PEJ) par thème."""
     cap = max(1, min(int(max_rows), _BROCHURE_MAX_PROC_THEMES))
-    rows: list[list[str]] = []
+    rows: list[list[Any]] = []
+    p_style = ParagraphStyle(
+        "BrochureProcTheme",
+        fontName=FONT_FAMILY,
+        fontSize=7.5,
+        leading=9.0,
+        textColor=rl_colors.HexColor("#1F2937"),
+    )
+    p_style_num = ParagraphStyle(
+        "BrochureProcNum",
+        fontName=FONT_FAMILY,
+        fontSize=7.5,
+        leading=9.0,
+        textColor=rl_colors.HexColor("#1F2937"),
+        alignment=TA_RIGHT,
+    )
     if proc_theme is not None and not proc_theme.empty:
-        for _, row in proc_theme.head(cap).iterrows():
+        valid_proc = proc_theme.copy()
+        if "nb_pej" in valid_proc.columns and "nb_pa" in valid_proc.columns:
+            valid_proc = valid_proc[(valid_proc["nb_pej"] > 0) | (valid_proc["nb_pa"] > 0)]
+        for _, row in valid_proc.head(cap).iterrows():
+            theme_text = str(row.get("theme", "")).strip()
             rows.append(
                 [
-                    _truncate_theme(row["theme"], 32),
-                    str(int(row.get("nb_pej", 0))),
-                    str(int(row.get("nb_pa", 0))),
+                    Paragraph(theme_text, p_style),
+                    Paragraph(str(int(row.get("nb_pej", 0))), p_style_num),
+                    Paragraph(str(int(row.get("nb_pa", 0))), p_style_num),
                 ]
             )
-    else:
-        rows.append(["—", "0", "0"])
+    if not rows:
+        rows.append(["—", Paragraph("0", p_style_num), Paragraph("0", p_style_num)])
     return brochure_table(
         rows,
         col_widths=col_widths_from_fracs(inner_w, _BROCHURE_PROC_COL_FRACS),
@@ -529,9 +575,16 @@ def _build_themes_table_brochure(
     total_value: int,
 ) -> Table:
     """Génère un tableau par thématiques avec les valeurs brutes et les pourcentages calculés."""
-    rows: list[list[str]] = []
+    rows: list[list[Any]] = []
+    p_style = ParagraphStyle(
+        "BrochurePage1Theme",
+        fontName=FONT_FAMILY,
+        fontSize=7.6,
+        leading=9.0,
+        textColor=rl_colors.HexColor("#1F2937"),
+    )
     for lb, v, pct in zip(labels, values, _theme_pct_strings_brochure(values, total_value=total_value)):
-        rows.append([_truncate_theme(lb, 30), str(int(v)), pct])
+        rows.append([Paragraph(str(lb).strip(), p_style), str(int(v)), pct])
     return brochure_table(
         rows,
         col_widths=col_widths_from_fracs(inner_w, _BROCHURE_THEME_COL_FRACS),
@@ -1676,8 +1729,11 @@ def _generate_synthese_brochure_pdf(
                         merged[c] = 0
                     else:
                         merged[c] = merged[c].fillna(0).astype(int)
-                merged["nb_total"] = merged["nb_pej"] + merged["nb_pa"] + merged["nb_pve"]
-                proc_theme = _sort_desc(merged, ["nb_total", "nb_pej", "nb_pa", "nb_pve"])
+                merged["nb_total_proc"] = merged["nb_pej"] + merged["nb_pa"]
+                merged["nb_total"] = merged["nb_total_proc"] + merged["nb_pve"]
+                # Filtrer les thématiques n'ayant aucune procédure (0 PEJ et 0 PA)
+                merged = merged[merged["nb_total_proc"] > 0]
+                proc_theme = _sort_desc(merged, ["nb_total_proc", "nb_pej", "nb_pa", "nb_pve"])
 
     pve_natinf = _sort_desc(_load_csv_fallback(out_dir, ["pve_global_par_natinf.csv", f"pve_{profil_id}_par_natinf.csv"]), ["nb"])
     act_par_type = _sort_desc(
@@ -1692,6 +1748,16 @@ def _generate_synthese_brochure_pdf(
         _load_csv_fallback(out_dir, ["synthese_resultats_usager_effectifs.csv", f"controles_{profil_id}_resultats_par_type_usager.csv", "controles_global_resultats_par_type_usager.csv"]),
         ["Total", "Conforme", "Infraction", "Manquement"],
     )
+    ops_resume = _load_csv_fallback(
+        out_dir,
+        [
+            "synthese_resume.csv",
+            f"controles_{profil_id}_operations_resume.csv",
+            "controles_global_operations_resume.csv",
+            f"controles_{profil_id}_usagers_resume.csv",
+            "controles_global_usagers_resume.csv",
+        ],
+    )
     resume = _load_csv_fallback(out_dir, ["synthese_resume.csv", f"controles_{profil_id}_usagers_resume.csv", "controles_global_usagers_resume.csv"])
     pej_resume = _load_csv_fallback(out_dir, ["pej_global_resume.csv", f"pej_{profil_id}_resume.csv"])
     pa_resume = _load_csv_fallback(out_dir, ["pa_global_resume.csv", f"pa_{profil_id}_resume.csv"])
@@ -1701,19 +1767,16 @@ def _generate_synthese_brochure_pdf(
     if resume is not None and not resume.empty and "nb_localisations" in resume.columns:
         nb_localisations = int(resume.iloc[0]["nb_localisations"])
     elif tab_resultats is not None and not tab_resultats.empty and "nb" in tab_resultats.columns:
-        logger.warning(
-            f"Fichier de résumé pour le profil '{profil_id}' sans colonne 'nb_localisations'. Fallback sur la somme de tab_resultats."
-        )
         nb_localisations = int(tab_resultats["nb"].sum())
     else:
-        if resume is not None and not resume.empty:
-            logger.warning(
-                f"Fichier de résumé pour le profil '{profil_id}' sans colonne 'nb_localisations' et aucun fallback tab_resultats disponible."
-            )
         nb_localisations = 0
 
     # Extraction des nombres globaux d'opérations et de procédures (PA / PEJ / PVe)
-    nb_operations_controle = int(resume.iloc[0]["nb_operations_controle"]) if resume is not None and not resume.empty and "nb_operations_controle" in resume.columns else 0
+    nb_operations_controle = 0
+    if ops_resume is not None and not ops_resume.empty and "nb_operations_controle" in ops_resume.columns:
+        nb_operations_controle = int(ops_resume.iloc[0]["nb_operations_controle"])
+    elif resume is not None and not resume.empty and "nb_operations_controle" in resume.columns:
+        nb_operations_controle = int(resume.iloc[0]["nb_operations_controle"])
     if nb_operations_controle == 0:
         nb_operations_controle = nb_localisations
 
@@ -1783,8 +1846,8 @@ def _generate_synthese_brochure_pdf(
     # ── INITIALISATION DU FICHIER PDF ET DU MOTEUR REPORTLAB ──
     if output_filename:
         stem = Path(output_filename).stem
-        if stem.startswith("bilan_"):
-            stem = f"brochure_{stem[6:]}"
+        if not stem.endswith("_brochure"):
+            stem = f"{stem}_brochure"
     else:
         stem = f"{profil_id}_brochure"
     pdf_path = apply_diffusion_pdf_suffix(out_dir / f"{stem}.pdf", diffusion)
@@ -2019,7 +2082,16 @@ def _generate_synthese_brochure_pdf(
     # Graphique à barres horizontales des résultats par usager (haut droite)
     result_chart_body: list = []
     if res_usager_plot is not None and not res_usager_plot.empty:
-        labels = [_truncate_theme(_display_type_usager(x), 20) for x in res_usager_plot["type_usager"]]
+        def _wrap_usager_label(raw: str) -> str:
+            txt = _display_type_usager(raw)
+            if len(txt) <= 22:
+                return txt
+            wrapped = textwrap.wrap(txt, width=20)
+            if len(wrapped) > 2:
+                return "\n".join(wrapped[:2]) + "…"
+            return "\n".join(wrapped)
+
+        labels = [_wrap_usager_label(x) for x in res_usager_plot["type_usager"]]
         series: dict[str, list[int]] = {
             "Conforme": [int(x) for x in res_usager_plot["Conforme"].tolist()],
             "Infraction": [int(x) for x in res_usager_plot["Infraction"].tolist()],

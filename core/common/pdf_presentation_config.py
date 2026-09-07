@@ -433,7 +433,7 @@ def resolve_pdf_presentation_config(
 
     if not gabarit_id:
         from core.common.chargeur_gabarits import load_gabarit
-        if profile_id and load_gabarit(profile_id, root):
+        if profile_id and load_gabarit(profile_id, root, warn_if_missing=False):
             gabarit_id = profile_id
         else:
             gabarit_id = "brochure_defaut" if is_brochure else "gabarit_defaut"
