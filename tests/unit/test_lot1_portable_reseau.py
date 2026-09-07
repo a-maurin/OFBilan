@@ -1,0 +1,103 @@
+# Copyright (C) 2026 Aguirre MAURIN
+#
+# Ce programme est un logiciel libre : vous pouvez le redistribuer et/ou le modifier
+# selon les termes de la Licence Publique Générale GNU (GPL).
+
+"""Tests unitaires pour le lot 1 : déport des écritures, isolation réseau, cache et verrous."""
+
+import os
+import sys
+from pathlib import Path
+
+from core.chemins_projet import (
+    is_writable,
+    get_app_data_dir,
+    get_out_dir,
+    get_cartes_dir,
+)
+from core.common.chargeurs_donnees import (
+    _get_cache_dir,
+    clear_disk_cache,
+)
+from core.common.verifier_dependances import (
+    injecter_lib_portable,
+    verifier_et_installer_accelerateurs,
+)
+from core.web.serveur import (
+    _get_pid_file,
+    _register_server_pid,
+    _cleanup_server_pid,
+    _is_pid_alive,
+    touch_watchdog,
+)
+
+
+def test_is_writable_and_get_app_data_dir(tmp_path):
+    assert is_writable(tmp_path) is True
+    app_data = get_app_data_dir()
+    assert isinstance(app_data, Path)
+    assert app_data.exists()
+
+
+def test_get_out_dir_fallback_when_readonly(monkeypatch, tmp_path):
+    # Simuler un dossier projet non inscriptible
+    ro_dir = tmp_path / "ro_project"
+    ro_dir.mkdir()
+    monkeypatch.setattr("core.chemins_projet.PROJECT_ROOT", ro_dir)
+    monkeypatch.setattr("core.chemins_projet.is_writable", lambda p: False)
+
+    out = get_out_dir("test_prog")
+    assert "OFBilan_Exports" in str(out)
+    assert out.name == "test_prog"
+
+
+def test_get_cartes_dir_points_to_local_appdata():
+    cartes_dir = get_cartes_dir()
+    assert isinstance(cartes_dir, Path)
+    assert cartes_dir.exists()
+    assert cartes_dir.name == "cartes"
+
+
+def test_cache_dir_and_clear_disk_cache():
+    cache_dir = _get_cache_dir()
+    assert cache_dir.exists()
+    assert cache_dir.name == "cache"
+
+    # Créer un fichier temporaire dans le cache et le vider
+    dummy_file = cache_dir / "dummy_test.pkl"
+    dummy_file.write_text("test", encoding="utf-8")
+    assert dummy_file.exists()
+
+    deleted = clear_disk_cache()
+    assert deleted >= 1
+    assert not dummy_file.exists()
+
+
+def test_verifier_dependances_lib_injection(tmp_path, monkeypatch):
+    # Crée un faux dossier lib
+    fake_root = tmp_path / "proj"
+    fake_lib = fake_root / "lib"
+    fake_lib.mkdir(parents=True)
+
+    monkeypatch.setattr(Path, "resolve", lambda self: fake_root / "core" / "common" / "verifier_dependances.py")
+    res = injecter_lib_portable()
+    # Si le chemin a été résolu
+    if str(fake_lib) in sys.path:
+        sys.path.remove(str(fake_lib))
+
+
+def test_pid_sentinel_lifecycle():
+    pid_file = _get_pid_file()
+    _register_server_pid()
+    assert pid_file.exists()
+    assert pid_file.read_text(encoding="utf-8").strip() == str(os.getpid())
+
+    assert _is_pid_alive(os.getpid()) is True
+    assert _is_pid_alive(99999999) is False
+
+    _cleanup_server_pid()
+    assert not pid_file.exists()
+
+
+def test_touch_watchdog():
+    touch_watchdog()

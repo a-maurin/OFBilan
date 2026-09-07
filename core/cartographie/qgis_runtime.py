@@ -45,11 +45,151 @@ logger = logging.getLogger(__name__)
 _QGIS_PYTHON_CACHE: Optional[Path] = None
 
 
+def _scan_program_files_qgis() -> list[Path]:
+    """Scanne les répertoires Program Files et retourne les exécutables Python triés par version décroissante."""
+    candidates: list[Path] = []
+    pfs = [Path(os.environ.get("ProgramFiles", r"C:\Program Files"))]
+    pf86 = os.environ.get("ProgramFiles(x86)")
+    if pf86:
+        pfs.append(Path(pf86))
+
+    qgis_dirs: list[Path] = []
+    for pf in pfs:
+        if pf.exists():
+            try:
+                qgis_dirs.extend([d for d in pf.glob("QGIS*") if d.is_dir()])
+            except OSError:
+                pass
+
+    import re
+    def _ver_sort(p: Path) -> tuple[int, ...]:
+        nums = re.findall(r"\d+", p.name)
+        return tuple(int(n) for n in nums) if nums else (0,)
+
+    qgis_dirs.sort(key=_ver_sort, reverse=True)
+
+    for qdir in qgis_dirs:
+        for sub in ("bin/python.exe", "bin/python3.exe", "bin/python-qgis-ltr.bat"):
+            cand = qdir / sub
+            if cand.exists():
+                candidates.append(cand)
+    return candidates
+
+
+def _scan_registry_qgis() -> list[Path]:
+    """Scanne le registre Windows pour détecter les chemins QGIS / OSGeo4W."""
+    candidates: list[Path] = []
+    if sys.platform != "win32":
+        return candidates
+    try:
+        import winreg
+        keys_to_check = [
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\QGIS\QGIS3", "InstallPath"),
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\OSGeo4W", ""),
+            (winreg.HKEY_CURRENT_USER, r"SOFTWARE\QGIS\QGIS3", "InstallPath"),
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\QGIS\QGIS3", "InstallPath"),
+        ]
+        for root_key, subkey, valname in keys_to_check:
+            try:
+                with winreg.OpenKey(root_key, subkey) as k:
+                    val, _ = winreg.QueryValueEx(k, valname)
+                    if val:
+                        p = Path(val)
+                        for sub in ("bin/python.exe", "bin/python3.exe", "bin/python-qgis-ltr.bat", "python.exe"):
+                            cand = p / sub
+                            if cand.exists():
+                                candidates.append(cand)
+            except OSError:
+                pass
+    except Exception:
+        pass
+    return candidates
+
+
+def prompt_user_for_qgis_path() -> Optional[Path]:
+    """Ouvre une boîte de sélection native de dossier si QGIS est introuvable."""
+    if os.environ.get("CI") or os.environ.get("PYTEST_CURRENT_TEST"):
+        return None
+    selected_path: Optional[str] = None
+    if sys.platform == "win32":
+        try:
+            ps_cmd = (
+                "[System.Reflection.Assembly]::LoadWithPartialName('System.windows.forms') | Out-Null; "
+                "$dialog = New-Object System.Windows.Forms.FolderBrowserDialog; "
+                "$dialog.Description = 'Veuillez sélectionner le dossier d installation de QGIS'; "
+                "if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $dialog.SelectedPath }"
+            )
+            res = subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd], capture_output=True, text=True, check=False)
+            out = res.stdout.strip()
+            if out:
+                selected_path = out
+        except Exception:
+            pass
+
+    if not selected_path:
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+            root = tk.Tk()
+            root.withdraw()
+            root.attributes('-topmost', True)
+            selected_path = filedialog.askdirectory(title="Sélectionner le dossier d'installation de QGIS")
+            root.destroy()
+        except Exception:
+            pass
+
+    if selected_path:
+        p = Path(selected_path)
+        candidates = [
+            p if p.is_file() and p.name.lower() in ("python.exe", "python-qgis-ltr.bat") else None,
+            p / "bin" / "python.exe",
+            p / "bin" / "python-qgis-ltr.bat",
+            p / "python.exe",
+        ]
+        for c in candidates:
+            if c and c.exists():
+                try:
+                    from core.parametres_utilisateur import lire_parametres, sauvegarder_parametres
+                    params = lire_parametres()
+                    params.setdefault("tech", {})["qgis_path"] = str(c)
+                    sauvegarder_parametres(params)
+                except Exception:
+                    pass
+                return c
+    return None
+
+
 def _qgis_python_path_candidates() -> list[Path]:
     candidates: list[Path] = []
-    env = (os.environ.get("QGIS_PYTHON") or os.environ.get("BILANS_QGIS_PYTHON") or "").strip()
+
+    # 1. Paramètres utilisateur mémorisés
+    try:
+        from core.parametres_utilisateur import lire_parametres
+        saved = lire_parametres().get("tech", {}).get("qgis_path", "").strip()
+        if saved:
+            sp = Path(saved)
+            if sp.is_file():
+                candidates.append(sp)
+            elif sp.is_dir():
+                for sub in ("bin/python.exe", "bin/python-qgis-ltr.bat", "python.exe"):
+                    cand = sp / sub
+                    if cand.exists():
+                        candidates.append(cand)
+    except Exception:
+        pass
+
+    # 2. Variables d'environnement
+    env = (os.environ.get("QGIS_PYTHON") or os.environ.get("BILANS_QGIS_PYTHON") or os.environ.get("OSGEO4W_ROOT") or "").strip()
     if env:
-        candidates.append(Path(env))
+        ep = Path(env)
+        if ep.is_file():
+            candidates.append(ep)
+        elif ep.is_dir():
+            for sub in ("bin/python.exe", "bin/python-qgis-ltr.bat", "python.exe"):
+                if (ep / sub).exists():
+                    candidates.append(ep / sub)
+
+    # 3. Fichier de configuration explicite
     for rel in (
         PROJECT_ROOT / "scripts" / "windows" / "qgis_python_path.txt",
         PROJECT_ROOT / "src" / "ofbilan" / "cartographie" / "qgis_python_path.txt",
@@ -65,19 +205,24 @@ def _qgis_python_path_candidates() -> list[Path]:
             if line and not line.startswith("#"):
                 candidates.append(Path(line))
                 break
-    pf = Path(os.environ.get("ProgramFiles", r"C:\Program Files"))
-    for pattern in (
-        pf / "QGIS 3.40.15" / "bin" / "python.exe",
-        Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "OSGeo4W" / "bin" / "python.exe",
-        Path(r"C:\OSGeo4W64\bin\python.exe"),
-        Path(r"C:\OSGeo4W\bin\python.exe"),
-    ):
-        if str(pattern):
-            candidates.append(pattern)
+
+    # 4. Registre Windows
+    candidates.extend(_scan_registry_qgis())
+
+    # 5. Scan Program Files par version décroissante
+    candidates.extend(_scan_program_files_qgis())
+
+    # 6. Emplacements OSGeo4W / LocalAppData
+    local_app_data = os.environ.get("LOCALAPPDATA", "")
+    if local_app_data:
+        candidates.append(Path(local_app_data) / "Programs" / "OSGeo4W" / "bin" / "python.exe")
+    candidates.append(Path(r"C:\OSGeo4W64\bin\python.exe"))
+    candidates.append(Path(r"C:\OSGeo4W\bin\python.exe"))
+
     return candidates
 
 
-def find_qgis_python_executable(*, refresh: bool = False) -> Optional[Path]:
+def find_qgis_python_executable(*, refresh: bool = False, prompt_if_missing: bool = False) -> Optional[Path]:
     """Retourne le chemin vers python.exe QGIS/OSGeo4W, ou None."""
     global _QGIS_PYTHON_CACHE
     if _QGIS_PYTHON_CACHE is not None and not refresh:
@@ -87,6 +232,13 @@ def find_qgis_python_executable(*, refresh: bool = False) -> Optional[Path]:
         if path.is_file():
             _QGIS_PYTHON_CACHE = path.resolve()
             return _QGIS_PYTHON_CACHE
+
+    if prompt_if_missing:
+        prompted = prompt_user_for_qgis_path()
+        if prompted and prompted.is_file():
+            _QGIS_PYTHON_CACHE = prompted.resolve()
+            return _QGIS_PYTHON_CACHE
+
     _QGIS_PYTHON_CACHE = None
     return None
 
@@ -94,6 +246,11 @@ def find_qgis_python_executable(*, refresh: bool = False) -> Optional[Path]:
 def get_qgis_env(python_exe: Path) -> dict[str, str]:
     """Calcule l'environnement OSGeo4W/QGIS complet pour l'exécutable python."""
     env = os.environ.copy()
+
+    # Nettoyage des variables parasites Anaconda / environnements hérités
+    for k in list(env.keys()):
+        if k.startswith("CONDA_") or k in ("PYTHONHOME", "PYTHONPATH", "_CONDA_ROOT", "_CONDA_EXE"):
+            del env[k]
     
     bin_dir = python_exe.parent
     root_dir = bin_dir.parent

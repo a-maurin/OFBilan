@@ -17,21 +17,55 @@
 
 #
 """Chemins du projet — partagés par tous les programmes."""
+import os
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
+def is_writable(path: Path) -> bool:
+    """Vérifie si un chemin est inscriptible via un test de création de fichier temporaire."""
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        test_file = path / f".writable_test_{os.getpid()}.tmp"
+        test_file.touch(exist_ok=True)
+        test_file.unlink(missing_ok=True)
+        return True
+    except OSError:
+        return False
+
+
+def get_app_data_dir() -> Path:
+    """Dossier local de travail (%LOCALAPPDATA%/OFBilan ou ~/.ofbilan)."""
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if local_app_data:
+        base = Path(local_app_data) / "OFBilan"
+    else:
+        base = Path.home() / ".ofbilan"
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+
+
 def get_out_dir(programme: str) -> Path:
-    """Dossier de sortie du programme (data/out/<programme>)."""
-    d = PROJECT_ROOT / "data" / "out" / programme
+    """Dossier de sortie du programme.
+
+    Tente d'écrire dans data/out/<programme> à la racine du projet.
+    Si le projet est en lecture seule (partage réseau), bascule vers ~/Documents/OFBilan_Exports/<programme>.
+    """
+    default_out = PROJECT_ROOT / "data" / "out"
+    if is_writable(default_out):
+        d = default_out / programme
+    else:
+        d = Path.home() / "Documents" / "OFBilan_Exports" / programme
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
 def get_cartes_dir() -> Path:
-    """Dossier des cartes générées (pour les bilans qui les intègrent)."""
-    return PROJECT_ROOT / "data" / "out" / "generateur_de_cartes"
+    """Dossier des cartes générées (stockage local pour préserver le partage réseau)."""
+    d = get_app_data_dir() / "cartes"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
 
 
 def get_sources_dir() -> Path:

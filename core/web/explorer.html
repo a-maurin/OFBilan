@@ -1754,18 +1754,35 @@ Composants principaux :
                         <div class="form-group"><label>Proxy</label><input type="text" id="set-sys-proxy"
                                 placeholder="http://proxy:port"></div>
                         <div class="form-group"><label>Port Serveur Local</label><input type="number" id="set-tech-port"
-                                value="8000"></div>
+                        <div class="form-group"><label>Chemin QGIS personnalisé</label><input type="text" id="set-tech-qgis"
+                                placeholder="Auto-détecté si vide (ex: C:\Program Files\QGIS 3.44.8)"></div>
                         <div class="form-group" style="display: flex; align-items: center; gap: 8px; margin-top: 10px;">
                             <input type="checkbox" id="set-tech-debug" style="margin:0;">
                             <label for="set-tech-debug" style="margin:0; cursor:pointer;">Activer le mode
                                 Débogage</label>
                         </div>
-                        <div style="margin-top: 15px; border-top: 1px solid #e2e8f0; padding-top: 10px;">
-                            <button type="button" onclick="loadSystemHealth()"
-                                style="background: #059669; color: #ffffff; border: none; border-radius: 6px; padding: 7px 12px; font-size: 12px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 6px;">
-                                🩺 Diagnostic & Santé Système
-                            </button>
-                            <div id="system-health-display" style="display: none; margin-top: 10px; font-size: 12px; background: #f8fafc; border: 1px solid #cbd5e1; padding: 10px; border-radius: 6px; max-height: 150px; overflow-y: auto;">
+                        <div style="margin-top: 15px; border-top: 1px solid #e2e8f0; padding-top: 10px; display: flex; flex-direction: column; gap: 8px;">
+                            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                                <button type="button" onclick="clearCacheAction()"
+                                    style="background: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd; border-radius: 6px; padding: 6px 10px; font-size: 12px; font-weight: 500; cursor: pointer;">
+                                    🧹 Vider le cache
+                                </button>
+                                <button type="button" onclick="openLogsAction()"
+                                    style="background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 10px; font-size: 12px; font-weight: 500; cursor: pointer;">
+                                    📂 Ouvrir les journaux
+                                </button>
+                                <button type="button" onclick="downloadLogsAction()"
+                                    style="background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 10px; font-size: 12px; font-weight: 500; cursor: pointer;">
+                                    📥 Télécharger le rapport
+                                </button>
+                            </div>
+                            <div>
+                                <button type="button" onclick="loadSystemHealth()"
+                                    style="background: #059669; color: #ffffff; border: none; border-radius: 6px; padding: 7px 12px; font-size: 12px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                                    🩺 Diagnostic & Santé Système
+                                </button>
+                                <div id="system-health-display" style="display: none; margin-top: 10px; font-size: 12px; background: #f8fafc; border: 1px solid #cbd5e1; padding: 10px; border-radius: 6px; max-height: 150px; overflow-y: auto;">
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -2062,6 +2079,8 @@ Composants principaux :
                 const tech = data.tech || {};
                 document.getElementById('set-tech-port').value = tech.port_serveur || 5000;
                 document.getElementById('set-tech-debug').checked = !!tech.mode_debug;
+                const qgisInput = document.getElementById('set-tech-qgis');
+                if (qgisInput) qgisInput.value = tech.qgis_path || '';
 
                 const useOffset = localStorage.getItem('ui_cluster_offset') !== 'false';
                 document.getElementById('set-ui-cluster-offset').checked = useOffset;
@@ -2103,7 +2122,8 @@ Composants principaux :
                 },
                 tech: {
                     port_serveur: parseInt(document.getElementById('set-tech-port').value) || 5000,
-                    mode_debug: document.getElementById('set-tech-debug').checked
+                    mode_debug: document.getElementById('set-tech-debug').checked,
+                    qgis_path: (document.getElementById('set-tech-qgis') ? document.getElementById('set-tech-qgis').value.trim() : '')
                 }
             };
 
@@ -2156,6 +2176,31 @@ Composants principaux :
             } catch (err) {
                 container.innerHTML = `<span style="color:#ef4444">Erreur réseau lors de l'accès au serveur.</span>`;
             }
+        }
+
+        async function clearCacheAction() {
+            if (!confirm('Voulez-vous vraiment vider le cache des données ?\nLes index et calculs temporaires locaux seront purgés.')) return;
+            try {
+                const res = await fetch('/api/cache/clear');
+                const data = await res.json();
+                alert(data.message || 'Cache vidé avec succès.');
+            } catch (err) {
+                alert('Erreur lors du nettoyage du cache : ' + err);
+            }
+        }
+
+        async function openLogsAction() {
+            try {
+                const res = await fetch('/api/logs/open');
+                const data = await res.json();
+                if (!data.success) alert('Impossible d\'ouvrir le dossier des journaux : ' + (data.error || ''));
+            } catch (err) {
+                alert('Erreur de communication : ' + err);
+            }
+        }
+
+        function downloadLogsAction() {
+            window.open('/api/logs/download', '_blank');
         }
 
         function restartServer() {

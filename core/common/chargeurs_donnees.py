@@ -42,11 +42,15 @@ import gzip
 import hashlib
 import json
 import logging
+import os
 import pickle
 import sys
 from functools import lru_cache
 from pathlib import Path
 from typing import List, Optional, Tuple, Union
+
+# Optimisation de lecture pour l'accès réseau distant (évite les scans récursifs SMB)
+os.environ.setdefault("GDAL_DISABLE_READDIR_ON_OPEN", "EMPTY_DIR")
 
 try:
     import geopandas as gpd
@@ -135,10 +139,33 @@ _PVE_RAW_CACHE = {}
 _FAITS_RAW_CACHE = {}
 
 
-def _get_cache_dir(root: Path) -> Path:
-    cache_dir = root / "data" / "cache"
+def _get_cache_dir(root: Optional[Path] = None) -> Path:
+    """Dossier du cache disque des données (déporté localement dans %LOCALAPPDATA%/OFBilan/cache)."""
+    try:
+        from core.chemins_projet import PROJECT_ROOT, get_app_data_dir
+        if root is not None and root.resolve() != PROJECT_ROOT.resolve():
+            cache_dir = root / "data" / "cache"
+        else:
+            cache_dir = get_app_data_dir() / "cache"
+    except Exception:
+        cache_dir = (root if root is not None else Path.home()) / "data" / "cache"
     cache_dir.mkdir(parents=True, exist_ok=True)
     return cache_dir
+
+
+def clear_disk_cache() -> int:
+    """Supprime tous les fichiers du cache disque et renvoie le nombre de fichiers supprimés."""
+    cache_dir = _get_cache_dir()
+    deleted = 0
+    if cache_dir.exists():
+        for p in cache_dir.glob("*"):
+            if p.is_file():
+                try:
+                    p.unlink(missing_ok=True)
+                    deleted += 1
+                except OSError:
+                    pass
+    return deleted
 
 
 def _compute_files_signature(files: List[Path]) -> str:

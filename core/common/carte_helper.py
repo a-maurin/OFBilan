@@ -256,6 +256,9 @@ def resolve_profile_map_paths(
         mid, profile=profile, presentation_cfg=presentation_cfg
     )
     dirs_to_check = [get_cartes_dir()]
+    base_cartes = PROJECT_ROOT / "data" / "out" / "generateur_de_cartes"
+    if base_cartes != get_cartes_dir() and base_cartes.exists():
+        dirs_to_check.append(base_cartes)
     if target_dir:
         dirs_to_check.append(target_dir)
 

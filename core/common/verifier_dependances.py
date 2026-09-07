@@ -1,21 +1,39 @@
 """
-Module de vérification et d'installation douce des accélérateurs Python (pyogrio, python-calamine).
+Module de vérification des dépendances et d'injection des bibliothèques portables.
 """
 
 import sys
-import subprocess
 import logging
 import importlib.util
+from pathlib import Path
 from typing import Callable, Optional
 
 logger = logging.getLogger("OFBilan.Dependances")
 
 
+def injecter_lib_portable() -> Path | None:
+    """Injecte PROJECT_ROOT / 'lib' en queue de sys.path si présent."""
+    try:
+        project_root = Path(__file__).resolve().parents[2]
+        lib_dir = project_root / "lib"
+        lib_str = str(lib_dir)
+        if lib_dir.is_dir() and lib_str not in sys.path:
+            sys.path.append(lib_str)
+            return lib_dir
+    except Exception:
+        pass
+    return None
+
+
 def verifier_et_installer_accelerateurs(log_callback: Optional[Callable[[str], None]] = None) -> None:
     """
-    Vérifie la présence de pyogrio et python-calamine.
-    Tente une installation silencieuse si manquants, sans jamais bloquer l'application.
+    Vérifie la présence des bibliothèques et accélérateurs sans aucune tentative de pip install.
+    Injecte lib/ portable en queue de sys.path.
     """
+    lib_path = injecter_lib_portable()
+    if lib_path and log_callback:
+        log_callback(f"  [INFO] Dossier de bibliothèques portables injecté : {lib_path}")
+
     targets = [
         ("pyogrio", "pyogrio"),
         ("calamine", "python-calamine"),
@@ -23,25 +41,12 @@ def verifier_et_installer_accelerateurs(log_callback: Optional[Callable[[str], N
 
     for mod_name, pkg_name in targets:
         if importlib.util.find_spec(mod_name) is None:
-            msg = f"  [INFO] Accélérateur '{pkg_name}' manquant. Tentative d'installation..."
+            msg = f"  [INFO] Accélérateur optionnel '{pkg_name}' non présent (utilisation du moteur standard)."
             logger.info(msg)
             if log_callback:
                 log_callback(msg)
-            
-            try:
-                subprocess.run(
-                    [sys.executable, "-m", "pip", "install", "--quiet", pkg_name],
-                    check=False,
-                    timeout=30,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-                if importlib.util.find_spec(mod_name) is not None:
-                    msg_ok = f"  [OK] Accélérateur '{pkg_name}' installé avec succès !"
-                    logger.info(msg_ok)
-                    if log_callback:
-                        log_callback(msg_ok)
-                else:
-                    logger.warning("  [WARN] Échec de l'installation de %s (droits ou réseau).", pkg_name)
-            except Exception as e:
-                logger.warning("  [WARN] Impossible d'installer %s : %s", pkg_name, e)
+        else:
+            msg_ok = f"  [OK] Accélérateur '{pkg_name}' détecté et actif."
+            logger.info(msg_ok)
+            if log_callback:
+                log_callback(msg_ok)

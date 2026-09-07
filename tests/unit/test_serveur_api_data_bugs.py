@@ -164,4 +164,25 @@ def test_system_health_route_has_write_and_return():
     route_block = serveur_source[health_idx:schema_idx]
     assert "self.wfile.write" in route_block
     assert "return" in route_block
-    assert "_get_plugin_version()" in route_block
+    assert "_get_plugin_version()" in route_block
+
+
+def test_api_data_datetime_scope():
+    """Vérifie que datetime n'est pas masqué ou ré-importé localement dans do_POST."""
+    import inspect
+    handler_cls = serveur_mod.Handler
+    source = inspect.getsource(handler_cls.do_POST)
+    # L'import local créait une variable libre non liée
+    assert "import datetime" not in source
+    assert hasattr(serveur_mod, "datetime")
+    assert hasattr(serveur_mod.datetime, "datetime")
+
+
+def test_api_data_project_root_scope():
+    """Vérifie que project_root est initialisé dès l'entrée de do_POST."""
+    import inspect
+    handler_cls = serveur_mod.Handler
+    source = inspect.getsource(handler_cls.do_POST)
+    assert "project_root = PROJECT_ROOT" in source
+
+

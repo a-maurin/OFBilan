@@ -38,7 +38,7 @@ import json
 import os
 import subprocess
 import sys
-from datetime import datetime
+import datetime
 import pandas as pd
 from pathlib import Path
 
@@ -106,9 +106,130 @@ def _get_plugin_version(default: str = "1.0.7") -> str:
 _PRELOAD_STATUS = "loading"
 _preload_lock = threading.Lock()
 
-_SERVER_LOG_FILE = SRC_DIR / "logs" / "serveur_web.log"
+try:
+    from core.chemins_projet import get_app_data_dir
+    _SERVER_LOG_FILE = get_app_data_dir() / "logs" / "serveur_web.log"
+except Exception:
+    _SERVER_LOG_FILE = SRC_DIR / "logs" / "serveur_web.log"
+
 _server_log_lock = threading.Lock()
 _MAX_SERVER_RUNS = 3
+
+import time
+
+_LAST_REQUEST_TIME = time.time()
+_watchdog_started = False
+_watchdog_lock = threading.Lock()
+
+
+def touch_watchdog() -> None:
+    """Réinitialise le compteur d'inactivité du watchdog."""
+    global _LAST_REQUEST_TIME
+    _LAST_REQUEST_TIME = time.time()
+
+
+def start_watchdog(timeout_seconds: int = 1800) -> None:
+    """Démarre le watchdog d'inactivité (30 min par défaut)."""
+    global _watchdog_started
+    with _watchdog_lock:
+        if _watchdog_started:
+            return
+        _watchdog_started = True
+
+    env_val = os.environ.get("OFBILAN_WATCHDOG_TIMEOUT")
+    if env_val is not None:
+        try:
+            timeout_seconds = int(env_val)
+        except ValueError:
+            pass
+
+    if timeout_seconds <= 0:
+        return
+
+    def _loop():
+        global _LAST_REQUEST_TIME
+        while True:
+            time.sleep(30)
+            idle = time.time() - _LAST_REQUEST_TIME
+            if idle >= timeout_seconds:
+                log_server(f"Inactivité détectée ({int(idle // 60)} min). Extinction automatique du serveur.", level="INFO")
+                _cleanup_server_pid()
+                os._exit(0)
+
+    t = threading.Thread(target=_loop, daemon=True, name="WatchdogInactivite")
+    t.start()
+
+
+def _get_pid_file() -> Path:
+    try:
+        from core.chemins_projet import get_app_data_dir
+        return get_app_data_dir() / "server.pid"
+    except Exception:
+        return SRC_DIR / "server.pid"
+
+
+def _is_pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    if sys.platform == "win32":
+        try:
+            res = subprocess.run(
+                ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            return str(pid) in res.stdout
+        except Exception:
+            return False
+    else:
+        try:
+            os.kill(pid, 0)
+            return True
+        except OSError:
+            return False
+
+
+def _kill_pid(pid: int) -> None:
+    if sys.platform == "win32":
+        subprocess.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True, check=False)
+    else:
+        try:
+            os.kill(pid, 15)
+        except OSError:
+            pass
+
+
+def _register_server_pid() -> None:
+    pid_file = _get_pid_file()
+    try:
+        if pid_file.exists():
+            old_pid_str = pid_file.read_text(encoding="utf-8").strip()
+            if old_pid_str.isdigit():
+                old_pid = int(old_pid_str)
+                if old_pid != os.getpid() and _is_pid_alive(old_pid):
+                    log_server(f"Processus serveur précédent orphelin détecté (PID {old_pid}). Extinction...", level="WARNING")
+                    _kill_pid(old_pid)
+    except Exception as e:
+        log_server(f"Impossible de vérifier le fichier PID : {e}", level="WARNING")
+
+    try:
+        pid_file.parent.mkdir(parents=True, exist_ok=True)
+        pid_file.write_text(str(os.getpid()), encoding="utf-8")
+    except Exception as e:
+        log_server(f"Impossible d'enregistrer le fichier PID : {e}", level="WARNING")
+
+
+def _cleanup_server_pid() -> None:
+    try:
+        pid_file = _get_pid_file()
+        if pid_file.exists():
+            current = pid_file.read_text(encoding="utf-8").strip()
+            if current == str(os.getpid()):
+                pid_file.unlink(missing_ok=True)
+    except Exception:
+        pass
+
 
 def init_server_logger(log_file: Path | str | None = None) -> Path:
     """
@@ -246,6 +367,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(WEB_DIR), **kwargs)
 
+    def handle_one_request(self):
+        touch_watchdog()
+        return super().handle_one_request()
+
     def log_message(self, format, *args):
         msg = format % args
         if IS_DEBUG:
@@ -275,6 +400,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             log_server(f"Connexion réseau interrompue par le client ({e.__class__.__name__})", level="DEBUG")
 
     def do_GET(self):
+        from core.chemins_projet import PROJECT_ROOT
+        project_root = PROJECT_ROOT
         parsed_path = self.path.split('?')[0]
         if parsed_path == "/favicon.ico":
             self.send_response(204)
@@ -326,7 +453,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     "platform": sys.platform,
                     "disk_free_mb": round(usage.free / (1024 * 1024), 1),
                     "sources": get_source_files_metadata(SRC_DIR),
-                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 }
             except Exception as exc:
                 health_info = {"status": "ERROR", "message": str(exc)}
@@ -394,6 +521,56 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_header('Cache-Control', 'no-cache')
             self.end_headers()
             self.wfile.write(json.dumps({"needs_update": needs_update}).encode('utf-8'))
+            return
+
+        if parsed_path == "/api/cache/clear":
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json; charset=utf-8')
+            self.send_header('Cache-Control', 'no-cache')
+            self.end_headers()
+            try:
+                from core.common.chargeurs_donnees import clear_session_cache, clear_disk_cache
+                clear_session_cache()
+                deleted_count = clear_disk_cache()
+                res = {"success": True, "deleted": deleted_count, "message": "Cache mémoire et disque vidés avec succès."}
+            except Exception as e:
+                res = {"success": False, "error": str(e)}
+            self.wfile.write(json.dumps(res, ensure_ascii=False).encode('utf-8'))
+            return
+
+        if parsed_path == "/api/logs/open":
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json; charset=utf-8')
+            self.send_header('Cache-Control', 'no-cache')
+            self.end_headers()
+            try:
+                from core.chemins_projet import get_app_data_dir
+                log_dir = get_app_data_dir() / "logs"
+                log_dir.mkdir(parents=True, exist_ok=True)
+                if sys.platform == "win32":
+                    os.startfile(str(log_dir))
+                else:
+                    subprocess.Popen(["xdg-open", str(log_dir)])
+                res = {"success": True, "path": str(log_dir)}
+            except Exception as e:
+                res = {"success": False, "error": str(e)}
+            self.wfile.write(json.dumps(res, ensure_ascii=False).encode('utf-8'))
+            return
+
+        if parsed_path == "/api/logs/download":
+            target_log = _SERVER_LOG_FILE
+            if target_log.exists():
+                self.send_response(200)
+                self.send_header('Content-Type', 'text/plain; charset=utf-8')
+                self.send_header('Content-Disposition', 'attachment; filename="serveur_web.log"')
+                self.end_headers()
+                with open(target_log, 'rb') as f:
+                    self.wfile.write(f.read())
+            else:
+                self.send_response(404)
+                self.send_header('Content-Type', 'text/plain; charset=utf-8')
+                self.end_headers()
+                self.wfile.write("Aucun journal disponible.".encode('utf-8'))
             return
 
         if parsed_path == "/api/check_update":
@@ -635,6 +812,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_POST(self):
         import urllib.parse
         from pathlib import Path
+        from core.chemins_projet import PROJECT_ROOT
+        project_root = PROJECT_ROOT
         parsed_path = urllib.parse.urlparse(self.path).path
 
         if parsed_path == "/api/log":
@@ -774,6 +953,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     src_dir = str(Path(__file__).resolve().parents[2])
                     env["PYTHONPATH"] = src_dir + os.pathsep + project_root + os.pathsep + env.get("PYTHONPATH", "")
                     env["PYTHONIOENCODING"] = "utf-8"
+                    env["PYTHONDONTWRITEBYTECODE"] = "1"
 
                     process = subprocess.Popen(
                         cmd,
@@ -793,8 +973,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         if not line and process.poll() is not None:
                             break
                         if line:
-                            self.wfile.write(line.encode('utf-8'))
-                            self.wfile.flush()
+                            try:
+                                self.wfile.write(line.encode('utf-8'))
+                                self.wfile.flush()
+                            except (BrokenPipeError, ConnectionResetError):
+                                log_server("Client web déconnecté pendant la génération. Arrêt du processus de calcul.", level="WARNING")
+                                try:
+                                    process.kill()
+                                except Exception:
+                                    pass
+                                break
 
                     process.wait()
                     if process.returncode == 0:
@@ -818,15 +1006,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
         elif parsed_path == "/api/data":
             try:
-                import datetime
-                from pathlib import Path
-                project_root = Path(__file__).resolve().parents[2]
-                
-                debug_log = project_root / "tests" / "scratch" / "api_data_debug.log"
+                from core.chemins_projet import get_app_data_dir
+                debug_log = get_app_data_dir() / "logs" / "api_data_debug.log"
                 debug_log.parent.mkdir(parents=True, exist_ok=True)
                 def log_debug(msg):
-                    with open(debug_log, "a", encoding="utf-8") as f:
-                        f.write(f"[{datetime.datetime.now()}] {msg}\n")
+                    if IS_DEBUG:
+                        with open(debug_log, "a", encoding="utf-8") as f:
+                            f.write(f"[{datetime.datetime.now()}] {msg}\n")
                         
                 log_debug("=== NOUVELLE REQUÊTE /api/data ===")
                 
@@ -1727,7 +1913,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 except Exception as e:
                     import traceback
                     log_server(f"[EXPLORER_GEOJSON] Erreur génération contours GeoJSON (Échelle: {echelle}, Code: {code}) : {e}\n{traceback.format_exc()}", level="ERROR")
-                    with open(Path(project_root) / "geojson_error.log", "w", encoding="utf-8") as f_err:
+                    from core.chemins_projet import get_app_data_dir
+                    err_file = get_app_data_dir() / "logs" / "geojson_error.log"
+                    err_file.parent.mkdir(parents=True, exist_ok=True)
+                    with open(err_file, "w", encoding="utf-8") as f_err:
                         f_err.write(f"Error loading boundary geojson: {e}\n")
                         traceback.print_exc(file=f_err)
                     print(f"Error loading boundary geojson: {e}")
@@ -1783,8 +1972,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 except Exception:
                     pass
                 import traceback
-                import datetime
-                err_log_dir = project_root / "tests" / "scratch"
+                from core.chemins_projet import get_app_data_dir
+                err_log_dir = get_app_data_dir() / "logs"
                 err_log_dir.mkdir(parents=True, exist_ok=True)
                 err_log_path = err_log_dir / "serveur_error.log"
                 with open(err_log_path, "a", encoding="utf-8") as f:
@@ -1962,11 +2151,14 @@ def run_server():
     os.chdir(str(WEB_DIR))
 
     apply_server_debug_mode()
+    _register_server_pid()
     init_server_logger()
+    start_watchdog()
     log_server(f"Initialisation du serveur web OFBilan (Port: {PORT}, PID: {os.getpid()})")
 
     import atexit
     atexit.register(lambda: finalize_server_logger(reason="Terminated"))
+    atexit.register(_cleanup_server_pid)
 
     # Lancement du pré-chargement des données en tâche de fond
     try:
@@ -1975,26 +2167,43 @@ def run_server():
         log_server(f"Impossible d'initialiser le pré-chargement : {e}", level="ERROR")
 
     socketserver.TCPServer.allow_reuse_address = True
+    import random
+    max_tries = 30
+    active_port = PORT
+    httpd = None
+
+    for attempt in range(max_tries):
+        try:
+            httpd = socketserver.TCPServer(("", active_port), Handler)
+            break
+        except OSError as e:
+            if getattr(e, "errno", None) in (10048, 98) or "10048" in str(e) or "Address already in use" in str(e):
+                log_server(f"Port {active_port} déjà occupé, recherche d'un port disponible...", level="INFO")
+                active_port += 1
+                time.sleep(random.uniform(0.05, 0.2))
+            else:
+                log_server(f"Erreur d'ouverture du port {active_port} : {e}", level="CRITICAL")
+                finalize_server_logger(reason=f"Port Error ({e})")
+                raise
+
+    if httpd is None:
+        log_server(f"Impossible d'allouer un port libre après {max_tries} tentatives.", level="CRITICAL")
+        finalize_server_logger(reason="No Port Available")
+        return
+
     try:
-        with socketserver.TCPServer(("", PORT), Handler) as httpd:
-            log_server(f"Serveur web actif sur http://localhost:{PORT}")
+        with httpd:
+            log_server(f"Serveur web actif sur http://localhost:{active_port}")
             log_server("L'explorateur web s'ouvre automatiquement. Appuyez sur Ctrl+C pour arrêter.")
 
             if os.environ.get("OFBILAN_RESTART") != "1":
                 import webbrowser
-                webbrowser.open(f"http://localhost:{PORT}/loading.html")
+                webbrowser.open(f"http://localhost:{active_port}/loading.html")
 
             httpd.serve_forever()
     except KeyboardInterrupt:
         log_server("Interruption utilisateur (Ctrl+C). Extinction du serveur.", level="INFO")
         finalize_server_logger(reason="Stopped by user (Ctrl+C)")
-    except OSError as e:
-        if getattr(e, "errno", None) in (10048, 98) or "10048" in str(e) or "Address already in use" in str(e):
-            log_server(f"Le port {PORT} est déjà utilisé par une autre instance du serveur.", level="ERROR")
-            log_server(f"Veuillez fermer l'instance existante ou modifier le port dans la configuration.", level="WARNING")
-        else:
-            log_server(f"Erreur d'ouverture du port {PORT} : {e}", level="CRITICAL")
-        finalize_server_logger(reason=f"Port Error ({e})")
     except Exception as e:
         log_server(f"Erreur critique serveur : {e}", level="CRITICAL")
         finalize_server_logger(reason=f"Crashed ({e})")

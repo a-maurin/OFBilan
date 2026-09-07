@@ -889,4 +889,21 @@ document.addEventListener('DOMContentLoaded', () => {
         accordBody.classList.toggle('open', !isOpen);
         accordHeader.classList.toggle('open', !isOpen);
     });
+
+    // Vérification unique et discrète des mises à jour au démarrage
+    fetch('/api/check_update')
+        .then(res => res.json())
+        .then(data => {
+            if (data && data.update_available) {
+                const banner = document.getElementById('update-banner');
+                if (banner) {
+                    const verEl = document.getElementById('update-version');
+                    if (verEl) verEl.innerText = data.latest_version;
+                    const linkEl = document.getElementById('update-link');
+                    if (linkEl) linkEl.href = data.zip_url;
+                    banner.classList.remove('hidden');
+                }
+            }
+        })
+        .catch(() => {});
 });
