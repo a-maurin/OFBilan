@@ -54,6 +54,9 @@ __pycache__/
 *.tmp
 ~$*.docx
 /*.png
+tests/scratch/*.txt
+tests/scratch/*.log
+
 
 ############################
 # Secrets / Environnement
