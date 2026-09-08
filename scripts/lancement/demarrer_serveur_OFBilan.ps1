@@ -16,6 +16,127 @@ Write-Host "=====================================" -ForegroundColor Cyan
 Write-Host "     Lancement du serveur OFBilan" -ForegroundColor Cyan
 Write-Host "=====================================" -ForegroundColor Cyan
 Write-Host ""
+
+# -----------------------------------------------------------------------------
+# 0. Gestion du miroir local (disque C:) pour supprimer les lenteurs reseau
+# -----------------------------------------------------------------------------
+$LocalAppDir = Join-Path $env:LOCALAPPDATA "OFBilan\app"
+$SourceConfigFile = Join-Path $env:LOCALAPPDATA "OFBilan\source_serveur.txt"
+
+function Test-IsNetworkLocation([string]$PathToCheck) {
+    if (-not $PathToCheck) { return $false }
+    if ($PathToCheck.StartsWith("\\") -or $PathToCheck.StartsWith("//")) { return $true }
+    $driveName = Split-Path -Qualifier $PathToCheck
+    if ($driveName) {
+        $cleanDrive = $driveName.TrimEnd('\')
+        $dInfo = [System.IO.DriveInfo]::GetDrives() | Where-Object { $_.Name.TrimEnd('\') -eq $cleanDrive } | Select-Object -First 1
+        if ($dInfo -and $dInfo.DriveType -eq [System.IO.DriveType]::Network) {
+            return $true
+        }
+    }
+    return $false
+}
+
+$isCurrentNetwork = Test-IsNetworkLocation $ProjectRoot
+$isCurrentLocalApp = ($ProjectRoot.TrimEnd('\') -eq $LocalAppDir.TrimEnd('\'))
+$serverSource = $null
+$executionRoot = $ProjectRoot
+
+if ($isCurrentNetwork) {
+    $serverSource = $ProjectRoot
+    try {
+        $cfgDir = Split-Path -Parent $SourceConfigFile
+        if (-not (Test-Path $cfgDir)) { [System.IO.Directory]::CreateDirectory($cfgDir) | Out-Null }
+        Set-Content -Path $SourceConfigFile -Value $serverSource -Encoding UTF8 -Force
+    } catch {}
+} elseif ($isCurrentLocalApp) {
+    if (Test-Path $SourceConfigFile) {
+        try {
+            $saved = (Get-Content $SourceConfigFile -Raw -Encoding UTF8).Trim()
+            if ($saved) {
+                $serverSource = $saved
+            }
+        } catch {}
+    }
+}
+
+if ($serverSource) {
+    $executionRoot = $LocalAppDir
+    Write-Host "Verification des mises a jour depuis le serveur..." -ForegroundColor Yellow
+
+    if (Test-Path $serverSource) {
+        if (-not (Test-Path $LocalAppDir)) {
+            [System.IO.Directory]::CreateDirectory($LocalAppDir) | Out-Null
+        }
+
+        $excludeDirs = @(
+            ".git",
+            ".github",
+            ".agents",
+            ".cursor",
+            ".gemini",
+            ".vscode",
+            ".idea",
+            ".venv",
+            "venv",
+            "env",
+            "tests",
+            "temp",
+            "distribution",
+            "releases",
+            "demo",
+            "docs\prompts",
+            "ref\hors_programme",
+            "__pycache__",
+            ".pytest_cache",
+            ".mypy_cache",
+            ".ruff_cache",
+            (Join-Path $LocalAppDir "data\out"),
+            (Join-Path $serverSource "data\out")
+        )
+
+        $excludeFiles = @(
+            "*.pyc",
+            "*.pyo",
+            "*.pyd",
+            "*.log",
+            "*.tmp",
+            "~$*.docx",
+            "*.zip",
+            "*.7z"
+        )
+
+        $robocopyArgs = @(
+            "$serverSource",
+            "$LocalAppDir",
+            "/MIR",
+            "/FFT",
+            "/R:1",
+            "/W:1",
+            "/XD"
+        ) + $excludeDirs + @(
+            "/XF"
+        ) + $excludeFiles + @(
+            "/NDL",
+            "/NFL",
+            "/NJH",
+            "/NJS"
+        )
+
+        & robocopy @robocopyArgs
+        $rcExit = $LASTEXITCODE
+
+        if ($rcExit -lt 8) {
+            Write-Host "[OK] Application synchronisee sur le disque local SSD." -ForegroundColor Green
+        } else {
+            Write-Host "[AVERTISSEMENT] Synchronisation partielle (code Robocopy : $rcExit)." -ForegroundColor Yellow
+        }
+    } else {
+        Write-Host "[INFO] Lecteur reseau non accessible. Demarrage en mode autonome hors-ligne." -ForegroundColor Yellow
+    }
+    Write-Host ""
+}
+
 Write-Host "Recherche de l'interpreteur Python de QGIS..." -ForegroundColor Gray
 
 $qgisPython = $null
@@ -125,7 +246,16 @@ $localPycache = Join-Path $env:LOCALAPPDATA "OFBilan\pycache"
 if (-not (Test-Path $localPycache)) { [System.IO.Directory]::CreateDirectory($localPycache) | Out-Null }
 $env:PYTHONPYCACHEPREFIX = $localPycache
 
-$serveurScript = Join-Path $ProjectRoot "core\web\serveur.py"
+# Détermination du script serveur cible (miroir local prioritaire si disponible)
+$serveurScript = Join-Path $executionRoot "core\web\serveur.py"
+if (-not (Test-Path $serveurScript)) {
+    $serveurScript = Join-Path $ProjectRoot "core\web\serveur.py"
+    $executionRoot = $ProjectRoot
+}
+
+if ($serverSource) {
+    $env:OFBILAN_REMOTE_ROOT = $serverSource
+}
 
 $passArgs = @()
 if ($env:DEBUG -eq "1" -or $env:OFBILAN_DEBUG -eq "1") {
@@ -135,7 +265,7 @@ if ($args) {
     $passArgs += $args
 }
 
-Push-Location $env:SystemRoot
+Push-Location $executionRoot
 try {
     & "$qgisPython" "$serveurScript" $passArgs
 } finally {
