@@ -1067,6 +1067,16 @@ Composants principaux :
 
         <!-- Tableau de bord Droite -->
         <section class="explorer-panel">
+            <!-- Bandeau d'information lors du chargement -->
+            <div id="data-loading-banner" class="hidden no-print"
+                style="margin-bottom: 12px; padding: 10px 16px; background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; border-radius: 8px; font-size: 13px; font-weight: 500; display: none; align-items: center; justify-content: space-between; gap: 10px; box-shadow: 0 2px 6px rgba(59, 130, 246, 0.08); transition: opacity 0.3s ease;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="display: inline-block; width: 14px; height: 14px; border: 2px solid #93c5fd; border-top-color: #1d4ed8; border-radius: 50%; animation: btnspin 0.8s linear infinite;"></span>
+                    <span id="data-loading-banner-text">Chargement des données en cours...</span>
+                </div>
+                <span style="font-size: 11px; color: #3b82f6; font-style: italic;">Mise en cache locale automatique</span>
+            </div>
+
             <!-- Indicateurs Clés en pleine largeur -->
             <div class="card" style="margin-bottom: 0;">
                 <h2>Indicateurs Clés</h2>

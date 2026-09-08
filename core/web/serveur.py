@@ -2157,24 +2157,22 @@ def preload_data_async():
                 log_server(f"Erreur lors de la vérification des accélérateurs : {e}", level="WARNING")
 
             t0 = time.perf_counter()
-            log_preload("[1/3] Chargement des données d'activité (points de contrôle, PEJ, PA, PVe)...")
-            from core.common.chargeurs_donnees import init_session_cache
-            init_session_cache(project_root)
-            log_preload(f"Données d'activité chargées en mémoire cache ({time.perf_counter() - t0:.1f}s)")
+            log_preload("[1/2] Vérification des modules et composants système...")
+            # Les données d'activité ne sont plus pré-chargées au démarrage nationalement :
+            # elles seront chargées à la demande et mises en cache au clic dans l'explorateur.
 
             t1 = time.perf_counter()
-            log_preload("[2/3] Chargement des contours géographiques...")
+            log_preload("[2/2] Préparation des contours géographiques...")
             try:
                 from core.cartographie.pochoir_helper import get_departements_admin_shp, _load_all_departements
                 shp = get_departements_admin_shp(project_root)
                 _load_all_departements(str(shp.resolve()))
-                log_preload(f"Contours géographiques chargés ({time.perf_counter() - t1:.1f}s)")
+                log_preload(f"Contours géographiques prêts ({time.perf_counter() - t1:.1f}s)")
             except Exception as e:
                 log_preload(f"Impossible de pré-charger les contours : {e}", level="WARNING")
 
-            log_preload("[3/3] Finalisation du cache et préparation de l'explorateur...")
             elapsed = time.perf_counter() - t_start
-            log_preload(f"Initialisation des données terminée avec succès (en {elapsed:.1f}s). L'explorateur est prêt !")
+            log_preload(f"Initialisation terminée avec succès (en {elapsed:.1f}s). L'explorateur est prêt !")
             global _PRELOAD_STATUS
             with _preload_lock:
                 _PRELOAD_STATUS = "ready"

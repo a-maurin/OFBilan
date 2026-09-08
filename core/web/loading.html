@@ -118,7 +118,7 @@ de l'auteur original (Aguirre MAURIN).
         const targetUrl = `http://localhost:${port}/explorer.html`;
         const statusUrl = `http://localhost:${port}/api/preload-status`;
         let retries = 0;
-        const maxRetries = 120; // 60 secondes (120 * 500ms)
+        const maxRetries = 240; // 60 secondes (240 * 250ms)
 
         function checkServer() {
             fetch(statusUrl)
@@ -134,15 +134,15 @@ de l'auteur original (Aguirre MAURIN).
                         document.querySelector('.loading-text').innerText = "PRÊT !";
                         setTimeout(() => {
                             window.location.replace(targetUrl);
-                        }, 500);
+                        }, 200);
                     } else {
-                        setTimeout(checkServer, 500);
+                        setTimeout(checkServer, 250);
                     }
                 })
                 .catch((error) => {
                     retries++;
                     if (retries < maxRetries) {
-                        setTimeout(checkServer, 500);
+                        setTimeout(checkServer, 250);
                     } else {
                         document.querySelector('.loading-text').innerText = "ERREUR DE DÉMARRAGE";
                         document.querySelector('.loading-text').style.color = "#D95C4A";
@@ -151,8 +151,8 @@ de l'auteur original (Aguirre MAURIN).
                 });
         }
 
-        // On lance la vérification après un court délai pour laisser QGIS lancer le process
-        setTimeout(checkServer, 1000);
+        // On lance la vérification rapidement
+        setTimeout(checkServer, 300);
     </script>
 </body>
 </html>

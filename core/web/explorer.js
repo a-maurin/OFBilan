@@ -2773,10 +2773,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (element) element.classList.toggle(className, add);
     }
 
-    function setGlobalLoadingState(isLoading, isError = false, errorMessage = '') {
+    function setGlobalLoadingState(isLoading, isError = false, errorMessage = '', territoryLabel = '') {
         const mapOverlay = document.getElementById('map-loading-overlay');
         const mapErrorBanner = document.getElementById('map-error-banner');
         const mapErrorMessage = document.getElementById('map-error-message');
+        const loadingBanner = document.getElementById('data-loading-banner');
+        const loadingBannerText = document.getElementById('data-loading-banner-text');
         const controlPanel = document.querySelector('.control-panel');
         const quickYearContainer = document.getElementById('quick-year-container');
         const activeQuickYearBtn = document.querySelector('.btn-quick-year.active');
@@ -2785,6 +2787,32 @@ document.addEventListener('DOMContentLoaded', () => {
         toggleElementClass(mapOverlay, 'hidden', !isLoading);
         toggleElementClass(controlPanel, 'filters-loading-disabled', isLoading);
         toggleElementClass(quickYearContainer, 'filters-loading-disabled', isLoading);
+
+        if (loadingBanner) {
+            if (isLoading) {
+                let terrText = territoryLabel;
+                if (!terrText) {
+                    const echelleVal = typeof selectEchelle !== 'undefined' && selectEchelle ? selectEchelle.value : '';
+                    const parsed = typeof getParsedCodes === 'function' ? getParsedCodes() : [];
+                    if (echelleVal === 'national') {
+                        terrText = 'la France entière';
+                    } else if (parsed && parsed.length > 0) {
+                        const typeLabel = echelleVal === 'departement' ? 'le département' : echelleVal === 'region' ? 'la région' : 'le périmètre';
+                        terrText = `${typeLabel} ${parsed.join(', ')}`;
+                    } else {
+                        terrText = 'le périmètre sélectionné';
+                    }
+                }
+                if (loadingBannerText) {
+                    loadingBannerText.textContent = `Chargement des données pour ${terrText} en cours...`;
+                }
+                loadingBanner.classList.remove('hidden');
+                loadingBanner.style.display = 'flex';
+            } else {
+                loadingBanner.classList.add('hidden');
+                loadingBanner.style.display = 'none';
+            }
+        }
 
         if (isLoading) {
             toggleElementClass(mapErrorBanner, 'hidden', true);

@@ -632,11 +632,17 @@ def load_point_ctrl(
         if path in _POINT_CTRL_RAW_CACHE:
             df = _POINT_CTRL_RAW_CACHE[path].copy()
         else:
-            try:
-                df = read_vector_attributes(path)
-            except Exception as e:
-                raise RuntimeError(f"Erreur de lecture du fichier SIG : {e}")
-            df.columns = [str(c).split(",")[0].strip() for c in df.columns]
+            path_sig = _compute_files_signature([path])
+            raw_key = f"point_ctrl_raw_{path.stem}"
+            cached_df = _load_disk_cache(root, raw_key, path_sig)
+            if cached_df is not None:
+                df = cached_df.copy()
+            else:
+                try:
+                    df = read_vector_attributes(path)
+                except Exception as e:
+                    raise RuntimeError(f"Erreur de lecture du fichier SIG : {e}")
+                df.columns = [str(c).split(",")[0].strip() for c in df.columns]
             
             # Validation des colonnes requises
             required_columns = ["date_ctrl", "dc_id", "num_depart"]
@@ -714,6 +720,7 @@ def load_point_ctrl(
                 if "avis_pasbi" not in df.columns:
                     df["avis_pasbi"] = df[avis_src]
             
+                _save_disk_cache(root, raw_key, path_sig, df)
             _POINT_CTRL_RAW_CACHE[path] = df.copy()
 
         # Filtre à posteriori par département
@@ -829,32 +836,38 @@ def load_pej(
     if path in _PEJ_RAW_CACHE:
         df = _PEJ_RAW_CACHE[path].copy()
     else:
-        df = _read_spreadsheet(path)
-        df.columns = pd.Index([str(c).strip().upper() for c in df.columns])
-        # Alias pour compatibilité si le classeur utilise "NATINF" au lieu de "NATINF_PEJ"
-        if "NATINF" in df.columns and "NATINF_PEJ" not in df.columns:
-            df["NATINF_PEJ"] = df["NATINF"]
-        # Alias "type_usager" pour filtrage des bilans usagers ciblés
-        if "type_usager" not in df.columns:
-            for cand in ("TYPE_USAGER", "TYPE USAGER", "USAGER", "USGAER"):
-                if cand in df.columns:
-                    df["type_usager"] = df[cand]
-                    break
-        df["DATE_CONSTATATION"] = safe_to_datetime(df["DATE_CONSTATATION"])
-        df["DATE_OUVERTURE_PROCEDURE"] = safe_to_datetime(df["DATE_OUVERTURE_PROCEDURE"])
-        
-        has_recap_date = "RECAP_DATE_INIT_PJ" in df.columns
-        if not has_recap_date:
-            df["RECAP_DATE_INIT_PJ"] = pd.NaT
+        raw_key = f"pej_raw_{path.stem}"
+        cached_df = _load_disk_cache(root, raw_key, sig)
+        if cached_df is not None:
+            df = cached_df.copy()
         else:
-            df["RECAP_DATE_INIT_PJ"] = safe_to_datetime(df["RECAP_DATE_INIT_PJ"])
+            df = _read_spreadsheet(path)
+            df.columns = pd.Index([str(c).strip().upper() for c in df.columns])
+            # Alias pour compatibilité si le classeur utilise "NATINF" au lieu de "NATINF_PEJ"
+            if "NATINF" in df.columns and "NATINF_PEJ" not in df.columns:
+                df["NATINF_PEJ"] = df["NATINF"]
+            # Alias "type_usager" pour filtrage des bilans usagers ciblés
+            if "type_usager" not in df.columns:
+                for cand in ("TYPE_USAGER", "TYPE USAGER", "USAGER", "USGAER"):
+                    if cand in df.columns:
+                        df["type_usager"] = df[cand]
+                        break
+            df["DATE_CONSTATATION"] = safe_to_datetime(df["DATE_CONSTATATION"])
+            df["DATE_OUVERTURE_PROCEDURE"] = safe_to_datetime(df["DATE_OUVERTURE_PROCEDURE"])
             
-        df["DATE_REF"] = (
-            df["DATE_CONSTATATION"]
-            .fillna(df["DATE_OUVERTURE_PROCEDURE"])
-            .fillna(df["RECAP_DATE_INIT_PJ"])
-        )
-        df.attrs["missing_recap_date"] = not has_recap_date
+            has_recap_date = "RECAP_DATE_INIT_PJ" in df.columns
+            if not has_recap_date:
+                df["RECAP_DATE_INIT_PJ"] = pd.NaT
+            else:
+                df["RECAP_DATE_INIT_PJ"] = safe_to_datetime(df["RECAP_DATE_INIT_PJ"])
+                
+            df["DATE_REF"] = (
+                df["DATE_CONSTATATION"]
+                .fillna(df["DATE_OUVERTURE_PROCEDURE"])
+                .fillna(df["RECAP_DATE_INIT_PJ"])
+            )
+            df.attrs["missing_recap_date"] = not has_recap_date
+            _save_disk_cache(root, raw_key, sig, df)
         _PEJ_RAW_CACHE[path] = df.copy()
         if is_national_full:
             _save_disk_cache(root, "pej_national", sig, df)
@@ -951,11 +964,17 @@ def load_pa(
     if path in _PA_RAW_CACHE:
         df = _PA_RAW_CACHE[path].copy()
     else:
-        df = _read_spreadsheet(path)
-        df.columns = pd.Index([str(c).strip().upper() for c in df.columns])
-        df["DATE_CONTROLE"] = safe_to_datetime(df["DATE_CONTROLE"])
-        df["DATE_DOSSIER"] = safe_to_datetime(df["DATE_DOSSIER"])
-        df["DATE_REF"] = df["DATE_CONTROLE"].fillna(df["DATE_DOSSIER"])
+        raw_key = f"pa_raw_{path.stem}"
+        cached_df = _load_disk_cache(root, raw_key, sig)
+        if cached_df is not None:
+            df = cached_df.copy()
+        else:
+            df = _read_spreadsheet(path)
+            df.columns = pd.Index([str(c).strip().upper() for c in df.columns])
+            df["DATE_CONTROLE"] = safe_to_datetime(df["DATE_CONTROLE"])
+            df["DATE_DOSSIER"] = safe_to_datetime(df["DATE_DOSSIER"])
+            df["DATE_REF"] = df["DATE_CONTROLE"].fillna(df["DATE_DOSSIER"])
+            _save_disk_cache(root, raw_key, sig, df)
         _PA_RAW_CACHE[path] = df.copy()
         if is_national_full:
             _save_disk_cache(root, "pa_national", sig, df)
@@ -2388,80 +2407,85 @@ def load_pve(
     if path in _PVE_RAW_CACHE:
         df = _PVE_RAW_CACHE[path].copy()
     else:
-        suffix = path.suffix.lower()
-        if suffix == ".csv":
-            df = pd.read_csv(path, sep=";", dtype=str, encoding="latin1")
-        elif suffix == ".ods":
-            df = _read_spreadsheet(path)
+        raw_key = f"pve_raw_{path.stem}"
+        cached_df = _load_disk_cache(root, raw_key, sig)
+        if cached_df is not None:
+            df = cached_df.copy()
         else:
-            # .xlsx : moteur openpyxl requis côté environnement Python
-            df = pd.read_excel(path, dtype=str, engine="openpyxl")
+            suffix = path.suffix.lower()
+            if suffix == ".csv":
+                df = pd.read_csv(path, sep=";", dtype=str, encoding="latin1")
+            elif suffix == ".ods":
+                df = _read_spreadsheet(path)
+            else:
+                # .xlsx : moteur openpyxl requis côté environnement Python
+                df = pd.read_excel(path, dtype=str, engine="openpyxl")
 
-        # Normalisation du code commune
-        if "INF-INSEE" in df.columns:
-            df["INF-INSEE"] = (
-                df["INF-INSEE"]
-                .astype(str)
-                .str.extract(r"(\d{1,5})", expand=False)
-                .fillna("")
-                .str.zfill(5)
-            )
-
-        # Alias de département INF-DEPART / INF-DEPARTEMENT
-        if "INF-DEPARTEMENT" in df.columns and "INF-DEPART" not in df.columns:
-            df["INF-DEPART"] = df["INF-DEPARTEMENT"]
-        elif "INF-DEPART" in df.columns and "INF-DEPARTEMENT" not in df.columns:
-            df["INF-DEPARTEMENT"] = df["INF-DEPART"]
-
-        # Alias UNITE_libelle
-        unite_col = next((c for c in df.columns if str(c).upper() in ("UNITE_LIBELLE", "UNITE_LIBEL", "UNITE_LIB", "UNITE")), None)
-        if unite_col and "UNITE_libelle" not in df.columns:
-            df["UNITE_libelle"] = df[unite_col]
-        if "UNITE_libelle" in df.columns and "unite_libelle" not in df.columns:
-            df["unite_libelle"] = df["UNITE_libelle"]
-
-        # Traitement et déduplication des doublons sur INF-ID
-        if "INF-ID" in df.columns:
-            nb_dups = int(df["INF-ID"].duplicated().sum())
-            if nb_dups > 0:
-                pct_dups = (nb_dups / max(1, len(df))) * 100
-                logger.warning(
-                    "PVe : %d doublon(s) détecté(s) sur INF-ID (%.2f%% des lignes). Déduplication automatique sur INF-ID.",
-                    nb_dups,
-                    pct_dups,
+            # Normalisation du code commune
+            if "INF-INSEE" in df.columns:
+                df["INF-INSEE"] = (
+                    df["INF-INSEE"]
+                    .astype(str)
+                    .str.extract(r"(\d{1,5})", expand=False)
+                    .fillna("")
+                    .str.zfill(5)
                 )
-                df = df.drop_duplicates(subset=["INF-ID"], keep="first").copy()
 
-        # Date de mise en force (MIF)
-        if "INF-DATE-MIF" in df.columns:
-            df["INF-DATE-MIF"] = safe_to_datetime(df["INF-DATE-MIF"])
-        if "INF-DATE-INTG" in df.columns:
-            df["INF-DATE-INTG"] = safe_to_datetime(df["INF-DATE-INTG"])
-            
-        # Jointure avec la table de concordance NATINF -> Domaine / Thème / Action SNC
-        try:
-            df_conc = load_concordance_natinf_snc(root)
-            if not df_conc.empty:
-                nat_col = next((c for c in df.columns if any(k in c.upper() for k in ["NATINF", "INF-NATINF", "NUMERO_NATINF", "CODE_NATINF"])), None)
-                if nat_col:
-                    df["numero_natinf_clean"] = df[nat_col].astype(str).str.extract(r'(\d+)', expand=False).fillna("").str.lstrip("0")
-                    df = df.merge(df_conc, left_on="numero_natinf_clean", right_on="numero_natinf", how="left")
-                    
-                    orig_dom = df["DOMAINE"].fillna("Hors domaine") if "DOMAINE" in df.columns else "Hors domaine"
-                    orig_thm = df["THEME"].fillna(orig_dom) if "THEME" in df.columns else orig_dom
+            # Alias de département INF-DEPART / INF-DEPARTEMENT
+            if "INF-DEPARTEMENT" in df.columns and "INF-DEPART" not in df.columns:
+                df["INF-DEPART"] = df["INF-DEPARTEMENT"]
+            elif "INF-DEPART" in df.columns and "INF-DEPARTEMENT" not in df.columns:
+                df["INF-DEPARTEMENT"] = df["INF-DEPART"]
 
-                    df["DOMAINE"] = df["domaine_snc"].fillna(orig_dom).replace("", orig_dom)
-                    df["THEME"] = df["theme_snc"].fillna(orig_thm).replace("", orig_thm)
-                    df["ACTION"] = df["action_snc"].fillna("Non renseigné").replace("", "Non renseigné")
-                    df["DOMAINE_SNC"] = df["DOMAINE"]
-                    df["THEME_SNC"] = df["THEME"]
-                    df["ACTION_SNC"] = df["ACTION"]
-                    df["domaine"] = df["DOMAINE"]
-                    df["theme"] = df["THEME"]
-        except Exception as exc:
-            logger.warning("Échec de la jointure concordance NATINF / SNC sur PVe : %s", exc)
+            # Alias UNITE_libelle
+            unite_col = next((c for c in df.columns if str(c).upper() in ("UNITE_LIBELLE", "UNITE_LIBEL", "UNITE_LIB", "UNITE")), None)
+            if unite_col and "UNITE_libelle" not in df.columns:
+                df["UNITE_libelle"] = df[unite_col]
+            if "UNITE_libelle" in df.columns and "unite_libelle" not in df.columns:
+                df["unite_libelle"] = df["UNITE_libelle"]
 
+            # Traitement et déduplication des doublons sur INF-ID
+            if "INF-ID" in df.columns:
+                nb_dups = int(df["INF-ID"].duplicated().sum())
+                if nb_dups > 0:
+                    pct_dups = (nb_dups / max(1, len(df))) * 100
+                    logger.warning(
+                        "PVe : %d doublon(s) détecté(s) sur INF-ID (%.2f%% des lignes). Déduplication automatique sur INF-ID.",
+                        nb_dups,
+                        pct_dups,
+                    )
+                    df = df.drop_duplicates(subset=["INF-ID"], keep="first").copy()
 
+            # Date de mise en force (MIF)
+            if "INF-DATE-MIF" in df.columns:
+                df["INF-DATE-MIF"] = safe_to_datetime(df["INF-DATE-MIF"])
+            if "INF-DATE-INTG" in df.columns:
+                df["INF-DATE-INTG"] = safe_to_datetime(df["INF-DATE-INTG"])
+                
+            # Jointure avec la table de concordance NATINF -> Domaine / Thème / Action SNC
+            try:
+                df_conc = load_concordance_natinf_snc(root)
+                if not df_conc.empty:
+                    nat_col = next((c for c in df.columns if any(k in c.upper() for k in ["NATINF", "INF-NATINF", "NUMERO_NATINF", "CODE_NATINF"])), None)
+                    if nat_col:
+                        df["numero_natinf_clean"] = df[nat_col].astype(str).str.extract(r'(\d+)', expand=False).fillna("").str.lstrip("0")
+                        df = df.merge(df_conc, left_on="numero_natinf_clean", right_on="numero_natinf", how="left")
+                        
+                        orig_dom = df["DOMAINE"].fillna("Hors domaine") if "DOMAINE" in df.columns else "Hors domaine"
+                        orig_thm = df["THEME"].fillna(orig_dom) if "THEME" in df.columns else orig_dom
+
+                        df["DOMAINE"] = df["domaine_snc"].fillna(orig_dom).replace("", orig_dom)
+                        df["THEME"] = df["theme_snc"].fillna(orig_thm).replace("", orig_thm)
+                        df["ACTION"] = df["action_snc"].fillna("Non renseigné").replace("", "Non renseigné")
+                        df["DOMAINE_SNC"] = df["DOMAINE"]
+                        df["THEME_SNC"] = df["THEME"]
+                        df["ACTION_SNC"] = df["ACTION"]
+                        df["domaine"] = df["DOMAINE"]
+                        df["theme"] = df["THEME"]
+            except Exception as exc:
+                logger.warning("Échec de la jointure concordance NATINF / SNC sur PVe : %s", exc)
+
+            _save_disk_cache(root, raw_key, sig, df)
         _PVE_RAW_CACHE[path] = df.copy()
         if is_national_full:
             _save_disk_cache(root, "pve_national", sig, df)
