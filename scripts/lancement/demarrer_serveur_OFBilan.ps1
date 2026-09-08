@@ -135,4 +135,9 @@ if ($args) {
     $passArgs += $args
 }
 
-& "$qgisPython" "$serveurScript" $passArgs
+Push-Location $env:SystemRoot
+try {
+    & "$qgisPython" "$serveurScript" $passArgs
+} finally {
+    Pop-Location
+}

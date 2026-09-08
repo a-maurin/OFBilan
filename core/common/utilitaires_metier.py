@@ -39,6 +39,8 @@ from pathlib import Path
 from typing import Any, List
 
 import pandas as pd
+from core import configurer_pandas_si_present
+configurer_pandas_si_present()
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _TYPES_USAGERS_PATH = _PROJECT_ROOT / "ref" / "programme" / "tables_reference" / "types_usagers.csv"

@@ -66,19 +66,10 @@ def apply_server_debug_mode(enabled: bool | None = None) -> bool:
         pass
     return IS_DEBUG
 
-# Ajouter le dossier actuel au path pour importer reparer_logo
 WEB_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(WEB_DIR))
 SRC_DIR = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(SRC_DIR))
-
-try:
-    from reparer_logo import generer_logo_blanc, generer_favicon_ico
-    # Génère automatiquement le logo propre et le favicon au démarrage
-    generer_logo_blanc()
-    generer_favicon_ico()
-except ImportError:
-    pass
 
 try:
     from core.parametres_utilisateur import lire_parametres
@@ -2155,6 +2146,16 @@ def preload_data_async():
         def log_preload(msg, level="INFO"):
             log_server(msg.strip(), level=level)
             _append_preload_log(msg)
+
+        # Laisser le temps au serveur HTTP de traiter la requête de loading.html et d'afficher la fenêtre
+        time.sleep(0.4)
+
+        try:
+            from reparer_logo import generer_logo_blanc, generer_favicon_ico
+            generer_logo_blanc()
+            generer_favicon_ico()
+        except Exception:
+            pass
 
         t_start = time.perf_counter()
         try:

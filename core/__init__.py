@@ -18,30 +18,42 @@
 #
 """Package principal pour la génération des bilans."""
 
+import sys
 import warnings
 
-# --- CONFIGURATION GLOBALE PANDAS ---
-# Solution pérenne pour désactiver le backend PyArrow pour les chaînes de caractères.
-# Dans l'environnement QGIS (Pandas 2.1+), PyArrow est souvent activé par défaut, mais la
-# version de PyArrow fournie manque de certaines fonctionnalités regex (ex: replace_substring_regex).
-# En forçant le mode "python", Pandas utilisera le moteur natif (module re) pour toutes les séries.
-try:
-    import pandas as pd
-    
-    # Pandas 2.0+
+_PANDAS_CONFIGURED = False
+
+
+def configurer_pandas_si_present() -> None:
+    """Configure de manière pérenne les options de Pandas dès que le module est chargé."""
+    global _PANDAS_CONFIGURED
+    if _PANDAS_CONFIGURED:
+        return
+    if "pandas" not in sys.modules:
+        return
+
     try:
-        if hasattr(pd.options.mode, "string_storage"):
-            pd.options.mode.string_storage = "python"
-    except Exception:
-        pass
-        
-    # Option future pour Pandas 2.1+
-    try:
-        if hasattr(pd.options.future, "infer_string"):
-            pd.options.future.infer_string = False
-    except Exception:
-        pass
-except ImportError:
-    pass
-except Exception as e:
-    warnings.warn(f"Impossible de configurer globalement le backend string de Pandas : {e}")
+        import pandas as pd
+
+        # Pandas 2.0+
+        try:
+            if hasattr(pd.options.mode, "string_storage"):
+                pd.options.mode.string_storage = "python"
+        except Exception:
+            pass
+
+        # Option future pour Pandas 2.1+
+        try:
+            if hasattr(pd.options.future, "infer_string"):
+                pd.options.future.infer_string = False
+        except Exception:
+            pass
+
+        _PANDAS_CONFIGURED = True
+    except Exception as e:
+        warnings.warn(f"Impossible de configurer globalement le backend string de Pandas : {e}")
+
+
+# Si pandas est déjà en mémoire, appliquer la configuration immédiatement
+if "pandas" in sys.modules:
+    configurer_pandas_si_present()

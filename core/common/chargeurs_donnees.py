@@ -58,6 +58,8 @@ except ImportError:
     gpd = None
 
 import pandas as pd
+from core import configurer_pandas_si_present
+configurer_pandas_si_present()
 import numpy as np
 import re
 
