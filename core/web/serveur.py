@@ -650,11 +650,21 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
             self.wfile.write(json.dumps({"status": "shutting down"}).encode('utf-8'))
-            print("Extinction du serveur demandée via l'interface web...")
+            log_server("Extinction du serveur demandée via l'interface web...", level="INFO")
             
             def shutdown():
-                time.sleep(0.5)
-                self.server.shutdown()
+                time.sleep(0.3)
+                _cleanup_server_pid()
+                finalize_server_logger(reason="Stopped via Web GUI")
+                def _force_exit():
+                    time.sleep(1.5)
+                    os._exit(0)
+                threading.Thread(target=_force_exit, daemon=True).start()
+                try:
+                    self.server.shutdown()
+                except Exception:
+                    pass
+                os._exit(0)
                 
             threading.Thread(target=shutdown, daemon=True).start()
             return
@@ -815,6 +825,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         from core.chemins_projet import PROJECT_ROOT
         project_root = PROJECT_ROOT
         parsed_path = urllib.parse.urlparse(self.path).path
+
+        if parsed_path == "/api/shutdown":
+            return self.do_GET()
 
         if parsed_path == "/api/log":
             try:
@@ -2204,6 +2217,10 @@ def run_server():
                 ouvrir_fenetre_app(f"http://localhost:{active_port}/loading.html")
 
             httpd.serve_forever()
+            log_server("Arrêt normal du serveur web.", level="INFO")
+            _cleanup_server_pid()
+            finalize_server_logger(reason="Stopped")
+            os._exit(0)
     except KeyboardInterrupt:
         log_server("Interruption utilisateur (Ctrl+C). Extinction du serveur.", level="INFO")
         finalize_server_logger(reason="Stopped by user (Ctrl+C)")

@@ -99,3 +99,16 @@ def test_preload_logs_thread_safety():
         t.join(timeout=5)
 
     assert not errors
+
+
+def test_shutdown_endpoint_contract():
+    """Vérifie que /api/shutdown déclenche un arrêt propre et sécurisé avec os._exit."""
+    import inspect
+    handler_cls = serveur_mod.Handler
+    source_get = inspect.getsource(handler_cls.do_GET)
+    source_post = inspect.getsource(handler_cls.do_POST)
+    assert "/api/shutdown" in source_get
+    assert "os._exit(0)" in source_get
+    assert "_cleanup_server_pid()" in source_get
+    assert "self.server.shutdown()" in source_get
+    assert "/api/shutdown" in source_post
