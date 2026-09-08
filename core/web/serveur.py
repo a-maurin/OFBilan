@@ -2197,8 +2197,11 @@ def run_server():
             log_server("L'explorateur web s'ouvre automatiquement. Appuyez sur Ctrl+C pour arrêter.")
 
             if os.environ.get("OFBILAN_RESTART") != "1":
-                import webbrowser
-                webbrowser.open(f"http://localhost:{active_port}/loading.html")
+                try:
+                    from core.web.lanceur_fenetre import ouvrir_fenetre_app
+                except ImportError:
+                    from lanceur_fenetre import ouvrir_fenetre_app
+                ouvrir_fenetre_app(f"http://localhost:{active_port}/loading.html")
 
             httpd.serve_forever()
     except KeyboardInterrupt:

@@ -34,12 +34,25 @@ try {
     $shortcut.Arguments = "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$scriptLauncher`""
     $shortcut.WorkingDirectory = $ProjectRoot
 
-    $iconPath = Join-Path $ProjectRoot "icon.ico"
-    if (Test-Path $iconPath) {
-        $shortcut.IconLocation = "$iconPath,0"
+    # Copie locale de l'icone dans LOCALAPPDATA (immunite contre restrictions reseau et apostrophes)
+    $localIconDir = Join-Path $env:LOCALAPPDATA "OFBilan"
+    if (-not (Test-Path $localIconDir)) {
+        New-Item -ItemType Directory -Path $localIconDir -Force | Out-Null
+    }
+    $localIconPath = Join-Path $localIconDir "icon.ico"
+    $sourceIcon = Join-Path $ProjectRoot "icon.ico"
+    if (Test-Path $sourceIcon) {
+        Copy-Item -Path $sourceIcon -Destination $localIconPath -Force
+    }
+    
+    if (Test-Path $localIconPath) {
+        $shortcut.IconLocation = "$localIconPath,0"
     }
     $shortcut.Description = "OFBilan - Edition de bilans et cartographie"
     $shortcut.Save()
+
+    # Rafraichissement doux du cache d'icones Windows
+    Start-Process -FilePath "ie4uinit.exe" -ArgumentList "-show" -WindowStyle Hidden -ErrorAction SilentlyContinue
 
     Write-Host "  [OK] Raccourci 'OFBilan' cree sur le Bureau." -ForegroundColor Green
 } catch {

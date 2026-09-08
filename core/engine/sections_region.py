@@ -149,8 +149,10 @@ def _generate_dept_vignette(
             else:
                 gdf_dept.plot(ax=ax, color='#f1f5f9', edgecolor='#003366', linewidth=1.2, aspect='equal')
             
+            from core.chemins_projet import get_carto_temp_dir
             carto_dir_default = PROJECT_ROOT / "data" / "sources" / "sig" / "CARTO"
             gpkg_files = list(out_dir.rglob("controles_*.gpkg")) + list(out_dir.glob("controles_*.gpkg"))
+            gpkg_files += list(get_carto_temp_dir().glob("controles_*.gpkg"))
             gpkg_files += list(carto_dir_default.glob("controles_*.gpkg"))
             
             pts_dept = None
@@ -294,8 +296,10 @@ def _generate_region_choropleth(
                 gdf_region.plot(ax=ax, color='#f1f5f9', edgecolor='#003366', linewidth=1.0)
                 
                 # Chargement des points de contrôle pour l'affichage de la grille de densité (hexbin)
+                from core.chemins_projet import get_carto_temp_dir
                 carto_dir_default = PROJECT_ROOT / "data" / "sources" / "sig" / "CARTO"
                 gpkg_files = list(out_dir.rglob("controles_*.gpkg")) + list(out_dir.glob("controles_*.gpkg")) if out_dir else []
+                gpkg_files += list(get_carto_temp_dir().glob("controles_*.gpkg"))
                 gpkg_files += list(carto_dir_default.glob("controles_*.gpkg"))
                 
                 pts_pnf = None

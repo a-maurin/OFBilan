@@ -45,7 +45,7 @@ _ROOT = Path(__file__).resolve().parents[2]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from core.chemins_projet import get_out_dir, get_cartes_dir, PROJECT_ROOT, ref_programme
+from core.chemins_projet import get_out_dir, get_cartes_dir, get_carto_temp_dir, PROJECT_ROOT, ref_programme
 from core.common.bilan_config import BilanConfig
 from core.common.dataframe_rollup import rollup_small_categories
 from core.common.chargeurs_donnees import (
@@ -619,7 +619,7 @@ def _run_global_profile_via_yaml(
         gpkg_logger = logging.getLogger(__name__)
         
         prefix = f"{profile.get('id', 'global')}_{code_norm}"
-        carto_dir = root / "data" / "sources" / "sig" / "CARTO"
+        carto_dir = get_carto_temp_dir()
         carto_dir.mkdir(parents=True, exist_ok=True)
         
         # 1. GPKG pour point_ctrl
@@ -3108,8 +3108,7 @@ def _export_csv(
                         alt_col = next((c for c in ["usager", "type_usager_cible", "types_usager_cible", "cat_usager"] if c in gdf_pts.columns), None)
                         gdf_pts["type_usager"] = gdf_pts[alt_col] if alt_col else "Autre"
                         
-                    root = Path(__file__).resolve().parent.parent.parent.parent
-                    carto_dir = root / "data" / "sources" / "sig" / "CARTO"
+                    carto_dir = get_carto_temp_dir()
                     carto_dir.mkdir(parents=True, exist_ok=True)
                     gpkg_path_pts = carto_dir / f"controles_{prefix}_export_automatique.gpkg"
                     
@@ -3217,7 +3216,7 @@ def _export_csv(
                     for col in gdf.select_dtypes(include=['datetime64[ns, UTC]', 'datetime64[ns]', 'datetime64']).columns:
                         gdf[col] = gdf[col].astype(str)
                     
-                    carto_dir = root / "data" / "sources" / "sig" / "CARTO"
+                    carto_dir = get_carto_temp_dir()
                     carto_dir.mkdir(parents=True, exist_ok=True)
                     gpkg_path = carto_dir / f"pej_{prefix}_export_automatique.gpkg"
                     gdf.to_file(gpkg_path, driver="GPKG")
@@ -3253,7 +3252,7 @@ def _export_csv(
                             gdf_pa = gdf_pa.to_crs("EPSG:2154")
                         for col in gdf_pa.select_dtypes(include=['datetime64[ns, UTC]', 'datetime64[ns]', 'datetime64']).columns:
                             gdf_pa[col] = gdf_pa[col].astype(str)
-                        carto_dir = root / "data" / "sources" / "sig" / "CARTO"
+                        carto_dir = get_carto_temp_dir()
                         carto_dir.mkdir(parents=True, exist_ok=True)
                         gpkg_path_pa = carto_dir / f"pa_{prefix}_export_automatique.gpkg"
                         gdf_pa.to_file(gpkg_path_pa, driver="GPKG")
@@ -3318,7 +3317,7 @@ def _export_csv(
                     for col in gdf.select_dtypes(include=['datetime64[ns, UTC]', 'datetime64[ns]', 'datetime64']).columns:
                         gdf[col] = gdf[col].astype(str)
                     
-                    carto_dir = root / "data" / "sources" / "sig" / "CARTO"
+                    carto_dir = get_carto_temp_dir()
                     carto_dir.mkdir(parents=True, exist_ok=True)
                     gpkg_path = carto_dir / f"pve_{prefix}_export_automatique.gpkg"
                     gdf.to_file(gpkg_path, driver="GPKG")

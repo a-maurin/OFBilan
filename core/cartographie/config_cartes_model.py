@@ -213,7 +213,7 @@ class LayoutTemplateConfig:
     legend: LayoutLegendDefaultsConfig = field(default_factory=LayoutLegendDefaultsConfig)
     scalebar: LayoutItemRectConfig = field(default_factory=LayoutItemRectConfig)
     logo_bas_droite: LayoutLogoDefaultsConfig = field(default_factory=LayoutLogoDefaultsConfig)
-    bandeau_haut: LayoutBandeauDefaultsConfig = field(default_factory=LayoutBandeauDefaultsConfig)
+    bandeau_haut: Optional[LayoutBandeauDefaultsConfig] = None
     # Éléments additionnels dont on veut contrôler le placement absolu via l'ID QGIS
     extra_items: Dict[str, LayoutItemRectConfig] = field(default_factory=dict)
 

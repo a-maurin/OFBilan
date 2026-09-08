@@ -109,12 +109,12 @@ def _logo_from_dict(d: Optional[Dict[str, Any]]) -> LayoutLogoDefaultsConfig:
     )
 
 
-def _bandeau_from_dict(d: Optional[Dict[str, Any]]) -> LayoutBandeauDefaultsConfig:
+def _bandeau_from_dict(d: Optional[Dict[str, Any]]) -> Optional[LayoutBandeauDefaultsConfig]:
     if not isinstance(d, dict):
-        return LayoutBandeauDefaultsConfig()
+        return None
     return LayoutBandeauDefaultsConfig(
         y_mm=float(d.get("y_mm", 0)),
-        height_mm=float(d.get("height_mm", 25)),
+        height_mm=float(d.get("height_mm", 0)),
         height_max_fraction=float(d.get("height_max_fraction", 0.15)),
         picture_id=str(d.get("picture_id", "bandeau_logos_ofb")),
     )

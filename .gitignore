@@ -74,6 +74,7 @@ secrets.*
 .gemini/
 .agents/
 *.code-workspace
+carte_code.md
 
 ############################
 # Artefacts OS / outils

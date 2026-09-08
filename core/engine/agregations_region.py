@@ -529,7 +529,8 @@ def _extract_gdf(df: pd.DataFrame, out_dir: Path, pattern: str = "controles_*.gp
 
     # 3. Fallback : Chargement du fichier GPKG de sortie s'il existe
     gpkg_files = list(out_dir.glob(pattern)) + list(out_dir.rglob(pattern))
-    from core.chemins_projet import PROJECT_ROOT
+    from core.chemins_projet import PROJECT_ROOT, get_carto_temp_dir
+    gpkg_files += list(get_carto_temp_dir().glob(pattern))
     carto_dir = PROJECT_ROOT / "data" / "sources" / "sig" / "CARTO"
     gpkg_files += list(carto_dir.glob(pattern))
     if gpkg_files:

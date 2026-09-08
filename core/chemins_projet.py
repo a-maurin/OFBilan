@@ -35,6 +35,27 @@ def is_writable(path: Path) -> bool:
         return False
 
 
+def is_network_path(path: Path) -> bool:
+    """Détecte si un chemin est sur un partage réseau (UNC ou lecteur distant)."""
+    try:
+        resolved = str(path.resolve())
+    except Exception:
+        resolved = str(path)
+    if resolved.startswith(("\\\\", "//")):
+        return True
+    if os.name == "nt":
+        import ctypes
+        drive = os.path.splitdrive(resolved)[0]
+        if drive:
+            drive_root = drive + "\\" if not drive.endswith("\\") else drive
+            try:
+                if ctypes.windll.kernel32.GetDriveTypeW(drive_root) == 4:
+                    return True
+            except Exception:
+                pass
+    return False
+
+
 def get_app_data_dir() -> Path:
     """Dossier local de travail (%LOCALAPPDATA%/OFBilan ou ~/.ofbilan)."""
     local_app_data = os.environ.get("LOCALAPPDATA")
@@ -46,17 +67,39 @@ def get_app_data_dir() -> Path:
     return base
 
 
+def get_export_base_dir() -> Path:
+    """Dossier de base pour les exports utilisateur (Documents/OFBilan_Exports ou personnalisé)."""
+    env_dir = os.environ.get("OFBILAN_EXPORT_DIR")
+    if env_dir:
+        return Path(env_dir).expanduser()
+    try:
+        from core.parametres_utilisateur import charger_parametres
+        settings = charger_parametres()
+        export_str = settings.get("systeme", {}).get("dossier_export")
+        if export_str:
+            return Path(export_str).expanduser()
+    except Exception:
+        pass
+    return Path.home() / "Documents" / "OFBilan_Exports"
+
+
 def get_out_dir(programme: str) -> Path:
     """Dossier de sortie du programme.
 
-    Tente d'écrire dans data/out/<programme> à la racine du projet.
-    Si le projet est en lecture seule (partage réseau), bascule vers ~/Documents/OFBilan_Exports/<programme>.
+    Les livrables sont systématiquement écrits sur le poste de l'utilisateur
+    (dans ~/Documents/OFBilan_Exports/<programme> ou le dossier configuré par l'utilisateur).
     """
-    default_out = PROJECT_ROOT / "data" / "out"
-    if is_writable(default_out):
-        d = default_out / programme
-    else:
-        d = Path.home() / "Documents" / "OFBilan_Exports" / programme
+    base = get_export_base_dir()
+    if not is_writable(base):
+        base = get_app_data_dir() / "exports"
+    d = base / programme
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def get_carto_temp_dir() -> Path:
+    """Dossier local pour les couches SIG temporaires d'export automatique."""
+    d = get_app_data_dir() / "cartes"
     d.mkdir(parents=True, exist_ok=True)
     return d
 

@@ -567,9 +567,9 @@ def resolve_layers_for_config(
         
         # Override data source if an automatic GPKG export exists for this profile (Lot 3 - Filtrage Spatial)
         if layer and profil_prefix and layer_role != "pochoir" and layer_role != "contexte":
-            from core.chemins_projet import PROJECT_ROOT
+            from core.chemins_projet import PROJECT_ROOT, get_carto_temp_dir
             from layer_resolver import infer_layer_role
-            carto_dir = PROJECT_ROOT / "data" / "sources" / "sig" / "CARTO"
+            carto_dirs = [get_carto_temp_dir(), PROJECT_ROOT / "data" / "sources" / "sig" / "CARTO"]
             role = layer_role or infer_layer_role(layer_key, layer.name())
             
             gpkg_path = None
@@ -581,10 +581,13 @@ def resolve_layers_for_config(
                 if len(parts) >= 2:
                     prefixes_candidats.append(parts[0])
                 
-                for pref in prefixes_candidats:
-                    path_cand = carto_dir / f"pej_{pref}_export_automatique.gpkg"
-                    if path_cand.exists():
-                        gpkg_path = path_cand
+                for d in carto_dirs:
+                    for pref in prefixes_candidats:
+                        path_cand = d / f"pej_{pref}_export_automatique.gpkg"
+                        if path_cand.exists():
+                            gpkg_path = path_cand
+                            break
+                    if gpkg_path is not None:
                         break
                 if gpkg_path is None:
                     from core.common.chargeurs_donnees import get_points_infrac_pj_path
@@ -603,10 +606,13 @@ def resolve_layers_for_config(
                     if len(parts) >= 2:
                         prefixes_candidats.append(parts[0])
                     
-                    for pref in prefixes_candidats:
-                        path_cand = carto_dir / f"{prefix_type}_{pref}_export_automatique.gpkg"
-                        if path_cand.exists():
-                            gpkg_path = path_cand
+                    for d in carto_dirs:
+                        for pref in prefixes_candidats:
+                            path_cand = d / f"{prefix_type}_{pref}_export_automatique.gpkg"
+                            if path_cand.exists():
+                                gpkg_path = path_cand
+                                break
+                        if gpkg_path is not None:
                             break
 
             if gpkg_path and gpkg_path.exists():
@@ -1731,19 +1737,6 @@ def _apply_legend_labels(
             logger.warning("Mise à jour légende ignorée: %s", e)
 
 
-def _get_logo_bandeau_path() -> Optional[Path]:
-    """Retourne le chemin du bandeau logos (République française + OFB), ref/programme/modele_ofb/word/media/image5."""
-    for ref_media in (
-        PROJECT_ROOT / "ref" / "programme" / "modele_ofb" / "word" / "media",
-        PROJECT_ROOT / "ref" / "modele_ofb" / "word" / "media",
-    ):
-        for ext in ("jpg", "jpeg", "png"):
-            p = ref_media / f"image5.{ext}"
-            if p.exists():
-                return p
-    return None
-
-
 # Logo RF-OFB horizontal en bas à droite des cartes
 # Référence taille / position : docs/usage/README_Production_cartes.md
 # Taille doublée (+100 %), ancrage au bord supérieur gauche (position du coin supérieur gauche fixe).
@@ -1821,67 +1814,6 @@ def _ensure_logo_ofb_bas_droite(layout, prof: "ProfileConfig") -> None:
                 height_mm=logo_cfg.height_mm,
             ),
         )
-
-
-def _ensure_logo_bandeau(layout, prof: "ProfileConfig") -> None:
-    """Ajoute ou met à jour le bandeau logos (République française + OFB) en haut du layout."""
-    from layout_defaults import get_bandeau_config, load_layout_defaults
-
-    logo_path = _get_logo_bandeau_path()
-    if not logo_path:
-        logger.warning(
-            "Bandeau logos OFB introuvable (ref/programme/modele_ofb/word/media/image5.jpg ou .png). "
-            "Placez le fichier pour l'afficher sur les cartes."
-        )
-        return
-
-    bandeau_cfg = get_bandeau_config(prof, layout, root=load_layout_defaults())
-    bandeau_id = bandeau_cfg.picture_id if bandeau_cfg else "bandeau_logos_ofb"
-    picture_item = None
-    for item in layout.items():
-        if isinstance(item, QgsLayoutItemPicture):
-            try:
-                if item.id() == bandeau_id:
-                    picture_item = item
-                    break
-            except Exception as exc:
-                logger.debug("Recherche bandeau logos (id layout): %s", exc)
-
-    if picture_item is None:
-        picture_item = QgsLayoutItemPicture(layout)
-        picture_item.setId(bandeau_id)
-        layout.addLayoutItem(picture_item)
-
-    # Définir le chemin de l'image (API PyQGIS : setPicturePath ; certaines versions ont setPath)
-    if hasattr(picture_item, "setPicturePath"):
-        picture_item.setPicturePath(str(logo_path))
-    else:
-        picture_item.setPath(str(logo_path))
-    picture_item.setResizeMode(QgsLayoutItemPicture.Zoom)
-    
-    if bandeau_cfg is not None and bandeau_cfg.height_mm > 0:
-        layout_size = layout.pageCollection().page(0).pageSize()
-        w_mm = layout_size.width()
-        bandeau_h = bandeau_cfg.height_mm
-        y_pos = bandeau_cfg.y_mm
-        try:
-            size_mm = QgsLayoutSize(w_mm, bandeau_h)
-            if hasattr(picture_item, "attemptResize"):
-                picture_item.attemptResize(size_mm)
-            else:
-                logger.warning(
-                    "QgsLayoutItemPicture: attemptResize non trouvé. Méthodes: %s",
-                    [m for m in dir(picture_item) if not m.startswith("_") and "size" in m.lower()],
-                )
-        except Exception as e:
-            logger.exception("Erreur lors du dimensionnement du bandeau logo: %s", e)
-        try:
-            if hasattr(picture_item, "attemptMove"):
-                picture_item.attemptMove(QgsLayoutPoint(0, y_pos))
-            elif hasattr(picture_item, "setPosition"):
-                picture_item.setPosition(QgsLayoutPoint(0, y_pos))
-        except Exception as e:
-            logger.exception("Erreur lors du positionnement du bandeau logo: %s", e)
 
 
 def resolve_map_title(prof: "ProfileConfig", dept_code: Optional[str] = None) -> str:
@@ -2141,12 +2073,6 @@ def export_layout(
     check_hide = items_a_masquer or getattr(prof, "items_masques", None) or []
     hide_logos_check = any(k in check_hide for k in ("logo_ofb_bas_droite", "bandeau_logos_ofb", "logos", "logo"))
 
-    # Bandeau logos République française + OFB en haut de la carte
-    if not hide_logos_check and not any(k in check_hide for k in ("bandeau_logos_ofb", "logo_bandeau")):
-        try:
-            _ensure_logo_bandeau(layout, prof)
-        except Exception as e:
-            logger.exception("Erreur bandeau logo (export continué): %s", e)
     # Logo RF-OFB horizontal en bas à droite
     if not hide_logos_check and not any(k in check_hide for k in ("logo_ofb_bas_droite", "logo_bas_droite")):
         try:

@@ -33,9 +33,18 @@ Rôles principaux :
 import os
 import subprocess
 import sys
-import webbrowser
 from pathlib import Path
 from typing import Any
+
+try:
+    from .core.web.lanceur_fenetre import ouvrir_fenetre_app
+except ImportError:
+    try:
+        from core.web.lanceur_fenetre import ouvrir_fenetre_app
+    except ImportError:
+        def ouvrir_fenetre_app(url: str, maximiser: bool = True) -> bool:
+            import webbrowser
+            return bool(webbrowser.open(url))
 
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QMessageBox
@@ -88,7 +97,7 @@ class OFBilanPlugin:
                 "OFBilan",
                 "Le serveur OFBilan est déjà en cours d'exécution.\nOuverture du navigateur..."
             )
-            webbrowser.open(f'http://localhost:{port}/explorer.html')
+            ouvrir_fenetre_app(f'http://localhost:{port}/explorer.html')
             return
 
         env = os.environ.copy()
@@ -112,7 +121,7 @@ class OFBilanPlugin:
             )
 
             loading_html = self.plugin_dir / 'core' / 'web' / 'loading.html'
-            webbrowser.open(f"{loading_html.as_uri()}?port={port}")
+            ouvrir_fenetre_app(f"{loading_html.as_uri()}?port={port}")
             self.iface.messageBar().pushMessage("OFBilan", "Démarrage du serveur web...", level=0, duration=3)
 
         except Exception as e:

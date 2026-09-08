@@ -11,9 +11,11 @@ from pathlib import Path
 
 from core.chemins_projet import (
     is_writable,
+    is_network_path,
     get_app_data_dir,
     get_out_dir,
     get_cartes_dir,
+    get_carto_temp_dir,
 )
 from core.common.chargeurs_donnees import (
     _get_cache_dir,
@@ -39,23 +41,35 @@ def test_is_writable_and_get_app_data_dir(tmp_path):
     assert app_data.exists()
 
 
-def test_get_out_dir_fallback_when_readonly(monkeypatch, tmp_path):
-    # Simuler un dossier projet non inscriptible
-    ro_dir = tmp_path / "ro_project"
-    ro_dir.mkdir()
-    monkeypatch.setattr("core.chemins_projet.PROJECT_ROOT", ro_dir)
-    monkeypatch.setattr("core.chemins_projet.is_writable", lambda p: False)
-
+def test_get_out_dir_systematically_exports_to_user_directory(monkeypatch, tmp_path):
+    # Les exports vont systématiquement dans Documents/OFBilan_Exports par défaut
+    monkeypatch.delenv("OFBILAN_EXPORT_DIR", raising=False)
     out = get_out_dir("test_prog")
     assert "OFBilan_Exports" in str(out)
     assert out.name == "test_prog"
 
+    # Et respectent la configuration personnalisée
+    custom_export = tmp_path / "custom_exports"
+    monkeypatch.setenv("OFBILAN_EXPORT_DIR", str(custom_export))
+    out_custom = get_out_dir("test_prog")
+    assert str(custom_export) in str(out_custom)
 
-def test_get_cartes_dir_points_to_local_appdata():
+
+def test_is_network_path():
+    assert is_network_path(Path("//serveur/partage/projet")) is True
+    assert is_network_path(Path(r"\\serveur\partage\projet")) is True
+    assert is_network_path(Path("C:/local/projet")) is False
+
+
+def test_get_cartes_and_carto_temp_dir_points_to_local_appdata():
     cartes_dir = get_cartes_dir()
     assert isinstance(cartes_dir, Path)
     assert cartes_dir.exists()
     assert cartes_dir.name == "cartes"
+
+    carto_temp = get_carto_temp_dir()
+    assert isinstance(carto_temp, Path)
+    assert carto_temp.exists()
 
 
 def test_cache_dir_and_clear_disk_cache():

@@ -18,11 +18,6 @@ templates:
     page:
       width_mm: 297.0
       height_mm: 210.0
-    bandeau_haut:
-      picture_id: "bandeau_logos_ofb"
-      y_mm: 0.0
-      height_mm: 25.0
-      height_max_fraction: 0.15
     logo_bas_droite:
       picture_id: "logo_ofb_bas_droite"
       skip_if_qgis_picture: true
