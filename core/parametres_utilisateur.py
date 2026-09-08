@@ -33,7 +33,7 @@ DEFAUT_PARAMETRES: Dict[str, Any] = {
     },
     "geo": {
         "code_geo_defaut": "",
-        "annee_reference": 2024,
+        "annee_reference": None,
         "gabarit_defaut": "gabarit_defaut"
     },
     "ui": {
@@ -61,12 +61,36 @@ DEFAUT_PARAMETRES: Dict[str, Any] = {
 }
 
 def get_settings_file_path() -> Path:
-    """Retourne le chemin absolu vers le fichier de paramètres utilisateur."""
-    # Stockage dans le profil utilisateur Windows (~/.ofbilan/user_settings.json)
-    base_dir = Path.home() / ".ofbilan"
-    # Création du dossier s'il n'existe pas
-    base_dir.mkdir(parents=True, exist_ok=True)
-    return base_dir / "user_settings.json"
+    """Retourne le chemin absolu vers le fichier de paramètres utilisateur.
+
+    Stocké prioritairement dans %LOCALAPPDATA%/OFBilan/user_settings.json pour garantir
+    l'accès en écriture locale même si le programme est exécuté depuis un lecteur réseau (ex: R:).
+    Migre automatiquement l'ancien fichier depuis ~/.ofbilan/user_settings.json s'il existe.
+    """
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if local_app_data:
+        base_dir = Path(local_app_data) / "OFBilan"
+    else:
+        base_dir = Path.home() / ".ofbilan"
+
+    target_file = base_dir / "user_settings.json"
+
+    # Migration transparente de l'ancien fichier vers LOCALAPPDATA si présent
+    legacy_file = Path.home() / ".ofbilan" / "user_settings.json"
+    if not target_file.is_file() and legacy_file.is_file():
+        try:
+            base_dir.mkdir(parents=True, exist_ok=True)
+            import shutil
+            shutil.copy2(legacy_file, target_file)
+        except Exception:
+            return legacy_file
+
+    try:
+        base_dir.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+
+    return target_file
 
 def _fusion_recursif(dict_base: Dict[str, Any], dict_mise_a_jour: Dict[str, Any]) -> Dict[str, Any]:
     """Fusionne récursivement deux dictionnaires."""
@@ -89,6 +113,8 @@ def lire_parametres() -> Dict[str, Any]:
             with fichier.open("r", encoding="utf-8") as f:
                 donnees_json = json.load(f)
                 if isinstance(donnees_json, dict):
+                    if donnees_json.get("geo", {}).get("annee_reference") == 2024:
+                        donnees_json["geo"]["annee_reference"] = None
                     parametres = _fusion_recursif(parametres, donnees_json)
         except (OSError, json.JSONDecodeError) as e:
             print(f"Erreur lors de la lecture des paramètres : {e}")
@@ -104,7 +130,14 @@ def sauvegarder_parametres(nouveaux_parametres: Dict[str, Any]) -> None:
 
     try:
         fichier.parent.mkdir(parents=True, exist_ok=True)
-        with fichier.open("w", encoding="utf-8") as f:
+        tmp_file = fichier.with_suffix(".tmp")
+        with tmp_file.open("w", encoding="utf-8") as f:
             json.dump(parametres_fusionnes, f, indent=4, ensure_ascii=False)
+        tmp_file.replace(fichier)
     except OSError as e:
         print(f"Erreur lors de la sauvegarde des paramètres : {e}")
+        raise
+
+
+# Alias pour la compatibilité avec d'autres modules
+charger_parametres = lire_parametres

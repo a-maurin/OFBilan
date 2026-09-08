@@ -5,6 +5,7 @@
 
 """Tests unitaires pour le lot 2 : détection QGIS durcie, port atomique et diagnostic."""
 
+import json
 import os
 import socket
 from pathlib import Path
@@ -46,6 +47,20 @@ def test_qgis_path_settings_persistence(tmp_path, monkeypatch):
 
     read_back = lire_parametres()
     assert read_back.get("tech", {}).get("qgis_path") == "C:\\Custom\\QGIS\\bin\\python.exe"
+
+
+def test_annee_reference_default_and_legacy_cleanup(tmp_path, monkeypatch):
+    settings_file = tmp_path / "user_settings.json"
+    monkeypatch.setattr("core.parametres_utilisateur.get_settings_file_path", lambda: settings_file)
+
+    # Par défaut sans fichier, annee_reference doit être None
+    params = lire_parametres()
+    assert params.get("geo", {}).get("annee_reference") is None
+
+    # Si un fichier existant contient l'ancien résidu 2024, il doit être nettoyé en None
+    settings_file.write_text(json.dumps({"geo": {"annee_reference": 2024}}), encoding="utf-8")
+    params_migres = lire_parametres()
+    assert params_migres.get("geo", {}).get("annee_reference") is None
 
 
 def test_find_qgis_python_finds_installation():

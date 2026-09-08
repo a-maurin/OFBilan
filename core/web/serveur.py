@@ -368,6 +368,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(WEB_DIR), **kwargs)
 
+    def address_string(self):
+        host, _ = self.client_address[:2]
+        return str(host)
+
     def handle_one_request(self):
         touch_watchdog()
         return super().handle_one_request()
@@ -874,22 +878,30 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 return
 
         elif parsed_path == "/api/settings":
-            content_length = int(self.headers['Content-Length'])
-            post_data = self.rfile.read(content_length)
-            nouveaux_parametres = json.loads(post_data.decode('utf-8'))
-            
-            from core.parametres_utilisateur import lire_parametres, sauvegarder_parametres
-            sauvegarder_parametres(nouveaux_parametres)
-            
-            parametres_mis_a_jour = lire_parametres()
-            mode_debug_active = bool(parametres_mis_a_jour.get("tech", {}).get("mode_debug", False))
-            apply_server_debug_mode(mode_debug_active)
-            
-            self.send_response(200)
-            self.send_header('Content-Type', 'application/json; charset=utf-8')
-            self.end_headers()
-            self.wfile.write(json.dumps(parametres_mis_a_jour).encode('utf-8'))
-            return
+            try:
+                content_length = int(self.headers.get('Content-Length', 0))
+                post_data = self.rfile.read(content_length)
+                nouveaux_parametres = json.loads(post_data.decode('utf-8'))
+                
+                from core.parametres_utilisateur import lire_parametres, sauvegarder_parametres
+                sauvegarder_parametres(nouveaux_parametres)
+                
+                parametres_mis_a_jour = lire_parametres()
+                mode_debug_active = bool(parametres_mis_a_jour.get("tech", {}).get("mode_debug", False))
+                apply_server_debug_mode(mode_debug_active)
+                
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps(parametres_mis_a_jour).encode('utf-8'))
+                return
+            except Exception as e:
+                log_server(f"Erreur traitement /api/settings : {e}", level="ERROR")
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
+                return
 
         elif parsed_path == "/api/generate":
             try:
@@ -2195,7 +2207,8 @@ def run_server():
     except Exception as e:
         log_server(f"Impossible d'initialiser le pré-chargement : {e}", level="ERROR")
 
-    socketserver.TCPServer.allow_reuse_address = True
+    socketserver.ThreadingTCPServer.allow_reuse_address = True
+    socketserver.ThreadingTCPServer.daemon_threads = True
     import random
     max_tries = 30
     active_port = PORT
@@ -2203,7 +2216,7 @@ def run_server():
 
     for attempt in range(max_tries):
         try:
-            httpd = socketserver.TCPServer(("", active_port), Handler)
+            httpd = socketserver.ThreadingTCPServer(("", active_port), Handler)
             break
         except OSError as e:
             if getattr(e, "errno", None) in (10048, 98) or "10048" in str(e) or "Address already in use" in str(e):

@@ -73,8 +73,8 @@ def get_export_base_dir() -> Path:
     if env_dir:
         return Path(env_dir).expanduser()
     try:
-        from core.parametres_utilisateur import charger_parametres
-        settings = charger_parametres()
+        from core.parametres_utilisateur import lire_parametres
+        settings = lire_parametres()
         export_str = settings.get("systeme", {}).get("dossier_export")
         if export_str:
             return Path(export_str).expanduser()

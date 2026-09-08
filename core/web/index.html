@@ -223,11 +223,11 @@ Composants principaux :
                         <div class="form-row">
                             <div class="form-group">
                                 <label for="date-deb">Date de début</label>
-                                <input type="date" id="date-deb" name="date-deb" value="2025-01-01" required>
+                                <input type="date" id="date-deb" name="date-deb" required>
                             </div>
                             <div class="form-group">
                                 <label for="date-fin">Date de fin</label>
-                                <input type="date" id="date-fin" name="date-fin" value="2025-12-31" required>
+                                <input type="date" id="date-fin" name="date-fin" required>
                             </div>
                         </div>
                     </div>
@@ -515,7 +515,7 @@ Composants principaux :
 
                 const geo = data.geo || {};
                 document.getElementById('set-geo-code').value = geo.code_geo_defaut || '';
-                document.getElementById('set-geo-annee').value = geo.annee_reference || 2024;
+                document.getElementById('set-geo-annee').value = geo.annee_reference || '';
                 const setGeoGab = document.getElementById('set-geo-gabarit');
                 if (setGeoGab) {
                     try {
@@ -561,6 +561,21 @@ Composants principaux :
             }
         }
 
+        function showSettingsToast(msg, isError) {
+            const toast = document.getElementById("settings-toast");
+            if (!toast) return;
+            toast.textContent = msg;
+            toast.style.background = isError ? "#fef2f2" : "#f0fdf4";
+            toast.style.color = isError ? "#991b1b" : "#166534";
+            toast.style.border = isError ? "1px solid #fecaca" : "1px solid #bbf7d0";
+            toast.style.display = "block";
+            setTimeout(() => {
+                if (toast.textContent === msg) {
+                    toast.style.display = "none";
+                }
+            }, isError ? 6000 : 2500);
+        }
+
         async function saveSettings() {
             const btn = document.getElementById('btn-save-settings');
             const originalText = btn.innerText;
@@ -575,7 +590,7 @@ Composants principaux :
                 },
                 geo: {
                     code_geo_defaut: document.getElementById('set-geo-code').value,
-                    annee_reference: parseInt(document.getElementById('set-geo-annee').value) || 2024,
+                    annee_reference: parseInt(document.getElementById('set-geo-annee').value) || null,
                     gabarit_defaut: document.getElementById('set-geo-gabarit') ? document.getElementById('set-geo-gabarit').value : 'gabarit_defaut'
                 },
                 ui: {
@@ -602,15 +617,22 @@ Composants principaux :
             localStorage.setItem('ui_cluster_zoom', document.getElementById('set-ui-cluster-zoom').value);
 
             try {
-                await fetch('/api/settings', {
+                const res = await fetch('/api/settings', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
-                closeSettingsModal();
+                if (!res.ok) {
+                    const data = await res.json().catch(() => ({}));
+                    throw new Error(data.error || `Erreur HTTP ${res.status}`);
+                }
+                showSettingsToast("✓ Paramètres enregistrés avec succès.", false);
+                setTimeout(() => {
+                    closeSettingsModal();
+                }, 800);
             } catch (err) {
                 console.error("Erreur sauvegarde paramètres:", err);
-                alert("Erreur lors de la sauvegarde.");
+                showSettingsToast("Échec de l'enregistrement : " + (err.message || "Erreur de communication"), true);
             } finally {
                 btn.innerText = originalText;
                 btn.disabled = false;
@@ -860,7 +882,7 @@ Composants principaux :
                     <div class="card" style="margin: 0;">
                         <h3 style="font-size: 14px; margin-bottom: 10px; color: #3b82f6;">Période et code service par défaut</h3>
                         <div class="form-group"><label>Code géographique défaut</label><input type="text" id="set-geo-code" placeholder="ex: 21, r27, FR"></div>
-                        <div class="form-group"><label>Année de référence par défaut</label><input type="number" id="set-geo-annee" value="2024"></div>
+                        <div class="form-group"><label>Année de référence par défaut</label><input type="number" id="set-geo-annee" placeholder="Année en cours"></div>
                         <div class="form-group">
                             <label for="set-geo-gabarit">Gabarit de présentation par défaut</label>
                             <div style="display: flex; gap: 8px; align-items: center; width: 100%;">
@@ -933,6 +955,11 @@ Composants principaux :
                         </div>
                     </div>
                 </div>
+            </div>
+
+            <!-- Toast Notification Banner dans le modal Paramètres -->
+            <div id="settings-toast"
+                style="display:none; padding:8px 16px; font-size:13px; text-align:center; transition:all 0.3s ease;">
             </div>
 
             <div

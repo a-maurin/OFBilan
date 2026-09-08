@@ -56,6 +56,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const profilsDropdown = document.getElementById('profils-dropdown');
     const selectGabarit = document.getElementById('gabarit');
 
+    // Dates par défaut dynamiques : 1er janvier de l'année en cours jusqu'à aujourd'hui
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const dateDebEl = document.getElementById('date-deb');
+    const dateFinEl = document.getElementById('date-fin');
+    if (dateDebEl && !dateDebEl.value) dateDebEl.value = `${currentYear}-01-01`;
+    if (dateFinEl && !dateFinEl.value) {
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        dateFinEl.value = `${currentYear}-${month}-${day}`;
+    }
+
     let profilesList = [];
     let gabaritsList = [];
     
@@ -90,6 +102,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const setTechDebugEl = document.getElementById('set-tech-debug');
             if (setTechDebugEl && data && data.tech && typeof data.tech.mode_debug !== 'undefined') {
                 setTechDebugEl.checked = !!data.tech.mode_debug;
+            }
+            if (data && data.geo && data.geo.annee_reference) {
+                const refYear = data.geo.annee_reference;
+                const mo = String(now.getMonth() + 1).padStart(2, '0');
+                const da = String(now.getDate()).padStart(2, '0');
+                if (dateDebEl) dateDebEl.value = `${refYear}-01-01`;
+                if (dateFinEl) dateFinEl.value = `${refYear}-${mo}-${da}`;
             }
         })
         .catch(err => console.error('Erreur chargement settings:', err));
