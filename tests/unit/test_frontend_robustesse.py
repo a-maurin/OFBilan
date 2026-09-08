@@ -326,7 +326,27 @@ def test_perimetre_initial_neutre_frontend():
     assert "inputCode.value = '21'" not in app_js
 
 
+def test_no_duplicate_variable_declarations_frontend():
+    """Vérifie l'absence de redéclaration de variables const/let dans le même bloc de code."""
+    import re
+    web_dir = Path(__file__).resolve().parents[2] / "core" / "web"
+    for js_filename in ("explorer.js", "app.js"):
+        content = (web_dir / js_filename).read_text(encoding="utf-8")
+        scopes = [set()]
+        duplicates = []
+        for line_idx, line in enumerate(content.splitlines(), start=1):
+            clean_line = re.sub(r"//.*$", "", line)
+            for char in clean_line:
+                if char == "{":
+                    scopes.append(set())
+                elif char == "}":
+                    if len(scopes) > 1:
+                        scopes.pop()
+            matches = re.findall(r"\b(?:const|let)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\b", clean_line)
+            for var_name in matches:
+                if var_name in scopes[-1]:
+                    duplicates.append((js_filename, line_idx, var_name))
+                else:
+                    scopes[-1].add(var_name)
 
-
-
-
+        assert not duplicates, f"Déclarations dupliquées détectées dans {js_filename} : {duplicates}"

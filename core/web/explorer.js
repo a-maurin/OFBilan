@@ -2915,7 +2915,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const isCompare = compareActiveCheck && compareActiveCheck.checked;
 
-        const parsedCodes = getParsedCodes();
         // Mode comparaison spatiale : plusieurs codes, sans comparaison temporelle
         const isSpatial = parsedCodes.length > 1 && !isCompare;
 
