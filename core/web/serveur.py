@@ -74,9 +74,10 @@ SRC_DIR = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(SRC_DIR))
 
 try:
-    from reparer_logo import generer_logo_blanc
-    # Génère automatiquement le logo propre au démarrage
+    from reparer_logo import generer_logo_blanc, generer_favicon_ico
+    # Génère automatiquement le logo propre et le favicon au démarrage
     generer_logo_blanc()
+    generer_favicon_ico()
 except ImportError:
     pass
 
@@ -404,9 +405,24 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         project_root = PROJECT_ROOT
         parsed_path = self.path.split('?')[0]
         if parsed_path == "/favicon.ico":
-            self.send_response(204)
-            self.end_headers()
-            return
+            ico_path = WEB_DIR / "favicon.ico"
+            if ico_path.exists():
+                self.send_response(200)
+                self.send_header('Content-Type', 'image/x-icon')
+                content = ico_path.read_bytes()
+                self.send_header('Content-Length', str(len(content)))
+                self.end_headers()
+                self.wfile.write(content)
+                return
+            png_path = WEB_DIR / "icon.png"
+            if png_path.exists():
+                self.send_response(200)
+                self.send_header('Content-Type', 'image/png')
+                content = png_path.read_bytes()
+                self.send_header('Content-Length', str(len(content)))
+                self.end_headers()
+                self.wfile.write(content)
+                return
 
         # Route pour servir les logos et ressources du répertoire ref/
         if parsed_path.startswith("/ref/"):

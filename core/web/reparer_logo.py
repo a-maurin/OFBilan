@@ -45,5 +45,30 @@ def generer_logo_blanc():
         print(f"Erreur lors de la génération du logo : {e}")
         return False
 
+
+def generer_favicon_ico() -> bool:
+    """Génère favicon.ico avec résolutions multi-tailles à partir de icon.png si absent."""
+    web_dir = Path(__file__).resolve().parent
+    png_path = web_dir / "icon.png"
+    ico_path = web_dir / "favicon.ico"
+
+    if not png_path.exists():
+        return False
+
+    try:
+        from PIL import Image
+        img = Image.open(png_path)
+        img.save(
+            ico_path,
+            format="ICO",
+            sizes=[(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
+        )
+        return True
+    except Exception as e:
+        print(f"Erreur lors de la génération du favicon : {e}")
+        return False
+
+
 if __name__ == "__main__":
     generer_logo_blanc()
+    generer_favicon_ico()

@@ -258,4 +258,50 @@ def test_pej_directeur_column_conditional_ui():
     assert "Directeur d\\'enquête" in js_source, "En-tête CSV Directeur d'enquête absent de explorer.js"
 
 
+def test_icones_et_manifeste_pwa_coherence():
+    """Vérifie que favicon.ico, manifest.json et les balises d'icônes sont présents et cohérents."""
+    import json
+    web_dir = Path(__file__).resolve().parents[2] / "core" / "web"
+    
+    # 1. Présence des assets
+    assert (web_dir / "favicon.ico").exists(), "favicon.ico absent du dossier core/web"
+    assert (web_dir / "manifest.json").exists(), "manifest.json absent du dossier core/web"
+    assert (web_dir / "icon.png").exists(), "icon.png absent du dossier core/web"
+    assert (web_dir / "icon.svg").exists(), "icon.svg absent du dossier core/web"
+
+    # 2. Structure du manifest.json
+    manifest_data = json.loads((web_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert "name" in manifest_data
+    assert "icons" in manifest_data
+    assert len(manifest_data["icons"]) >= 2
+
+    # 3. Présence des balises d'icônes dans toutes les pages
+    for page_name in ("loading.html", "explorer.html", "index.html"):
+        page_source = (web_dir / page_name).read_text(encoding="utf-8")
+        assert 'href="favicon.ico"' in page_source, f"Lien favicon.ico manquant dans {page_name}"
+        assert 'href="icon.png"' in page_source, f"Lien icon.png manquant dans {page_name}"
+        assert 'href="icon.svg"' in page_source, f"Lien icon.svg manquant dans {page_name}"
+        assert 'href="manifest.json"' in page_source, f"Lien manifest.json manquant dans {page_name}"
+
+
+def test_serveur_favicon_ico_reponse_200():
+    """Vérifie que la requête /favicon.ico renvoie un code 200 avec type image/x-icon."""
+    import socketserver
+    import threading
+    import urllib.request
+    from core.web.serveur import Handler
+
+    with socketserver.TCPServer(("127.0.0.1", 0), Handler) as server:
+        port = server.server_address[1]
+        thread = threading.Thread(target=server.handle_request)
+        thread.start()
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/favicon.ico", timeout=2) as resp:
+            assert resp.status == 200
+            assert resp.headers.get_content_type() == "image/x-icon"
+            assert len(resp.read()) > 0
+        thread.join()
+
+
+
+
 

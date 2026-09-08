@@ -120,8 +120,6 @@ class OFBilanPlugin:
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
             )
 
-            loading_html = self.plugin_dir / 'core' / 'web' / 'loading.html'
-            ouvrir_fenetre_app(f"{loading_html.as_uri()}?port={port}")
             self.iface.messageBar().pushMessage("OFBilan", "Démarrage du serveur web...", level=0, duration=3)
 
         except Exception as e:

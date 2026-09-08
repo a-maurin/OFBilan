@@ -1,0 +1,26 @@
+{
+  "name": "OFBilan Explorer - Office Français de la Biodiversité",
+  "short_name": "OFBilan",
+  "description": "Exploration cartographique et bilans d'activité de l'OFB",
+  "start_url": "explorer.html",
+  "display": "standalone",
+  "background_color": "#003A76",
+  "theme_color": "#003A76",
+  "icons": [
+    {
+      "src": "favicon.ico",
+      "sizes": "16x16 32x32 48x48 64x64 128x128 256x256",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "icon.png",
+      "sizes": "256x256",
+      "type": "image/png"
+    },
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
