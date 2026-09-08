@@ -1,6 +1,6 @@
 @echo off
 setlocal EnableDelayedExpansion
-set "SCRIPT_DIR=%~dp0..\..\src\bilans\cartographie\"
+set "SCRIPT_DIR=%~dp0..\..\core\cartographie\"
 set "QGIS_PYTHON="
 
 REM Copie allégée de la logique de lancer_production_cartographique.bat pour trouver QGIS
@@ -48,5 +48,5 @@ if exist "!OSGEO4W_ROOT!\bin\o4w_env.bat" (
 
 cd /d "%~dp0..\.."
 echo Lancement du diagnostic avec : "!QGIS_PYTHON!"
-"!QGIS_PYTHON!" "scripts\windows\test_qgis_zorder.py"
+"!QGIS_PYTHON!" "%~dp0test_qgis_zorder.py"
 pause

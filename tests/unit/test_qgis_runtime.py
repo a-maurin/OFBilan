@@ -28,7 +28,7 @@ def test_find_qgis_python_from_path_file(tmp_path: Path, monkeypatch) -> None:
     fake = tmp_path / "qgis" / "python.exe"
     fake.parent.mkdir(parents=True)
     fake.write_text("", encoding="utf-8")
-    cfg = tmp_path / "scripts" / "windows" / "qgis_python_path.txt"
+    cfg = tmp_path / "scripts" / "lancement" / "qgis_python_path.txt"
     cfg.parent.mkdir(parents=True)
     cfg.write_text(str(fake) + "\n", encoding="utf-8")
     monkeypatch.setattr(qgis_runtime, "PROJECT_ROOT", tmp_path)

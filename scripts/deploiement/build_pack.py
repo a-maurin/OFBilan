@@ -39,11 +39,11 @@ from pathlib import Path
 
 
 def create_pack() -> int:
-    project_root = Path(__file__).resolve().parents[1]
+    project_root = Path(__file__).resolve().parents[2]
     
     # 1. Vérification
     print("Vérification de l'intégrité des référentiels...")
-    verify_script = project_root / "scripts" / "verify_ref_layout.py"
+    verify_script = project_root / "scripts" / "maintenance" / "verify_ref_layout.py"
     r = subprocess.run([sys.executable, str(verify_script), str(project_root)], cwd=project_root)
     if r.returncode != 0:
         print("Erreur : La vérification des référentiels a échoué. Corrigez les erreurs avant d'empaqueter.", file=sys.stderr)
@@ -79,7 +79,7 @@ def create_pack() -> int:
     
     # 3. Copie du script d'installation
     import shutil
-    installer_script = project_root / "scripts" / "installer_pack.bat"
+    installer_script = project_root / "scripts" / "deploiement" / "installer_pack.bat"
     if installer_script.exists():
         shutil.copy2(installer_script, dist_dir / "installer_pack.bat")
         print(f"Script d'installation copié : {dist_dir / 'installer_pack.bat'}")

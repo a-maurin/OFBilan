@@ -191,7 +191,9 @@ def _qgis_python_path_candidates() -> list[Path]:
 
     # 3. Fichier de configuration explicite
     for rel in (
+        PROJECT_ROOT / "scripts" / "lancement" / "qgis_python_path.txt",
         PROJECT_ROOT / "scripts" / "windows" / "qgis_python_path.txt",
+        PROJECT_ROOT / "core" / "cartographie" / "qgis_python_path.txt",
         PROJECT_ROOT / "src" / "ofbilan" / "cartographie" / "qgis_python_path.txt",
     ):
         if not rel.exists():

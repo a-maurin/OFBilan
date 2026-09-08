@@ -11,10 +11,10 @@ from core.chemins_projet import PROJECT_ROOT
 
 
 def test_launchers_files_exist():
-    ps1_launcher = PROJECT_ROOT / "scripts" / "demarrer_serveur_OFBilan.ps1"
-    bat_launcher = PROJECT_ROOT / "scripts" / "demarrer_serveur_OFBilan.bat"
-    ps1_installer = PROJECT_ROOT / "scripts" / "installer_sur_ce_poste.ps1"
-    bat_installer = PROJECT_ROOT / "scripts" / "installer_sur_ce_poste.bat"
+    ps1_launcher = PROJECT_ROOT / "scripts" / "lancement" / "demarrer_serveur_OFBilan.ps1"
+    bat_launcher = PROJECT_ROOT / "scripts" / "lancement" / "demarrer_serveur_OFBilan.bat"
+    ps1_installer = PROJECT_ROOT / "scripts" / "deploiement" / "installer_sur_ce_poste.ps1"
+    bat_installer = PROJECT_ROOT / "scripts" / "deploiement" / "installer_sur_ce_poste.bat"
 
     assert ps1_launcher.exists()
     assert bat_launcher.exists()
@@ -23,16 +23,16 @@ def test_launchers_files_exist():
 
 
 def test_no_pip_install_in_launchers():
-    bat_content = (PROJECT_ROOT / "scripts" / "demarrer_serveur_OFBilan.bat").read_text(encoding="utf-8")
-    ps1_content = (PROJECT_ROOT / "scripts" / "demarrer_serveur_OFBilan.ps1").read_text(encoding="utf-8")
+    bat_content = (PROJECT_ROOT / "scripts" / "lancement" / "demarrer_serveur_OFBilan.bat").read_text(encoding="utf-8")
+    ps1_content = (PROJECT_ROOT / "scripts" / "lancement" / "demarrer_serveur_OFBilan.ps1").read_text(encoding="utf-8")
 
     assert "pip install" not in bat_content
     assert "pip install" not in ps1_content
 
 
 def test_no_mklink_junction_in_installer():
-    ps1_installer = (PROJECT_ROOT / "scripts" / "installer_sur_ce_poste.ps1").read_text(encoding="utf-8")
-    bat_installer = (PROJECT_ROOT / "scripts" / "installer_sur_ce_poste.bat").read_text(encoding="utf-8")
+    ps1_installer = (PROJECT_ROOT / "scripts" / "deploiement" / "installer_sur_ce_poste.ps1").read_text(encoding="utf-8")
+    bat_installer = (PROJECT_ROOT / "scripts" / "deploiement" / "installer_sur_ce_poste.bat").read_text(encoding="utf-8")
 
     assert "mklink" not in ps1_installer
     assert "/J" not in ps1_installer

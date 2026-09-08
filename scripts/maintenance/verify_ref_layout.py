@@ -41,7 +41,7 @@ def _count_files(directory: Path) -> int:
 
 
 def main() -> int:
-    repo = Path(__file__).resolve().parents[1]
+    repo = Path(__file__).resolve().parents[2]
     if len(sys.argv) > 1:
         repo = Path(sys.argv[1]).resolve()
 

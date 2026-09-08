@@ -26,7 +26,7 @@ la clause obligatoire d'attribution (Section 7b).
 """
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 FULL_HEADER = """# Copyright (C) 2026 Aguirre MAURIN
 #

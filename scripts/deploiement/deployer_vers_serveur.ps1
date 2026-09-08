@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Deploiement propre de la version poste de travail vers le serveur reseau.
 .DESCRIPTION
@@ -14,7 +14,7 @@ param (
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
 $PSScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
-$ProjectRoot = Split-Path -Parent $PSScriptRoot
+$ProjectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 
 Write-Host "=================================================" -ForegroundColor Cyan
 Write-Host "   Deploiement d'OFBilan vers le serveur         " -ForegroundColor Cyan
@@ -166,8 +166,8 @@ $essentialFiles = @(
     "core\web\lanceur_fenetre.py",
     "core\web\serveur.py",
     "core\web\explorer.html",
-    "scripts\demarrer_serveur_OFBilan.bat",
-    "scripts\installer_sur_ce_poste.bat"
+    "scripts\lancement\demarrer_serveur_OFBilan.bat",
+    "scripts\deploiement\installer_sur_ce_poste.bat"
 )
 
 $allFound = $true

@@ -23,7 +23,7 @@ from pathlib import Path
 import sys
 
 # Ajustement du PATH Python si besoin
-_ROOT = Path(__file__).resolve().parents[1]
+_ROOT = Path(__file__).resolve().parents[2]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 

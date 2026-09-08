@@ -28,5 +28,5 @@ Toutes les ressources ci-dessous sont hébergées et servies en local par le ser
 Pour mettre à jour ou retélécharger ces dépendances en vérifiant leur intégrité SHA-256, exécuter le script :
 
 ```bash
-python3 scripts/download_vendor_assets.py
+python3 scripts/donnees/download_vendor_assets.py
 ```

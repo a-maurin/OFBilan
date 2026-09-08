@@ -31,7 +31,7 @@ Actions :
 from pathlib import Path
 import shutil
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 # Liste des fichiers/dossiers à supprimer définitivement
 TO_REMOVE = [
@@ -56,10 +56,10 @@ TO_REMOVE = [
     ROOT / "tests" / "sandbox",
 ]
 
-# Déplacement des batchs vers scripts/windows/
+# Déplacement des batchs vers scripts/lancement/
 BATCH_MOVES = [
-    (ROOT / "core" / "cartographie" / "lancer_osgeo4w.bat", ROOT / "scripts" / "windows" / "lancer_osgeo4w.bat"),
-    (ROOT / "core" / "cartographie" / "lancer_production_cartographique.bat", ROOT / "scripts" / "windows" / "lancer_production_cartographique.bat"),
+    (ROOT / "core" / "cartographie" / "lancer_osgeo4w.bat", ROOT / "scripts" / "lancement" / "lancer_osgeo4w.bat"),
+    (ROOT / "core" / "cartographie" / "lancer_production_cartographique.bat", ROOT / "scripts" / "lancement" / "lancer_production_cartographique.bat"),
 ]
 
 def _rel_path(path: Path) -> str:
@@ -85,9 +85,9 @@ def main() -> None:
             print(f"Erreur lors de la suppression de {_rel_path(target)}: {err}")
 
     # 2. Déplacement des fichiers batch
-    win_dir = ROOT / "scripts" / "windows"
+    launch_dir = ROOT / "scripts" / "lancement"
     try:
-        win_dir.mkdir(parents=True, exist_ok=True)
+        launch_dir.mkdir(parents=True, exist_ok=True)
     except OSError:
         pass
 

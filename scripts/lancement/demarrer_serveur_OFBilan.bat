@@ -2,7 +2,7 @@
 chcp 65001 >nul
 setlocal EnableDelayedExpansion
 
-pushd "%~dp0.."
+pushd "%~dp0..\.."
 set "PROJECT_ROOT=%CD%"
 
 echo.

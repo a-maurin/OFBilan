@@ -12,7 +12,7 @@ if not exist "%OSGEO4W_ROOT%\bin\python.exe" (
     exit /b 1
 )
 
-pushd "%~dp0"
+pushd "%~dp0..\..\core\cartographie"
 call "%OSGEO4W_ROOT%\bin\python-qgis-ltr.bat" "gui_lancement_cartes.py"
 popd
 pause

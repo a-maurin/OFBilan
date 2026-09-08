@@ -10,7 +10,7 @@ param (
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
 $ErrorActionPreference = "Stop"
-$ProjectRoot = Split-Path -Parent $PSScriptRoot
+$ProjectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 
 Write-Host "Preparation du package vers : $Destination" -ForegroundColor Cyan
 

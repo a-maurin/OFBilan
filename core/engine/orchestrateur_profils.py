@@ -1014,7 +1014,7 @@ def prompt_cartography_integration(
         if not qgis_available():
             print(
                 "  - QGIS (PyQGIS) non détecté dans cet interpréteur Python : "
-                "génération automatique impossible. Utilisez scripts/windows/generer_cartes.bat "
+                "génération automatique impossible. Utilisez scripts/lancement/generer_cartes.bat "
                 f"avec --echelle departement --code {carto_dept}, ou déposez les PNG avec "
                 f"marqueur .{carto_dept}.dept (rétrocompat. : dept. 21 sans marqueur)."
             )

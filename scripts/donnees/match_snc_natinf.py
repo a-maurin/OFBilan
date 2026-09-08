@@ -2,7 +2,7 @@ import pandas as pd
 from pathlib import Path
 import re
 
-root = Path(r"c:\Users\aguirre.maurin\Documents\GitHub\OFBilan-Plugin-QGIS")
+root = Path(__file__).resolve().parents[2]
 excel_path = root / "ref" / "programme" / "tables_reference" / "231222 Plans de contrôle OSCEAN 2024.xlsx"
 csv_path = root / "ref" / "programme" / "tables_reference" / "concordance_natinf_snc.csv"
 

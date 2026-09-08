@@ -42,7 +42,7 @@ PVE_DIR = SERVER_ROOT / "PVe" / "Statistiques"
 PEJ_PA_DIR = SERVER_ROOT / "OSCEAN" / "1-Données" / "suivi_procedures"
 SIG_DIR = SERVER_ROOT / "OSCEAN" / "2-Carto"
 
-LOCAL_ROOT = Path(os.getcwd())
+LOCAL_ROOT = Path(__file__).resolve().parents[2]
 LOCAL_SOURCES = LOCAL_ROOT / "data" / "sources"
 LOCAL_SOURCES_SIG = LOCAL_SOURCES / "sig"
 ARCHIVE_DIR = LOCAL_ROOT / "data" / "sources_archive"

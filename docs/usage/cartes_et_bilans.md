@@ -117,4 +117,4 @@ Si QGIS est installé mais non détecté : créer `scripts\windows\qgis_python_p
 - Sans marqueur : seul le département **21** est accepté comme carte pré-générée legacy (Côte-d'Or).
 - Département **≠ 21** sans QGIS ni marqueur : cartes ignorées dans le PDF + avertissement dans les logs.
 
-Voir aussi : `docs/usage/README_Production_cartes.md`, `scripts/windows/lancer_bilans_qgis.bat`.
+Voir aussi : `docs/usage/README_Production_cartes.md`, `scripts/lancement/lancer_bilans_qgis.bat`.

@@ -28,7 +28,7 @@ if exist "%LOCALAPPDATA_OSGEO%\bin\python.exe" (
     set "QT_QPA_PLATFORM=offscreen"
     set "PYTHONPATH=!OSGEO4W_ROOT!\apps\!QGIS_APPS_DIR!\python;!PYTHONPATH!"
     cd /d "%SCRIPT_DIR%..\.."
-    "!QGIS_PYTHON!" "%SCRIPT_DIR%production_cartographique.py" %*
+    "!QGIS_PYTHON!" "%SCRIPT_DIR%..\..\core\cartographie\production_cartographique.py" %*
     if errorlevel 1 (
         echo.
         echo Le script a echoue. Verifier les messages ci-dessus.
@@ -116,7 +116,7 @@ echo !QGIS_PYTHON! | findstr /i "OSGeo4W" >nul
         set "QT_PLUGIN_PATH=!OSGEO4W_ROOT!\apps\!QGIS_APPS_DIR!\qtplugins;!OSGEO4W_ROOT!\apps\qt5\plugins"
         set "PYTHONPATH=!OSGEO4W_ROOT!\apps\!QGIS_APPS_DIR!\python;!PYTHONPATH!"
     )
-"!QGIS_PYTHON!" "%SCRIPT_DIR%production_cartographique.py" %*
+"!QGIS_PYTHON!" "%SCRIPT_DIR%..\..\core\cartographie\production_cartographique.py" %*
 if errorlevel 1 (
     echo.
     echo Le script a echoue. Verifier les messages ci-dessus.

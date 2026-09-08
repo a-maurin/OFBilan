@@ -23,5 +23,5 @@ if %QGIS_PYTHON%=="" (
 )
 
 :: %~dp0 correspond au dossier ou se trouve ce script .bat
-%QGIS_PYTHON% "%~dp0..\core\point_entree_cli.py" %*
+%QGIS_PYTHON% "%~dp0..\..\core\point_entree_cli.py" %*
 exit /b

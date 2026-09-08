@@ -31,7 +31,7 @@ def read_file(file_path: Path):
     return pd.DataFrame()
 
 def main():
-    root = Path(__file__).resolve().parent.parent
+    root = Path(__file__).resolve().parents[2]
     sources_dir = root / "data" / "sources"
     ref_dir = root / "ref" / "programme" / "tables_reference"
     ref_dir.mkdir(parents=True, exist_ok=True)

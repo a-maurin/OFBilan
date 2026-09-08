@@ -7,7 +7,7 @@ sans refonte du moteur metier.
 ## Sources de verite
 
 - `bin/` : raccourcis d'exécution locaux pour le développement.
-- `scripts/` : wrappers d'execution (Windows/Linux) et verification (`verify.ps1` / `verify.sh` pour pytest, `verify_ref_layout.*` pour `ref/`).
+- `scripts/` : scripts organisés par usage (`lancement/`, `deploiement/`, `donnees/`, `maintenance/`).
 - `tools/` : scripts de maintenance internes, audits ponctuels et utilitaires de diagnostic.
 - `src/bilans/` : code applicatif principal (moteur profilé, cartographie, common).
 - `config/` : configuration de pilotage versionnee (profils, options metier, presentation).
@@ -20,8 +20,8 @@ sans refonte du moteur metier.
 
 Wrappers maintenus :
 
-- Windows : `scripts/windows/lancer_bilans.bat`, `scripts/windows/lancer_bilans_qgis.bat`, `scripts/windows/generer_cartes.bat`, `scripts/windows/parametrer_cartes.bat`
-- Linux : `scripts/linux/lancer_bilans.sh`, `scripts/linux/generer_cartes.sh`, `scripts/linux/parametrer_cartes.sh`
+- Windows : `scripts/lancement/demarrer_serveur_OFBilan.bat`, `scripts/lancement/lancer_bilans.bat`, `scripts/lancement/lancer_bilans_qgis.bat`, `scripts/lancement/generer_cartes.bat`, `scripts/lancement/parametrer_cartes.bat`
+- Linux : `scripts/lancement/demarrer_serveur_OFBilan.sh`, `scripts/lancement/lancer_cli_OFBilan.sh`
 
 ## CLI et packaging (phase 2)
 
@@ -29,13 +29,13 @@ Wrappers maintenus :
 - Entree script console (apres installation) : `bilans`
 - Fichier de packaging : `pyproject.toml`
 - Pas de point d'entree legacy conserve : la CLI officielle est `python -m ofbilan`.
-- Tests : `pip install -e .[dev]` puis `python -m pytest -q` (ou `scripts/verify.ps1` / `scripts/verify.sh`) ; CI `.github/workflows/tests.yml`.
+- Tests : `pip install -e .[dev]` puis `python -m pytest -q` (ou `scripts/maintenance/verify.ps1` / `scripts/maintenance/verify.sh`) ; CI `.github/workflows/tests.yml`.
 
 ## Rationalisation config/ref (phase 3)
 
 - Cible : `config/` porte le pilotage, `ref/programme/` porte les referentiels actifs.
 - Etat actuel : pilotage dans `config/` ; donnees de reference dans `ref/programme/`.
-- Verification locale : `scripts/verify_ref_layout.ps1`.
+- Verification locale : `scripts/maintenance/verify_ref_layout.ps1`.
 - Regle pratique : toute nouvelle cle de pilotage dans `config/` ; tout nouveau referentiel
   metier dans `ref/programme/` (ou `data/sources/` si donnee operationnelle).
 

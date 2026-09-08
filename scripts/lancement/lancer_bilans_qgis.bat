@@ -9,7 +9,7 @@ set "POWERSHELL=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
 set "PF=C:\Program Files"
 set "SCRIPT_DIR=%~dp0"
 set "PROJECT_ROOT=%SCRIPT_DIR%..\.."
-set "CARTO_DIR=%PROJECT_ROOT%\src\ofbilan\cartographie\"
+set "CARTO_DIR=%PROJECT_ROOT%\core\cartographie\"
 
 REM 0. Priorite : OSGeo4W AppData
 set "LOCALAPPDATA_OSGEO=%LOCALAPPDATA%\Programs\OSGeo4W"
@@ -59,7 +59,7 @@ if "!QGIS_PYTHON!"=="" (
     echo.
     echo [Erreur] Python QGIS introuvable.
     echo.
-    echo Creer scripts\windows\qgis_python_path.txt avec le chemin vers python.exe QGIS.
+    echo Creer scripts\lancement\qgis_python_path.txt avec le chemin vers python.exe QGIS.
     echo Ou dans QGIS Console : import sys; print(sys.executable^)
     echo.
     pause

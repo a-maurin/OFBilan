@@ -23,10 +23,10 @@ Les entrées de production restent dans `data/sources/` ; les sorties dans `data
 Arborescence `ref/` :
 
 ```powershell
-.\scripts\verify_ref_layout.ps1
-# ou : python scripts/verify_ref_layout.py
+.\scripts\maintenance\verify_ref_layout.ps1
+# ou : python scripts/maintenance/verify_ref_layout.py
 ```
 
 Contrôle la présence des fichiers sous `programme/`, l’absence des anciens dossiers à la racine de `ref/`, et les imbrications erronées (`communes_pnf/communes_pnf`, etc.).
 
-Tests applicatifs (hors `ref/`, identiques à la CI) : `python -m pytest -q` ou `.\scripts\verify.ps1` / `./scripts/verify.sh` — voir le README racine.
+Tests applicatifs (hors `ref/`, identiques à la CI) : `python -m pytest -q` ou `.\scripts\maintenance\verify.ps1` / `./scripts/maintenance/verify.sh` — voir le README racine.

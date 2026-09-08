@@ -10,7 +10,7 @@
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
 $PSScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
-$ProjectRoot = Split-Path -Parent $PSScriptRoot
+$ProjectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 
 Write-Host "=================================================" -ForegroundColor Cyan
 Write-Host "     Installation d'OFBilan sur ce poste         " -ForegroundColor Cyan
@@ -30,7 +30,7 @@ try {
     $shortcut = $wshShell.CreateShortcut($shortcutPath)
     $shortcut.TargetPath = "powershell.exe"
 
-    $scriptLauncher = Join-Path $ProjectRoot "scripts\demarrer_serveur_OFBilan.ps1"
+    $scriptLauncher = Join-Path $ProjectRoot "scripts\lancement\demarrer_serveur_OFBilan.ps1"
     $shortcut.Arguments = "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$scriptLauncher`""
     $shortcut.WorkingDirectory = $ProjectRoot
 

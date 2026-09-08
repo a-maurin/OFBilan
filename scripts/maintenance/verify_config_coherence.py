@@ -34,7 +34,7 @@ except Exception:
     pass
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-ROOT_DIR = SCRIPT_DIR.parent
+ROOT_DIR = SCRIPT_DIR.parent.parent
 
 def check_coherence(strict: bool = False) -> tuple[list[str], list[str]]:
     """Vérifie la cohérence inter-configurations et retourne (erreurs_critiques, avertissements)."""

@@ -127,10 +127,10 @@ def _check_qgis() -> None:
         logger.error(
             "PyQGIS non disponible. Ce script doit être exécuté avec l'interpréteur Python de QGIS.\n"
             "Solutions recommandées (Windows OSGeo4W):\n"
-            "  1. Lancer scripts/windows/generer_cartes.bat\n"
+            "  1. Lancer scripts/lancement/generer_cartes.bat\n"
             "  2. Ouvrir le shell OSGeo4W (menu Démarrer), puis:\n"
             "     set PYTHONPATH=%OSGEO4W_ROOT%\\apps\\qgis-ltr\\python\n"
-            "     python src\\bilans\\cartographie\\production_cartographique.py --interactive\n"
+            "     python core\\cartographie\\production_cartographique.py --interactive\n"
             "  3. Depuis QGIS : Outils > Console Python > coller et exécuter le script\n"
         )
         sys.exit(1)

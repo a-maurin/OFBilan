@@ -52,7 +52,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    repo = Path(__file__).resolve().parents[1]
+    repo = Path(__file__).resolve().parents[2]
     src_prog = repo / "ref" / "programme"
     guide = repo / "docs" / "distribution" / "GUIDE_REF_INSTALLATION.md"
 
@@ -64,7 +64,7 @@ def main() -> int:
         import subprocess
 
         r = subprocess.run(
-            [sys.executable, str(repo / "scripts" / "verify_ref_layout.py"), str(repo)],
+            [sys.executable, str(repo / "scripts" / "maintenance" / "verify_ref_layout.py"), str(repo)],
             cwd=repo,
         )
         if r.returncode != 0:

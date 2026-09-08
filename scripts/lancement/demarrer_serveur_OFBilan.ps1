@@ -10,7 +10,7 @@
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
 $PSScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
-$ProjectRoot = Split-Path -Parent $PSScriptRoot
+$ProjectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 
 Write-Host "=====================================" -ForegroundColor Cyan
 Write-Host "     Lancement du serveur OFBilan" -ForegroundColor Cyan

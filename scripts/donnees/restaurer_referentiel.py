@@ -27,7 +27,7 @@ import zipfile
 from pathlib import Path
 
 def restaurer():
-    root = Path(__file__).resolve().parents[1]
+    root = Path(__file__).resolve().parents[2]
     zip_path = root / "pack_configuration_referentiels.zip"
     
     if not zip_path.exists():

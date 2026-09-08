@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 import urllib.request
 
-ROOT_DIR = Path(__file__).resolve().parent.parent
+ROOT_DIR = Path(__file__).resolve().parents[2]
 VENDOR_DIR = ROOT_DIR / "core" / "web" / "vendor"
 
 # Cartographie des assets : (Nom du fichier local, URL distante, Hash SHA-256 optionnel de contrôle)

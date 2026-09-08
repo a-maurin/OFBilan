@@ -11,8 +11,8 @@ Ce document décrit la génération des cartes utilisées dans les bilans.
 
 ## Scripts Windows
 
-- `scripts/windows/parametrer_cartes.bat` : paramétrage des couches ;
-- `scripts/windows/generer_cartes.bat` : génération des cartes.
+- `scripts/lancement/parametrer_cartes.bat` : paramétrage des couches ;
+- `scripts/lancement/generer_cartes.bat` : génération des cartes.
 
 ## Scripts Linux
 
