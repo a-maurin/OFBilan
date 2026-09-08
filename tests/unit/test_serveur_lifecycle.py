@@ -111,4 +111,38 @@ def test_shutdown_endpoint_contract():
     assert "os._exit(0)" in source_get
     assert "_cleanup_server_pid()" in source_get
     assert "self.server.shutdown()" in source_get
-    assert "/api/shutdown" in source_post
+    assert "/api/shutdown" in source_post
+
+
+def test_append_preload_log():
+    """Vérifie que _append_preload_log ajoute les messages et limite la taille."""
+    with serveur_mod._preload_lock:
+        serveur_mod._PRELOAD_LOGS.clear()
+    serveur_mod._append_preload_log("  Message test 1  ")
+    with serveur_mod._preload_lock:
+        assert "Message test 1" in serveur_mod._PRELOAD_LOGS
+
+    for i in range(40):
+        serveur_mod._append_preload_log(f"log-{i}")
+    with serveur_mod._preload_lock:
+        assert len(serveur_mod._PRELOAD_LOGS) <= 30
+
+
+def test_core_common_lazy_loading():
+    """Vérifie que core.common expose ses sous-modules dynamiquement sans les importer à l'avance."""
+    import core.common as common
+    assert hasattr(common, "chargeurs_donnees")
+    assert hasattr(common, "bilan_config")
+    import pytest
+    with pytest.raises(AttributeError):
+        _ = common.module_inexistant_xyz
+
+
+def test_serveur_sans_pandas_au_niveau_module():
+    """Vérifie que pandas n'est pas importé au démarrage direct du module serveur."""
+    import inspect
+    src = inspect.getsource(serveur_mod)
+    # Vérifie que 'import pandas as pd' n'apparaît pas au niveau global (indentation 0)
+    lines = src.splitlines()
+    global_pandas = [line for line in lines if line.strip() == "import pandas as pd" and not line.startswith(" ")]
+    assert not global_pandas, "pandas ne doit pas être importé au niveau module dans serveur.py"

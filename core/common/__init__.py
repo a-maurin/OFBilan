@@ -16,14 +16,39 @@
 # de l'auteur original (Aguirre MAURIN).
 
 #
-"""Sous-package `bilans.common` exposant les utilitaires partagés."""
+"""Sous-package `core.common` exposant les utilitaires partagés avec chargement paresseux."""
 
-from core.common.bilan_config import *  # noqa: F401,F403
-from core.common.chargeurs_donnees import *  # noqa: F401,F403
-from core.common.utilitaires_metier import *  # noqa: F401,F403
-from core.common.ofb_charte import *  # noqa: F401,F403
-from core.common.pdf_report_builder import *  # noqa: F401,F403
-from core.common.pdf_utils import *  # noqa: F401,F403
-from core.common.rendus_graphiques import *  # noqa: F401,F403
-from core.common.carte_helper import *  # noqa: F401,F403
-from core.common.prompt_periode import *  # noqa: F401,F403
+import importlib
+from typing import Any
+
+__all__ = [
+    "bilan_config",
+    "chargeurs_donnees",
+    "utilitaires_metier",
+    "ofb_charte",
+    "pdf_report_builder",
+    "pdf_utils",
+    "rendus_graphiques",
+    "carte_helper",
+    "prompt_periode",
+]
+
+_MODULE_MAP = {name: f"core.common.{name}" for name in __all__}
+
+
+def __getattr__(name: str) -> Any:
+    if name in _MODULE_MAP:
+        mod = importlib.import_module(_MODULE_MAP[name])
+        return mod
+    for mod_name in _MODULE_MAP.values():
+        try:
+            mod = importlib.import_module(mod_name)
+            if hasattr(mod, name):
+                return getattr(mod, name)
+        except Exception:
+            continue
+    raise AttributeError(f"Le module '{__name__}' n'a pas d'attribut '{name}'")
+
+
+def __dir__() -> list[str]:
+    return sorted(list(globals().keys()) + __all__)

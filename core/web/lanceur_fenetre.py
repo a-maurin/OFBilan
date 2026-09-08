@@ -9,7 +9,79 @@ import shutil
 import subprocess
 import webbrowser
 
+import threading
+from typing import Any
+
 logger = logging.getLogger(__name__)
+
+
+def _maximiser_fenetre_windows(titre_partiel: str = "OFBilan", delai_max_sec: float = 6.0) -> None:
+    """Surveille l'apparition de la fenêtre applicative sous Windows pour forcer sa maximisation."""
+    if os.name != "nt":
+        return
+
+    def _worker() -> None:
+        try:
+            import ctypes
+            from ctypes import wintypes
+            import time
+
+            user32 = ctypes.windll.user32
+            kernel32 = ctypes.windll.kernel32
+            sw_maximize = 3
+
+            wndenumproc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+            nav_exes = ("msedge.exe", "chrome.exe", "chromium.exe", "brave.exe")
+            fenetre_trouvee = False
+
+            def enum_cb(hwnd: Any, _lparam: Any) -> bool:
+                nonlocal fenetre_trouvee
+                try:
+                    if not user32.IsWindowVisible(hwnd):
+                        return True
+
+                    length = user32.GetWindowTextLengthW(hwnd)
+                    if length <= 0:
+                        return True
+
+                    buf = ctypes.create_unicode_buffer(length + 1)
+                    user32.GetWindowTextW(hwnd, buf, length + 1)
+                    if titre_partiel.lower() not in buf.value.lower():
+                        return True
+
+                    pid = wintypes.DWORD()
+                    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+                    if pid.value:
+                        h_proc = kernel32.OpenProcess(0x1000, False, pid.value)
+                        if h_proc:
+                            try:
+                                proc_buf = ctypes.create_unicode_buffer(1024)
+                                size = wintypes.DWORD(1024)
+                                if kernel32.QueryFullProcessImageNameW(h_proc, 0, proc_buf, ctypes.byref(size)):
+                                    nom_exe = Path(proc_buf.value).name.lower()
+                                    if not any(nav in nom_exe for nav in nav_exes):
+                                        return True
+                            finally:
+                                kernel32.CloseHandle(h_proc)
+
+                    user32.ShowWindowAsync(hwnd, sw_maximize)
+                    user32.SetForegroundWindow(hwnd)
+                    fenetre_trouvee = True
+                    return False
+                except Exception:
+                    return True
+
+            cb = wndenumproc(enum_cb)
+            t_debut = time.time()
+            while time.time() - t_debut < delai_max_sec and not fenetre_trouvee:
+                user32.EnumWindows(cb, 0)
+                if fenetre_trouvee:
+                    break
+                time.sleep(0.2)
+        except Exception as e:
+            logger.debug("Échec de la maximisation Windows : %s", e)
+
+    threading.Thread(target=_worker, daemon=True).start()
 
 
 def trouver_navigateur_app() -> str | None:
@@ -70,11 +142,15 @@ def ouvrir_fenetre_app(url: str, maximiser: bool = True) -> bool:
             commande.append("--start-maximized")
 
         try:
+            cwd_arg = os.environ.get("SystemRoot", r"C:\Windows") if os.name == "nt" else None
             subprocess.Popen(
                 commande,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
+                cwd=cwd_arg,
             )
+            if maximiser and os.name == "nt":
+                _maximiser_fenetre_windows()
             return True
         except Exception as e:
             logger.warning("Échec du lancement en mode application (%s), repli sur le navigateur standard.", e)

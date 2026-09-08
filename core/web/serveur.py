@@ -39,7 +39,6 @@ import os
 import subprocess
 import sys
 import datetime
-import pandas as pd
 from pathlib import Path
 
 def check_is_debug() -> bool:
@@ -174,11 +173,13 @@ def _is_pid_alive(pid: int) -> bool:
         return False
     if sys.platform == "win32":
         try:
+            cwd_win = os.environ.get("SystemRoot", r"C:\Windows")
             res = subprocess.run(
                 ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
                 capture_output=True,
                 text=True,
                 check=False,
+                cwd=cwd_win,
             )
             return str(pid) in res.stdout
         except Exception:
@@ -193,7 +194,8 @@ def _is_pid_alive(pid: int) -> bool:
 
 def _kill_pid(pid: int) -> None:
     if sys.platform == "win32":
-        subprocess.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True, check=False)
+        cwd_win = os.environ.get("SystemRoot", r"C:\Windows")
+        subprocess.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True, check=False, cwd=cwd_win)
     else:
         try:
             os.kill(pid, 15)
@@ -355,6 +357,7 @@ _DIRECTEUR_ENQUETE_COLS = (
 
 def _extract_directeur_enquete(record: dict) -> str:
     """Extrait l'identité du directeur d'enquête depuis un enregistrement PEJ."""
+    import pandas as pd
     for col in _DIRECTEUR_ENQUETE_COLS:
         val = record.get(col)
         if val is not None and pd.notna(val):
@@ -2134,6 +2137,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         else:
             super().do_POST()
 
+def _append_preload_log(msg: str) -> None:
+    clean = msg.strip()
+    if not clean:
+        return
+    with _preload_lock:
+        _PRELOAD_LOGS.append(clean)
+        if len(_PRELOAD_LOGS) > 30:
+            _PRELOAD_LOGS.pop(0)
+
+
 def preload_data_async():
     import threading
     import time
@@ -2141,10 +2154,7 @@ def preload_data_async():
     def target():
         def log_preload(msg, level="INFO"):
             log_server(msg.strip(), level=level)
-            with _preload_lock:
-                _PRELOAD_LOGS.append(msg.strip())
-                if len(_PRELOAD_LOGS) > 20:
-                    _PRELOAD_LOGS.pop(0)
+            _append_preload_log(msg)
 
         t_start = time.perf_counter()
         try:
@@ -2193,17 +2203,10 @@ def run_server():
     _register_server_pid()
     init_server_logger()
     start_watchdog()
-    log_server(f"Initialisation du serveur web OFBilan (Port: {PORT}, PID: {os.getpid()})")
 
     import atexit
     atexit.register(lambda: finalize_server_logger(reason="Terminated"))
     atexit.register(_cleanup_server_pid)
-
-    # Lancement du pré-chargement des données en tâche de fond
-    try:
-        preload_data_async()
-    except Exception as e:
-        log_server(f"Impossible d'initialiser le pré-chargement : {e}", level="ERROR")
 
     socketserver.ThreadingTCPServer.allow_reuse_address = True
     socketserver.ThreadingTCPServer.daemon_threads = True
@@ -2231,18 +2234,33 @@ def run_server():
         finalize_server_logger(reason="No Port Available")
         return
 
+    # Ouverture immédiate de la fenêtre GUI dédiée avant les messages d'initialisation
+    if os.environ.get("OFBILAN_RESTART") != "1":
+        try:
+            from core.web.lanceur_fenetre import ouvrir_fenetre_app
+        except ImportError:
+            from lanceur_fenetre import ouvrir_fenetre_app
+        ouvrir_fenetre_app(f"http://localhost:{active_port}/loading.html")
+
+    # Diffusion des journaux de démarrage (sur console et dans l'interface de chargement)
+    msg_init = f"Initialisation du serveur web OFBilan (Port: {active_port}, PID: {os.getpid()})"
+    log_server(msg_init)
+    _append_preload_log(msg_init)
+
+    msg_ready = f"Serveur web actif sur http://localhost:{active_port}"
+    log_server(msg_ready)
+    _append_preload_log(msg_ready)
+
+    log_server("L'explorateur web s'ouvre automatiquement. Appuyez sur Ctrl+C pour arrêter.")
+
+    # Lancement du pré-chargement des données en tâche de fond
+    try:
+        preload_data_async()
+    except Exception as e:
+        log_server(f"Impossible d'initialiser le pré-chargement : {e}", level="ERROR")
+
     try:
         with httpd:
-            log_server(f"Serveur web actif sur http://localhost:{active_port}")
-            log_server("L'explorateur web s'ouvre automatiquement. Appuyez sur Ctrl+C pour arrêter.")
-
-            if os.environ.get("OFBILAN_RESTART") != "1":
-                try:
-                    from core.web.lanceur_fenetre import ouvrir_fenetre_app
-                except ImportError:
-                    from lanceur_fenetre import ouvrir_fenetre_app
-                ouvrir_fenetre_app(f"http://localhost:{active_port}/loading.html")
-
             httpd.serve_forever()
             log_server("Arrêt normal du serveur web.", level="INFO")
             _cleanup_server_pid()
