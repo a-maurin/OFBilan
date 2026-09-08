@@ -1604,25 +1604,48 @@ document.addEventListener('DOMContentLoaded', () => {
     selectEchelle.addEventListener('change', () => {
         const val = selectEchelle.value;
 
+        if (!val) {
+            inputCode.value = '';
+            inputCode.disabled = true;
+            if (btnToggleCodes) btnToggleCodes.disabled = true;
+            codeHelper.textContent = 'Veuillez sélectionner une échelle';
+            return;
+        }
+
         inputCode.disabled = false;
         if (btnToggleCodes) btnToggleCodes.disabled = false;
 
         if (val === 'departement') {
-            inputCode.value = '21';
+            inputCode.value = '';
             inputCode.placeholder = 'ex : 21';
             codeHelper.textContent = 'Exemples : 21, 27, 39';
+            if (btnToggleCodes && codesDropdown && codesDropdown.classList.contains('hidden')) {
+                btnToggleCodes.click();
+            }
         } else if (val === 'region') {
-            inputCode.value = 'r27';
+            inputCode.value = '';
             inputCode.placeholder = 'ex : r27';
             codeHelper.textContent = 'Exemples : r27, r44';
+            if (btnToggleCodes && codesDropdown && codesDropdown.classList.contains('hidden')) {
+                btnToggleCodes.click();
+            }
         } else if (val === 'bmi') {
-            inputCode.value = 'BMI-NEC';
+            inputCode.value = '';
             inputCode.placeholder = 'ex : BMI-NEC';
             codeHelper.textContent = 'Codes possibles : BMI-NEC, BMI-SO, BMI-SE, BMI-NO, BMI-IFE, BMI-IFO, BMI-TIP';
+            if (btnToggleCodes && codesDropdown && codesDropdown.classList.contains('hidden')) {
+                btnToggleCodes.click();
+            }
         } else if (val === 'national') {
             inputCode.value = '';
             inputCode.placeholder = 'France entière';
             codeHelper.textContent = 'Échelle nationale sélectionnée';
+            inputCode.disabled = true;
+            if (btnToggleCodes) btnToggleCodes.disabled = true;
+        } else if (val === 'pnf') {
+            inputCode.value = '';
+            inputCode.placeholder = 'Dép. 21 et 52';
+            codeHelper.textContent = 'Parc national de forêts';
             inputCode.disabled = true;
             if (btnToggleCodes) btnToggleCodes.disabled = true;
         }
@@ -2877,6 +2900,18 @@ document.addEventListener('DOMContentLoaded', () => {
         // Point A : reset de la bannière avant chaque chargement
         const _errBanner = document.getElementById('profile-warning-banner');
         if (_errBanner) { _errBanner.style.display = 'none'; _errBanner.style.color = ''; }
+
+        // Suspension du chargement tant qu'aucun périmètre géographique n'est sélectionné
+        const echelleVal = selectEchelle ? selectEchelle.value : '';
+        const parsedCodes = getParsedCodes();
+        const codeVal = (inputCode ? inputCode.value : '').trim();
+
+        if (!echelleVal || (echelleVal !== 'national' && echelleVal !== 'pnf' && !codeVal && parsedCodes.length === 0)) {
+            btnUpdate.disabled = false;
+            btnUpdate.innerHTML = 'Charger les données';
+            setGlobalLoadingState(false, false);
+            return;
+        }
 
         const isCompare = compareActiveCheck && compareActiveCheck.checked;
 
@@ -4570,9 +4605,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 dateFinEl.value = `${currentYear}-${month}-${day}`;
             }
 
-            selectEchelle.value = 'departement';
-            inputCode.value = '21';
-            codeHelper.textContent = 'Exemples : 21, 27, 39';
+            selectEchelle.value = '';
+            inputCode.value = '';
+            inputCode.disabled = true;
+            if (btnToggleCodes) btnToggleCodes.disabled = true;
+            codeHelper.textContent = 'Veuillez sélectionner une échelle';
 
             // Réinitialisation des filtres multi-sélections
             if (inputUsager.setSelectedValues) inputUsager.setSelectedValues([]);

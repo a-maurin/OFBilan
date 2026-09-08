@@ -627,22 +627,45 @@ document.addEventListener('DOMContentLoaded', () => {
     // Mise à jour dynamique de l'aide géographique
     selectEchelle.addEventListener('change', () => {
         const val = selectEchelle.value;
+        if (!val) {
+            inputCode.value = '';
+            inputCode.disabled = true;
+            if (btnToggleCodes) btnToggleCodes.disabled = true;
+            codeHelper.textContent = 'Veuillez sélectionner une échelle';
+            renderGabaritsOptions();
+            return;
+        }
+
+        inputCode.disabled = false;
+        if (btnToggleCodes) btnToggleCodes.disabled = false;
+
         if (val === 'departement') {
-            inputCode.value = '21';
+            inputCode.value = '';
             inputCode.placeholder = 'ex : 21';
             codeHelper.textContent = 'Exemples : 21, 27, 39';
+            if (btnToggleCodes && codesDropdown && codesDropdown.classList.contains('hidden')) {
+                btnToggleCodes.click();
+            }
         } else if (val === 'region') {
-            inputCode.value = 'r27';
+            inputCode.value = '';
             inputCode.placeholder = 'ex : r27';
             codeHelper.textContent = 'Exemples : r27, r44';
+            if (btnToggleCodes && codesDropdown && codesDropdown.classList.contains('hidden')) {
+                btnToggleCodes.click();
+            }
         } else if (val === 'bmi') {
-            inputCode.value = 'BMI-NEC';
+            inputCode.value = '';
             inputCode.placeholder = 'ex : BMI-NEC';
             codeHelper.textContent = 'Codes possibles : BMI-NEC, BMI-SO, BMI-SE, BMI-NO, BMI-IFE, BMI-IFO, BMI-TIP';
+            if (btnToggleCodes && codesDropdown && codesDropdown.classList.contains('hidden')) {
+                btnToggleCodes.click();
+            }
         } else if (val === 'national') {
             inputCode.value = 'FR';
             inputCode.placeholder = 'ex : FR';
             codeHelper.textContent = 'Code national : FR';
+            inputCode.disabled = true;
+            if (btnToggleCodes) btnToggleCodes.disabled = true;
         }
         renderGabaritsOptions();
     });

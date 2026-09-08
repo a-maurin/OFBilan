@@ -26,8 +26,16 @@ def generer_logo_blanc():
     local_dst_path = Path(__file__).resolve().parent / "logo.svg"
     
     if not src_path.exists():
-        print(f"Erreur : Le fichier source est introuvable : {src_path}")
         return False
+
+    # Sauter si les fichiers existent déjà et sont à jour
+    if dst_path.exists() and local_dst_path.exists():
+        try:
+            src_mtime = src_path.stat().st_mtime
+            if src_mtime <= local_dst_path.stat().st_mtime and src_mtime <= dst_path.stat().st_mtime:
+                return True
+        except Exception:
+            pass
         
     try:
         content = src_path.read_text(encoding="utf-8")
@@ -47,13 +55,21 @@ def generer_logo_blanc():
 
 
 def generer_favicon_ico() -> bool:
-    """Génère favicon.ico avec résolutions multi-tailles à partir de icon.png si absent."""
+    """Génère favicon.ico avec résolutions multi-tailles à partir de icon.png si absent ou obsolète."""
     web_dir = Path(__file__).resolve().parent
     png_path = web_dir / "icon.png"
     ico_path = web_dir / "favicon.ico"
 
     if not png_path.exists():
         return False
+
+    # Sauter si le favicon existe déjà et est plus récent que l'icône source
+    if ico_path.exists():
+        try:
+            if png_path.stat().st_mtime <= ico_path.stat().st_mtime:
+                return True
+        except Exception:
+            pass
 
     try:
         from PIL import Image

@@ -302,6 +302,31 @@ def test_serveur_favicon_ico_reponse_200():
         thread.join()
 
 
+def test_perimetre_initial_neutre_frontend():
+    """Vérifie qu'aucun périmètre (21) n'est pré-sélectionné au premier démarrage."""
+    web_dir = Path(__file__).resolve().parents[2] / "core" / "web"
+    explorer_html = (web_dir / "explorer.html").read_text(encoding="utf-8")
+    index_html = (web_dir / "index.html").read_text(encoding="utf-8")
+    explorer_js = (web_dir / "explorer.js").read_text(encoding="utf-8")
+    app_js = (web_dir / "app.js").read_text(encoding="utf-8")
+
+    # 1. Vérifier que code n'a pas 21 par défaut dans le HTML
+    assert 'name="code" value="21"' not in explorer_html
+    assert 'name="code" value="21"' not in index_html
+    assert 'name="code" value=""' in explorer_html
+    assert 'name="code" value=""' in index_html
+
+    # 2. Vérifier que l'option neutre d'échelle existe et est sélectionnée
+    assert '<option value="" selected disabled>Choisir une échelle...</option>' in explorer_html
+    assert '<option value="" selected disabled>Choisir une échelle...</option>' in index_html
+
+    # 3. Vérifier que le chargement est suspendu au démarrage si aucun périmètre n'est sélectionné
+    assert "Suspension du chargement tant qu'aucun périmètre géographique n'est sélectionné" in explorer_js
+    assert "inputCode.value = '21'" not in explorer_js
+    assert "inputCode.value = '21'" not in app_js
+
+
+
 
 
 

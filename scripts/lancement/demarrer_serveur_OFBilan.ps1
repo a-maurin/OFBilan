@@ -19,16 +19,35 @@ Write-Host ""
 Write-Host "Recherche de l'interpreteur Python de QGIS..." -ForegroundColor Gray
 
 $qgisPython = $null
+$qgisCacheFile = Join-Path $env:LOCALAPPDATA "OFBilan\qgis_path.txt"
 
-# 1. Verification dans les parametres utilisateur
-$userSettings = Join-Path $env:USERPROFILE ".ofbilan\user_settings.json"
-if (Test-Path $userSettings) {
+# 0. Verification dans le cache local dedie
+if (Test-Path $qgisCacheFile) {
     try {
-        $json = Get-Content $userSettings -Raw -Encoding UTF8 | ConvertFrom-Json
-        if ($json.tech.qgis_path -and (Test-Path $json.tech.qgis_path)) {
-            $qgisPython = $json.tech.qgis_path
+        $cachedPath = (Get-Content $qgisCacheFile -Raw -Encoding UTF8).Trim()
+        if ($cachedPath -and (Test-Path $cachedPath)) {
+            $qgisPython = $cachedPath
         }
     } catch {}
+}
+
+# 1. Verification dans les parametres utilisateur
+if (-not $qgisPython) {
+    $settingsFiles = @(
+        (Join-Path $env:LOCALAPPDATA "OFBilan\user_settings.json"),
+        (Join-Path $env:USERPROFILE ".ofbilan\user_settings.json")
+    )
+    foreach ($userSettings in $settingsFiles) {
+        if (Test-Path $userSettings) {
+            try {
+                $json = Get-Content $userSettings -Raw -Encoding UTF8 | ConvertFrom-Json
+                if ($json.tech.qgis_path -and (Test-Path $json.tech.qgis_path)) {
+                    $qgisPython = $json.tech.qgis_path
+                    break
+                }
+            } catch {}
+        }
+    }
 }
 
 # 2. Variables d'environnement
@@ -86,12 +105,26 @@ if (-not $qgisPython) {
     exit 1
 }
 
+# Mémorisation dans le cache local pour accélérer les prochains lancements
+if ($qgisPython -and $qgisCacheFile) {
+    try {
+        $cacheDir = Split-Path -Parent $qgisCacheFile
+        if (-not (Test-Path $cacheDir)) { [System.IO.Directory]::CreateDirectory($cacheDir) | Out-Null }
+        Set-Content -Path $qgisCacheFile -Value $qgisPython -Encoding UTF8 -Force
+    } catch {}
+}
+
 Write-Host "[OK] Interpreteur trouve : $qgisPython" -ForegroundColor Green
 Write-Host ""
 Write-Host "[OK] Demarrage du serveur web..." -ForegroundColor Cyan
 Write-Host ""
 
-$env:PYTHONDONTWRITEBYTECODE = "1"
+# Cache local du bytecode Python (.pyc) déporté sur C: (aucun conflit ni écriture lente sur réseau)
+Remove-Item env:PYTHONDONTWRITEBYTECODE -ErrorAction SilentlyContinue
+$localPycache = Join-Path $env:LOCALAPPDATA "OFBilan\pycache"
+if (-not (Test-Path $localPycache)) { [System.IO.Directory]::CreateDirectory($localPycache) | Out-Null }
+$env:PYTHONPYCACHEPREFIX = $localPycache
+
 $serveurScript = Join-Path $ProjectRoot "core\web\serveur.py"
 
 $passArgs = @()

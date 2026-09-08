@@ -187,7 +187,8 @@ Composants principaux :
                             <div class="form-group">
                                 <label for="echelle">Échelle spatiale</label>
                                 <select id="echelle" name="echelle" required>
-                                    <option value="departement" selected>Département</option>
+                                    <option value="" selected disabled>Choisir une échelle...</option>
+                                    <option value="departement">Département</option>
                                     <option value="region">Région</option>
                                     <option value="bmi">BMI (Interrégional)</option>
                                     <option value="national">National</option>
@@ -196,12 +197,12 @@ Composants principaux :
                             <div class="form-group">
                                 <label for="code" id="label-code">Code géographique</label>
                                 <div class="custom-select-container">
-                                    <input type="text" id="code" name="code" value="21"
+                                    <input type="text" id="code" name="code" value="" disabled
                                         placeholder="Rechercher ou sélectionner..." required autocomplete="off">
-                                    <button type="button" id="btn-toggle-codes" class="select-arrow-btn">▼</button>
+                                    <button type="button" id="btn-toggle-codes" class="select-arrow-btn" disabled>▼</button>
                                     <div id="codes-dropdown" class="select-dropdown hidden"></div>
                                 </div>
-                                <div id="code-helper" class="code-helper">Exemples : 21, 27</div>
+                                <div id="code-helper" class="code-helper">Veuillez sélectionner une échelle</div>
                             </div>
                         </div>
                     </div>
