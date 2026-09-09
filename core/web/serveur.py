@@ -38,6 +38,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 import datetime
 from pathlib import Path
 
@@ -538,6 +539,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     msg = "data: [ERREUR] Délai dépassé (5 min). Le serveur SSSC ne répond pas. Vérifiez votre connexion réseau.\n\n"
                     self.wfile.write(msg.encode('utf-8'))
                     self.wfile.flush()
+                elif process.returncode != 0:
+                    msg = f"data: [ERREUR] Échec du téléchargement (code {process.returncode}).\n\n"
+                    self.wfile.write(msg.encode('utf-8'))
+                    self.wfile.flush()
                 else:
                     msg = f"data: [TERMINE] Code de retour: {process.returncode}\n\n"
                     self.wfile.write(msg.encode('utf-8'))
@@ -651,8 +656,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
         if parsed_path == '/api/restart':
             # Endpoint pour recharger les données (simule un redémarrage)
-            import time
-            import threading
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
             self.send_header('Access-Control-Allow-Origin', '*')
@@ -682,8 +685,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             
         elif parsed_path == '/api/shutdown':
             # Endpoint pour éteindre le serveur
-            import time
-            import threading
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
             self.send_header('Access-Control-Allow-Origin', '*')
