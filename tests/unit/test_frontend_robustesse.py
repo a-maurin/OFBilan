@@ -350,3 +350,13 @@ def test_no_duplicate_variable_declarations_frontend():
                     scopes[-1].add(var_name)
 
         assert not duplicates, f"Déclarations dupliquées détectées dans {js_filename} : {duplicates}"
+
+
+def test_code_geo_prefilled_liste_fermee():
+    """Vérifie que la liste des codes géographiques reste fermée lors d'un préremplissage."""
+    web_dir = Path(__file__).resolve().parents[2] / "core" / "web"
+    for js_filename in ("explorer.js", "app.js"):
+        content = (web_dir / js_filename).read_text(encoding="utf-8")
+        assert "prefilled: true" in content, f"Drapeau prefilled absent lors de l'application des paramètres dans {js_filename}"
+        assert "isPrefilled" in content, f"Vérification isPrefilled absente de {js_filename}"
+        assert "!isPrefilled && btnToggleCodes" in content, f"Garde d'ouverture automatique de liste absente dans {js_filename}"

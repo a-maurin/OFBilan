@@ -60,3 +60,42 @@ def test_merge_pej_faits_locations_of_prefix_and_numproc(tmp_path):
     assert row1["y_faits"] == 47.0
     assert row1["precision_loc"] == "GPS Fait (Exacte)"
     assert row1["NOM_COM"] == "Recey-sur-Ource"
+
+
+def test_merge_pej_faits_locations_uses_gdf_oscean(tmp_path, monkeypatch):
+    import core.common.chargeurs_donnees as cd
+
+    called = False
+
+    def mock_load_point_ctrl(*args, **kwargs):
+        nonlocal called
+        called = True
+        return pd.DataFrame()
+
+    monkeypatch.setattr(cd, "load_point_ctrl", mock_load_point_ctrl)
+
+    pej = pd.DataFrame([
+        {
+            "DC_ID": "2026-DC-001",
+            "NUMERO_PROCEDURE": "PROC-001",
+            "NOM_COM": np.nan,
+        }
+    ])
+
+    gdf_oscean = pd.DataFrame([
+        {
+            "dc_id": "2026-DC-001",
+            "code_pej": "PROC-001",
+            "nom_commun": "Dijon",
+            "x": 5.04,
+            "y": 47.32,
+        }
+    ])
+
+    out = cd.merge_pej_faits_locations(pej, tmp_path, "departement", "21", gdf_oscean=gdf_oscean)
+    assert not called
+    assert out.iloc[0]["NOM_COM"] == "Dijon"
+    assert out.iloc[0]["x_faits"] == 5.04
+    assert out.iloc[0]["y_faits"] == 47.32
+    assert out.iloc[0]["precision_loc"] == "Point de contrôle rattaché"
+

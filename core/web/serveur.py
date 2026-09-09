@@ -1340,7 +1340,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     from core.engine.orchestrateur_profils import _apply_restrict_geo_pnf, _coalesced_insee_for_pnf_mask
                     log = logging.getLogger(__name__)
                     if not df_pej.empty:
-                        df_pej = merge_pej_faits_locations(df_pej, project_root, echelle, code)
+                        df_pej = merge_pej_faits_locations(
+                            df_pej, project_root, echelle, code, gdf_oscean=df_pts_unfiltered
+                        )
                     df_pts, df_pej, df_pa, df_pve = _apply_restrict_geo_pnf(
                         df_pts, df_pej, df_pa, df_pve, project_root, log
                     )
@@ -1623,7 +1625,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 if not df_pej.empty:
                     try:
                         from core.common.chargeurs_donnees import merge_pej_faits_locations
-                        df_pej_loc = merge_pej_faits_locations(df_pej, project_root, echelle, code)
+                        df_pej_loc = merge_pej_faits_locations(
+                            df_pej, project_root, echelle, code, gdf_oscean=df_pts_unfiltered
+                        )
                         
                         # --- FALLBACK 1: COORDONNEES VIA df_pts_unfiltered ---
                         if not df_pts_unfiltered.empty and "dc_id" in df_pts_unfiltered.columns and "x" in df_pts_unfiltered.columns and "y" in df_pts_unfiltered.columns:

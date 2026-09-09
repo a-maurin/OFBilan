@@ -1601,7 +1601,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    selectEchelle.addEventListener('change', () => {
+    selectEchelle.addEventListener('change', (e) => {
+        const isPrefilled = Boolean(e && e.detail && e.detail.prefilled);
         const val = selectEchelle.value;
 
         if (!val) {
@@ -1616,24 +1617,24 @@ document.addEventListener('DOMContentLoaded', () => {
         if (btnToggleCodes) btnToggleCodes.disabled = false;
 
         if (val === 'departement') {
-            inputCode.value = '';
+            if (!isPrefilled) inputCode.value = '';
             inputCode.placeholder = 'ex : 21';
             codeHelper.textContent = 'Exemples : 21, 27, 39';
-            if (btnToggleCodes && codesDropdown && codesDropdown.classList.contains('hidden')) {
+            if (!isPrefilled && btnToggleCodes && codesDropdown && codesDropdown.classList.contains('hidden')) {
                 btnToggleCodes.click();
             }
         } else if (val === 'region') {
-            inputCode.value = '';
+            if (!isPrefilled) inputCode.value = '';
             inputCode.placeholder = 'ex : r27';
             codeHelper.textContent = 'Exemples : r27, r44';
-            if (btnToggleCodes && codesDropdown && codesDropdown.classList.contains('hidden')) {
+            if (!isPrefilled && btnToggleCodes && codesDropdown && codesDropdown.classList.contains('hidden')) {
                 btnToggleCodes.click();
             }
         } else if (val === 'bmi') {
-            inputCode.value = '';
+            if (!isPrefilled) inputCode.value = '';
             inputCode.placeholder = 'ex : BMI-NEC';
             codeHelper.textContent = 'Codes possibles : BMI-NEC, BMI-SO, BMI-SE, BMI-NO, BMI-IFE, BMI-IFO, BMI-TIP';
-            if (btnToggleCodes && codesDropdown && codesDropdown.classList.contains('hidden')) {
+            if (!isPrefilled && btnToggleCodes && codesDropdown && codesDropdown.classList.contains('hidden')) {
                 btnToggleCodes.click();
             }
         } else if (val === 'national') {
@@ -1648,6 +1649,10 @@ document.addEventListener('DOMContentLoaded', () => {
             codeHelper.textContent = 'Parc national de forêts';
             inputCode.disabled = true;
             if (btnToggleCodes) btnToggleCodes.disabled = true;
+        }
+
+        if (isPrefilled && codesDropdown) {
+            codesDropdown.classList.add('hidden');
         }
     });
 
@@ -1752,9 +1757,15 @@ document.addEventListener('DOMContentLoaded', () => {
             else if (code.startsWith('bmi')) selectEchelle.value = 'bmi';
             else selectEchelle.value = 'departement';
 
-            selectEchelle.dispatchEvent(new Event('change'));
             if (selectEchelle.value !== 'national') {
                 inputCode.value = settings.geo.code_geo_defaut;
+            }
+            selectEchelle.dispatchEvent(new CustomEvent('change', { detail: { prefilled: true } }));
+            if (codesDropdown) {
+                codesDropdown.classList.add('hidden');
+            }
+            if (document.activeElement === inputCode) {
+                inputCode.blur();
             }
         }
 

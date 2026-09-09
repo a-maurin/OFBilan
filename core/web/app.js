@@ -103,6 +103,24 @@ document.addEventListener('DOMContentLoaded', () => {
             if (setTechDebugEl && data && data.tech && typeof data.tech.mode_debug !== 'undefined') {
                 setTechDebugEl.checked = !!data.tech.mode_debug;
             }
+            if (data && data.geo && data.geo.code_geo_defaut) {
+                const code = data.geo.code_geo_defaut.toLowerCase();
+                if (code === 'fr') selectEchelle.value = 'national';
+                else if (code.startsWith('r')) selectEchelle.value = 'region';
+                else if (code.startsWith('bmi')) selectEchelle.value = 'bmi';
+                else selectEchelle.value = 'departement';
+
+                if (selectEchelle.value !== 'national') {
+                    inputCode.value = data.geo.code_geo_defaut;
+                }
+                selectEchelle.dispatchEvent(new CustomEvent('change', { detail: { prefilled: true } }));
+                if (codesDropdown) {
+                    codesDropdown.classList.add('hidden');
+                }
+                if (document.activeElement === inputCode) {
+                    inputCode.blur();
+                }
+            }
             if (data && data.geo && data.geo.annee_reference) {
                 const refYear = data.geo.annee_reference;
                 const mo = String(now.getMonth() + 1).padStart(2, '0');
@@ -625,7 +643,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Mise à jour dynamique de l'aide géographique
-    selectEchelle.addEventListener('change', () => {
+    selectEchelle.addEventListener('change', (e) => {
+        const isPrefilled = Boolean(e && e.detail && e.detail.prefilled);
         const val = selectEchelle.value;
         if (!val) {
             inputCode.value = '';
@@ -640,24 +659,24 @@ document.addEventListener('DOMContentLoaded', () => {
         if (btnToggleCodes) btnToggleCodes.disabled = false;
 
         if (val === 'departement') {
-            inputCode.value = '';
+            if (!isPrefilled) inputCode.value = '';
             inputCode.placeholder = 'ex : 21';
             codeHelper.textContent = 'Exemples : 21, 27, 39';
-            if (btnToggleCodes && codesDropdown && codesDropdown.classList.contains('hidden')) {
+            if (!isPrefilled && btnToggleCodes && codesDropdown && codesDropdown.classList.contains('hidden')) {
                 btnToggleCodes.click();
             }
         } else if (val === 'region') {
-            inputCode.value = '';
+            if (!isPrefilled) inputCode.value = '';
             inputCode.placeholder = 'ex : r27';
             codeHelper.textContent = 'Exemples : r27, r44';
-            if (btnToggleCodes && codesDropdown && codesDropdown.classList.contains('hidden')) {
+            if (!isPrefilled && btnToggleCodes && codesDropdown && codesDropdown.classList.contains('hidden')) {
                 btnToggleCodes.click();
             }
         } else if (val === 'bmi') {
-            inputCode.value = '';
+            if (!isPrefilled) inputCode.value = '';
             inputCode.placeholder = 'ex : BMI-NEC';
             codeHelper.textContent = 'Codes possibles : BMI-NEC, BMI-SO, BMI-SE, BMI-NO, BMI-IFE, BMI-IFO, BMI-TIP';
-            if (btnToggleCodes && codesDropdown && codesDropdown.classList.contains('hidden')) {
+            if (!isPrefilled && btnToggleCodes && codesDropdown && codesDropdown.classList.contains('hidden')) {
                 btnToggleCodes.click();
             }
         } else if (val === 'national') {
@@ -666,6 +685,9 @@ document.addEventListener('DOMContentLoaded', () => {
             codeHelper.textContent = 'Code national : FR';
             inputCode.disabled = true;
             if (btnToggleCodes) btnToggleCodes.disabled = true;
+        }
+        if (isPrefilled && codesDropdown) {
+            codesDropdown.classList.add('hidden');
         }
         renderGabaritsOptions();
     });

@@ -2628,6 +2628,7 @@ def merge_pej_faits_locations(
     natinf_list: list = [],
     log: Optional[logging.Logger] = None,
     gdf_faits: Optional[pd.DataFrame] = None,
+    gdf_oscean: Optional[pd.DataFrame] = None,
 ) -> pd.DataFrame:
     """
     Enrichit le tableau PEJ (ODS) avec les coordonnées WGS84 issues de la couche
@@ -2636,6 +2637,7 @@ def merge_pej_faits_locations(
     Utilise ``gpd.read_file()`` directement pour lire les colonnes natives du GPKG
     (``x_infrac`` / ``y_infrac`` / ``dossier``). Si ``natinf_list`` est fourni, seules
     les lignes GPKG dont le NATINF correspond sont conservées avant jointure.
+    ``gdf_oscean`` permet de réutiliser un jeu de points de contrôle déjà en mémoire.
     """
     lg = log or logger
     if pej is None or pej.empty or "DC_ID" not in pej.columns:
@@ -2803,7 +2805,7 @@ def merge_pej_faits_locations(
     missing = out["NOM_COM"].isna() if has_nom_com else pd.Series(True, index=out.index)
     if missing.any():
         try:
-            oscean_gdf = load_point_ctrl(root, echelle=echelle, code=code)
+            oscean_gdf = gdf_oscean if gdf_oscean is not None else load_point_ctrl(root, echelle=echelle, code=code)
             if not oscean_gdf.empty and "dc_id" in oscean_gdf.columns and "nom_commun" in oscean_gdf.columns:
                 oscean_dc = oscean_gdf[["dc_id", "nom_commun"]].dropna(subset=["nom_commun"]).copy()
                 oscean_dc["dc_id"] = oscean_dc["dc_id"].astype(str).apply(lambda val: re.sub(r"\.0$", "", str(val)) if pd.notna(val) else "")
@@ -2884,7 +2886,7 @@ def merge_pej_faits_locations(
     if missing_xy.any():
         # Fallback Niveau 2 : Point de contrôle rattaché (OSCEAN)
         try:
-            oscean_gdf = load_point_ctrl(root, echelle=echelle, code=code)
+            oscean_gdf = gdf_oscean if gdf_oscean is not None else load_point_ctrl(root, echelle=echelle, code=code)
             if not oscean_gdf.empty and "dc_id" in oscean_gdf.columns and "x" in oscean_gdf.columns and "y" in oscean_gdf.columns:
                 osc_valid = oscean_gdf.dropna(subset=["x", "y"]).copy()
                 osc_valid["dc_clean"] = osc_valid["dc_id"].astype(str).apply(lambda v: re.sub(r"\.0$", "", str(v)) if pd.notna(v) else "")
