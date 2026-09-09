@@ -66,10 +66,15 @@ def fix_header(py_file: Path) -> bool:
 
     # Supprimer l'ancien en-tête court s'il est au début
     remaining = lines[start_idx:]
-    while remaining and (remaining[0].strip().startswith("# Copyright") or remaining[0].strip() == "#"):
-        remaining.pop(0)
+    if remaining and remaining[0].strip().startswith("# Copyright"):
+        while remaining and (remaining[0].strip().startswith("#") or remaining[0].strip() == ""):
+            if remaining[0].strip().startswith('"""') or remaining[0].strip().startswith("'''"):
+                break
+            if remaining[0].strip().startswith("# ==") or remaining[0].strip().startswith("# --"):
+                break
+            remaining.pop(0)
 
-    new_content = shebang + FULL_HEADER + "".join(remaining)
+    new_content = shebang + FULL_HEADER + "".join(remaining).lstrip("\r\n")
     py_file.write_text(new_content, encoding="utf-8")
     return True
 

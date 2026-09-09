@@ -7,6 +7,13 @@
 # Ce programme est distribué dans l'espoir qu'il sera utile, mais SANS AUCUNE GARANTIE ;
 # sans même la garantie implicite de QUALITÉ MARCHANDE ou D'ADÉQUATION À UN USAGE PARTICULIER.
 # Voir la Licence Publique Générale GNU pour plus de détails.
+#
+# CONDITIONS SUPPLÉMENTAIRES D'ATTRIBUTION (SECTION 7(b) DE LA GPL v3) :
+# Conformément à la section 7(b) de la GNU GPL v3, vous devez expressément conserver
+# intactes et lisibles toutes les mentions d'auteur, notices de copyright et la présente
+# clause dans chaque fichier source ou interface utilisateur redistribué. Toute version modifiée
+# doit clairement indiquer qu'elle a été altérée et ne doit en aucun cas supprimer le nom
+# de l'auteur original (Aguirre MAURIN).
 
 """
 ========================================================================================
