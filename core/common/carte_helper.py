@@ -335,7 +335,7 @@ def _warn_qgis_unavailable_for_cartes(carto_dept: str, *, subprocess_failed: boo
         logger.warning(
             "Génération cartes échouée (QGIS introuvable et générateur Matplotlib en erreur) "
             "pour le département %s. Vérifiez l'installation QGIS ou les logs, puis : "
-            "scripts\\windows\\lancer_bilans_qgis.bat --profil global --cartes "
+            "scripts\\lancement\\lancer_bilans_qgis.bat --profil global --cartes "
             "--echelle departement --code %s ...",
             carto_dept,
             carto_dept,
@@ -343,7 +343,7 @@ def _warn_qgis_unavailable_for_cartes(carto_dept: str, *, subprocess_failed: boo
         return
     logger.warning(
         "PyQGIS non importable dans cet interpréteur : tentative via sous-processus QGIS "
-        "(ou générateur Matplotlib en secours, voir logs). Sinon : scripts\\windows\\lancer_bilans_qgis.bat --profil global --cartes "
+        "(ou générateur Matplotlib en secours, voir logs). Sinon : scripts\\lancement\\lancer_bilans_qgis.bat --profil global --cartes "
         "--echelle departement --code %s",
         carto_dept,
     )

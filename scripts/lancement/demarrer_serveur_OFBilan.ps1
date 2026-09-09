@@ -65,6 +65,10 @@ if ($serverSource) {
     Write-Host "Verification des mises a jour depuis le serveur..." -ForegroundColor Yellow
 
     if (Test-Path $serverSource) {
+        $isFirstRun = (-not (Test-Path $LocalAppDir)) -or ((Get-ChildItem $LocalAppDir -Force -ErrorAction SilentlyContinue | Measure-Object).Count -eq 0)
+        if ($isFirstRun) {
+            Write-Host "Premier lancement detecte : initialisation de la copie locale..." -ForegroundColor Cyan
+        }
         if (-not (Test-Path $LocalAppDir)) {
             [System.IO.Directory]::CreateDirectory($LocalAppDir) | Out-Null
         }
@@ -91,8 +95,7 @@ if ($serverSource) {
             ".pytest_cache",
             ".mypy_cache",
             ".ruff_cache",
-            (Join-Path $LocalAppDir "data\out"),
-            (Join-Path $serverSource "data\out")
+            "data"
         )
 
         $excludeFiles = @(
@@ -111,6 +114,7 @@ if ($serverSource) {
             "$LocalAppDir",
             "/MIR",
             "/FFT",
+            "/MT:8",
             "/R:1",
             "/W:1",
             "/XD"
@@ -118,7 +122,6 @@ if ($serverSource) {
             "/XF"
         ) + $excludeFiles + @(
             "/NDL",
-            "/NFL",
             "/NJH",
             "/NJS"
         )

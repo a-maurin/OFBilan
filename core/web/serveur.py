@@ -497,7 +497,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_header('Connection', 'keep-alive')
             self.end_headers()
             
-            script_path = SRC_DIR / "scripts" / "fetch_sources.py"
+            script_path = SRC_DIR / "scripts" / "donnees" / "fetch_sources.py"
+            if not script_path.exists():
+                script_path = SRC_DIR / "scripts" / "fetch_sources.py"
+
             import subprocess
             try:
                 process = subprocess.Popen(
@@ -508,15 +511,37 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     bufsize=1,
                     cwd=str(SRC_DIR)
                 )
+
+                _timeout_hit = threading.Event()
+
+                def _kill_on_timeout():
+                    import time
+                    time.sleep(300)
+                    if process.poll() is None:
+                        try:
+                            process.kill()
+                        except Exception:
+                            pass
+                        _timeout_hit.set()
+
+                t = threading.Thread(target=_kill_on_timeout, daemon=True)
+                t.start()
+
                 for line in iter(process.stdout.readline, ''):
                     if not line: break
                     msg = f"data: {line.strip()}\n\n"
                     self.wfile.write(msg.encode('utf-8'))
                     self.wfile.flush()
                 process.wait()
-                msg = f"data: [TERMINE] Code de retour: {process.returncode}\n\n"
-                self.wfile.write(msg.encode('utf-8'))
-                self.wfile.flush()
+
+                if _timeout_hit.is_set():
+                    msg = "data: [ERREUR] Délai dépassé (5 min). Le serveur SSSC ne répond pas. Vérifiez votre connexion réseau.\n\n"
+                    self.wfile.write(msg.encode('utf-8'))
+                    self.wfile.flush()
+                else:
+                    msg = f"data: [TERMINE] Code de retour: {process.returncode}\n\n"
+                    self.wfile.write(msg.encode('utf-8'))
+                    self.wfile.flush()
             except Exception as e:
                 msg = f"data: [ERREUR] {str(e)}\n\n"
                 self.wfile.write(msg.encode('utf-8'))

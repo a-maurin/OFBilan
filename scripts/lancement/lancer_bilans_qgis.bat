@@ -72,7 +72,7 @@ if exist "!TMP_ROOT!\bin\o4w_env.bat" call :configure_osgeo4w_env
 
 :run_bilans
 cd /d "%PROJECT_ROOT%"
-set "PYTHONPATH=%CD%\src;%PYTHONPATH%"
+set "PYTHONPATH=%CD%;%PYTHONPATH%"
 echo.
 echo Python QGIS : !QGIS_PYTHON!
 echo.
