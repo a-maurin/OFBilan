@@ -508,8 +508,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
             timeout_seconds = int(os.environ.get("OFBILAN_UPDATE_TIMEOUT", "1800"))
             child_env = os.environ.copy()
-            child_env.pop("PYTHONHOME", None)
-            child_env.pop("PYTHONPATH", None)
             try:
                 process = subprocess.Popen(
                     [sys.executable, "-u", str(script_path)],
