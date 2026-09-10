@@ -214,13 +214,23 @@
         margin-bottom: 0px !important;
     }
 
-    #map, #map *, .leaflet-overlay-pane, .print-canvas-img {
+    #map, #map *, .leaflet-overlay-pane, .print-canvas-img, .print-canvas-snapshot {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    #map svg {
+        display: block !important;
+        visibility: visible !important;
+    }
+
+    #map svg path {
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
     }
 
     #map canvas, .leaflet-pane canvas, .leaflet-overlay-pane canvas, .leaflet-zoom-animated canvas, .leaflet-heatmap-layer,
-    #map img.leaflet-tile, .leaflet-tile-pane img, .leaflet-tile {
+    #map img.leaflet-tile, .leaflet-tile-pane img, .leaflet-tile, .print-canvas-snapshot {
         display: block !important;
         opacity: 1 !important;
         visibility: visible !important;

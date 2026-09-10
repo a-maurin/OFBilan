@@ -1670,13 +1670,18 @@ document.addEventListener('DOMContentLoaded', () => {
     maskPane.style.zIndex = '410';
     maskPane.style.pointerEvents = 'none';
 
+    const boundaryPane = map.createPane('boundaryPane');
+    boundaryPane.style.zIndex = '415';
+    boundaryPane.style.pointerEvents = 'none';
+
     const choroplethPane = map.createPane('choroplethPane');
     choroplethPane.style.zIndex = '420';
 
     const entityMarkersPane = map.createPane('entityMarkersPane');
     entityMarkersPane.style.zIndex = '650';
 
-    const maskRenderer = L.canvas({ pane: 'maskPane' });
+    const maskRenderer = L.svg({ pane: 'maskPane' });
+    const boundaryRenderer = L.svg({ pane: 'boundaryPane' });
     const choroplethRenderer = L.svg({ pane: 'choroplethPane' });
     const entityRenderer = L.canvas({ pane: 'entityMarkersPane' });
 
@@ -3550,7 +3555,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     hasGeojson = true;
                 }
 
-                const currentEchelle = document.getElementById('echelle-select')?.value || '';
+                const currentEchelle = document.getElementById('echelle')?.value || '';
                 if ((!currentPerimeterGeojson.features || currentPerimeterGeojson.features.length === 0) && !['pnf', 'departement'].includes(currentEchelle)) {
                     currentPerimeterGeojson = currentBoundaryGeojson;
                 }
@@ -3560,6 +3565,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     // Discret, élégant et parfaitement intégré à la charte de l'explorateur (1.8px, #003A76, opacité 0.8)
                     boundaryLayer = L.geoJSON(currentPerimeterGeojson, {
                         interactive: false,
+                        pane: 'boundaryPane',
+                        renderer: boundaryRenderer,
                         style: function(feature) {
                             let color = '#003A76';
                             let weight = 1.8;
@@ -3596,6 +3603,8 @@ document.addEventListener('DOMContentLoaded', () => {
                                 fillColor: fillColor,
                                 fillOpacity: fillOpacity,
                                 dashArray: dashArray,
+                                pane: 'boundaryPane',
+                                renderer: boundaryRenderer,
                                 interactive: false
                             };
                         }

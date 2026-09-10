@@ -359,4 +359,30 @@ def test_code_geo_prefilled_liste_fermee():
         content = (web_dir / js_filename).read_text(encoding="utf-8")
         assert "prefilled: true" in content, f"Drapeau prefilled absent lors de l'application des paramètres dans {js_filename}"
         assert "isPrefilled" in content, f"Vérification isPrefilled absente de {js_filename}"
-        assert "!isPrefilled && btnToggleCodes" in content, f"Garde d'ouverture automatique de liste absente dans {js_filename}"
+        assert "!isPrefilled && btnToggleCodes" in content, f"Garde d'ouverture automatique de liste absente dans {js_filename}"
+
+
+def test_map_boundary_and_mask_svg_robustesse():
+    """Vérifie la configuration vectorielle SVG des limites et du masque pour l'impression."""
+    web_dir = Path(__file__).resolve().parents[2] / "core" / "web"
+    explorer_js = (web_dir / "explorer.js").read_text(encoding="utf-8")
+    print_css = (web_dir / "print.css").read_text(encoding="utf-8")
+
+    # 1. Vérifier la présence du pane boundaryPane et des renderers SVG
+    assert "map.createPane('boundaryPane')" in explorer_js
+    assert "boundaryPane.style.zIndex = '415'" in explorer_js
+    assert "maskRenderer = L.svg({ pane: 'maskPane' })" in explorer_js
+    assert "boundaryRenderer = L.svg({ pane: 'boundaryPane' })" in explorer_js
+
+    # 2. Vérifier l'affectation de boundaryPane et boundaryRenderer à boundaryLayer
+    assert "pane: 'boundaryPane'" in explorer_js
+    assert "renderer: boundaryRenderer" in explorer_js
+
+    # 3. Vérifier la correction du sélecteur d'échelle
+    assert "document.getElementById('echelle')?.value" in explorer_js
+    assert "document.getElementById('echelle-select')" not in explorer_js
+
+    # 4. Vérifier les règles d'impression SVG et snapshot dans print.css
+    assert "#map svg" in print_css
+    assert "#map svg path" in print_css
+    assert ".print-canvas-snapshot" in print_css
