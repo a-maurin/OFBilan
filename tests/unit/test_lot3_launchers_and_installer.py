@@ -42,13 +42,12 @@ def test_no_pip_install_in_launchers():
     assert "pip install" not in ps1_content
 
 
-def test_no_mklink_junction_in_installer():
+def test_mklink_junction_in_installer():
     ps1_installer = (PROJECT_ROOT / "scripts" / "deploiement" / "installer_sur_ce_poste.ps1").read_text(encoding="utf-8")
-    bat_installer = (PROJECT_ROOT / "scripts" / "deploiement" / "installer_sur_ce_poste.bat").read_text(encoding="utf-8")
 
-    assert "mklink" not in ps1_installer
-    assert "/J" not in ps1_installer
-    assert "mklink" not in bat_installer
+    assert "mklink" in ps1_installer
+    assert "/J" in ps1_installer
+    assert "targetPluginDir" in ps1_installer
 
 
 def test_stub_config_and_resolver_logic(tmp_path):

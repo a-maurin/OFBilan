@@ -52,18 +52,23 @@ def verifier_et_installer_accelerateurs(log_callback: Optional[Callable[[str], N
         log_callback(f"  [INFO] Dossier de bibliothèques portables injecté : {lib_path}")
 
     targets = [
-        ("pyogrio", "pyogrio"),
-        ("calamine", "python-calamine"),
+        ("pyogrio", "pyogrio", "Accélérateur spatial"),
+        ("calamine", "python-calamine", "Accélérateur de lecture classeur"),
+        ("odf", "odfpy", "Lecteur de classeurs ODS"),
+        ("pypdf", "pypdf", "Gestionnaire de documents PDF"),
     ]
 
-    for mod_name, pkg_name in targets:
+    for item in targets:
+        mod_name, pkg_name = item[0], item[1]
+        role = item[2] if len(item) > 2 else pkg_name
         if importlib.util.find_spec(mod_name) is None:
-            msg = f"  [INFO] Accélérateur optionnel '{pkg_name}' non présent (utilisation du moteur standard)."
+            msg = f"  [INFO] Module optionnel '{pkg_name}' ({role}) non détecté."
             logger.info(msg)
             if log_callback:
                 log_callback(msg)
         else:
-            msg_ok = f"  [OK] Accélérateur '{pkg_name}' détecté et actif."
+            msg_ok = f"  [OK] Module '{pkg_name}' ({role}) détecté et actif."
             logger.info(msg_ok)
             if log_callback:
                 log_callback(msg_ok)
+

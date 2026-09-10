@@ -21,6 +21,12 @@
 import sys
 import warnings
 
+try:
+    from core.common.verifier_dependances import injecter_lib_portable
+    injecter_lib_portable()
+except Exception:
+    pass
+
 _PANDAS_CONFIGURED = False
 
 

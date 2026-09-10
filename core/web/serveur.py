@@ -503,6 +503,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 script_path = SRC_DIR / "scripts" / "fetch_sources.py"
 
             import subprocess
+            import queue
+            import time
+
+            timeout_seconds = int(os.environ.get("OFBILAN_UPDATE_TIMEOUT", "1800"))
+            child_env = os.environ.copy()
+            child_env.pop("PYTHONHOME", None)
+            child_env.pop("PYTHONPATH", None)
             try:
                 process = subprocess.Popen(
                     [sys.executable, "-u", str(script_path)],
@@ -510,14 +517,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     stderr=subprocess.STDOUT,
                     text=True,
                     bufsize=1,
-                    cwd=str(SRC_DIR)
+                    cwd=str(SRC_DIR),
+                    env=child_env
                 )
 
                 _timeout_hit = threading.Event()
 
                 def _kill_on_timeout():
-                    import time
-                    time.sleep(300)
+                    time.sleep(timeout_seconds)
                     if process.poll() is None:
                         try:
                             process.kill()
@@ -525,18 +532,62 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                             pass
                         _timeout_hit.set()
 
-                t = threading.Thread(target=_kill_on_timeout, daemon=True)
-                t.start()
+                t_timeout = threading.Thread(target=_kill_on_timeout, daemon=True)
+                t_timeout.start()
 
-                for line in iter(process.stdout.readline, ''):
-                    if not line: break
-                    msg = f"data: {line.strip()}\n\n"
-                    self.wfile.write(msg.encode('utf-8'))
-                    self.wfile.flush()
+                out_queue = queue.Queue()
+
+                def _reader():
+                    for line in iter(process.stdout.readline, ''):
+                        if not line:
+                            break
+                        out_queue.put(line)
+                    out_queue.put(None)
+
+                t_reader = threading.Thread(target=_reader, daemon=True)
+                t_reader.start()
+
+                last_line_time = time.time()
+                last_keepalive_time = time.time()
+                pulse_emitted = False
+
+                while True:
+                    try:
+                        line = out_queue.get(timeout=2.0)
+                    except queue.Empty:
+                        line = Ellipsis
+
+                    now = time.time()
+
+                    if line is None:
+                        break
+                    elif line is not Ellipsis:
+                        msg = f"data: {line.strip()}\n\n"
+                        self.wfile.write(msg.encode('utf-8'))
+                        self.wfile.flush()
+                        last_line_time = now
+                        last_keepalive_time = now
+                        pulse_emitted = False
+                    else:
+                        if now - last_keepalive_time >= 15.0:
+                            self.wfile.write(b": keepalive\n\n")
+                            self.wfile.flush()
+                            last_keepalive_time = now
+
+                        if now - last_line_time >= 30.0 and not pulse_emitted:
+                            msg = "data: [PATIENTEZ] Téléchargement en cours (transfert volumineux)...\n\n"
+                            self.wfile.write(msg.encode('utf-8'))
+                            self.wfile.flush()
+                            pulse_emitted = True
+
+                    if process.poll() is not None and out_queue.empty():
+                        break
+
                 process.wait()
 
                 if _timeout_hit.is_set():
-                    msg = "data: [ERREUR] Délai dépassé (5 min). Le serveur SSSC ne répond pas. Vérifiez votre connexion réseau.\n\n"
+                    mins = max(1, timeout_seconds // 60)
+                    msg = f"data: [ERREUR] Délai dépassé ({mins} min). Le serveur SSSC ne répond pas. Vérifiez votre connexion réseau.\n\n"
                     self.wfile.write(msg.encode('utf-8'))
                     self.wfile.flush()
                 elif process.returncode != 0:
@@ -549,17 +600,26 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     self.wfile.flush()
             except Exception as e:
                 msg = f"data: [ERREUR] {str(e)}\n\n"
-                self.wfile.write(msg.encode('utf-8'))
-                self.wfile.flush()
+                try:
+                    self.wfile.write(msg.encode('utf-8'))
+                    self.wfile.flush()
+                except Exception:
+                    pass
             return
 
         if parsed_path == "/api/check-sources":
             sources_dir = SRC_DIR / "data" / "sources"
             needs_update = True
             if sources_dir.exists():
-                items = [p for p in sources_dir.iterdir() if p.name != ".gitkeep"]
-                if items:
+                marker_file = sources_dir / ".download_complete"
+                if marker_file.exists():
                     needs_update = False
+                else:
+                    sig_dir = sources_dir / "sig"
+                    has_sig = sig_dir.is_dir() and any(sig_dir.iterdir())
+                    has_pve = any(sources_dir.glob("Stats_PVe*.xlsx"))
+                    if has_sig and has_pve:
+                        needs_update = False
             self.send_response(200)
             self.send_header('Content-Type', 'application/json; charset=utf-8')
             self.send_header('Cache-Control', 'no-cache')

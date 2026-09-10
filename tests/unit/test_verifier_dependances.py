@@ -23,3 +23,14 @@ def test_verifier_et_installer_accelerateurs():
     verifier_et_installer_accelerateurs(log_callback=logs.append)
     # Vérifie que la fonction s'exécute sans lever d'exception
     assert isinstance(logs, list)
+    # Vérifie que odfpy et pypdf sont bien détectés
+    assert any("odfpy" in log and "[OK]" in log for log in logs)
+    assert any("pypdf" in log and "[OK]" in log for log in logs)
+
+
+def test_modules_portables_charges():
+    import odf
+    import pypdf
+    assert odf is not None
+    assert pypdf is not None
+

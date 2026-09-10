@@ -33,10 +33,10 @@ from core.parametres_utilisateur import (
 )
 
 
-def test_get_qgis_env_cleans_parasite_variables(tmp_path):
-    os.environ["CONDA_PREFIX"] = "C:\\Miniconda"
-    os.environ["_CONDA_ROOT"] = "C:\\Miniconda"
-    os.environ["PYTHONHOME"] = "C:\\CustomPython"
+def test_get_qgis_env_cleans_parasite_variables(tmp_path, monkeypatch):
+    monkeypatch.setenv("CONDA_PREFIX", "C:\\Miniconda")
+    monkeypatch.setenv("_CONDA_ROOT", "C:\\Miniconda")
+    monkeypatch.setenv("PYTHONHOME", "C:\\CustomPython")
 
     dummy_py = tmp_path / "bin" / "python.exe"
     dummy_py.parent.mkdir(parents=True)

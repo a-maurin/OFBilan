@@ -16,6 +16,14 @@
 # de l'auteur original (Aguirre MAURIN).
 
 import importlib.util
+from pathlib import Path
+import sys
+
+# Injection du dossier des bibliothèques portables lib/
+_project_root = Path(__file__).resolve().parents[2]
+_lib_dir = _project_root / "lib"
+if _lib_dir.is_dir() and str(_lib_dir) not in sys.path:
+    sys.path.append(str(_lib_dir))
 
 libs = [
     "pyogrio",
@@ -24,13 +32,15 @@ libs = [
     "fiona",
     "openpyxl",
     "odf",
+    "pypdf",
     "geopandas",
     "pandas"
 ]
 
-print("\n=== DIAGNOSTIC DES BIBLIOTHÈQUES INTÉGRÉES ===")
+print("\n=== Diagnostic des bibliothèques intégrées ===")
 for lib in libs:
     spec = importlib.util.find_spec(lib)
     status = "OK" if spec is not None else "MANQUANT"
     print(f"  [{status}] {lib}")
 print("===============================================\n")
+

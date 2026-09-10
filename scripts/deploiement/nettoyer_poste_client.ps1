@@ -140,11 +140,16 @@ if (Test-Path -LiteralPath $profilesBase) {
         $pluginDir = Join-Path $p.FullName "python\plugins\OFBilan"
         if (Test-Path -LiteralPath $pluginDir) {
             try {
-                Remove-Item -LiteralPath $pluginDir -Recurse -Force -ErrorAction Stop
-                Write-Host "  [OK] Relais supprime dans le profil : $($p.Name)" -ForegroundColor Green
+                $dirInfo = Get-Item -LiteralPath $pluginDir -Force -ErrorAction SilentlyContinue
+                if ($dirInfo -and ($dirInfo.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+                    [System.IO.Directory]::Delete($pluginDir)
+                } else {
+                    Remove-Item -LiteralPath $pluginDir -Recurse -Force -ErrorAction Stop
+                }
+                Write-Host "  [OK] Extension / jonction supprimee dans le profil : $($p.Name)" -ForegroundColor Green
                 $removedRelays++
             } catch {
-                Write-Host "  [ATTENTION] Impossible de supprimer le relais dans $($p.Name) : $_" -ForegroundColor Red
+                Write-Host "  [ATTENTION] Impossible de supprimer l'extension dans $($p.Name) : $_" -ForegroundColor Red
             }
         }
     }

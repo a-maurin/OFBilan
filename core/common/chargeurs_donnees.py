@@ -60,6 +60,13 @@ except ImportError:
 import pandas as pd
 from core import configurer_pandas_si_present
 configurer_pandas_si_present()
+
+try:
+    from core.common.verifier_dependances import injecter_lib_portable
+    injecter_lib_portable()
+except Exception:
+    pass
+
 import numpy as np
 import re
 
@@ -478,7 +485,18 @@ def _read_spreadsheet(path: Path, *, dtype=str) -> pd.DataFrame:
                 exc,
             )
         logger.info("Lecture ODS en cours (peut prendre ~1 min) : %s", path.name)
-        return pd.read_excel(path, dtype=dtype, engine="odf")
+        try:
+            return pd.read_excel(path, dtype=dtype, engine="odf")
+        except (ImportError, ModuleNotFoundError) as exc:
+            logger.error(
+                "Lecture ODS impossible (%s) : le module 'odfpy' est manquant. "
+                "Vérifiez que le dossier 'lib/' est synchronisé ou enregistrez le classeur en .xlsx.",
+                path.name,
+            )
+            raise RuntimeError(
+                f"Module 'odfpy' manquant pour lire le classeur ODS '{path.name}'. "
+                f"Vérifiez la présence du dossier 'lib/' ou enregistrez le fichier en .xlsx."
+            ) from exc
     if suffix == ".xlsx":
         return pd.read_excel(path, dtype=dtype, engine="openpyxl")
     raise ValueError(f"Format de classeur non pris en charge : {path}")
@@ -843,7 +861,14 @@ def load_pej(
         if cached_df is not None:
             df = cached_df.copy()
         else:
-            df = _read_spreadsheet(path)
+            try:
+                df = _read_spreadsheet(path)
+            except Exception as exc:
+                logger.error("Échec de la lecture du classeur PEJ (%s) : %s", path.name, exc)
+                df = pd.DataFrame()
+            if df.empty:
+                _PEJ_RAW_CACHE[path] = pd.DataFrame()
+                return pd.DataFrame()
             df.columns = pd.Index([str(c).strip().upper() for c in df.columns])
             # Alias pour compatibilité si le classeur utilise "NATINF" au lieu de "NATINF_PEJ"
             if "NATINF" in df.columns and "NATINF_PEJ" not in df.columns:
@@ -971,7 +996,14 @@ def load_pa(
         if cached_df is not None:
             df = cached_df.copy()
         else:
-            df = _read_spreadsheet(path)
+            try:
+                df = _read_spreadsheet(path)
+            except Exception as exc:
+                logger.error("Échec de la lecture du classeur PA (%s) : %s", path.name, exc)
+                df = pd.DataFrame()
+            if df.empty:
+                _PA_RAW_CACHE[path] = pd.DataFrame()
+                return pd.DataFrame()
             df.columns = pd.Index([str(c).strip().upper() for c in df.columns])
             df["DATE_CONTROLE"] = safe_to_datetime(df["DATE_CONTROLE"])
             df["DATE_DOSSIER"] = safe_to_datetime(df["DATE_DOSSIER"])

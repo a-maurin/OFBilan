@@ -46,6 +46,7 @@ LOCAL_ROOT = Path(__file__).resolve().parents[2]
 LOCAL_SOURCES = LOCAL_ROOT / "data" / "sources"
 LOCAL_SOURCES_SIG = LOCAL_SOURCES / "sig"
 ARCHIVE_DIR = LOCAL_ROOT / "data" / "sources_archive"
+MARKER_FILE = LOCAL_SOURCES / ".download_complete"
 
 def archive_existing_sources():
     if not LOCAL_SOURCES.exists():
@@ -199,12 +200,24 @@ def fetch_infrac_non_localises():
 def main():
     print("Démarrage de la récupération automatique des sources...")
     
+    if MARKER_FILE.exists():
+        try:
+            MARKER_FILE.unlink()
+        except OSError:
+            pass
+
     archive_existing_sources()
     fetch_pve()
     fetch_pej_pa()
     fetch_sig()
     fetch_infrac_non_localises()
     
+    try:
+        LOCAL_SOURCES.mkdir(parents=True, exist_ok=True)
+        MARKER_FILE.write_text(datetime.now().isoformat(), encoding="utf-8")
+    except OSError:
+        pass
+
     print("\nTerminé avec succès.")
 
 if __name__ == "__main__":
