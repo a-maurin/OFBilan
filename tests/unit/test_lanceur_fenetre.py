@@ -168,11 +168,15 @@ def test_maximiser_fenetre_windows_worker_trouve_et_maximise():
         return 1
     mock_user32.EnumWindows.side_effect = fake_enum_windows
 
+    mock_windll = MagicMock()
+    mock_windll.user32 = mock_user32
+    mock_windll.kernel32 = mock_kernel32
+
     # Exécution synchrone du worker en interceptant Thread.start
     mock_thread_inst = MagicMock()
     with patch("core.web.lanceur_fenetre.os.name", "nt"), \
-         patch("ctypes.windll.user32", mock_user32), \
-         patch("ctypes.windll.kernel32", mock_kernel32), \
+         patch.object(ctypes, "windll", mock_windll, create=True), \
+         patch.object(ctypes, "WINFUNCTYPE", getattr(ctypes, "WINFUNCTYPE", ctypes.CFUNCTYPE), create=True), \
          patch("threading.Thread", return_value=mock_thread_inst):
         _maximiser_fenetre_windows(titre_partiel="OFBilan", delai_max_sec=1.0)
         # Appel direct du worker transmis au thread
@@ -180,7 +184,95 @@ def test_maximiser_fenetre_windows_worker_trouve_et_maximise():
         worker_func()
 
     mock_user32.ShowWindowAsync.assert_called_once_with(1001, 3)
+    mock_user32.PostMessageW.assert_called_once_with(1001, 0x0112, 0xF030, 0)
     mock_user32.SetForegroundWindow.assert_called_once_with(1001)
     mock_kernel32.CloseHandle.assert_called_once_with(100)
+
+
+def test_maximiser_fenetre_windows_ignore_onglets_parasites():
+    """Vérifie que les fenêtres de navigateur tierces (ex. onglet GitHub du projet) sont ignorées."""
+    from core.web.lanceur_fenetre import _maximiser_fenetre_windows
+    import ctypes
+
+    mock_user32 = MagicMock()
+    mock_kernel32 = MagicMock()
+
+    mock_user32.IsWindowVisible.return_value = 1
+    mock_user32.GetWindowTextLengthW.return_value = 45
+
+    def fake_get_text(hwnd, buf, max_len):
+        buf.value = "chore: commit · a-maurin/OFBilan · GitHub"
+        return len(buf.value)
+    mock_user32.GetWindowTextW.side_effect = fake_get_text
+
+    def fake_enum_windows(cb, lparam):
+        cb(2001, lparam)
+        return 1
+    mock_user32.EnumWindows.side_effect = fake_enum_windows
+
+    mock_windll = MagicMock()
+    mock_windll.user32 = mock_user32
+    mock_windll.kernel32 = mock_kernel32
+
+    mock_thread_inst = MagicMock()
+    with patch("core.web.lanceur_fenetre.os.name", "nt"), \
+         patch.object(ctypes, "windll", mock_windll, create=True), \
+         patch.object(ctypes, "WINFUNCTYPE", getattr(ctypes, "WINFUNCTYPE", ctypes.CFUNCTYPE), create=True), \
+         patch("threading.Thread", return_value=mock_thread_inst):
+        _maximiser_fenetre_windows(titre_partiel="OFBilan", delai_max_sec=0.2)
+        worker_func = threading.Thread.call_args[1]["target"]
+        worker_func()
+
+    mock_user32.ShowWindowAsync.assert_not_called()
+
+
+def test_maximiser_fenetre_windows_trouve_loading_html():
+    """Vérifie la détection et maximisation d'une fenêtre de chargement."""
+    from core.web.lanceur_fenetre import _maximiser_fenetre_windows
+    import ctypes
+
+    mock_user32 = MagicMock()
+    mock_kernel32 = MagicMock()
+
+    mock_user32.IsWindowVisible.return_value = 1
+    mock_user32.GetWindowTextLengthW.return_value = 23
+
+    def fake_get_text(hwnd, buf, max_len):
+        buf.value = "OFBilan - Chargement..."
+        return len(buf.value)
+    mock_user32.GetWindowTextW.side_effect = fake_get_text
+
+    def fake_get_pid(hwnd, pid_ref):
+        pid_ref._obj.value = 5678
+        return 1
+    mock_user32.GetWindowThreadProcessId.side_effect = fake_get_pid
+
+    mock_kernel32.OpenProcess.return_value = 200
+    def fake_query_img(hproc, flags, buf, size_ref):
+        buf.value = r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+        return 1
+    mock_kernel32.QueryFullProcessImageNameW.side_effect = fake_query_img
+
+    def fake_enum_windows(cb, lparam):
+        cb(3001, lparam)
+        return 1
+    mock_user32.EnumWindows.side_effect = fake_enum_windows
+
+    mock_windll = MagicMock()
+    mock_windll.user32 = mock_user32
+    mock_windll.kernel32 = mock_kernel32
+
+    mock_thread_inst = MagicMock()
+    with patch("core.web.lanceur_fenetre.os.name", "nt"), \
+         patch.object(ctypes, "windll", mock_windll, create=True), \
+         patch.object(ctypes, "WINFUNCTYPE", getattr(ctypes, "WINFUNCTYPE", ctypes.CFUNCTYPE), create=True), \
+         patch("threading.Thread", return_value=mock_thread_inst):
+        _maximiser_fenetre_windows(titre_partiel="OFBilan", delai_max_sec=1.0)
+        worker_func = threading.Thread.call_args[1]["target"]
+        worker_func()
+
+    mock_user32.ShowWindowAsync.assert_called_once_with(3001, 3)
+    mock_user32.PostMessageW.assert_called_once_with(3001, 0x0112, 0xF030, 0)
+
 
 

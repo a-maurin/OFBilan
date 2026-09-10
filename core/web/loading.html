@@ -107,6 +107,14 @@ de l'auteur original (Aguirre MAURIN).
     </div>
 
     <script>
+        // Redimensionnement plein écran de secours pour le mode application dédié
+        try {
+            if (window.screen) {
+                window.moveTo(0, 0);
+                window.resizeTo(window.screen.availWidth, window.screen.availHeight);
+            }
+        } catch (e) {}
+
         const urlParams = new URLSearchParams(window.location.search);
         let port = urlParams.get('port');
         if (!port && window.location.port) {

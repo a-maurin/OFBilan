@@ -312,7 +312,6 @@ def generer_archive_diagnostic(nb_lignes_echantillon: int = NB_LIGNES_ECHANTILLO
 
         # 2. Journal du serveur web
         try:
-            from core.chemins_projet import get_app_data_dir
             server_log = get_app_data_dir() / "logs" / "serveur_web.log"
             if server_log.is_file():
                 zf.writestr("logs/serveur_web.log", server_log.read_bytes())

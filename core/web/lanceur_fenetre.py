@@ -32,7 +32,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
-def _maximiser_fenetre_windows(titre_partiel: str = "OFBilan", delai_max_sec: float = 6.0) -> None:
+def _maximiser_fenetre_windows(titre_partiel: str = "OFBilan", delai_max_sec: float = 15.0) -> None:
     """Surveille l'apparition de la fenêtre applicative sous Windows pour forcer sa maximisation."""
     if os.name != "nt":
         return
@@ -46,6 +46,8 @@ def _maximiser_fenetre_windows(titre_partiel: str = "OFBilan", delai_max_sec: fl
             user32 = ctypes.windll.user32
             kernel32 = ctypes.windll.kernel32
             sw_maximize = 3
+            wm_syscommand = 0x0112
+            sc_maximize = 0xF030
 
             wndenumproc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
             nav_exes = ("msedge.exe", "chrome.exe", "chromium.exe", "brave.exe")
@@ -63,7 +65,21 @@ def _maximiser_fenetre_windows(titre_partiel: str = "OFBilan", delai_max_sec: fl
 
                     buf = ctypes.create_unicode_buffer(length + 1)
                     user32.GetWindowTextW(hwnd, buf, length + 1)
-                    if titre_partiel.lower() not in buf.value.lower():
+                    titre_clean = buf.value.strip().lower()
+
+                    # Exclusion stricte des fenêtres parasites (onglets GitHub, moteurs de recherche)
+                    if any(parasite in titre_clean for parasite in ("github", "gitlab", "google", "bing", "stackoverflow")):
+                        return True
+
+                    # Détection de la cible OFBilan ou de la page de démarrage en cours de chargement
+                    est_cible = (
+                        titre_clean == titre_partiel.lower()
+                        or titre_clean.startswith(f"{titre_partiel.lower()} ")
+                        or titre_clean.startswith(f"{titre_partiel.lower()}-")
+                        or "loading.html" in titre_clean
+                        or "explorer.html" in titre_clean
+                    )
+                    if not est_cible:
                         return True
 
                     pid = wintypes.DWORD()
@@ -82,6 +98,9 @@ def _maximiser_fenetre_windows(titre_partiel: str = "OFBilan", delai_max_sec: fl
                                 kernel32.CloseHandle(h_proc)
 
                     user32.ShowWindowAsync(hwnd, sw_maximize)
+                    post_message = getattr(user32, "PostMessageW", None)
+                    if post_message:
+                        post_message(hwnd, wm_syscommand, sc_maximize, 0)
                     user32.SetForegroundWindow(hwnd)
                     fenetre_trouvee = True
                     return False

@@ -19,7 +19,7 @@ import pandas as pd
 import geopandas as gpd
 from pathlib import Path
 
-root = Path(r"c:\Users\aguirre.maurin\Documents\GitHub\OFBilan-Plugin-QGIS")
+root = Path(r"c:\Users\aguirre.maurin\Documents\GitHub\OFBilan")
 sources = root / "data" / "sources"
 
 # 1. PVe

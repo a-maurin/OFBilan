@@ -49,6 +49,15 @@ Composants principaux :
     <link rel="stylesheet" href="vendor/MarkerCluster.css" />
     <link rel="stylesheet" href="vendor/MarkerCluster.Default.css" />
     <link rel="stylesheet" href="vendor/driver.css" />
+    <script>
+        // Redimensionnement plein écran de secours pour le mode application dédié
+        try {
+            if (window.screen) {
+                window.moveTo(0, 0);
+                window.resizeTo(window.screen.availWidth, window.screen.availHeight);
+            }
+        } catch (e) {}
+    </script>
     <style>
         @keyframes dataFadeIn {
             from {

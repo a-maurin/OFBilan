@@ -37,10 +37,13 @@ def is_writable(path: Path) -> bool:
 
 def is_network_path(path: Path) -> bool:
     """Détecte si un chemin est sur un partage réseau (UNC ou lecteur distant)."""
+    raw_str = str(path)
+    if raw_str.startswith(("\\\\", "//")):
+        return True
     try:
         resolved = str(path.resolve())
     except Exception:
-        resolved = str(path)
+        resolved = raw_str
     if resolved.startswith(("\\\\", "//")):
         return True
     if os.name == "nt":

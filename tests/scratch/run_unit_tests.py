@@ -19,7 +19,7 @@ import pytest
 import sys
 from pathlib import Path
 
-root = Path(r"c:\Users\aguirre.maurin\Documents\GitHub\OFBilan-Plugin-QGIS")
+root = Path(r"c:\Users\aguirre.maurin\Documents\GitHub\OFBilan")
 sys.path.insert(0, str(root))
 
 res = pytest.main([str(root / "tests" / "unit" / "test_agent_service_filtering.py"), "-v"])
