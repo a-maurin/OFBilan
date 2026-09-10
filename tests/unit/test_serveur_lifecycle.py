@@ -114,6 +114,36 @@ def test_shutdown_endpoint_contract():
     assert "/api/shutdown" in source_post
 
 
+def test_shutdown_execution_no_name_error(monkeypatch):
+    """Vérifie que la fonction interne shutdown ne lève aucun NameError sur time."""
+    import io
+    from unittest.mock import MagicMock
+
+    handler = serveur_mod.Handler.__new__(serveur_mod.Handler)
+    handler.path = "/api/shutdown"
+    handler.send_response = MagicMock()
+    handler.send_header = MagicMock()
+    handler.end_headers = MagicMock()
+    handler.wfile = io.BytesIO()
+    handler.server = MagicMock()
+
+    launched_threads = []
+    def fake_thread_start(self_thread):
+        launched_threads.append(self_thread)
+
+    monkeypatch.setattr(threading.Thread, "start", fake_thread_start)
+    monkeypatch.setattr(serveur_mod.os, "_exit", MagicMock())
+    monkeypatch.setattr(serveur_mod.time, "sleep", MagicMock())
+    monkeypatch.setattr(serveur_mod, "_cleanup_server_pid", MagicMock())
+    monkeypatch.setattr(serveur_mod, "finalize_server_logger", MagicMock())
+
+    handler.do_GET()
+
+    assert len(launched_threads) >= 1
+    shutdown_target = launched_threads[0]._target
+    shutdown_target()
+
+
 def test_append_preload_log():
     """Vérifie que _append_preload_log ajoute les messages et limite la taille."""
     with serveur_mod._preload_lock:

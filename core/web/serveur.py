@@ -40,6 +40,7 @@ import subprocess
 import sys
 import time
 import datetime
+import queue
 from pathlib import Path
 
 def check_is_debug() -> bool:
@@ -502,10 +503,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if not script_path.exists():
                 script_path = SRC_DIR / "scripts" / "fetch_sources.py"
 
-            import subprocess
-            import queue
-            import time
-
             timeout_seconds = int(os.environ.get("OFBILAN_UPDATE_TIMEOUT", "1800"))
             child_env = os.environ.copy()
             try:
@@ -771,10 +768,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             log_server("Extinction du serveur demandée via l'interface web...", level="INFO")
             
             def shutdown():
+                import time
                 time.sleep(0.3)
                 _cleanup_server_pid()
                 finalize_server_logger(reason="Stopped via Web GUI")
                 def _force_exit():
+                    import time
                     time.sleep(1.5)
                     os._exit(0)
                 threading.Thread(target=_force_exit, daemon=True).start()
