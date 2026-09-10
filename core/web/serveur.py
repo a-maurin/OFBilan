@@ -617,6 +617,26 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write("Aucun journal disponible.".encode('utf-8'))
             return
 
+        if parsed_path == "/api/diagnostic/download":
+            try:
+                from core.common.diagnostic_helper import generer_archive_diagnostic
+                from datetime import datetime
+                zip_bytes = generer_archive_diagnostic()
+                now_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/zip')
+                self.send_header('Content-Disposition', f'attachment; filename="diagnostic_OFBilan_{now_str}.zip"')
+                self.send_header('Content-Length', str(len(zip_bytes)))
+                self.send_header('Cache-Control', 'no-cache')
+                self.end_headers()
+                self.wfile.write(zip_bytes)
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-Type', 'text/plain; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(f"Erreur lors de la préparation du diagnostic : {e}".encode('utf-8'))
+            return
+
         if parsed_path == "/api/check_update":
             import urllib.request
             import ssl
@@ -997,15 +1017,34 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 # Désactiver l'ouverture automatique du PDF sous Windows lors du run de la GUI
                 cmd.append("--no-open")
 
+                # Enregistrement des paramètres et initialisation du journal de génération
+                run_log_file = None
+                try:
+                    from core.common.diagnostic_helper import (
+                        initialiser_journal_generation,
+                        enregistrer_derniers_parametres_run,
+                    )
+                    enregistrer_derniers_parametres_run(params)
+                    run_log_file = initialiser_journal_generation()
+                except Exception as e_diag:
+                    log_server(f"Avertissement initialisation diagnostic : {e_diag}", level="WARNING")
+
                 # Répondre avec un flux de texte en temps réel (chunked)
                 self.send_response(200)
                 self.send_header('Content-Type', 'text/plain; charset=utf-8')
                 self.send_header('Cache-Control', 'no-cache')
                 self.end_headers()
 
-                # Lancement du processus
-                self.wfile.write(f"> Commande : {' '.join(cmd)}\n\n".encode('utf-8'))
+                cmd_header = f"> Commande : {' '.join(cmd)}\n\n"
+                self.wfile.write(cmd_header.encode('utf-8'))
                 self.wfile.flush()
+
+                if run_log_file:
+                    try:
+                        with open(run_log_file, "a", encoding="utf-8") as f_log:
+                            f_log.write(cmd_header)
+                    except Exception:
+                        pass
 
                 try:
                     # On force PYTHONPATH pour que le module ofbilan soit résolu correctement
@@ -1034,6 +1073,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         if not line and process.poll() is not None:
                             break
                         if line:
+                            if run_log_file:
+                                try:
+                                    with open(run_log_file, "a", encoding="utf-8") as f_log:
+                                        f_log.write(line)
+                                except Exception:
+                                    pass
                             try:
                                 self.wfile.write(line.encode('utf-8'))
                                 self.wfile.flush()
@@ -1046,12 +1091,28 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                                 break
 
                     process.wait()
+                    fin_msg = ""
                     if process.returncode == 0:
-                        self.wfile.write("\n[SUCCESS] Génération terminée avec succès.\n".encode('utf-8'))
+                        fin_msg = "\n[SUCCESS] Génération terminée avec succès.\n"
                     else:
-                        self.wfile.write(f"\n[ERREUR] Le processus s'est arrêté avec le code d'erreur {process.returncode}.\n".encode('utf-8'))
+                        fin_msg = f"\n[ERREUR] Le processus s'est arrêté avec le code d'erreur {process.returncode}.\n"
+                    
+                    self.wfile.write(fin_msg.encode('utf-8'))
+                    if run_log_file:
+                        try:
+                            with open(run_log_file, "a", encoding="utf-8") as f_log:
+                                f_log.write(fin_msg)
+                        except Exception:
+                            pass
                 except Exception as e:
-                    self.wfile.write(f"\n[ERREUR] Impossible de lancer le traitement : {e}\n".encode('utf-8'))
+                    err_msg = f"\n[ERREUR] Impossible de lancer le traitement : {e}\n"
+                    self.wfile.write(err_msg.encode('utf-8'))
+                    if run_log_file:
+                        try:
+                            with open(run_log_file, "a", encoding="utf-8") as f_log:
+                                f_log.write(err_msg)
+                        except Exception:
+                            pass
                 self.wfile.flush()
 
             except Exception as e:

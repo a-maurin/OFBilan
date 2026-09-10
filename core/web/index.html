@@ -412,6 +412,19 @@ Composants principaux :
                         </div>
                     </div>
                 </div>
+
+                <div id="error-card" class="result-card hidden" style="border-left: 4px solid #ef4444; background: #fef2f2;">
+                    <div class="result-icon" style="background: #fee2e2; color: #ef4444;">⚠️</div>
+                    <div class="result-details">
+                        <h3 style="color: #991b1b;">Une erreur est survenue lors de la génération</h3>
+                        <p style="color: #7f1d1d;">Le calcul a rencontré un problème. Vous pouvez télécharger l'archive de diagnostic technique pour transmission.</p>
+                        <div class="result-actions" style="margin-top: 10px;">
+                            <button type="button" onclick="window.open('/api/diagnostic/download', '_blank')" class="btn btn-secondary" style="background: #dc2626; border-color: #dc2626; color: #ffffff;">
+                                📦 Télécharger le diagnostic de panne (.zip)
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </section>
     </main>
@@ -663,6 +676,10 @@ Composants principaux :
 
         function downloadLogsAction() {
             window.open('/api/logs/download', '_blank');
+        }
+
+        function downloadDiagnosticAction() {
+            window.open('/api/diagnostic/download', '_blank');
         }
     </script>
 
@@ -951,6 +968,10 @@ Composants principaux :
                                 <button type="button" onclick="downloadLogsAction()"
                                     style="background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 10px; font-size: 12px; font-weight: 500; cursor: pointer;">
                                     📥 Télécharger le rapport
+                                </button>
+                                <button type="button" onclick="downloadDiagnosticAction()"
+                                    style="background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe; border-radius: 6px; padding: 6px 10px; font-size: 12px; font-weight: 500; cursor: pointer;">
+                                    📦 Exporter le diagnostic (.zip)
                                 </button>
                             </div>
                         </div>

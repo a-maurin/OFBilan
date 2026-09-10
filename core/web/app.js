@@ -751,6 +751,8 @@ document.addEventListener('DOMContentLoaded', () => {
         btnGenerate.disabled = true;
         btnGenerate.textContent = "Génération en cours...";
         resultCard.classList.add('hidden');
+        const errorCard = document.getElementById('error-card');
+        if (errorCard) errorCard.classList.add('hidden');
 
         // Reset progress bar
         progressBar.classList.remove('finished', 'error');
@@ -835,9 +837,11 @@ document.addEventListener('DOMContentLoaded', () => {
                             if (consoleOutput.textContent.includes('[ERREUR]')) {
                                 progressBar.classList.remove('finished');
                                 progressBar.classList.add('error');
+                                if (errorCard) errorCard.classList.remove('hidden');
                             } else {
                                 progressBar.classList.remove('error');
                                 progressBar.classList.add('finished');
+                                if (errorCard) errorCard.classList.add('hidden');
                             }
 
                             if (consoleOutput.textContent.includes('[SUCCESS]')) {
@@ -875,6 +879,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 statusText.style.color = "#D95C4A";
                 progressBar.classList.remove('finished');
                 progressBar.classList.add('error');
+                if (errorCard) errorCard.classList.remove('hidden');
             });
     });
 
