@@ -20,8 +20,11 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sys
 import threading
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from core.web.lanceur_fenetre import ouvrir_fenetre_app, trouver_navigateur_app
 
@@ -136,6 +139,7 @@ def test_maximiser_fenetre_windows_non_nt():
         mock_thread.assert_not_called()
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Test Win32 réservé à Windows")
 def test_maximiser_fenetre_windows_worker_trouve_et_maximise():
     """Vérifie le traitement de maximisation et de focus par l'API Win32."""
     from core.web.lanceur_fenetre import _maximiser_fenetre_windows
@@ -189,6 +193,7 @@ def test_maximiser_fenetre_windows_worker_trouve_et_maximise():
     mock_kernel32.CloseHandle.assert_called_once_with(100)
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Test Win32 réservé à Windows")
 def test_maximiser_fenetre_windows_ignore_onglets_parasites():
     """Vérifie que les fenêtres de navigateur tierces (ex. onglet GitHub du projet) sont ignorées."""
     from core.web.lanceur_fenetre import _maximiser_fenetre_windows
@@ -226,6 +231,7 @@ def test_maximiser_fenetre_windows_ignore_onglets_parasites():
     mock_user32.ShowWindowAsync.assert_not_called()
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Test Win32 réservé à Windows")
 def test_maximiser_fenetre_windows_trouve_loading_html():
     """Vérifie la détection et maximisation d'une fenêtre de chargement."""
     from core.web.lanceur_fenetre import _maximiser_fenetre_windows
