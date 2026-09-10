@@ -176,7 +176,7 @@ def test_maximiser_fenetre_windows_worker_trouve_et_maximise():
     mock_thread_inst = MagicMock()
     with patch("core.web.lanceur_fenetre.os.name", "nt"), \
          patch.object(ctypes, "windll", mock_windll, create=True), \
-         patch.object(ctypes, "WINFUNCTYPE", getattr(ctypes, "WINFUNCTYPE", ctypes.CFUNCTYPE), create=True), \
+         patch.object(ctypes, "WINFUNCTYPE", lambda *args: (lambda f: f), create=True), \
          patch("threading.Thread", return_value=mock_thread_inst):
         _maximiser_fenetre_windows(titre_partiel="OFBilan", delai_max_sec=1.0)
         # Appel direct du worker transmis au thread
@@ -217,7 +217,7 @@ def test_maximiser_fenetre_windows_ignore_onglets_parasites():
     mock_thread_inst = MagicMock()
     with patch("core.web.lanceur_fenetre.os.name", "nt"), \
          patch.object(ctypes, "windll", mock_windll, create=True), \
-         patch.object(ctypes, "WINFUNCTYPE", getattr(ctypes, "WINFUNCTYPE", ctypes.CFUNCTYPE), create=True), \
+         patch.object(ctypes, "WINFUNCTYPE", lambda *args: (lambda f: f), create=True), \
          patch("threading.Thread", return_value=mock_thread_inst):
         _maximiser_fenetre_windows(titre_partiel="OFBilan", delai_max_sec=0.2)
         worker_func = threading.Thread.call_args[1]["target"]
@@ -265,7 +265,7 @@ def test_maximiser_fenetre_windows_trouve_loading_html():
     mock_thread_inst = MagicMock()
     with patch("core.web.lanceur_fenetre.os.name", "nt"), \
          patch.object(ctypes, "windll", mock_windll, create=True), \
-         patch.object(ctypes, "WINFUNCTYPE", getattr(ctypes, "WINFUNCTYPE", ctypes.CFUNCTYPE), create=True), \
+         patch.object(ctypes, "WINFUNCTYPE", lambda *args: (lambda f: f), create=True), \
          patch("threading.Thread", return_value=mock_thread_inst):
         _maximiser_fenetre_windows(titre_partiel="OFBilan", delai_max_sec=1.0)
         worker_func = threading.Thread.call_args[1]["target"]
