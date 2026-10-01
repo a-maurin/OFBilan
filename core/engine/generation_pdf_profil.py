@@ -331,6 +331,12 @@ def _generate_pdf_content(
     pa_resume = _load_csv_opt(out_dir, "pa_global_resume.csv")
     pve_resume = _load_csv_opt(out_dir, "pve_global_resume.csv")
     ops_resume = _load_csv_opt(out_dir, "controles_global_operations_resume.csv")
+    categories_controles_df = _load_csv_opt(out_dir, "categories_chasse_controles.csv")
+    categories_infractions_df = _load_csv_opt(out_dir, "categories_chasse_infractions.csv")
+    donut_ctrl_candidate = out_dir / "categories_chasse_controles_donut.png"
+    donut_inf_candidate = out_dir / "categories_chasse_infractions_donut.png"
+    categories_controles_donut_path = donut_ctrl_candidate if donut_ctrl_candidate.exists() else None
+    categories_infractions_donut_path = donut_inf_candidate if donut_inf_candidate.exists() else None
 
     nb_localisations = 0
     if agg_domaine is not None and not agg_domaine.empty:
@@ -562,6 +568,10 @@ def _generate_pdf_content(
         usagers_resume=usagers_resume,
         agg_periode=agg_periode,
         pej_dom=None,
+        categories_controles_df=categories_controles_df,
+        categories_infractions_df=categories_infractions_df,
+        categories_controles_donut_path=categories_controles_donut_path,
+        categories_infractions_donut_path=categories_infractions_donut_path,
         cartes=cartes,
         global_map_paths=global_map_paths,
         global_map_layout=global_map_layout,

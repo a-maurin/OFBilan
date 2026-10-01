@@ -738,6 +738,8 @@ def run_profile_aggregations(
     analyse_controles_global(point, out_dir)
     analyse_pej_pa_global(root, point, pa, pej, out_dir, echelle=echelle, code=code, gdf_faits=gdf_faits)
     analyse_pve_global(pve, out_dir)
+    if "categories_chasse" in profile and profile["categories_chasse"]:
+        analyse_categories_chasse(point, pve, pej, profile["categories_chasse"], out_dir=out_dir)
     if ventilation_mode == "annuelle":
         analyse_annuelle_global(point, pa, pej, pve, out_dir)
     elif ventilation_mode == "mensuelle":
@@ -799,4 +801,253 @@ def compute_n1_deltas(
         "delta_str": delta_str,
         "alerte_baisse": alerte,
         "message_alerte": msg,
+    }
+
+
+def compute_categories_chasse_controles(
+    point: pd.DataFrame,
+    categories_cfg: dict[str, Any],
+    out_dir: Path | None = None,
+    figure_scale: float = 1.0,
+) -> dict[str, Any]:
+    """Ventile les points de contrôle terrain dans les catégories de chasse."""
+    from core.common.utilitaires_metier import (
+        classify_resultat_controle_series,
+        series_str_contains,
+    )
+    import re
+
+    rows: list[dict[str, Any]] = []
+    donut_data: dict[str, int] = {}
+
+    if point.empty or not categories_cfg:
+        for cat_id, cfg in categories_cfg.items():
+            lbl = cfg.get("label", cat_id)
+            rows.append({
+                "categorie": cat_id,
+                "libelle": lbl,
+                "total": 0,
+                "conforme": 0,
+                "non_conforme": 0,
+                "taux_non_conforme": 0.0,
+            })
+            donut_data[lbl] = 0
+        df_res = pd.DataFrame(rows)
+        return {
+            "df": df_res,
+            "donut_data": donut_data,
+            "donut_path": None,
+        }
+
+    pt = point.copy()
+    pt["_cat"] = "autres"
+
+    col_nom = "nom_dossie" if "nom_dossie" in pt.columns else ("nom_dossier" if "nom_dossier" in pt.columns else None)
+    col_act = "type_actio" if "type_actio" in pt.columns else ("type_action" if "type_action" in pt.columns else None)
+
+    for cat_id, cfg in categories_cfg.items():
+        if cat_id == "autres":
+            continue
+        kws = cfg.get("keywords_controles", [])
+        if not kws:
+            continue
+        pattern = "|".join(re.escape(k) for k in kws)
+        mask = pd.Series(False, index=pt.index)
+        if col_nom:
+            mask |= series_str_contains(pt[col_nom], pattern, regex=True)
+        if col_act:
+            mask |= series_str_contains(pt[col_act], pattern, regex=True)
+        pt.loc[mask & (pt["_cat"] == "autres"), "_cat"] = cat_id
+
+    res_col = "resultat_c" if "resultat_c" in pt.columns else ("resultat_controle" if "resultat_controle" in pt.columns else None)
+    for cat_id, cfg in categories_cfg.items():
+        lbl = cfg.get("label", cat_id)
+        sub = pt[pt["_cat"] == cat_id]
+        total = len(sub)
+        if total > 0 and res_col:
+            classified = classify_resultat_controle_series(sub[res_col])
+            conf = int((classified == "Conforme").sum())
+            non_conf = int(((classified == "Infraction") | (classified == "Manquement")).sum())
+        else:
+            conf = 0
+            non_conf = 0
+        taux = round((non_conf / total) * 100, 1) if total > 0 else 0.0
+
+        rows.append({
+            "categorie": cat_id,
+            "libelle": lbl,
+            "total": total,
+            "conforme": conf,
+            "non_conforme": non_conf,
+            "taux_non_conforme": taux,
+        })
+        donut_data[lbl] = total
+
+    df_res = pd.DataFrame(rows)
+    donut_path = None
+
+    if out_dir is not None:
+        csv_file = out_dir / "categories_chasse_controles.csv"
+        df_res.to_csv(csv_file, sep=";", index=False, encoding="utf-8")
+        if sum(donut_data.values()) > 0:
+            from core.common.rendus_graphiques import chart_pie
+            donut_path = Path(chart_pie(
+                donut_data,
+                "",
+                out_dir,
+                "categories_chasse_controles_donut.png",
+                donut=True,
+                figure_scale=figure_scale,
+            ))
+
+    return {
+        "df": df_res,
+        "donut_data": donut_data,
+        "donut_path": donut_path,
+    }
+
+
+def compute_categories_chasse_infractions(
+    pve: pd.DataFrame,
+    pej: pd.DataFrame,
+    categories_cfg: dict[str, Any],
+    out_dir: Path | None = None,
+    figure_scale: float = 1.0,
+) -> dict[str, Any]:
+    """Ventile les infractions PVe et PEJ dans les catégories de chasse."""
+    import logging
+    import re
+    from core.common.utilitaires_metier import contient_natinf
+
+    logger = logging.getLogger("ofbilan")
+    rows: list[dict[str, Any]] = []
+    donut_data: dict[str, int] = {}
+    unlisted_set: set[str] = set()
+
+    cat_codes_pve: dict[str, set[str]] = {}
+    cat_codes_pej: dict[str, set[str]] = {}
+    all_known: set[str] = set()
+
+    for cat_id, cfg in categories_cfg.items():
+        cpve = set(str(c).strip() for c in cfg.get("natinf_pve", []) if str(c).strip())
+        cpej = set(str(c).strip() for c in cfg.get("natinf_pej", []) if str(c).strip())
+        cat_codes_pve[cat_id] = cpve
+        cat_codes_pej[cat_id] = cpej
+        all_known |= cpve | cpej
+
+    col_pve = "INF-NATINF" if "INF-NATINF" in pve.columns else ("NATINF" if "NATINF" in pve.columns else None)
+    pve_cat_counts: dict[str, int] = {cat_id: 0 for cat_id in categories_cfg}
+
+    if not pve.empty and col_pve:
+        for val in pve[col_pve].dropna():
+            s_val = str(val).strip()
+            matched_cat = None
+            for cat_id in categories_cfg:
+                if cat_id == "autres":
+                    continue
+                if contient_natinf(s_val, list(cat_codes_pve[cat_id])):
+                    matched_cat = cat_id
+                    break
+            if matched_cat is None:
+                if contient_natinf(s_val, list(cat_codes_pve.get("autres", set()))):
+                    matched_cat = "autres"
+                else:
+                    matched_cat = "autres" if "autres" in categories_cfg else list(categories_cfg.keys())[-1]
+                    codes_found = re.findall(r"\b\d{3,5}\b", s_val)
+                    for c in codes_found:
+                        if c not in all_known:
+                            unlisted_set.add(c)
+            pve_cat_counts[matched_cat] = pve_cat_counts.get(matched_cat, 0) + 1
+
+    col_pej = "NATINF_PEJ" if "NATINF_PEJ" in pej.columns else ("NATINF" if "NATINF" in pej.columns else None)
+    pej_cat_counts: dict[str, int] = {cat_id: 0 for cat_id in categories_cfg}
+
+    if not pej.empty and col_pej:
+        for val in pej[col_pej].dropna():
+            s_val = str(val).strip()
+            matched_cat = None
+            for cat_id in categories_cfg:
+                if cat_id == "autres":
+                    continue
+                if contient_natinf(s_val, list(cat_codes_pej[cat_id])):
+                    matched_cat = cat_id
+                    break
+            if matched_cat is None:
+                if contient_natinf(s_val, list(cat_codes_pej.get("autres", set()))):
+                    matched_cat = "autres"
+                else:
+                    matched_cat = "autres" if "autres" in categories_cfg else list(categories_cfg.keys())[-1]
+                    codes_found = re.findall(r"\b\d{3,5}\b", s_val)
+                    for c in codes_found:
+                        if c not in all_known:
+                            unlisted_set.add(c)
+            pej_cat_counts[matched_cat] = pej_cat_counts.get(matched_cat, 0) + 1
+
+    unlisted_list = sorted(list(unlisted_set))
+    if unlisted_list:
+        logger.warning(
+            "Codes NATINF chasse non répertoriés dans les listes fermées (versés dans 'Autres infractions') : %s",
+            ", ".join(unlisted_list),
+        )
+        print(f"\n[ALERTE OFBILAN] Codes NATINF chasse non répertoriés dans les listes fermées (classés dans 'Autres infractions') : {', '.join(unlisted_list)}")
+        print("Vous pouvez mettre à jour la clé categories_chasse dans config/profils_bilan/chasse.yaml si nécessaire.\n")
+
+    grand_total = sum(pve_cat_counts.values()) + sum(pej_cat_counts.values())
+
+    for cat_id, cfg in categories_cfg.items():
+        lbl = cfg.get("label", cat_id)
+        nb_pve = pve_cat_counts.get(cat_id, 0)
+        nb_pej = pej_cat_counts.get(cat_id, 0)
+        tot = nb_pve + nb_pej
+        pct = round((tot / grand_total) * 100, 1) if grand_total > 0 else 0.0
+
+        rows.append({
+            "categorie": cat_id,
+            "libelle": lbl,
+            "nb_pve": nb_pve,
+            "nb_pej": nb_pej,
+            "total": tot,
+            "pct": pct,
+        })
+        donut_data[lbl] = tot
+
+    df_res = pd.DataFrame(rows)
+    donut_path = None
+
+    if out_dir is not None:
+        csv_file = out_dir / "categories_chasse_infractions.csv"
+        df_res.to_csv(csv_file, sep=";", index=False, encoding="utf-8")
+        if grand_total > 0:
+            from core.common.rendus_graphiques import chart_pie
+            donut_path = Path(chart_pie(
+                donut_data,
+                "",
+                out_dir,
+                "categories_chasse_infractions_donut.png",
+                donut=True,
+                figure_scale=figure_scale,
+            ))
+
+    return {
+        "df": df_res,
+        "donut_data": donut_data,
+        "donut_path": donut_path,
+        "unlisted_natinf": unlisted_list,
+    }
+
+
+def analyse_categories_chasse(
+    point: pd.DataFrame,
+    pve: pd.DataFrame,
+    pej: pd.DataFrame,
+    categories_cfg: dict[str, Any],
+    out_dir: Path | None = None,
+    figure_scale: float = 1.0,
+) -> dict[str, Any]:
+    """Exécute l'analyse conjointe des contrôles et des infractions pour les catégories chasse."""
+    res_ctrl = compute_categories_chasse_controles(point, categories_cfg, out_dir=out_dir, figure_scale=figure_scale)
+    res_inf = compute_categories_chasse_infractions(pve, pej, categories_cfg, out_dir=out_dir, figure_scale=figure_scale)
+    return {
+        "controles": res_ctrl,
+        "infractions": res_inf,
     }

@@ -204,6 +204,7 @@ defaults:
       show_intro_text: true
       show_table: true
       show_pie: true
+      show_categories_controles: false
     sec22dom:
       show_pie: true
       show_overflow_note: true
@@ -212,6 +213,8 @@ defaults:
       show_pie: true
       # Aires empilées Conforme / Non-conforme / En attente par domaine (section 2.4, même page que tableau + camembert).
       show_chart_resultats_domaine: true
+    sec3:
+      show_categories_infractions: false
     sec31:
       show_table: true
       show_key_figures: true
@@ -355,6 +358,13 @@ profiles:
         sec31: "4.1 Procès-verbaux électroniques (PVe)"
         sec32: "4.2 Procédures d’enquête judiciaire (PEJ)"
         sec33: "4.3 Procédures administratives (PA)"
+
+  chasse:
+    blocks:
+      sec23:
+        show_categories_controles: true
+      sec3:
+        show_categories_infractions: true
 
   # Exemple: profil thématique PNF
   pnf:

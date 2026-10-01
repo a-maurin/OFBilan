@@ -105,6 +105,10 @@ class PdfContext:
     agg_periode: pd.DataFrame | None = None
     pej_dom: pd.DataFrame | None = None
     proc_summary: dict[str, Any] | None = field(default_factory=dict)
+    categories_controles_df: pd.DataFrame | None = None
+    categories_infractions_df: pd.DataFrame | None = None
+    categories_controles_donut_path: Path | None = None
+    categories_infractions_donut_path: Path | None = None
     
     # Paramètres de cartographie et gabarit
     cartes: bool = True

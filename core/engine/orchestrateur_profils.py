@@ -3023,6 +3023,19 @@ def _run_aggregations(
             results["agg_annuelle"] = mensuel
             results["ventilation_temporelle_type"] = "mensuelle"
 
+    if "categories_chasse" in profile and profile["categories_chasse"]:
+        from core.engine.agregations_profil import analyse_categories_chasse
+        res_cat = analyse_categories_chasse(
+            point_filtered, pve_filtered, pej_filtered,
+            profile["categories_chasse"],
+            out_dir=None,
+        )
+        results["categories_chasse_controles"] = res_cat["controles"]["df"]
+        results["categories_chasse_infractions"] = res_cat["infractions"]["df"]
+        results["categories_chasse_controles_donut_data"] = res_cat["controles"]["donut_data"]
+        results["categories_chasse_infractions_donut_data"] = res_cat["infractions"]["donut_data"]
+        results["categories_chasse_unlisted_natinf"] = res_cat["infractions"]["unlisted_natinf"]
+
     return results
 
 
@@ -3379,6 +3392,11 @@ def _export_csv(
     ]:
         if key in results and isinstance(results[key], pd.DataFrame) and not results[key].empty:
             results[key].to_csv(out_dir / name, sep=";", index=False)
+
+    if "categories_chasse_controles" in results and isinstance(results["categories_chasse_controles"], pd.DataFrame):
+        results["categories_chasse_controles"].to_csv(out_dir / "categories_chasse_controles.csv", sep=";", index=False, encoding="utf-8")
+    if "categories_chasse_infractions" in results and isinstance(results["categories_chasse_infractions"], pd.DataFrame):
+        results["categories_chasse_infractions"].to_csv(out_dir / "categories_chasse_infractions.csv", sep=";", index=False, encoding="utf-8")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -4106,9 +4124,10 @@ def _generate_pdf(
                     # Tableau thématique pour la colonne de droite
                     right_element = None
                     df_theme = curr_results.get("tab_par_theme")
+                    from reportlab.platypus import Table, TableStyle, Paragraph, Spacer
+                    from reportlab.lib import colors as rl_colors
+
                     if isinstance(df_theme, pd.DataFrame) and not df_theme.empty:
-                        from reportlab.platypus import Table, TableStyle, Paragraph
-                        from reportlab.lib import colors as rl_colors
                         t_rows = []
                         t_rows.append([
                             Paragraph("<b>Thématique</b>", builder.styles.get("BodyText")),
@@ -4135,7 +4154,6 @@ def _generate_pdf(
                         body_st = builder.styles.get("BodyText", builder.styles.get("Normal"))
                         right_element = Paragraph("<i>Données par thématique indisponibles</i>", body_st)
 
-                    from reportlab.platypus import Table, TableStyle, Spacer
                     tbl_sec1 = Table([[img_carto, right_element]], colWidths=[col_w, col_w])
                     tbl_sec1.setStyle(TableStyle([
                         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
@@ -4685,6 +4703,57 @@ def _generate_pdf(
                 builder.add_paragraph("Aucune donnée domaine disponible.")
             builder.add_spacer(4)
 
+        def _render_categories_controles_block(df_cat: pd.DataFrame) -> None:
+            if df_cat is None or df_cat.empty:
+                return
+            hdr = ["Catégorie", "Contrôles", "Conformes", "Non conformes", "% Non-conforme"]
+            tbl = [hdr]
+            tot_ctrl, tot_conf, tot_nc = 0, 0, 0
+            for _, r in df_cat.iterrows():
+                c_tot = int(r.get("total", 0))
+                c_conf = int(r.get("conforme", 0))
+                c_nc = int(r.get("non_conforme", 0))
+                t_nc = r.get("taux_non_conforme", 0.0)
+                tot_ctrl += c_tot
+                tot_conf += c_conf
+                tot_nc += c_nc
+                tbl.append([str(r.get("libelle", r.get("categorie", ""))), str(c_tot), str(c_conf), str(c_nc), f"{t_nc} %"])
+            taux_tot = round((tot_nc / tot_ctrl) * 100, 1) if tot_ctrl > 0 else 0.0
+            tbl.append(["Total", str(tot_ctrl), str(tot_conf), str(tot_nc), f"{taux_tot} %"])
+            
+            cw = [avail_w * 0.36, avail_w * 0.16, avail_w * 0.16, avail_w * 0.16, avail_w * 0.16]
+            ca = ["LEFT", "RIGHT", "RIGHT", "RIGHT", "RIGHT"]
+            cap = pdf_metric_caption("Répartition des contrôles par catégorie", "ctrl")
+            
+            donut_data = curr_results.get("categories_chasse_controles_donut_data") or {}
+            donut_path: Path | None = None
+            if donut_data and sum(donut_data.values()) > 0:
+                donut_path = Path(chart_pie(
+                    donut_data,
+                    "",
+                    tmp_dir,
+                    "categories_chasse_controles_donut.png",
+                    **_chart_pie_compact_legend_kw(
+                        len(donut_data),
+                        legend_fontsize=ref_pie_legend_fs,
+                        legend_ncol_max=legend_ncol_max,
+                    ),
+                    figure_scale=ref_pie_fs,
+                    donut=True,
+                ))
+            if donut_path is not None and donut_path.exists():
+                builder.add_table_and_image_keep_together(
+                    tbl,
+                    table_caption=cap,
+                    col_widths=cw,
+                    col_aligns=ca,
+                    image_path=donut_path,
+                    image_width_ratio=ref_pie_w,
+                )
+            else:
+                builder.add_table(tbl, caption=cap, col_widths=cw, col_aligns=ca)
+            builder.add_spacer(3)
+
         def _render_sec23() -> None:
             builder.add_section("sec23", section_title["sec23"] + title_suffix, toc_level=1)
             if is_type_usager and nb_localisations > 0:
@@ -4778,6 +4847,10 @@ def _generate_pdf(
             # On ne force pas systématiquement un saut de page ici.
             if profil_id == "agrainage":
                 _render_zone_tub_block()
+            if is_block_enabled(presentation_cfg, "sec23.show_categories_controles", False):
+                df_cat_ctrl = curr_results.get("categories_chasse_controles")
+                if df_cat_ctrl is not None and not df_cat_ctrl.empty:
+                    _render_categories_controles_block(df_cat_ctrl)
 
         def _render_zone_tub_block() -> None:
             """Bloc Zone TUB / hors zone TUB (sans entrée TOC dédiée)."""
@@ -4973,11 +5046,65 @@ def _generate_pdf(
         if not sec3_order:
             sec3_order = ["sec31", "sec32", "sec33"]
 
+        def _render_categories_infractions_block(df_cat: pd.DataFrame) -> None:
+            if df_cat is None or df_cat.empty:
+                return
+            hdr = ["Catégorie", "PVe", "PEJ", "Total", "Part %"]
+            tbl = [hdr]
+            tot_pve, tot_pej, tot_all = 0, 0, 0
+            for _, r in df_cat.iterrows():
+                pv = int(r.get("nb_pve", 0))
+                pj = int(r.get("nb_pej", 0))
+                tot = int(r.get("total", 0))
+                pct = r.get("pct", 0.0)
+                tot_pve += pv
+                tot_pej += pj
+                tot_all += tot
+                tbl.append([str(r.get("libelle", r.get("categorie", ""))), str(pv), str(pj), str(tot), f"{pct} %"])
+            tbl.append(["Total", str(tot_pve), str(tot_pej), str(tot_all), "100 %"])
+            
+            cw = [avail_w * 0.40, avail_w * 0.15, avail_w * 0.15, avail_w * 0.15, avail_w * 0.15]
+            ca = ["LEFT", "RIGHT", "RIGHT", "RIGHT", "RIGHT"]
+            cap = pdf_metric_caption("Répartition des infractions par catégorie", "proc")
+            
+            donut_data = curr_results.get("categories_chasse_infractions_donut_data") or {}
+            donut_path: Path | None = None
+            if donut_data and sum(donut_data.values()) > 0:
+                donut_path = Path(chart_pie(
+                    donut_data,
+                    "",
+                    tmp_dir,
+                    "categories_chasse_infractions_donut.png",
+                    **_chart_pie_compact_legend_kw(
+                        len(donut_data),
+                        legend_fontsize=ref_pie_legend_fs,
+                        legend_ncol_max=legend_ncol_max,
+                    ),
+                    figure_scale=ref_pie_fs,
+                    donut=True,
+                ))
+            if donut_path is not None and donut_path.exists():
+                builder.add_table_and_image_keep_together(
+                    tbl,
+                    table_caption=cap,
+                    col_widths=cw,
+                    col_aligns=ca,
+                    image_path=donut_path,
+                    image_width_ratio=ref_pie_w,
+                )
+            else:
+                builder.add_table(tbl, caption=cap, col_widths=cw, col_aligns=ca)
+            builder.add_spacer(3)
+
         def _begin_sec3_subsection(subsection_id: str) -> bool:
             """Ouvre le chapitre 3 sur la première sous-section (titre + contenu groupés)."""
             if not sec3_order or sec3_order[0] != subsection_id:
                 return False
             builder.add_section("sec3", section_title["sec3"] + title_suffix, start_on_new_page=is_block_enabled(presentation_cfg, "sec3.start_on_new_page", False))
+            if is_block_enabled(presentation_cfg, "sec3.show_categories_infractions", False):
+                df_cat_inf = curr_results.get("categories_chasse_infractions")
+                if df_cat_inf is not None and not df_cat_inf.empty:
+                    _render_categories_infractions_block(df_cat_inf)
             return True
 
         def _render_sec31() -> None:

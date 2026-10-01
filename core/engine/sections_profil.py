@@ -547,6 +547,34 @@ def render_sec22res(ctx: PdfContext) -> None:
             block.append(Spacer(1, 1 * mm))
             block.append(_mk_centered_image(Path(stack_path), ctx.chart_bar_w * 0.94))
 
+    show_cat_ctrl = is_block_enabled(ctx.presentation_cfg, "sec23.show_categories_controles", False) or is_block_enabled(ctx.presentation_cfg, "sec22res.show_categories_controles", False)
+    if show_cat_ctrl and ctx.categories_controles_df is not None and not ctx.categories_controles_df.empty:
+        df_cat = ctx.categories_controles_df
+        hdr = ["Catégorie", "Contrôles", "Conformes", "Non conformes", "% Non-conforme"]
+        tbl_cat = [hdr]
+        tot_c, tot_cf, tot_nc = 0, 0, 0
+        for _, r in df_cat.iterrows():
+            c_tot = int(r.get("total", 0))
+            c_conf = int(r.get("conforme", 0))
+            c_nc = int(r.get("non_conforme", 0))
+            t_nc = r.get("taux_non_conforme", 0.0)
+            tot_c += c_tot
+            tot_cf += c_conf
+            tot_nc += c_nc
+            tbl_cat.append([str(r.get("libelle", r.get("categorie", ""))), str(c_tot), str(c_conf), str(c_nc), f"{t_nc} %"])
+        taux_tot = round((tot_nc / tot_c) * 100, 1) if tot_c > 0 else 0.0
+        tbl_cat.append(["Total", str(tot_c), str(tot_cf), str(tot_nc), f"{taux_tot} %"])
+        
+        cw = [ctx.avail_w * 0.36, ctx.avail_w * 0.16, ctx.avail_w * 0.16, ctx.avail_w * 0.16, ctx.avail_w * 0.16]
+        ca = ["LEFT", "RIGHT", "RIGHT", "RIGHT", "RIGHT"]
+        block.append(Spacer(1, 2 * mm))
+        block.append(Paragraph(pdf_metric_caption("Répartition des contrôles par catégorie", "ctrl"), ctx.builder.styles["TableCaption"]))
+        block.append(Spacer(1, 1 * mm))
+        block.append(ofb_table(tbl_cat, col_widths=cw, col_aligns=ca, split_by_row=ctx.split_by_row))
+        if ctx.categories_controles_donut_path is not None and ctx.categories_controles_donut_path.exists():
+            block.append(Spacer(1, 1 * mm))
+            block.append(_mk_centered_image(ctx.categories_controles_donut_path, ctx.ref_pie_w))
+
     if block:
         ctx.builder.add_keep_together_block(block)
     elif ctx.show_placeholder:
@@ -619,6 +647,44 @@ def render_sec3(ctx: PdfContext) -> None:
                 col_widths=[ctx.avail_w * 0.44, ctx.avail_w * 0.14, ctx.avail_w * 0.14, ctx.avail_w * 0.14, ctx.avail_w * 0.14],
                 col_aligns=["LEFT", "RIGHT", "RIGHT", "RIGHT", "RIGHT"],
             )
+
+    show_cat_inf = is_block_enabled(ctx.presentation_cfg, "sec3.show_categories_infractions", False)
+    if show_cat_inf and ctx.categories_infractions_df is not None and not ctx.categories_infractions_df.empty:
+        df_cat = ctx.categories_infractions_df
+        hdr = ["Catégorie", "PVe", "PEJ", "Total", "Part %"]
+        tbl_inf = [hdr]
+        tot_pv, tot_pj, tot_all = 0, 0, 0
+        for _, r in df_cat.iterrows():
+            pv = int(r.get("nb_pve", 0))
+            pj = int(r.get("nb_pej", 0))
+            tot = int(r.get("total", 0))
+            pct = r.get("pct", 0.0)
+            tot_pv += pv
+            tot_pj += pj
+            tot_all += tot
+            tbl_inf.append([str(r.get("libelle", r.get("categorie", ""))), str(pv), str(pj), str(tot), f"{pct} %"])
+        tbl_inf.append(["Total", str(tot_pv), str(tot_pj), str(tot_all), "100 %"])
+        
+        cw = [ctx.avail_w * 0.40, ctx.avail_w * 0.15, ctx.avail_w * 0.15, ctx.avail_w * 0.15, ctx.avail_w * 0.15]
+        ca = ["LEFT", "RIGHT", "RIGHT", "RIGHT", "RIGHT"]
+        
+        if ctx.categories_infractions_donut_path is not None and ctx.categories_infractions_donut_path.exists():
+            ctx.builder.add_table_and_image_keep_together(
+                tbl_inf,
+                table_caption=pdf_metric_caption("Répartition des infractions par catégorie", "proc"),
+                col_widths=cw,
+                col_aligns=ca,
+                image_path=ctx.categories_infractions_donut_path,
+                image_width_ratio=ctx.ref_pie_w,
+            )
+        else:
+            ctx.builder.add_table(
+                tbl_inf,
+                caption=pdf_metric_caption("Répartition des infractions par catégorie", "proc"),
+                col_widths=cw,
+                col_aligns=ca,
+            )
+        ctx.builder.add_spacer(3)
 
 # 3.1 PVe
 def render_sec31(ctx: PdfContext) -> None:
