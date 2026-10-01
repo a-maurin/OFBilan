@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -219,6 +220,20 @@ def _qgis_python_path_candidates() -> list[Path]:
     candidates.append(Path(r"C:\OSGeo4W64\bin\python.exe"))
     candidates.append(Path(r"C:\OSGeo4W\bin\python.exe"))
 
+    # 7. Sous Linux / Unix : interpréteurs candidats disposant de PyQGIS
+    if sys.platform != "win32":
+        linux_cands: list[Path] = [Path(sys.executable)]
+        for cmd in ("python3", "python"):
+            w = shutil.which(cmd)
+            if w:
+                linux_cands.append(Path(w))
+        for p in (Path("/usr/bin/python3"), Path("/usr/local/bin/python3")):
+            if p not in linux_cands:
+                linux_cands.append(p)
+        for cand in linux_cands:
+            if cand.is_file() and can_import_pyqgis(cand, env=get_qgis_env(cand)):
+                candidates.append(cand)
+
     return candidates
 
 
@@ -251,6 +266,26 @@ def get_qgis_env(python_exe: Path) -> dict[str, str]:
     for k in list(env.keys()):
         if k.startswith("CONDA_") or k in ("PYTHONHOME", "PYTHONPATH", "_CONDA_ROOT", "_CONDA_EXE"):
             del env[k]
+
+    # Sous Linux / Unix natif (hors exécutables Windows simulés ou exécutés via Wine)
+    if sys.platform != "win32" and python_exe.suffix.lower() != ".exe":
+        env["QT_QPA_PLATFORM"] = "offscreen"
+        env["GDAL_FILENAME_IS_UTF8"] = "YES"
+        env["VSI_CACHE"] = "TRUE"
+        env["VSI_CACHE_SIZE"] = "1000000"
+        env["PYTHONUTF8"] = "1"
+        qgis_prefix = os.environ.get("QGIS_PREFIX_PATH", "/usr")
+        env["QGIS_PREFIX_PATH"] = qgis_prefix
+
+        python_paths = [
+            str(PROJECT_ROOT / "core"),
+            str(PROJECT_ROOT),
+        ]
+        existing_pythonpath = env.get("PYTHONPATH", "")
+        if existing_pythonpath:
+            python_paths.append(existing_pythonpath)
+        env["PYTHONPATH"] = os.pathsep.join(python_paths)
+        return env
     
     bin_dir = python_exe.parent
     root_dir = bin_dir.parent

@@ -24,6 +24,7 @@ from pathlib import Path
 
 from core.cartographie.qgis_runtime import (
     _scan_program_files_qgis,
+    can_import_pyqgis,
     get_qgis_env,
     find_qgis_python_executable,
 )
@@ -80,7 +81,7 @@ def test_find_qgis_python_finds_installation():
     found = find_qgis_python_executable(refresh=True)
     if found is not None:
         assert found.exists()
-        assert "qgis" in str(found).lower()
+        assert "qgis" in str(found).lower() or can_import_pyqgis(found)
 
 
 def test_atomic_port_bind_simulation():

@@ -19,4 +19,8 @@
 # Vérification locale identique à la CI (tests unit + smoke).
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-python -m pytest -q
+PYTHON_BIN="python3"
+if ! command -v "$PYTHON_BIN" &>/dev/null; then
+    PYTHON_BIN="python"
+fi
+"$PYTHON_BIN" -m pytest -q

@@ -70,3 +70,52 @@ def test_run_cartography_subprocess_delegates_to_bat(monkeypatch, tmp_path: Path
     assert ok is True
     assert calls
     assert "global,global_usagers" in calls[0]
+
+
+def test_get_qgis_env_linux(tmp_path: Path, monkeypatch) -> None:
+    dummy_py = tmp_path / "bin" / "python3"
+    dummy_py.parent.mkdir(parents=True)
+    dummy_py.touch()
+
+    monkeypatch.setattr(qgis_runtime.sys, "platform", "linux")
+    env = qgis_runtime.get_qgis_env(dummy_py)
+
+    assert env.get("QT_QPA_PLATFORM") == "offscreen"
+    assert env.get("PYTHONUTF8") == "1"
+    assert "OSGEO4W_ROOT" not in env
+    assert "PYTHONHOME" not in env
+    assert str(qgis_runtime.PROJECT_ROOT / "core") in env.get("PYTHONPATH", "")
+
+
+def test_run_cartography_subprocess_direct_linux(monkeypatch, tmp_path: Path) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+
+        class R:
+            returncode = 0
+            stdout = "OK"
+            stderr = ""
+
+        return R()
+
+    dummy_py = tmp_path / "bin" / "python3"
+    dummy_py.parent.mkdir(parents=True)
+    dummy_py.touch()
+
+    monkeypatch.setattr(qgis_runtime.sys, "platform", "linux")
+    monkeypatch.setattr(qgis_runtime, "find_qgis_python_executable", lambda *a, **k: dummy_py)
+    monkeypatch.setattr(qgis_runtime, "can_import_pyqgis", lambda *a, **k: True)
+    monkeypatch.setattr(qgis_runtime.subprocess, "run", fake_run)
+
+    ok = qgis_runtime.run_cartography_export_subprocess(
+        ["global"],
+        date_deb="2026-01-01",
+        date_fin="2026-12-31",
+        dept_code="21",
+    )
+    assert ok is True
+    assert calls
+    assert str(dummy_py) in calls[0][0]
+    assert "production_cartographique.py" in calls[0][1]

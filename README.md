@@ -5,7 +5,7 @@
 [![QGIS](https://img.shields.io/badge/QGIS-3.22%2B%20LTR-green.svg)](https://qgis.org)
 [![Python](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://python.org)
 [![Licence](https://img.shields.io/badge/Licence-GPLv3-orange.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![Plateforme](https://img.shields.io/badge/Plateforme-Windows%2010%20%2F%2011-lightgrey.svg)]()
+[![Plateforme](https://img.shields.io/badge/Plateforme-Windows%20%7C%20Linux-lightgrey.svg)]()
 
 **OFBilan** est une application autonome d'aide à la décision, d'exploration de données et de communication, dotée d'une intégration optionnelle sous forme d'extension relais pour QGIS. Elle s'appuie sur les données de contrôles (OSCEAN) et les procédures judiciaires et administratives (PVe, PEJ, PA) de l'Office français de la biodiversité (OFB).
 
@@ -41,7 +41,7 @@ Un moteur d'édition automatisé piloté par des gabarits déclaratifs en YAML :
 
 ## Prérequis système
 
-* **Système d'exploitation** : Windows 10 ou 11 (64 bits).
+* **Système d'exploitation** : Windows 10 ou 11 (64 bits), Linux (Ubuntu, Debian, Fedora, etc.).
 * **QGIS** : **QGIS 3.22 LTR ou supérieur** installé sur le poste (versions recommandées : 3.28 LTR, 3.34 LTR ou 3.40+).
 * **Environnement Python** : Python $\ge$ 3.8 (fourni nativement avec QGIS).
 > ⚠️ **Incompatibilité** : les versions antérieures de QGIS (ex. QGIS 3.10 et 3.16) reposant sur Python 3.7 ne sont pas supportées.
@@ -63,6 +63,18 @@ Pour une installation isolée (clone Git ou copie locale sans partage réseau) :
 1. Clonez le dépôt ou décompressez l'archive du code source sur votre poste.
 2. **Référentiels et données sources** : les données métier (`data/sources/`) et fonds géographiques (`ref/programme/`) étant confidentiels, déposez l'archive `pack_configuration_referentiels.zip` et exécutez le script `scripts/deploiement/installer_pack.bat`.
 3. Lancez l'application via `scripts/lancement/demarrer_serveur_OFBilan.bat`.
+
+### Méthode 3 : Installation et utilisation sous Linux
+1. Clonez le dépôt sur votre poste Linux.
+2. Pour créer le raccourci dans le menu des applications et sur le bureau, exécutez :
+   ```bash
+   bash scripts/deploiement/installer_sur_ce_poste.sh
+   ```
+3. Démarrez l'application au choix :
+   * Par double-clic sur l'icône **OFBilan** de votre bureau ou menu des applications.
+   * Via le lanceur universel à la racine : `./lancer.sh` (ouvre l'interface web par défaut).
+   * En console interactive pour générer des bilans : `./scripts/lancement/lancer_bilans.sh`.
+   * En ligne de commande directe : `./lancer.sh --profil global --code 21`.
 
 ### Désinstallation et réinitialisation
 Pour remettre un poste client à l'état vierge, exécutez le script :
