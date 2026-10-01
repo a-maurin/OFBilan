@@ -834,18 +834,14 @@ def _run_global_profile_via_yaml(
             safe_filter = _safe_type_usager_for_filename(filter_label) or "filtre"
             pdf_prefix = f"{pdf_prefix}_{safe_filter}"
 
-        is_brochure_opt = bool(resolved_opts.get("brochure")) or (options and bool(options.get("brochure")))
-        if is_brochure_opt:
-            if code_norm:
-                output_filename = f"bilan_{pdf_prefix}_{code_norm}_brochure.pdf"
+        format_sortie = (options or {}).get("format_sortie") or resolved_opts.get("format_sortie")
+        if not format_sortie:
+            if bool(resolved_opts.get("brochure")) or (options and bool(options.get("brochure"))):
+                format_sortie = "brochure"
             else:
-                output_filename = f"bilan_{pdf_prefix}_brochure.pdf"
-        else:
-            if code_norm:
-                output_filename = f"bilan_{pdf_prefix}_{code_norm}.pdf"
-            else:
-                output_filename = f"bilan_{pdf_prefix}.pdf"
-        pdf_kwargs: dict = {
+                format_sortie = "complet"
+
+        base_kwargs: dict = {
             "profile": profile,
             "date_deb": date_deb_ts,
             "date_fin": date_fin_ts,
@@ -853,19 +849,34 @@ def _run_global_profile_via_yaml(
             "code": code_norm,
             "ventilation_mode": ventilation_mode,
             "chart_preset": chart_preset,
-            "output_filename": output_filename,
             "diffusion": str(resolved_opts.get("diffusion", "externe")),
             "cartes": bool(resolved_opts.get("cartes", False)),
         }
         import inspect
 
-        if "brochure" in inspect.signature(generate_pdf_impl).parameters:
-            pdf_kwargs["brochure"] = bool(resolved_opts.get("brochure", False))
-        if "cli_options" in inspect.signature(generate_pdf_impl).parameters:
-            pdf_kwargs["cli_options"] = resolved_opts
-        if "gabarit" in inspect.signature(generate_pdf_impl).parameters:
-            pdf_kwargs["gabarit"] = resolved_opts.get("gabarit")
-        generate_pdf_impl(out_dir, **pdf_kwargs)
+        def _call_pdf(is_broch: bool, out_fname: str) -> None:
+            kw = dict(base_kwargs)
+            kw["output_filename"] = out_fname
+            opts_copy = dict(resolved_opts)
+            opts_copy["brochure"] = is_broch
+            if "brochure" in inspect.signature(generate_pdf_impl).parameters:
+                kw["brochure"] = is_broch
+            if "cli_options" in inspect.signature(generate_pdf_impl).parameters:
+                kw["cli_options"] = opts_copy
+            if "gabarit" in inspect.signature(generate_pdf_impl).parameters:
+                kw["gabarit"] = resolved_opts.get("gabarit")
+            generate_pdf_impl(out_dir, **kw)
+
+        fn_complet = f"bilan_{pdf_prefix}_{code_norm}.pdf" if code_norm else f"bilan_{pdf_prefix}.pdf"
+        fn_brochure = f"bilan_{pdf_prefix}_{code_norm}_brochure.pdf" if code_norm else f"bilan_{pdf_prefix}_brochure.pdf"
+
+        if format_sortie == "brochure":
+            _call_pdf(True, fn_brochure)
+        elif format_sortie == "les_deux":
+            _call_pdf(False, fn_complet)
+            _call_pdf(True, fn_brochure)
+        else:
+            _call_pdf(False, fn_complet)
 
     print(f"\nTerminé ! Rapport disponible dans : {out_dir}")
     print(_message_fin_generation_pdf(profile, out_subdir, resolved_opts=resolved_opts))
@@ -6414,7 +6425,46 @@ def _run_engine_thematic_pipeline(
     # ── PDF ──
     print("[6/6] Mise en page et création du rapport PDF...")
     with Spinner():
-        _generate_pdf(results, out_dir, profile, cfg, resolved_opts, ventilation_mode=ventilation_mode)
+        format_sortie = (options or {}).get("format_sortie") or resolved_opts.get("format_sortie")
+        if not format_sortie:
+            if bool((options or {}).get("brochure")) or bool(resolved_opts.get("brochure")):
+                format_sortie = "brochure"
+            else:
+                format_sortie = "complet"
+
+        code_norm = str(cfg.code).strip()
+        gabarit_id_opt = (options or {}).get("gabarit") or resolved_opts.get("gabarit")
+
+        def _do_generate_brochure() -> None:
+            from core.engine.generation_pdf_synthese_brochure import (
+                generate_synthese_brochure_pdf_report,
+            )
+            out_filename = (
+                f"bilan_{profil_id}_{code_norm}_brochure.pdf"
+                if code_norm
+                else f"bilan_{profil_id}_brochure.pdf"
+            )
+            generate_synthese_brochure_pdf_report(
+                out_dir,
+                profile=profile,
+                date_deb=pd.to_datetime(date_deb),
+                date_fin=pd.to_datetime(date_fin),
+                echelle=echelle,
+                code=code,
+                ventilation_mode=ventilation_mode,
+                output_filename=out_filename,
+                diffusion=str(resolved_opts.get("diffusion", "externe")),
+                cartes=bool(resolved_opts.get("cartes", True)),
+                gabarit=gabarit_id_opt or "gabarit_defaut",
+            )
+
+        if format_sortie == "brochure":
+            _do_generate_brochure()
+        elif format_sortie == "les_deux":
+            _generate_pdf(results, out_dir, profile, cfg, resolved_opts, ventilation_mode=ventilation_mode)
+            _do_generate_brochure()
+        else:
+            _generate_pdf(results, out_dir, profile, cfg, resolved_opts, ventilation_mode=ventilation_mode)
 
     print(f"\nTerminé ! Rapport disponible dans : {out_dir}")
     return 0

@@ -461,3 +461,57 @@ def test_bilans_cli_pnf_v2_code_unification(monkeypatch) -> None:
     assert resolve_code_subdir_suffix(profile, "21") == "21"
 
 
+def test_bilans_cli_format_options(monkeypatch) -> None:
+    import core.point_entree_cli as cli
+
+    captured: dict[str, object] = {}
+
+    def _fake_run_batch(profils, date_deb, date_fin, echelle, code, combine=False, cli_options=None):
+        captured["cli_options"] = cli_options
+        return 0
+
+    monkeypatch.setattr(cli, "_check_deps", lambda: None)
+    monkeypatch.setattr("core.engine.catalogue_profils.resolve_profile_ids", lambda ids: ids)
+    monkeypatch.setattr("core.engine.execution_lots_profils.run_profiles_batch", _fake_run_batch)
+
+    # 1. Test --format brochure
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["bilans", "--profil", "chasse", "--date-deb", "2025-01-01", "--date-fin", "2025-12-31", "--format", "brochure"],
+    )
+    assert cli.main() == 0
+    assert captured["cli_options"]["format_sortie"] == "brochure"
+    assert captured["cli_options"]["brochure"] is True
+
+    # 2. Test --format les_deux
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["bilans", "--profil", "chasse", "--date-deb", "2025-01-01", "--date-fin", "2025-12-31", "--format", "les_deux"],
+    )
+    assert cli.main() == 0
+    assert captured["cli_options"]["format_sortie"] == "les_deux"
+    assert captured["cli_options"]["brochure"] is True
+
+    # 3. Test --format complet
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["bilans", "--profil", "chasse", "--date-deb", "2025-01-01", "--date-fin", "2025-12-31", "--format", "complet"],
+    )
+    assert cli.main() == 0
+    assert captured["cli_options"]["format_sortie"] == "complet"
+    assert captured["cli_options"]["brochure"] is False
+
+    # 4. Test retrocompatibilite --brochure
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["bilans", "--profil", "chasse", "--date-deb", "2025-01-01", "--date-fin", "2025-12-31", "--brochure"],
+    )
+    assert cli.main() == 0
+    assert captured["cli_options"]["format_sortie"] == "brochure"
+    assert captured["cli_options"]["brochure"] is True
+
+

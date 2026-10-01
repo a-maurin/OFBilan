@@ -31,8 +31,8 @@ def test_types_usager_cible_pnf_desactive_par_defaut() -> None:
     assert profile.get("options", {}).get("pnf", {}).get("ask") is True
 
 
-def test_chasse_pnf_active_par_defaut_sans_question() -> None:
+def test_chasse_pnf_desactive_par_defaut_sans_question() -> None:
     profile = load_profile_config(PROJECT_ROOT, "chasse")
     opts = resolve_options(profile, {})
-    assert opts.get("pnf") is True
+    assert opts.get("pnf") is False
     assert profile.get("options", {}).get("pnf", {}).get("ask") is False

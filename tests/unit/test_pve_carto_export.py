@@ -36,6 +36,30 @@ def test_sanitize_gdf_for_gpkg_removes_case_duplicate_columns():
     assert cleaned["date_ctrl"].dtype == object
 
 
+HAS_LOCAL_SIG_COMMUNES = any(
+    (PROJECT_ROOT / "ref" / "programme" / "sig" / name).exists()
+    for name in [
+        "communes-france-2025.csv",
+        "communes-france-2025.gpkg",
+        "communes-france-2025.shp",
+        "communes_21/communes.shp",
+    ]
+)
+
+
+def test_communes_centroids_resolution_with_tmp_path(tmp_path):
+    sig_dir = tmp_path / "ref" / "programme" / "sig"
+    sig_dir.mkdir(parents=True)
+    csv_file = sig_dir / "communes-france-2025.csv"
+    csv_file.write_text("code_insee,latitude_centre,longitude_centre\n21231,47.32,5.04\n", encoding="utf-8")
+    dict_x, dict_y = get_communes_centroids_dicts(tmp_path)
+    assert isinstance(dict_x, dict)
+    assert isinstance(dict_y, dict)
+    assert dict_x.get("21231") == 5.04
+    assert dict_y.get("21231") == 47.32
+
+
+@pytest.mark.skipif(not HAS_LOCAL_SIG_COMMUNES, reason="Couches SIG locales de communes absentes (normal en CI)")
 def test_communes_centroids_resolution_with_project_root():
     dict_x, dict_y = get_communes_centroids_dicts(PROJECT_ROOT)
     assert isinstance(dict_x, dict)
@@ -45,3 +69,4 @@ def test_communes_centroids_resolution_with_project_root():
     if "21231" in dict_x:
         assert isinstance(dict_x["21231"], float)
         assert isinstance(dict_y["21231"], float)
+

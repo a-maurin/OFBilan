@@ -1053,10 +1053,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 elif params.get("cartes") is False:
                     cmd.append("--no-cartes")
 
-                if params.get("brochure") is True:
+                if params.get("format"):
+                    cmd.extend(["--format", str(params["format"])])
+                elif params.get("brochure") is True:
                     cmd.append("--brochure")
                 elif params.get("brochure") is False:
                     cmd.append("--no-brochure")
+
+                if params.get("pnf") is True:
+                    cmd.append("--pnf")
+                elif params.get("pnf") is False:
+                    cmd.append("--no-pnf")
 
                 is_debug_req = params.get("mode_debug")
                 if is_debug_req is None:
@@ -2193,7 +2200,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     pdfs = list(out_dir.glob("*.pdf"))
                     if not pdfs:
                         raise FileNotFoundError("Aucun fichier PDF trouvé dans le dossier de sortie.")
-                    target = max(pdfs, key=lambda p: p.stat().st_mtime)
+                    pdf_type = params.get("pdf_type")
+                    if pdf_type == "brochure":
+                        broch_pdfs = [p for p in pdfs if "brochure" in p.name.lower()]
+                        target = max(broch_pdfs, key=lambda p: p.stat().st_mtime) if broch_pdfs else max(pdfs, key=lambda p: p.stat().st_mtime)
+                    elif pdf_type == "complet":
+                        comp_pdfs = [p for p in pdfs if "brochure" not in p.name.lower()]
+                        target = max(comp_pdfs, key=lambda p: p.stat().st_mtime) if comp_pdfs else max(pdfs, key=lambda p: p.stat().st_mtime)
+                    else:
+                        target = max(pdfs, key=lambda p: p.stat().st_mtime)
                 
                 if target.exists():
                     if sys.platform == "win32":

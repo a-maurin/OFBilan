@@ -51,28 +51,42 @@ Composants principaux :
             <div class="logo-area">
                 <img src="logo.svg" alt="Bandeau OFBilan" class="header-logo">
             </div>
-            
-            <div id="update-console-container" class="hidden" style="position: absolute; top: 10px; right: 20px; width: 350px; background: #1e1e1e; border: 1px solid #333; border-radius: 6px; z-index: 9999; box-shadow: 0 4px 12px rgba(0,0,0,0.5); display: none; flex-direction: column;">
-                <div style="background: #333; color: white; padding: 5px 10px; font-size: 12px; border-top-left-radius: 6px; border-top-right-radius: 6px; font-family: monospace;">Terminal - Mise à jour</div>
-                <div id="update-console-output" style="padding: 10px; height: 200px; overflow-y: auto; color: #00ff00; font-family: monospace; font-size: 11px; white-space: pre-wrap;"></div>
+
+            <div id="update-console-container" class="hidden"
+                style="position: absolute; top: 10px; right: 20px; width: 350px; background: #1e1e1e; border: 1px solid #333; border-radius: 6px; z-index: 9999; box-shadow: 0 4px 12px rgba(0,0,0,0.5); display: none; flex-direction: column;">
+                <div
+                    style="background: #333; color: white; padding: 5px 10px; font-size: 12px; border-top-left-radius: 6px; border-top-right-radius: 6px; font-family: monospace;">
+                    Terminal - Mise à jour</div>
+                <div id="update-console-output"
+                    style="padding: 10px; height: 200px; overflow-y: auto; color: #00ff00; font-family: monospace; font-size: 11px; white-space: pre-wrap;">
+                </div>
             </div>
 
             <button class="burger-btn" onclick="document.querySelector('.app-nav').classList.toggle('open')">☰</button>
             <nav class="app-nav">
                 <a href="explorer.html" class="nav-item">Analyse Interactive</a>
                 <a href="index.html" class="nav-item active">Éditeur de Bilans</a>
-                <a href="#" onclick="restartServer(); return false;" class="nav-item nav-item-push" style="color: #F4A261; font-weight: 600;" title="Redémarrer le serveur local (Utile après mise à jour des données brutes)">↻ <span class="nav-text-hide-medium">Redémarrer</span></a>
-                <a href="#" onclick="shutdownServer(); return false;" class="nav-item" style="color: #D95C4A; font-weight: 600;" title="Éteindre le serveur">⏻ <span class="nav-text-hide-medium">Éteindre</span></a>
-                <button id="btn-update-sources" class="nav-item nav-icon-btn" style="background:none; border:none; cursor:pointer; color: #cbd5e1; font-weight:600;" title="Mettre à jour les sources">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                      <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5"/>
-                      <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708z"/>
+                <a href="#" onclick="restartServer(); return false;" class="nav-item nav-item-push"
+                    style="color: #F4A261; font-weight: 600;"
+                    title="Redémarrer le serveur local (Utile après mise à jour des données brutes)">↻ <span
+                        class="nav-text-hide-medium">Redémarrer</span></a>
+                <a href="#" onclick="shutdownServer(); return false;" class="nav-item"
+                    style="color: #D95C4A; font-weight: 600;" title="Éteindre le serveur">⏻ <span
+                        class="nav-text-hide-medium">Éteindre</span></a>
+                <button id="btn-update-sources" class="nav-item nav-icon-btn"
+                    style="background:none; border:none; cursor:pointer; color: #cbd5e1; font-weight:600;"
+                    title="Mettre à jour les sources">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
+                        viewBox="0 0 16 16">
+                        <path
+                            d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5" />
+                        <path
+                            d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708z" />
                     </svg>
                     <span class="nav-label-mobile">Mise à jour les sources</span>
                 </button>
                 <a href="#" onclick="openHelpModal(); return false;" class="nav-item nav-icon-btn"
-                    style="color: #cbd5e1;"
-                    title="Guide et Aide">
+                    style="color: #cbd5e1;" title="Guide et Aide">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="12" cy="12" r="10"></circle>
@@ -97,7 +111,7 @@ Composants principaux :
     </header>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             const btnUpdate = document.getElementById('btn-update-sources');
             const consoleContainer = document.getElementById('update-console-container');
             const consoleOutput = document.getElementById('update-console-output');
@@ -121,14 +135,14 @@ Composants principaux :
                 hideConsole(3000);
             };
 
-            btnUpdate.addEventListener('click', function() {
+            btnUpdate.addEventListener('click', function () {
                 consoleContainer.classList.remove('hidden');
                 consoleContainer.style.display = 'flex';
                 consoleOutput.textContent = "Démarrage de la mise à jour...\n";
 
                 const evtSource = new EventSource("/api/update-sources");
 
-                evtSource.onmessage = function(event) {
+                evtSource.onmessage = function (event) {
                     consoleOutput.textContent += event.data + "\n";
                     consoleOutput.scrollTop = consoleOutput.scrollHeight;
 
@@ -142,7 +156,7 @@ Composants principaux :
                     }
                 };
 
-                evtSource.onerror = function() {
+                evtSource.onerror = function () {
                     consoleOutput.textContent += "[ERREUR] Connexion SSE perdue.\n";
                     evtSource.close();
                     handleDownloadError("Perte de connexion durant le téléchargement initial.");
@@ -199,7 +213,8 @@ Composants principaux :
                                 <div class="custom-select-container">
                                     <input type="text" id="code" name="code" value="" disabled
                                         placeholder="Rechercher ou sélectionner..." required autocomplete="off">
-                                    <button type="button" id="btn-toggle-codes" class="select-arrow-btn" disabled>▼</button>
+                                    <button type="button" id="btn-toggle-codes" class="select-arrow-btn"
+                                        disabled>▼</button>
                                     <div id="codes-dropdown" class="select-dropdown hidden"></div>
                                 </div>
                                 <div id="code-helper" class="code-helper">Veuillez sélectionner une échelle</div>
@@ -249,7 +264,8 @@ Composants principaux :
                                 <div class="custom-select-container">
                                     <input type="text" id="type-usager" name="type-usager"
                                         placeholder="Tous les types d'usagers" autocomplete="off">
-                                    <button type="button" id="btn-toggle-usagers" class="select-arrow-btn">&#9660;</button>
+                                    <button type="button" id="btn-toggle-usagers"
+                                        class="select-arrow-btn">&#9660;</button>
                                     <div id="usagers-dropdown" class="select-dropdown hidden"></div>
                                 </div>
                             </div>
@@ -260,7 +276,8 @@ Composants principaux :
                                 <div class="custom-select-container">
                                     <input type="text" id="domaine-snc" name="domaine-snc"
                                         placeholder="Tous les domaines" autocomplete="off">
-                                    <button type="button" id="btn-toggle-domaines-snc" class="select-arrow-btn">&#9660;</button>
+                                    <button type="button" id="btn-toggle-domaines-snc"
+                                        class="select-arrow-btn">&#9660;</button>
                                     <div id="domaines-snc-dropdown" class="select-dropdown hidden"></div>
                                 </div>
                             </div>
@@ -269,9 +286,10 @@ Composants principaux :
                             <div class="form-group">
                                 <label for="theme-snc">Thèmes de la SNC</label>
                                 <div class="custom-select-container">
-                                    <input type="text" id="theme-snc" name="theme-snc"
-                                        placeholder="Tous les thèmes" autocomplete="off">
-                                    <button type="button" id="btn-toggle-themes-snc" class="select-arrow-btn">&#9660;</button>
+                                    <input type="text" id="theme-snc" name="theme-snc" placeholder="Tous les thèmes"
+                                        autocomplete="off">
+                                    <button type="button" id="btn-toggle-themes-snc"
+                                        class="select-arrow-btn">&#9660;</button>
                                     <div id="themes-snc-dropdown" class="select-dropdown hidden"></div>
                                 </div>
                             </div>
@@ -282,7 +300,8 @@ Composants principaux :
                                 <div class="custom-select-container">
                                     <input type="text" id="type-action-snc" name="type-action-snc"
                                         placeholder="Tous les types d'action" autocomplete="off">
-                                    <button type="button" id="btn-toggle-types-action" class="select-arrow-btn">&#9660;</button>
+                                    <button type="button" id="btn-toggle-types-action"
+                                        class="select-arrow-btn">&#9660;</button>
                                     <div id="types-action-dropdown" class="select-dropdown hidden"></div>
                                 </div>
                             </div>
@@ -305,7 +324,8 @@ Composants principaux :
                                 <input type="checkbox" id="annexe-detaillee" name="annexe-detaillee">
                                 <span class="slider"></span>
                             </label>
-                            <span class="checkbox-label">Inclure l'annexe technique détaillée par domaine/thème (Bilan Régional)</span>
+                            <span class="checkbox-label">Inclure l'annexe technique détaillée par domaine/thème (Bilan
+                                Régional)</span>
                         </div>
 
                         <!-- Sélection des cartes et chemins personnalisés -->
@@ -336,12 +356,21 @@ Composants principaux :
                             </div>
                         </div>
 
+                        <div class="form-group" style="margin-top: 12px;">
+                            <label for="format-sortie">Format du document</label>
+                            <select id="format-sortie" name="format-sortie">
+                                <option value="complet" selected>Bilan complet</option>
+                                <option value="brochure">Brochure condensée (2 pages)</option>
+                                <option value="les_deux">Bilan complet et brochure (les deux)</option>
+                            </select>
+                        </div>
+
                         <div class="checkbox-row">
                             <label class="switch">
-                                <input type="checkbox" id="brochure" name="brochure">
+                                <input type="checkbox" id="pnf" name="pnf">
                                 <span class="slider"></span>
                             </label>
-                            <span class="checkbox-label">Générer le format brochure</span>
+                            <span class="checkbox-label">Analyse PNF (cœur / hors-cœur)</span>
                         </div>
                     </div>
 
@@ -365,7 +394,9 @@ Composants principaux :
                     </div>
 
                     <!-- Message d'erreur de validation -->
-                    <div id="form-error-msg" style="display:none; color:#EF4444; background:#fef2f2; border:1px solid #fecaca; border-radius:6px; padding:8px 12px; margin-bottom:8px; font-size:0.875rem;"></div>
+                    <div id="form-error-msg"
+                        style="display:none; color:#EF4444; background:#fef2f2; border:1px solid #fecaca; border-radius:6px; padding:8px 12px; margin-bottom:8px; font-size:0.875rem;">
+                    </div>
                     <!-- Bouton de lancement (sticky) -->
                     <div class="form-footer-sticky">
                         <button type="button" id="btn-generate" class="btn btn-primary">Générer le Bilan</button>
@@ -393,7 +424,8 @@ Composants principaux :
                     <div class="console-header">
                         <span>Terminal d'exécution</span>
                         <div style="display: flex; gap: 10px;">
-                            <button id="btn-copy" class="btn-clear-console" title="Copier le contenu du terminal">Copier</button>
+                            <button id="btn-copy" class="btn-clear-console"
+                                title="Copier le contenu du terminal">Copier</button>
                             <button id="btn-clear" class="btn-clear-console">Effacer</button>
                         </div>
                     </div>
@@ -406,20 +438,26 @@ Composants principaux :
                     <div class="result-details">
                         <h3>Bilan généré avec succès !</h3>
                         <p>Le fichier PDF et les cartes associées sont disponibles dans le dossier de sortie.</p>
-                        <div class="result-actions">
+                        <div class="result-actions" style="display: flex; gap: 8px; flex-wrap: wrap;">
                             <button id="btn-open-pdf" class="btn btn-secondary">Ouvrir le PDF</button>
+                            <button id="btn-open-pdf-brochure" class="btn btn-secondary hidden"
+                                style="background: #0284c7; border-color: #0284c7;">Ouvrir la brochure</button>
                             <button id="btn-open-folder" class="btn btn-outline">Dossier de sortie</button>
                         </div>
                     </div>
                 </div>
 
-                <div id="error-card" class="result-card hidden" style="border-left: 4px solid #ef4444; background: #fef2f2;">
+                <div id="error-card" class="result-card hidden"
+                    style="border-left: 4px solid #ef4444; background: #fef2f2;">
                     <div class="result-icon" style="background: #fee2e2; color: #ef4444;">⚠️</div>
                     <div class="result-details">
                         <h3 style="color: #991b1b;">Une erreur est survenue lors de la génération</h3>
-                        <p style="color: #7f1d1d;">Le calcul a rencontré un problème. Vous pouvez télécharger l'archive de diagnostic technique pour transmission.</p>
+                        <p style="color: #7f1d1d;">Le calcul a rencontré un problème. Vous pouvez télécharger l'archive
+                            de diagnostic technique pour transmission.</p>
                         <div class="result-actions" style="margin-top: 10px;">
-                            <button type="button" onclick="window.open('/api/diagnostic/download', '_blank')" class="btn btn-secondary" style="background: #dc2626; border-color: #dc2626; color: #ffffff;">
+                            <button type="button" onclick="window.open('/api/diagnostic/download', '_blank')"
+                                class="btn btn-secondary"
+                                style="background: #dc2626; border-color: #dc2626; color: #ffffff;">
                                 📦 Télécharger le diagnostic de panne (.zip)
                             </button>
                         </div>
@@ -430,12 +468,13 @@ Composants principaux :
     </main>
 
     <footer class="app-footer">
-        <p>OFBilan - <span id="app-version">v1.0.1</span> | Office Français de la Biodiversité | Auteur : Aguirre MAURIN - SD21 | Contact : aguirre.maurin@ofb.gouv.Fr</p>
+        <p>OFBilan - <span id="app-version">v1.0.1</span> | Office Français de la Biodiversité | Auteur : Aguirre MAURIN
+            - SD21 | Contact : aguirre.maurin@ofb.gouv.Fr</p>
     </footer>
     <script src="app.js?v=1.1.0"></script>
     <script>
         function restartServer() {
-            if(confirm('Voulez-vous vraiment redémarrer le serveur local ?\n(Nécessaire uniquement si vous avez mis à jour les données géographiques brutes)')) {
+            if (confirm('Voulez-vous vraiment redémarrer le serveur local ?\n(Nécessaire uniquement si vous avez mis à jour les données géographiques brutes)')) {
                 // Montrer l'écran de chargement immédiatement
                 document.body.innerHTML = `
                 <div style="display:flex;justify-content:center;align-items:center;height:100vh;background-color:#003A76;color:white;flex-direction:column;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
@@ -444,34 +483,34 @@ Composants principaux :
                     <div style="margin-top:20px;letter-spacing:2px;font-weight:300;font-size:1.2rem;">REDÉMARRAGE DU SERVEUR...</div>
                     <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
                 </div>`;
-                
-                fetch('/api/restart').catch(() => {});
-                
+
+                fetch('/api/restart').catch(() => { });
+
                 let retries = 0;
                 function pollServer() {
                     setTimeout(() => {
                         fetch('/api/version?t=' + Date.now())
-                        .then(response => {
-                            if (response.ok) {
-                                setTimeout(() => window.location.reload(), 1000);
-                            } else {
-                                pollServer();
-                            }
-                        })
-                        .catch(() => {
-                            retries++;
-                            if (retries < 120) {
-                                pollServer();
-                            } else {
-                                const msg = document.createElement('div');
-                                msg.style = 'color:#D95C4A;margin-top:20px;font-size:1.2rem;';
-                                msg.innerText = 'Délai d\'attente dépassé. Veuillez recharger manuellement.';
-                                document.body.appendChild(msg);
-                            }
-                        });
+                            .then(response => {
+                                if (response.ok) {
+                                    setTimeout(() => window.location.reload(), 1000);
+                                } else {
+                                    pollServer();
+                                }
+                            })
+                            .catch(() => {
+                                retries++;
+                                if (retries < 120) {
+                                    pollServer();
+                                } else {
+                                    const msg = document.createElement('div');
+                                    msg.style = 'color:#D95C4A;margin-top:20px;font-size:1.2rem;';
+                                    msg.innerText = 'Délai d\'attente dépassé. Veuillez recharger manuellement.';
+                                    document.body.appendChild(msg);
+                                }
+                            });
                     }, 500);
                 }
-                
+
                 // Attendre un peu que le serveur s'éteigne avant de commencer le polling
                 setTimeout(pollServer, 2000);
             }
@@ -711,160 +750,303 @@ Composants principaux :
             <!-- Corps Modal : 2 Colonnes -->
             <div style="display: flex; flex: 1; overflow: hidden;">
                 <!-- Colonne Gauche : Sommaire -->
-                <div style="width: 250px; background: #f1f5f9; border-right: 1px solid #e2e8f0; padding: 20px; overflow-y: auto;">
-                    <h3 style="font-size: 13px; color: #64748b; text-transform: uppercase; margin-bottom: 15px; letter-spacing: 0.5px;">Sommaire</h3>
-                    <ul style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px;">
-                        <li><a href="#help-intro" style="text-decoration: none; color: #334155; font-weight: 500; font-size: 13px; display: block; padding: 6px 10px; border-radius: 6px; transition: background 0.2s;" onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='transparent'">1. Introduction & Visite</a></li>
-                        <li><a href="#help-views" style="text-decoration: none; color: #334155; font-weight: 500; font-size: 13px; display: block; padding: 6px 10px; border-radius: 6px; transition: background 0.2s;" onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='transparent'">2. Vues et Navigation</a></li>
-                        <li><a href="#help-filters" style="text-decoration: none; color: #334155; font-weight: 500; font-size: 13px; display: block; padding: 6px 10px; border-radius: 6px; transition: background 0.2s;" onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='transparent'">3. Les filtres d'exploration</a></li>
-                        <li><a href="#help-map" style="text-decoration: none; color: #334155; font-weight: 500; font-size: 13px; display: block; padding: 6px 10px; border-radius: 6px; transition: background 0.2s;" onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='transparent'">4. La carte & Maillage H3</a></li>
-                        <li><a href="#help-charts" style="text-decoration: none; color: #334155; font-weight: 500; font-size: 13px; display: block; padding: 6px 10px; border-radius: 6px; transition: background 0.2s;" onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='transparent'">5. Graphiques & Tableaux</a></li>
-                        <li><a href="#help-pdf" style="text-decoration: none; color: #334155; font-weight: 500; font-size: 13px; display: block; padding: 6px 10px; border-radius: 6px; transition: background 0.2s;" onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='transparent'">6. Édition & Bilan PDF</a></li>
-                        <li><a href="#help-settings" style="text-decoration: none; color: #334155; font-weight: 500; font-size: 13px; display: block; padding: 6px 10px; border-radius: 6px; transition: background 0.2s;" onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='transparent'">7. Paramètres, Gabarits & Serveur</a></li>
+                <div
+                    style="width: 250px; background: #f1f5f9; border-right: 1px solid #e2e8f0; padding: 20px; overflow-y: auto;">
+                    <h3
+                        style="font-size: 13px; color: #64748b; text-transform: uppercase; margin-bottom: 15px; letter-spacing: 0.5px;">
+                        Sommaire</h3>
+                    <ul
+                        style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px;">
+                        <li><a href="#help-intro"
+                                style="text-decoration: none; color: #334155; font-weight: 500; font-size: 13px; display: block; padding: 6px 10px; border-radius: 6px; transition: background 0.2s;"
+                                onmouseover="this.style.background='#e2e8f0'"
+                                onmouseout="this.style.background='transparent'">1. Introduction & Visite</a></li>
+                        <li><a href="#help-views"
+                                style="text-decoration: none; color: #334155; font-weight: 500; font-size: 13px; display: block; padding: 6px 10px; border-radius: 6px; transition: background 0.2s;"
+                                onmouseover="this.style.background='#e2e8f0'"
+                                onmouseout="this.style.background='transparent'">2. Vues et Navigation</a></li>
+                        <li><a href="#help-filters"
+                                style="text-decoration: none; color: #334155; font-weight: 500; font-size: 13px; display: block; padding: 6px 10px; border-radius: 6px; transition: background 0.2s;"
+                                onmouseover="this.style.background='#e2e8f0'"
+                                onmouseout="this.style.background='transparent'">3. Les filtres d'exploration</a></li>
+                        <li><a href="#help-map"
+                                style="text-decoration: none; color: #334155; font-weight: 500; font-size: 13px; display: block; padding: 6px 10px; border-radius: 6px; transition: background 0.2s;"
+                                onmouseover="this.style.background='#e2e8f0'"
+                                onmouseout="this.style.background='transparent'">4. La carte & Maillage H3</a></li>
+                        <li><a href="#help-charts"
+                                style="text-decoration: none; color: #334155; font-weight: 500; font-size: 13px; display: block; padding: 6px 10px; border-radius: 6px; transition: background 0.2s;"
+                                onmouseover="this.style.background='#e2e8f0'"
+                                onmouseout="this.style.background='transparent'">5. Graphiques & Tableaux</a></li>
+                        <li><a href="#help-pdf"
+                                style="text-decoration: none; color: #334155; font-weight: 500; font-size: 13px; display: block; padding: 6px 10px; border-radius: 6px; transition: background 0.2s;"
+                                onmouseover="this.style.background='#e2e8f0'"
+                                onmouseout="this.style.background='transparent'">6. Édition & Bilan PDF</a></li>
+                        <li><a href="#help-settings"
+                                style="text-decoration: none; color: #334155; font-weight: 500; font-size: 13px; display: block; padding: 6px 10px; border-radius: 6px; transition: background 0.2s;"
+                                onmouseover="this.style.background='#e2e8f0'"
+                                onmouseout="this.style.background='transparent'">7. Paramètres, Gabarits & Serveur</a>
+                        </li>
                     </ul>
                 </div>
 
                 <!-- Colonne Droite : Contenu -->
                 <div style="flex: 1; padding: 30px; overflow-y: auto; scroll-behavior: smooth;" id="help-content-area">
-                    
+
                     <!-- 1. Introduction & Visite -->
-                    <div id="help-intro" style="margin-bottom: 35px; border-bottom: 1px solid #f1f5f9; padding-bottom: 25px;">
-                        <h3 style="color: var(--color-primary); font-size: 18px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
+                    <div id="help-intro"
+                        style="margin-bottom: 35px; border-bottom: 1px solid #f1f5f9; padding-bottom: 25px;">
+                        <h3
+                            style="color: var(--color-primary); font-size: 18px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
                             <span>1. Introduction & Visite guidée</span>
                         </h3>
-                        <p style="font-size: 14px; line-height: 1.6; color: #334155; margin-bottom: 15px;">Bienvenue dans <strong>OFBilan</strong>. Ce logiciel est conçu pour analyser visuellement et cartographier les données d'interventions et de contrôles de la police de l'environnement sur votre territoire, puis générer en un clic des bilans au format PDF prêts à l'impression.</p>
-                        
-                        <div onclick="closeHelpModal(); startGuidedTour();" style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 15px; margin-top: 15px; display: flex; align-items: center; justify-content: space-between; gap: 15px; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='#e0f2fe'" onmouseout="this.style.background='#f0f9ff'">
+                        <p style="font-size: 14px; line-height: 1.6; color: #334155; margin-bottom: 15px;">Bienvenue
+                            dans <strong>OFBilan</strong>. Ce logiciel est conçu pour analyser visuellement et
+                            cartographier les données d'interventions et de contrôles de la police de l'environnement
+                            sur votre territoire, puis générer en un clic des bilans au format PDF prêts à l'impression.
+                        </p>
+
+                        <div onclick="closeHelpModal(); startGuidedTour();"
+                            style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 15px; margin-top: 15px; display: flex; align-items: center; justify-content: space-between; gap: 15px; cursor: pointer; transition: all 0.2s;"
+                            onmouseover="this.style.background='#e0f2fe'" onmouseout="this.style.background='#f0f9ff'">
                             <div>
-                                <div style="font-weight: 600; font-size: 14px; color: #0369a1;">Visite rapide interactive</div>
-                                <div style="font-size: 12px; color: #0c4a6e;">Un tutoriel pas-à-pas pour découvrir l'interface principale.</div>
+                                <div style="font-weight: 600; font-size: 14px; color: #0369a1;">Visite rapide
+                                    interactive</div>
+                                <div style="font-size: 12px; color: #0c4a6e;">Un tutoriel pas-à-pas pour découvrir
+                                    l'interface principale.</div>
                             </div>
-                            <button type="button" class="btn btn-primary" style="font-size: 12px; padding: 6px 14px; background: #0284c7; border: none; border-radius: 6px; color: white; font-weight: 600; cursor: pointer;">Lancer le tutoriel ▶</button>
+                            <button type="button" class="btn btn-primary"
+                                style="font-size: 12px; padding: 6px 14px; background: #0284c7; border: none; border-radius: 6px; color: white; font-weight: 600; cursor: pointer;">Lancer
+                                le tutoriel ▶</button>
                         </div>
                     </div>
 
                     <!-- 2. Vues & Navigation -->
-                    <div id="help-views" style="margin-bottom: 35px; border-bottom: 1px solid #f1f5f9; padding-bottom: 25px;">
-                        <h3 style="color: var(--color-primary); font-size: 18px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 15px;">2. Vues et Navigation dans l'Application</h3>
-                        <p style="font-size: 14px; line-height: 1.6; color: #334155; margin-bottom: 15px;">L'application s'articule autour de deux vues complémentaires accessibles via la barre de navigation principale :</p>
-                        
+                    <div id="help-views"
+                        style="margin-bottom: 35px; border-bottom: 1px solid #f1f5f9; padding-bottom: 25px;">
+                        <h3
+                            style="color: var(--color-primary); font-size: 18px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 15px;">
+                            2. Vues et Navigation dans l'Application</h3>
+                        <p style="font-size: 14px; line-height: 1.6; color: #334155; margin-bottom: 15px;">L'application
+                            s'articule autour de deux vues complémentaires accessibles via la barre de navigation
+                            principale :</p>
+
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
-                            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 15px;">
+                            <div
+                                style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 15px;">
                                 <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                                    <span style="background: #22c55e; color: white; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: bold;">VUE 1</span>
+                                    <span
+                                        style="background: #22c55e; color: white; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: bold;">VUE
+                                        1</span>
                                     <strong style="color: #15803d; font-size: 14px;">Analyse Interactive</strong>
                                 </div>
-                                <p style="font-size: 13px; color: #166534; line-height: 1.5; margin: 0;">Exploration spatiale et temporelle dynamique. Permet de manipuler la carte, les filtres thématiques, les graphes de saisonnalité et la grille hexagonal H3.</p>
+                                <p style="font-size: 13px; color: #166534; line-height: 1.5; margin: 0;">Exploration
+                                    spatiale et temporelle dynamique. Permet de manipuler la carte, les filtres
+                                    thématiques, les graphes de saisonnalité et la grille hexagonal H3.</p>
                             </div>
 
-                            <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 15px;">
+                            <div
+                                style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 15px;">
                                 <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                                    <span style="background: #f59e0b; color: white; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: bold;">VUE 2</span>
+                                    <span
+                                        style="background: #f59e0b; color: white; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: bold;">VUE
+                                        2</span>
                                     <strong style="color: #b45309; font-size: 14px;">Éditeur de Bilans</strong>
                                 </div>
-                                <p style="font-size: 13px; color: #92400e; line-height: 1.5; margin: 0;">Mise en page dynamique et génération PDF. Réorganise l'affichage au format A4 officiel avec sélection du gabarit de présentation.</p>
+                                <p style="font-size: 13px; color: #92400e; line-height: 1.5; margin: 0;">Mise en page
+                                    dynamique et génération PDF. Réorganise l'affichage au format A4 officiel avec
+                                    sélection du gabarit de présentation.</p>
                             </div>
                         </div>
                     </div>
 
                     <!-- 3. Filtres d'exploration -->
-                    <div id="help-filters" style="margin-bottom: 35px; border-bottom: 1px solid #f1f5f9; padding-bottom: 25px;">
-                        <h3 style="color: var(--color-primary); font-size: 18px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 15px;">3. Les filtres d'exploration (Panneau de gauche)</h3>
-                        <p style="font-size: 14px; line-height: 1.6; color: #334155;">Le panneau latéral gauche régit l'extraction et l'agrégation des données. Après chaque modification, cliquez sur le bouton vert <span style="background: #22c55e; color: white; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 12px;">Charger les données</span> en bas du panneau.</p>
-                        
-                        <ul style="font-size: 13px; line-height: 1.7; color: #334155; margin-top: 12px; padding-left: 20px;">
-                            <li><strong>Profil thématique :</strong> Pré-filtre automatiquement les actions selon des domaines métier (ex: <em>Produits phytopharmaceutiques</em>, <em>Chasse</em>, <em>Pêche</em>, <em>Eau & Milieux aquatiques</em>).</li>
-                            <li><strong>Période & Comparaison :</strong> Ajustez les dates de début et de fin. Cochez l'option de comparaison pour analyser l'évolution <strong>N vs N-1</strong>.</li>
-                            <li><strong>Périmètre géographique :</strong> Sélectionnez l'échelon (Département, Région, Inter-région, National) et renseignez le code associé (ex: <code>21</code> pour la Côte-d'Or).</li>
-                            <li><strong>Maillage Hexagonal (H3) :</strong> Choisissez la résolution d'alvéoles spatiales (résolution 6, 7 ou 8) pour agréger les contrôles en nid d'abeille.</li>
-                            <li><strong>PEJ non géolocalisées :</strong> Un bandeau d'alerte s'affiche lorsque des procédures judiciaires n'ont pas de coordonnées cartographiques brutes, avec une modale explicative détaillée.</li>
+                    <div id="help-filters"
+                        style="margin-bottom: 35px; border-bottom: 1px solid #f1f5f9; padding-bottom: 25px;">
+                        <h3
+                            style="color: var(--color-primary); font-size: 18px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 15px;">
+                            3. Les filtres d'exploration (Panneau de gauche)</h3>
+                        <p style="font-size: 14px; line-height: 1.6; color: #334155;">Le panneau latéral gauche régit
+                            l'extraction et l'agrégation des données. Après chaque modification, cliquez sur le bouton
+                            vert <span
+                                style="background: #22c55e; color: white; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 12px;">Charger
+                                les données</span> en bas du panneau.</p>
+
+                        <ul
+                            style="font-size: 13px; line-height: 1.7; color: #334155; margin-top: 12px; padding-left: 20px;">
+                            <li><strong>Profil thématique :</strong> Pré-filtre automatiquement les actions selon des
+                                domaines métier (ex: <em>Produits phytopharmaceutiques</em>, <em>Chasse</em>,
+                                <em>Pêche</em>, <em>Eau & Milieux aquatiques</em>).</li>
+                            <li><strong>Période & Comparaison :</strong> Ajustez les dates de début et de fin. Cochez
+                                l'option de comparaison pour analyser l'évolution <strong>N vs N-1</strong>.</li>
+                            <li><strong>Périmètre géographique :</strong> Sélectionnez l'échelon (Département, Région,
+                                Inter-région, National) et renseignez le code associé (ex: <code>21</code> pour la
+                                Côte-d'Or).</li>
+                            <li><strong>Maillage Hexagonal (H3) :</strong> Choisissez la résolution d'alvéoles spatiales
+                                (résolution 6, 7 ou 8) pour agréger les contrôles en nid d'abeille.</li>
+                            <li><strong>PEJ non géolocalisées :</strong> Un bandeau d'alerte s'affiche lorsque des
+                                procédures judiciaires n'ont pas de coordonnées cartographiques brutes, avec une modale
+                                explicative détaillée.</li>
                         </ul>
                     </div>
 
                     <!-- 4. Carte interactive -->
-                    <div id="help-map" style="margin-bottom: 35px; border-bottom: 1px solid #f1f5f9; padding-bottom: 25px;">
-                        <h3 style="color: var(--color-primary); font-size: 18px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 15px;">4. La carte interactive & Analyses spatiales</h3>
-                        <p style="font-size: 14px; line-height: 1.6; color: #334155; margin-bottom: 15px;">La carte cartographie dynamiquement l'ensemble des interventions selon trois modes d'affichage principaux :</p>
-                        
+                    <div id="help-map"
+                        style="margin-bottom: 35px; border-bottom: 1px solid #f1f5f9; padding-bottom: 25px;">
+                        <h3
+                            style="color: var(--color-primary); font-size: 18px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 15px;">
+                            4. La carte interactive & Analyses spatiales</h3>
+                        <p style="font-size: 14px; line-height: 1.6; color: #334155; margin-bottom: 15px;">La carte
+                            cartographie dynamiquement l'ensemble des interventions selon trois modes d'affichage
+                            principaux :</p>
+
                         <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 10px;">
-                            <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between;">
+                            <div
+                                style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between;">
                                 <div>
-                                    <strong style="color: #0f172a; font-size: 13px;">📍 Mode Points & Regroupement (Cluster)</strong>
-                                    <div style="font-size: 12px; color: #64748b;">Affiche chaque contrôle ou les regroupe dans des puces numérotées selon le niveau de zoom.</div>
+                                    <strong style="color: #0f172a; font-size: 13px;">📍 Mode Points & Regroupement
+                                        (Cluster)</strong>
+                                    <div style="font-size: 12px; color: #64748b;">Affiche chaque contrôle ou les
+                                        regroupe dans des puces numérotées selon le niveau de zoom.</div>
                                 </div>
-                                <span style="background: #3b82f6; color: white; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">Par défaut</span>
+                                <span
+                                    style="background: #3b82f6; color: white; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">Par
+                                    défaut</span>
                             </div>
 
-                            <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between;">
+                            <div
+                                style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between;">
                                 <div>
-                                    <strong style="color: #0f172a; font-size: 13px;">🔥 Mode Carte de Chaleur (Heatmap)</strong>
-                                    <div style="font-size: 12px; color: #64748b;">Révèle instantanément le gradient de densité et les zones d'accumulation d'actions de contrôle.</div>
+                                    <strong style="color: #0f172a; font-size: 13px;">🔥 Mode Carte de Chaleur
+                                        (Heatmap)</strong>
+                                    <div style="font-size: 12px; color: #64748b;">Révèle instantanément le gradient de
+                                        densité et les zones d'accumulation d'actions de contrôle.</div>
                                 </div>
-                                <span style="background: #f97316; color: white; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">Vue Densité</span>
+                                <span
+                                    style="background: #f97316; color: white; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">Vue
+                                    Densité</span>
                             </div>
 
-                            <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between;">
+                            <div
+                                style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between;">
                                 <div>
                                     <strong style="color: #0f172a; font-size: 13px;">🗺️ Mode Choroplèthe</strong>
-                                    <div style="font-size: 12px; color: #64748b;">Représentation graphique de la densité d'action agrégée à l'échelle des limites administratives (départements, communes) ou par alvéoles régulières H3 pour une analyse territoriale neutre.</div>
+                                    <div style="font-size: 12px; color: #64748b;">Représentation graphique de la densité
+                                        d'action agrégée à l'échelle des limites administratives (départements,
+                                        communes) ou par alvéoles régulières H3 pour une analyse territoriale neutre.
+                                    </div>
                                 </div>
-                                <span style="background: #8b5cf6; color: white; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">Mode Choroplèthe</span>
+                                <span
+                                    style="background: #8b5cf6; color: white; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">Mode
+                                    Choroplèthe</span>
                             </div>
                         </div>
 
-                        <p style="font-size: 13px; line-height: 1.6; color: #334155; margin-top: 15px;">Utilisez le bouton <span style="background: #f1f5f9; color: #475569; padding: 2px 8px; border: 1px solid #cbd5e1; border-radius: 4px; font-weight: 600; font-size: 12px;">📷 Export PNG</span> pour enregistrer une image haute résolution de la carte ou le bouton <span style="background: #f1f5f9; color: #475569; padding: 2px 8px; border: 1px solid #cbd5e1; border-radius: 4px; font-weight: 600; font-size: 12px;">⛶ Plein écran</span> pour agrandir la vue.</p>
+                        <p style="font-size: 13px; line-height: 1.6; color: #334155; margin-top: 15px;">Utilisez le
+                            bouton <span
+                                style="background: #f1f5f9; color: #475569; padding: 2px 8px; border: 1px solid #cbd5e1; border-radius: 4px; font-weight: 600; font-size: 12px;">📷
+                                Export PNG</span> pour enregistrer une image haute résolution de la carte ou le bouton
+                            <span
+                                style="background: #f1f5f9; color: #475569; padding: 2px 8px; border: 1px solid #cbd5e1; border-radius: 4px; font-weight: 600; font-size: 12px;">⛶
+                                Plein écran</span> pour agrandir la vue.</p>
                     </div>
 
                     <!-- 5. Graphiques -->
-                    <div id="help-charts" style="margin-bottom: 35px; border-bottom: 1px solid #f1f5f9; padding-bottom: 25px;">
-                        <h3 style="color: var(--color-primary); font-size: 18px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 15px;">5. Graphiques statistiques & Tableaux</h3>
-                        <p style="font-size: 14px; line-height: 1.6; color: #334155;">Les graphiques s'actualisent en temps réel lors du chargement des données et proposent des infobulles détaillées au survol :</p>
-                        
-                        <ul style="font-size: 13px; line-height: 1.7; color: #334155; margin-top: 10px; padding-left: 20px;">
-                            <li><strong>Saisonnalité mensuelle :</strong> Graphique linéaire montrant la répartition des contrôles mois par mois (avec tracé comparatif N vs N-1 si activé).</li>
-                            <li><strong>Résultats des contrôles & Usagers :</strong> Diagrammes en barres ou camemberts synthétisant les suites données (PVe, PEJ, conformités) et les catégories d'usagers.</li>
-                            <li><strong>Légendes interactives :</strong> Cliquez sur un élément de légende sous un graphique pour filtrer ou masquer temporairement une catégorie.</li>
-                            <li><strong>Tableaux de synthèse (Top 10) :</strong> Classement des infractions les plus fréquentes identifiées sur le périmètre.</li>
+                    <div id="help-charts"
+                        style="margin-bottom: 35px; border-bottom: 1px solid #f1f5f9; padding-bottom: 25px;">
+                        <h3
+                            style="color: var(--color-primary); font-size: 18px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 15px;">
+                            5. Graphiques statistiques & Tableaux</h3>
+                        <p style="font-size: 14px; line-height: 1.6; color: #334155;">Les graphiques s'actualisent en
+                            temps réel lors du chargement des données et proposent des infobulles détaillées au survol :
+                        </p>
+
+                        <ul
+                            style="font-size: 13px; line-height: 1.7; color: #334155; margin-top: 10px; padding-left: 20px;">
+                            <li><strong>Saisonnalité mensuelle :</strong> Graphique linéaire montrant la répartition des
+                                contrôles mois par mois (avec tracé comparatif N vs N-1 si activé).</li>
+                            <li><strong>Résultats des contrôles & Usagers :</strong> Diagrammes en barres ou camemberts
+                                synthétisant les suites données (PVe, PEJ, conformités) et les catégories d'usagers.
+                            </li>
+                            <li><strong>Légendes interactives :</strong> Cliquez sur un élément de légende sous un
+                                graphique pour filtrer ou masquer temporairement une catégorie.</li>
+                            <li><strong>Tableaux de synthèse (Top 10) :</strong> Classement des infractions les plus
+                                fréquentes identifiées sur le périmètre.</li>
                         </ul>
                     </div>
 
                     <!-- 6. Bilan PDF -->
-                    <div id="help-pdf" style="margin-bottom: 35px; border-bottom: 1px solid #f1f5f9; padding-bottom: 25px;">
-                        <h3 style="color: var(--color-primary); font-size: 18px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 15px;">6. Édition & Génération de Bilan PDF</h3>
-                        <p style="font-size: 14px; line-height: 1.6; color: #334155; margin-bottom: 15px;">Pour générer un rapport officiel, cliquez sur le bouton rouge <span style="background: #ef4444; color: white; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 12px;">Édition PDF</span> situé en bas du panneau de gauche.</p>
-                        
+                    <div id="help-pdf"
+                        style="margin-bottom: 35px; border-bottom: 1px solid #f1f5f9; padding-bottom: 25px;">
+                        <h3
+                            style="color: var(--color-primary); font-size: 18px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 15px;">
+                            6. Édition & Génération de Bilan PDF</h3>
+                        <p style="font-size: 14px; line-height: 1.6; color: #334155; margin-bottom: 15px;">Pour générer
+                            un rapport officiel, cliquez sur le bouton rouge <span
+                                style="background: #ef4444; color: white; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 12px;">Édition
+                                PDF</span> situé en bas du panneau de gauche.</p>
+
                         <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 15px;">
-                            <div style="font-weight: 600; font-size: 13px; color: #991b1b; margin-bottom: 8px;">Conseils importants d'impression navigateur :</div>
-                            <ol style="font-size: 12px; color: #7f1d1d; line-height: 1.6; margin: 0; padding-left: 20px;">
-                                <li>Sélectionnez <strong>"Enregistrer au format PDF"</strong> comme imprimante cible.</li>
-                                <li>Dans les paramètres avancés, cochez impérativement la case <strong>"Graphiques d'arrière-plan"</strong> pour préserver les couleurs et fonds des cartes/graphiques.</li>
-                                <li>Définissez les marges sur <strong>"Aucune"</strong> ou <strong>"Par défaut"</strong> selon le gabarit A4 sélectionné.</li>
+                            <div style="font-weight: 600; font-size: 13px; color: #991b1b; margin-bottom: 8px;">Conseils
+                                importants d'impression navigateur :</div>
+                            <ol
+                                style="font-size: 12px; color: #7f1d1d; line-height: 1.6; margin: 0; padding-left: 20px;">
+                                <li>Sélectionnez <strong>"Enregistrer au format PDF"</strong> comme imprimante cible.
+                                </li>
+                                <li>Dans les paramètres avancés, cochez impérativement la case <strong>"Graphiques
+                                        d'arrière-plan"</strong> pour préserver les couleurs et fonds des
+                                    cartes/graphiques.</li>
+                                <li>Définissez les marges sur <strong>"Aucune"</strong> ou <strong>"Par défaut"</strong>
+                                    selon le gabarit A4 sélectionné.</li>
                             </ol>
                         </div>
                     </div>
 
                     <!-- 7. Paramètres & Serveur -->
                     <div id="help-settings" style="margin-bottom: 20px;">
-                        <h3 style="color: var(--color-primary); font-size: 18px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 15px;">7. Paramètres, Éditeur de Gabarit & Gestion du Serveur</h3>
-                        <p style="font-size: 14px; line-height: 1.6; color: #334155; margin-bottom: 15px;">La fenêtre de réglages (accès via l'icône d'engrenage <span style="font-size: 14px;">⚙️</span> dans la barre supérieure) permet d'administrer le logiciel :</p>
-                        
+                        <h3
+                            style="color: var(--color-primary); font-size: 18px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 15px;">
+                            7. Paramètres, Éditeur de Gabarit & Gestion du Serveur</h3>
+                        <p style="font-size: 14px; line-height: 1.6; color: #334155; margin-bottom: 15px;">La fenêtre de
+                            réglages (accès via l'icône d'engrenage <span style="font-size: 14px;">⚙️</span> dans la
+                            barre supérieure) permet d'administrer le logiciel :</p>
+
                         <div style="display: flex; flex-direction: column; gap: 12px;">
-                            <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 12px;">
-                                <strong style="color: #1e293b; font-size: 13px;">⚙️ Profil Utilisateur & Défauts</strong>
-                                <p style="font-size: 12px; color: #475569; margin: 4px 0 0 0; line-height: 1.5;">Renseignez votre Nom, Prénom et Unité/Service pour personnaliser automatiquement le cartouche des bilans PDF. Définissez également le code géographique et le gabarit par défaut au démarrage.</p>
+                            <div
+                                style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 12px;">
+                                <strong style="color: #1e293b; font-size: 13px;">⚙️ Profil Utilisateur &
+                                    Défauts</strong>
+                                <p style="font-size: 12px; color: #475569; margin: 4px 0 0 0; line-height: 1.5;">
+                                    Renseignez votre Nom, Prénom et Unité/Service pour personnaliser automatiquement le
+                                    cartouche des bilans PDF. Définissez également le code géographique et le gabarit
+                                    par défaut au démarrage.</p>
                             </div>
 
-                            <div style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; padding: 12px;">
-                                <strong style="color: #0369a1; font-size: 13px;">⚙️ Éditeur visuel de Gabarit YAML</strong>
-                                <p style="font-size: 12px; color: #0c4a6e; margin: 4px 0 0 0; line-height: 1.5;">Accessible via le bouton <span style="background: #3b82f6; color: white; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 500;">⚙️ Éditer le gabarit</span> dans les paramètres. Permet de modifier graphiquement et sans code les fichiers de configuration YAML (ordre des sections PDF, masquage des graphiques, dimensions, visuels d'en-tête et fiches départementales 1 page A4).</p>
+                            <div
+                                style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; padding: 12px;">
+                                <strong style="color: #0369a1; font-size: 13px;">⚙️ Éditeur visuel de Gabarit
+                                    YAML</strong>
+                                <p style="font-size: 12px; color: #0c4a6e; margin: 4px 0 0 0; line-height: 1.5;">
+                                    Accessible via le bouton <span
+                                        style="background: #3b82f6; color: white; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 500;">⚙️
+                                        Éditer le gabarit</span> dans les paramètres. Permet de modifier graphiquement
+                                    et sans code les fichiers de configuration YAML (ordre des sections PDF, masquage
+                                    des graphiques, dimensions, visuels d'en-tête et fiches départementales 1 page A4).
+                                </p>
                             </div>
 
-                            <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 12px;">
-                                <strong style="color: #1e293b; font-size: 13px;">🛠️ Diagnostic & Contrôle du Serveur Local</strong>
-                                <ul style="font-size: 12px; color: #475569; margin: 4px 0 0 0; padding-left: 18px; line-height: 1.6;">
-                                    <li><span style="color: #F4A261; font-weight: 600;">↻ Redémarrer</span> : Redémarre à chaud le serveur backend local Python après une mise à jour des fichiers ou données brutes.</li>
-                                    <li><span style="color: #D95C4A; font-weight: 600;">⏻ Éteindre</span> : Arrête proprement le serveur local OFBilan.</li>
-                                    <li><span style="color: #64748b; font-weight: 600;">↻ Sources</span> : Vérifie la disponibilité et re-synchronise les sources de données brutes.</li>
+                            <div
+                                style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 12px;">
+                                <strong style="color: #1e293b; font-size: 13px;">🛠️ Diagnostic & Contrôle du Serveur
+                                    Local</strong>
+                                <ul
+                                    style="font-size: 12px; color: #475569; margin: 4px 0 0 0; padding-left: 18px; line-height: 1.6;">
+                                    <li><span style="color: #F4A261; font-weight: 600;">↻ Redémarrer</span> : Redémarre
+                                        à chaud le serveur backend local Python après une mise à jour des fichiers ou
+                                        données brutes.</li>
+                                    <li><span style="color: #D95C4A; font-weight: 600;">⏻ Éteindre</span> : Arrête
+                                        proprement le serveur local OFBilan.</li>
+                                    <li><span style="color: #64748b; font-weight: 600;">↻ Sources</span> : Vérifie la
+                                        disponibilité et re-synchronise les sources de données brutes.</li>
                                 </ul>
                             </div>
                         </div>
@@ -895,28 +1077,37 @@ Composants principaux :
                         <h3 style="font-size: 14px; margin-bottom: 10px; color: #3b82f6;">Profil Utilisateur</h3>
                         <div class="form-group"><label>Nom</label><input type="text" id="set-profil-nom"></div>
                         <div class="form-group"><label>Prénom</label><input type="text" id="set-profil-prenom"></div>
-                        <div class="form-group"><label>Service / Unité</label><input type="text" id="set-profil-service"></div>
+                        <div class="form-group"><label>Service / Unité</label><input type="text"
+                                id="set-profil-service"></div>
                     </div>
                     <div class="card" style="margin: 0;">
-                        <h3 style="font-size: 14px; margin-bottom: 10px; color: #3b82f6;">Période et code service par défaut</h3>
-                        <div class="form-group"><label>Code géographique défaut</label><input type="text" id="set-geo-code" placeholder="ex: 21, r27, FR"></div>
-                        <div class="form-group"><label>Année de référence par défaut</label><input type="number" id="set-geo-annee" placeholder="Année en cours"></div>
+                        <h3 style="font-size: 14px; margin-bottom: 10px; color: #3b82f6;">Période et code service par
+                            défaut</h3>
+                        <div class="form-group"><label>Code géographique défaut</label><input type="text"
+                                id="set-geo-code" placeholder="ex: 21, r27, FR"></div>
+                        <div class="form-group"><label>Année de référence par défaut</label><input type="number"
+                                id="set-geo-annee" placeholder="Année en cours"></div>
                         <div class="form-group">
                             <label for="set-geo-gabarit">Gabarit de présentation par défaut</label>
                             <div style="display: flex; gap: 8px; align-items: center; width: 100%;">
-                                <select id="set-geo-gabarit" style="flex: 1 1 auto; width: 0; min-width: 0; padding: 7px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+                                <select id="set-geo-gabarit"
+                                    style="flex: 1 1 auto; width: 0; min-width: 0; padding: 7px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
                                     <option value="">Automatique (par profil)</option>
                                 </select>
-                                <button type="button" onclick="openGabaritEditorModal()" style="flex: 0 0 auto; width: auto; background: #3b82f6; color: #ffffff; border: none; border-radius: 6px; padding: 7px 12px; font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap; box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2);" title="Configurer le gabarit sélectionné">⚙️ Éditer le gabarit</button>
+                                <button type="button" onclick="openGabaritEditorModal()"
+                                    style="flex: 0 0 auto; width: auto; background: #3b82f6; color: #ffffff; border: none; border-radius: 6px; padding: 7px 12px; font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap; box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2);"
+                                    title="Configurer le gabarit sélectionné">⚙️ Éditer le gabarit</button>
                             </div>
                         </div>
                     </div>
                     <div class="card" style="margin: 0;">
                         <h3 style="font-size: 14px; margin-bottom: 10px; color: #3b82f6;">Export & Rapports</h3>
-                        <div class="form-group"><label>Qualité des cartes (DPI)</label><input type="number" id="set-export-dpi" value="300"></div>
+                        <div class="form-group"><label>Qualité des cartes (DPI)</label><input type="number"
+                                id="set-export-dpi" value="300"></div>
                         <div class="form-group" style="display: flex; align-items: center; gap: 8px;">
                             <input type="checkbox" id="set-export-brutes" style="margin:0;">
-                            <label for="set-export-brutes" style="margin:0; cursor:pointer;">Inclure les données brutes en annexe</label>
+                            <label for="set-export-brutes" style="margin:0; cursor:pointer;">Inclure les données brutes
+                                en annexe</label>
                         </div>
                     </div>
                 </div>
@@ -938,24 +1129,34 @@ Composants principaux :
                                 <option value="sombre">Sombre</option>
                             </select>
                         </div>
-                        <div class="form-group"><label>Zoom carte par défaut</label><input type="number" id="set-ui-zoom" value="8"></div>
+                        <div class="form-group"><label>Zoom carte par défaut</label><input type="number"
+                                id="set-ui-zoom" value="8"></div>
                         <div class="form-group" style="display: flex; align-items: center; gap: 8px; margin-top: 10px;">
                             <input type="checkbox" id="set-ui-cluster-offset" checked style="margin:0;">
-                            <label for="set-ui-cluster-offset" style="margin:0; cursor:pointer;">Écarter les clusters superposés</label>
+                            <label for="set-ui-cluster-offset" style="margin:0; cursor:pointer;">Écarter les clusters
+                                superposés</label>
                         </div>
-                        <div class="form-group"><label>Niveau de zoom minimal pour l'écartement :</label><input type="number" id="set-ui-cluster-zoom" value="10"></div>
+                        <div class="form-group"><label>Niveau de zoom minimal pour l'écartement :</label><input
+                                type="number" id="set-ui-cluster-zoom" value="10"></div>
                     </div>
                     <div class="card" style="margin: 0;">
                         <h3 style="font-size: 14px; margin-bottom: 10px; color: #3b82f6;">Paramètres avancés</h3>
-                        <div class="form-group"><label>Dossier d'export</label><input type="text" id="set-sys-dossier" placeholder="~/Documents/OFBilan_Exports"></div>
-                        <div class="form-group"><label>Proxy</label><input type="text" id="set-sys-proxy" placeholder="http://proxy:port"></div>
-                        <div class="form-group"><label>Port Serveur Local</label><input type="number" id="set-tech-port" value="5000"></div>
-                        <div class="form-group"><label>Chemin QGIS personnalisé</label><input type="text" id="set-tech-qgis" placeholder="Auto-détecté si vide (ex: C:\Program Files\QGIS 3.44.8)"></div>
+                        <div class="form-group"><label>Dossier d'export</label><input type="text" id="set-sys-dossier"
+                                placeholder="~/Documents/OFBilan_Exports"></div>
+                        <div class="form-group"><label>Proxy</label><input type="text" id="set-sys-proxy"
+                                placeholder="http://proxy:port"></div>
+                        <div class="form-group"><label>Port Serveur Local</label><input type="number" id="set-tech-port"
+                                value="5000"></div>
+                        <div class="form-group"><label>Chemin QGIS personnalisé</label><input type="text"
+                                id="set-tech-qgis"
+                                placeholder="Auto-détecté si vide (ex: C:\Program Files\QGIS 3.44.8)"></div>
                         <div class="form-group" style="display: flex; align-items: center; gap: 8px; margin-top: 10px;">
                             <input type="checkbox" id="set-tech-debug" style="margin:0;">
-                            <label for="set-tech-debug" style="margin:0; cursor:pointer;">Activer le mode Débogage</label>
+                            <label for="set-tech-debug" style="margin:0; cursor:pointer;">Activer le mode
+                                Débogage</label>
                         </div>
-                        <div style="margin-top: 15px; border-top: 1px solid #e2e8f0; padding-top: 10px; display: flex; flex-direction: column; gap: 8px;">
+                        <div
+                            style="margin-top: 15px; border-top: 1px solid #e2e8f0; padding-top: 10px; display: flex; flex-direction: column; gap: 8px;">
                             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
                                 <button type="button" onclick="clearCacheAction()"
                                     style="background: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd; border-radius: 6px; padding: 6px 10px; font-size: 12px; font-weight: 500; cursor: pointer;">
@@ -987,49 +1188,82 @@ Composants principaux :
             <div
                 style="padding: 15px 20px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 10px; background: #f8fafc; border-radius: 0 0 8px 8px;">
                 <button type="button" class="btn btn-primary" onclick="closeSettingsModal()">Annuler</button>
-                <button type="button" class="btn btn-secondary" id="btn-save-settings" onclick="saveSettings()">Enregistrer</button>
+                <button type="button" class="btn btn-secondary" id="btn-save-settings"
+                    onclick="saveSettings()">Enregistrer</button>
             </div>
         </div>
     </div>
 
     <!-- Modal Éditeur de Gabarit -->
-    <div id="gabarit-editor-modal" class="hidden" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 9999999; display: none; justify-content: center; align-items: center;">
-        <div style="background: var(--color-bg-card, #ffffff); border-radius: 8px; width: 950px; max-width: 95vw; height: 85vh; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 8px 30px rgba(0,0,0,0.3); overflow: hidden;">
-            
+    <div id="gabarit-editor-modal" class="hidden"
+        style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 9999999; display: none; justify-content: center; align-items: center;">
+        <div
+            style="background: var(--color-bg-card, #ffffff); border-radius: 8px; width: 950px; max-width: 95vw; height: 85vh; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 8px 30px rgba(0,0,0,0.3); overflow: hidden;">
+
             <!-- Toast Notification Banner -->
-            <div id="gab-editor-toast" style="display:none; padding:8px 16px; font-size:13px; text-align:center; transition:all 0.3s ease;"></div>
+            <div id="gab-editor-toast"
+                style="display:none; padding:8px 16px; font-size:13px; text-align:center; transition:all 0.3s ease;">
+            </div>
 
             <!-- Header -->
-            <div style="padding: 12px 20px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; background: #f8fafc;">
+            <div
+                style="padding: 12px 20px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; background: #f8fafc;">
                 <div style="display: flex; align-items: center; gap: 12px;">
                     <h2 style="margin: 0; font-size: 18px; color: #1e293b;">⚙️ Éditeur de Gabarit de Présentation</h2>
-                    <span id="gab-system-badge" style="font-size: 11px; padding: 2px 8px; border-radius: 12px; font-weight: 600;">🔒 Système</span>
+                    <span id="gab-system-badge"
+                        style="font-size: 11px; padding: 2px 8px; border-radius: 12px; font-weight: 600;">🔒
+                        Système</span>
                 </div>
-                <button type="button" onclick="closeGabaritEditorModal()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #64748b;">&times;</button>
+                <button type="button" onclick="closeGabaritEditorModal()"
+                    style="background: none; border: none; font-size: 24px; cursor: pointer; color: #64748b;">&times;</button>
             </div>
 
             <!-- Actions Toolbar -->
-            <div style="padding: 10px 20px; border-bottom: 1px solid #e2e8f0; background: #ffffff; display: flex; flex-wrap: nowrap; justify-content: space-between; align-items: center; gap: 10px; overflow-x: auto;">
+            <div
+                style="padding: 10px 20px; border-bottom: 1px solid #e2e8f0; background: #ffffff; display: flex; flex-wrap: nowrap; justify-content: space-between; align-items: center; gap: 10px; overflow-x: auto;">
                 <div style="display: flex; gap: 8px; align-items: center; flex-wrap: nowrap;">
-                    <button type="button" onclick="saveGabaritAction()" style="display:inline-flex; align-items:center; height:34px; padding:0 12px; font-size:12px; font-weight:500; border-radius:6px; border:1px solid #cbd5e1; background:#ffffff; color:#334155; cursor:pointer; white-space:nowrap;">💾 Enregistrer</button>
-                    <button type="button" onclick="saveGabaritAsAction()" style="display:inline-flex; align-items:center; height:34px; padding:0 12px; font-size:12px; font-weight:500; border-radius:6px; border:1px solid #cbd5e1; background:#ffffff; color:#334155; cursor:pointer; white-space:nowrap;">📋 Enregistrer sous</button>
-                    <button type="button" onclick="triggerImportGabarit()" style="display:inline-flex; align-items:center; height:34px; padding:0 12px; font-size:12px; font-weight:500; border-radius:6px; border:1px solid #cbd5e1; background:#ffffff; color:#334155; cursor:pointer; white-space:nowrap;">📥 Importer</button>
-                    <input type="file" id="gab-file-import-input" accept=".yaml,.yml" style="display:none;" onchange="handleImportFile(this)">
-                    <button type="button" onclick="exportGabaritAction()" style="display:inline-flex; align-items:center; height:34px; padding:0 12px; font-size:12px; font-weight:500; border-radius:6px; border:1px solid #cbd5e1; background:#ffffff; color:#334155; cursor:pointer; white-space:nowrap;">📤 Exporter</button>
-                    <button type="button" id="btn-gab-delete" onclick="deleteGabaritAction()" style="display:inline-flex; align-items:center; height:34px; padding:0 12px; font-size:12px; font-weight:500; border-radius:6px; border:1px solid #fca5a5; background:#ffffff; color:#ef4444; cursor:pointer; white-space:nowrap;">🗑️ Supprimer</button>
+                    <button type="button" onclick="saveGabaritAction()"
+                        style="display:inline-flex; align-items:center; height:34px; padding:0 12px; font-size:12px; font-weight:500; border-radius:6px; border:1px solid #cbd5e1; background:#ffffff; color:#334155; cursor:pointer; white-space:nowrap;">💾
+                        Enregistrer</button>
+                    <button type="button" onclick="saveGabaritAsAction()"
+                        style="display:inline-flex; align-items:center; height:34px; padding:0 12px; font-size:12px; font-weight:500; border-radius:6px; border:1px solid #cbd5e1; background:#ffffff; color:#334155; cursor:pointer; white-space:nowrap;">📋
+                        Enregistrer sous</button>
+                    <button type="button" onclick="triggerImportGabarit()"
+                        style="display:inline-flex; align-items:center; height:34px; padding:0 12px; font-size:12px; font-weight:500; border-radius:6px; border:1px solid #cbd5e1; background:#ffffff; color:#334155; cursor:pointer; white-space:nowrap;">📥
+                        Importer</button>
+                    <input type="file" id="gab-file-import-input" accept=".yaml,.yml" style="display:none;"
+                        onchange="handleImportFile(this)">
+                    <button type="button" onclick="exportGabaritAction()"
+                        style="display:inline-flex; align-items:center; height:34px; padding:0 12px; font-size:12px; font-weight:500; border-radius:6px; border:1px solid #cbd5e1; background:#ffffff; color:#334155; cursor:pointer; white-space:nowrap;">📤
+                        Exporter</button>
+                    <button type="button" id="btn-gab-delete" onclick="deleteGabaritAction()"
+                        style="display:inline-flex; align-items:center; height:34px; padding:0 12px; font-size:12px; font-weight:500; border-radius:6px; border:1px solid #fca5a5; background:#ffffff; color:#ef4444; cursor:pointer; white-space:nowrap;">🗑️
+                        Supprimer</button>
                 </div>
                 <div style="display: flex; gap: 8px; align-items: center; flex-wrap: nowrap;">
-                    <button type="button" onclick="resetGabaritAction()" style="display:inline-flex; align-items:center; height:34px; padding:0 12px; font-size:12px; font-weight:500; border-radius:6px; border:1px solid #cbd5e1; background:#ffffff; color:#334155; cursor:pointer; white-space:nowrap;">🔄 Réinitialiser</button>
-                    <button type="button" onclick="testPdfGabaritAction()" style="display:inline-flex; align-items:center; height:34px; padding:0 14px; font-size:12px; font-weight:600; border-radius:6px; border:none; background:#3b82f6; color:#ffffff; cursor:pointer; white-space:nowrap; box-shadow:0 2px 4px rgba(59,130,246,0.2);">📄 Tester le PDF</button>
+                    <button type="button" onclick="resetGabaritAction()"
+                        style="display:inline-flex; align-items:center; height:34px; padding:0 12px; font-size:12px; font-weight:500; border-radius:6px; border:1px solid #cbd5e1; background:#ffffff; color:#334155; cursor:pointer; white-space:nowrap;">🔄
+                        Réinitialiser</button>
+                    <button type="button" onclick="testPdfGabaritAction()"
+                        style="display:inline-flex; align-items:center; height:34px; padding:0 14px; font-size:12px; font-weight:600; border-radius:6px; border:none; background:#3b82f6; color:#ffffff; cursor:pointer; white-space:nowrap; box-shadow:0 2px 4px rgba(59,130,246,0.2);">📄
+                        Tester le PDF</button>
                 </div>
             </div>
 
             <!-- Tabs Header -->
             <div style="display: flex; border-bottom: 1px solid #e2e8f0; background: #f1f5f9; padding: 0 20px;">
-                <button type="button" id="gab-tab-btn-1" onclick="switchGabaritTab(1)" style="padding: 10px 16px; border: none; background: none; cursor: pointer; font-size: 13px; font-weight: bold; color: #3b82f6; border-bottom: 3px solid #3b82f6;">📝 1. Infos & Titres</button>
-                <button type="button" id="gab-tab-btn-2" onclick="switchGabaritTab(2)" style="padding: 10px 16px; border: none; background: none; cursor: pointer; font-size: 13px; color: #64748b;">📑 2. Sections & Carte</button>
-                <button type="button" id="gab-tab-btn-3" onclick="switchGabaritTab(3)" style="padding: 10px 16px; border: none; background: none; cursor: pointer; font-size: 13px; color: #64748b;">📐 3. Grille Brochure</button>
-                <button type="button" id="gab-tab-btn-4" onclick="switchGabaritTab(4)" style="padding: 10px 16px; border: none; background: none; cursor: pointer; font-size: 13px; color: #64748b;">💻 4. Code YAML</button>
+                <button type="button" id="gab-tab-btn-1" onclick="switchGabaritTab(1)"
+                    style="padding: 10px 16px; border: none; background: none; cursor: pointer; font-size: 13px; font-weight: bold; color: #3b82f6; border-bottom: 3px solid #3b82f6;">📝
+                    1. Infos & Titres</button>
+                <button type="button" id="gab-tab-btn-2" onclick="switchGabaritTab(2)"
+                    style="padding: 10px 16px; border: none; background: none; cursor: pointer; font-size: 13px; color: #64748b;">📑
+                    2. Sections & Carte</button>
+                <button type="button" id="gab-tab-btn-3" onclick="switchGabaritTab(3)"
+                    style="padding: 10px 16px; border: none; background: none; cursor: pointer; font-size: 13px; color: #64748b;">📐
+                    3. Grille Brochure</button>
+                <button type="button" id="gab-tab-btn-4" onclick="switchGabaritTab(4)"
+                    style="padding: 10px 16px; border: none; background: none; cursor: pointer; font-size: 13px; color: #64748b;">💻
+                    4. Code YAML</button>
             </div>
 
             <!-- Panes Container -->
@@ -1039,9 +1273,12 @@ Composants principaux :
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
                         <div class="card" style="margin: 0;">
                             <h3 style="font-size: 14px; margin-bottom: 10px; color: #3b82f6;">Identité du Gabarit</h3>
-                            <div class="form-group"><label>Identifiant Technique</label><input type="text" id="gab-id-display" readonly style="background:#f1f5f9; color:#64748b;"></div>
-                            <div class="form-group"><label>Libellé Affiché</label><input type="text" id="gab-label" oninput="onTab1Change()"></div>
-                            <div class="form-group"><label>Description</label><textarea id="gab-description" rows="2" oninput="onTab1Change()"></textarea></div>
+                            <div class="form-group"><label>Identifiant Technique</label><input type="text"
+                                    id="gab-id-display" readonly style="background:#f1f5f9; color:#64748b;"></div>
+                            <div class="form-group"><label>Libellé Affiché</label><input type="text" id="gab-label"
+                                    oninput="onTab1Change()"></div>
+                            <div class="form-group"><label>Description</label><textarea id="gab-description" rows="2"
+                                    oninput="onTab1Change()"></textarea></div>
                             <div class="form-group">
                                 <label>Portée (Cible)</label>
                                 <select id="gab-cible" onchange="onTab1Change()">
@@ -1052,7 +1289,8 @@ Composants principaux :
                             </div>
                         </div>
                         <div class="card" style="margin: 0;">
-                            <h3 style="font-size: 14px; margin-bottom: 10px; color: #3b82f6;">Titrage & Organisation</h3>
+                            <h3 style="font-size: 14px; margin-bottom: 10px; color: #3b82f6;">Titrage & Organisation
+                            </h3>
                             <div class="form-group">
                                 <label>Mode Ligne 2 de Titre</label>
                                 <select id="gab-title-mode" onchange="onTab1Change()">
@@ -1060,10 +1298,15 @@ Composants principaux :
                                     <option value="auto">Automatique (Période / Année)</option>
                                 </select>
                             </div>
-                            <div class="form-group"><label>Texte Fixe Ligne 2</label><input type="text" id="gab-title-fixed" oninput="onTab1Change()" placeholder="ex: Service Régional Police – BFC"></div>
-                            <h4 style="font-size: 12px; margin-top: 15px; margin-bottom: 8px; color: #64748b;">Attribution Automatique par Service (Optionnel)</h4>
-                            <div class="form-group"><label>Code Région</label><input type="text" id="gab-org-region" oninput="onTab1Change()" placeholder="ex: r27"></div>
-                            <div class="form-group"><label>Code Service</label><input type="text" id="gab-org-service" oninput="onTab1Change()" placeholder="ex: srp"></div>
+                            <div class="form-group"><label>Texte Fixe Ligne 2</label><input type="text"
+                                    id="gab-title-fixed" oninput="onTab1Change()"
+                                    placeholder="ex: Service Régional Police – BFC"></div>
+                            <h4 style="font-size: 12px; margin-top: 15px; margin-bottom: 8px; color: #64748b;">
+                                Attribution Automatique par Service (Optionnel)</h4>
+                            <div class="form-group"><label>Code Région</label><input type="text" id="gab-org-region"
+                                    oninput="onTab1Change()" placeholder="ex: r27"></div>
+                            <div class="form-group"><label>Code Service</label><input type="text" id="gab-org-service"
+                                    oninput="onTab1Change()" placeholder="ex: srp"></div>
                         </div>
                     </div>
                 </div>
@@ -1072,13 +1315,18 @@ Composants principaux :
                 <div id="gab-tab-pane-2" style="display: none;">
                     <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 20px;">
                         <div class="card" style="margin: 0;">
-                            <h3 style="font-size: 14px; margin-bottom: 10px; color: #3b82f6;">Ordre et Inclusion des Sections</h3>
-                            <p style="font-size: 12px; color: #64748b; margin-bottom: 12px;">Cochez pour inclure la section dans le rapport et utilisez les flèches pour modifier l'ordre d'enchaînement.</p>
+                            <h3 style="font-size: 14px; margin-bottom: 10px; color: #3b82f6;">Ordre et Inclusion des
+                                Sections</h3>
+                            <p style="font-size: 12px; color: #64748b; margin-bottom: 12px;">Cochez pour inclure la
+                                section dans le rapport et utilisez les flèches pour modifier l'ordre d'enchaînement.
+                            </p>
                             <div id="gab-sections-list"></div>
                         </div>
                         <div class="card" style="margin: 0;">
-                            <h3 style="font-size: 14px; margin-bottom: 10px; color: #3b82f6;">Pochoir Cartographique</h3>
-                            <p style="font-size: 12px; color: #64748b; margin-bottom: 12px;">Cochez les éléments visuels à afficher sur la carte.</p>
+                            <h3 style="font-size: 14px; margin-bottom: 10px; color: #3b82f6;">Pochoir Cartographique
+                            </h3>
+                            <p style="font-size: 12px; color: #64748b; margin-bottom: 12px;">Cochez les éléments visuels
+                                à afficher sur la carte.</p>
                             <div id="gab-carto-masks"></div>
                         </div>
                     </div>
@@ -1086,30 +1334,41 @@ Composants principaux :
 
                 <!-- Onglet 3 -->
                 <div id="gab-tab-pane-3" style="display: none;">
-                    <div id="gab-tab3-disabled-notice" style="display:none; padding:15px; background:#fffbeb; border:1px solid #fef3c7; border-radius:6px; color:#b45309; font-size:13px;">
-                        ℹ️ <strong>Remarque :</strong> La portée de ce gabarit est configurée sur <em>Bilan complet</em>. La grille de widgets s'applique uniquement aux formats <em>Brochure</em> et <em>Bilan et brochure</em>.
+                    <div id="gab-tab3-disabled-notice"
+                        style="display:none; padding:15px; background:#fffbeb; border:1px solid #fef3c7; border-radius:6px; color:#b45309; font-size:13px;">
+                        ℹ️ <strong>Remarque :</strong> La portée de ce gabarit est configurée sur <em>Bilan
+                            complet</em>. La grille de widgets s'applique uniquement aux formats <em>Brochure</em> et
+                        <em>Bilan et brochure</em>.
                     </div>
                     <div id="gab-tab3-content">
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-                            <h3 style="font-size: 14px; margin: 0; color: #3b82f6;">Structure des Pages de la Brochure</h3>
-                            <button type="button" class="btn btn-secondary" onclick="addPage()" style="font-size:12px; padding:4px 10px;">➕ Ajouter une page</button>
+                        <div
+                            style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                            <h3 style="font-size: 14px; margin: 0; color: #3b82f6;">Structure des Pages de la Brochure
+                            </h3>
+                            <button type="button" class="btn btn-secondary" onclick="addPage()"
+                                style="font-size:12px; padding:4px 10px;">➕ Ajouter une page</button>
                         </div>
 
                         <div id="gab-pages-editor"></div>
 
                         <div class="card" style="margin-top: 15px; background: #f8fafc;">
-                            <h4 style="font-size: 13px; margin: 0 0 10px 0; color: #334155;">📐 Aperçu Wireframe Schématique</h4>
-                            <div id="gab-wireframe-container" style="display: flex; gap: 15px; overflow-x: auto; padding: 10px 0;"></div>
+                            <h4 style="font-size: 13px; margin: 0 0 10px 0; color: #334155;">📐 Aperçu Wireframe
+                                Schématique</h4>
+                            <div id="gab-wireframe-container"
+                                style="display: flex; gap: 15px; overflow-x: auto; padding: 10px 0;"></div>
                         </div>
                     </div>
                 </div>
 
                 <!-- Onglet 4 -->
                 <div id="gab-tab-pane-4" style="display: none;">
-                    <div id="gab-yaml-error-banner" style="display:none; padding:10px 14px; background:#fef2f2; border:1px solid #fecaca; border-radius:6px; color:#991b1b; font-size:12px; margin-bottom:10px; font-family:monospace; white-space:pre-wrap;"></div>
+                    <div id="gab-yaml-error-banner"
+                        style="display:none; padding:10px 14px; background:#fef2f2; border:1px solid #fecaca; border-radius:6px; color:#991b1b; font-size:12px; margin-bottom:10px; font-family:monospace; white-space:pre-wrap;">
+                    </div>
                     <div class="form-group" style="height: 100%;">
                         <label style="margin-bottom:6px;">Éditeur de Code YAML Synchrone (Temps réel)</label>
-                        <textarea id="gab-yaml-textarea" oninput="onYamlTextareaInput()" style="width: 100%; height: 350px; font-family: monospace; font-size: 12px; line-height: 1.4; background: #1e293b; color: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid #334155; resize: vertical;"></textarea>
+                        <textarea id="gab-yaml-textarea" oninput="onYamlTextareaInput()"
+                            style="width: 100%; height: 350px; font-family: monospace; font-size: 12px; line-height: 1.4; background: #1e293b; color: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid #334155; resize: vertical;"></textarea>
                     </div>
                 </div>
             </div>

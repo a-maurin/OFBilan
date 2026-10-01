@@ -385,4 +385,30 @@ def test_map_boundary_and_mask_svg_robustesse():
     # 4. Vérifier les règles d'impression SVG et snapshot dans print.css
     assert "#map svg" in print_css
     assert "#map svg path" in print_css
-    assert ".print-canvas-snapshot" in print_css
+    assert ".print-canvas-snapshot" in print_css
+
+
+def test_gui_format_sortie_and_pnf_options():
+    """Vérifie la présence et le branchement du sélecteur de format et du commutateur PNF."""
+    web_dir = Path(__file__).resolve().parents[2] / "core" / "web"
+    index_html = (web_dir / "index.html").read_text(encoding="utf-8")
+    app_js = (web_dir / "app.js").read_text(encoding="utf-8")
+    serveur_py = (web_dir / "serveur.py").read_text(encoding="utf-8")
+
+    # index.html
+    assert 'id="format-sortie"' in index_html
+    assert 'value="complet"' in index_html
+    assert 'value="brochure"' in index_html
+    assert 'value="les_deux"' in index_html
+    assert 'id="pnf"' in index_html
+    assert 'id="btn-open-pdf-brochure"' in index_html
+
+    # app.js
+    assert "format: document.getElementById('format-sortie')" in app_js
+    assert "pnf: document.getElementById('pnf')" in app_js
+    assert "btnOpenPdfBrochure" in app_js
+
+    # serveur.py
+    assert 'params.get("format")' in serveur_py
+    assert 'params.get("pnf")' in serveur_py
+    assert 'pdf_type = params.get("pdf_type")' in serveur_py

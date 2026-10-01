@@ -284,6 +284,13 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--format",
+        dest="format_sortie",
+        choices=("complet", "brochure", "les_deux"),
+        default=None,
+        help="Format de document souhaité : complet (rapport détaillé), brochure (synthèse 2 pages), ou les_deux.",
+    )
+    parser.add_argument(
         "--brochure",
         action=argparse.BooleanOptionalAction,
         default=None,
@@ -488,12 +495,25 @@ def main() -> int:
     if diffusion:
         cli_options["diffusion"] = diffusion
 
+    format_sortie = args.format_sortie
     brochure = args.brochure
-    if brochure is None and _is_interactive():
-        brochure_rep = ask_choice_list("Activation du mode brochure", [(True, "Oui"), (False, "Non")], False)
-        brochure = bool(brochure_rep)
-    if brochure is not None:
+
+    if format_sortie:
+        cli_options["format_sortie"] = format_sortie
+        cli_options["brochure"] = format_sortie in ("brochure", "les_deux")
+    elif brochure is not None:
         cli_options["brochure"] = brochure
+        cli_options["format_sortie"] = "brochure" if brochure else "complet"
+    elif _is_interactive():
+        format_rep = ask_choice_list(
+            "Format du document",
+            [("complet", "Bilan complet"), ("brochure", "Brochure condensée (2 pages)"), ("les_deux", "Les deux")],
+            "complet",
+        )
+        format_sortie = str(format_rep)
+        cli_options["format_sortie"] = format_sortie
+        cli_options["brochure"] = format_sortie in ("brochure", "les_deux")
+
 
     if args.mots_cles:
         cli_options["mots_cles"] = args.mots_cles

@@ -804,7 +804,9 @@ document.addEventListener('DOMContentLoaded', () => {
             cartes: cartesCheckbox.checked,
             'annexe-detaillee': document.getElementById('annexe-detaillee') ? document.getElementById('annexe-detaillee').checked : false,
             cartes_selection: cartesSelection,
-            brochure: document.getElementById('brochure').checked,
+            format: document.getElementById('format-sortie') ? document.getElementById('format-sortie').value : 'complet',
+            brochure: document.getElementById('format-sortie') ? (document.getElementById('format-sortie').value !== 'complet') : false,
+            pnf: document.getElementById('pnf') ? document.getElementById('pnf').checked : false,
             diffusion: document.getElementById('diffusion').value,
             preset: document.getElementById('preset').value,
             gabarit: selectGabarit && selectGabarit.value ? selectGabarit.value : null,
@@ -846,6 +848,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
                             if (consoleOutput.textContent.includes('[SUCCESS]')) {
                                 resultCard.classList.remove('hidden');
+                                const formatVal = document.getElementById('format-sortie') ? document.getElementById('format-sortie').value : 'complet';
+                                const btnBrochure = document.getElementById('btn-open-pdf-brochure');
+                                if (formatVal === 'les_deux') {
+                                    btnOpenPdf.textContent = "Ouvrir le bilan complet";
+                                    if (btnBrochure) btnBrochure.classList.remove('hidden');
+                                } else if (formatVal === 'brochure') {
+                                    btnOpenPdf.textContent = "Ouvrir la brochure";
+                                    if (btnBrochure) btnBrochure.classList.add('hidden');
+                                } else {
+                                    btnOpenPdf.textContent = "Ouvrir le PDF";
+                                    if (btnBrochure) btnBrochure.classList.add('hidden');
+                                }
                             }
                             return;
                         }
@@ -884,18 +898,23 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     const btnOpenPdf = document.getElementById('btn-open-pdf');
+    const btnOpenPdfBrochure = document.getElementById('btn-open-pdf-brochure');
     const btnOpenFolder = document.getElementById('btn-open-folder');
 
-    function openOutput(endpoint) {
+    function openOutput(endpoint, pdfType = null) {
         const profil = inputProfil.value;
         const code = inputCode.value;
+        const payload = { profil, code };
+        if (pdfType) {
+            payload.pdf_type = pdfType;
+        }
 
         fetch(endpoint, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ profil, code })
+            body: JSON.stringify(payload)
         })
             .then(response => response.json())
             .then(data => {
@@ -908,7 +927,14 @@ document.addEventListener('DOMContentLoaded', () => {
             });
     }
 
-    btnOpenPdf.addEventListener('click', () => openOutput('/api/open-pdf'));
+    btnOpenPdf.addEventListener('click', () => {
+        const formatVal = document.getElementById('format-sortie') ? document.getElementById('format-sortie').value : 'complet';
+        const type = (formatVal === 'les_deux' ? 'complet' : (formatVal === 'brochure' ? 'brochure' : 'complet'));
+        openOutput('/api/open-pdf', type);
+    });
+    if (btnOpenPdfBrochure) {
+        btnOpenPdfBrochure.addEventListener('click', () => openOutput('/api/open-pdf', 'brochure'));
+    }
     btnOpenFolder.addEventListener('click', () => openOutput('/api/open-folder'));
 
     btnClear.addEventListener('click', () => {

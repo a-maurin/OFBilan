@@ -46,7 +46,7 @@ analyses:
 options:
   pnf:
     label: "Analyse PNF / hors PNF"
-    default: true
+    default: false
     ask: true
   tub:
     label: "Analyse zones TUB"

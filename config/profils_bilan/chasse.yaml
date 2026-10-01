@@ -247,7 +247,7 @@ periode_analyse:
 options:
   pnf:
     label: Analyse PNF / hors PNF
-    default: true
+    default: false
     ask: false
   tub:
     label: Analyse zones TUB
