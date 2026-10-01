@@ -472,6 +472,26 @@ def render_sec22res(ctx: PdfContext) -> None:
                 split_by_row=ctx.split_by_row,
             )
         )
+        strip_res = ctx.tab_resultats_controles["resultat"].astype(str).str.strip()
+        dont_sum = int(
+            ctx.tab_resultats_controles.loc[
+                strip_res.isin(["Dont manquement", "Dont infraction", "    Dont manquement", "    Dont infraction"]),
+                "nb",
+            ].sum()
+        )
+        nc_val = (
+            int(ctx.tab_resultats_controles.loc[strip_res == "Non-conforme", "nb"].sum())
+            if (strip_res == "Non-conforme").any()
+            else 0
+        )
+        if dont_sum > nc_val:
+            block.append(Spacer(1, 1 * mm))
+            block.append(
+                Paragraph(
+                    "* Note : le total des résultats détaillés peut excéder le total des contrôles du fait de doubles qualifications possibles (manquement administratif et infraction pénale).",
+                    ctx.builder.styles.get("TableNote", ctx.builder.styles.get("FigureCaption", ctx.builder.styles["BodySmall"])),
+                )
+            )
         block.append(Spacer(1, 2 * mm))
         strip_res = ctx.tab_resultats_controles["resultat"].astype(str).str.strip()
         pie_mask = strip_res.isin(["Conforme", "Non-conforme", "En attente"])

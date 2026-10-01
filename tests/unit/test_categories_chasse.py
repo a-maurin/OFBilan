@@ -80,6 +80,29 @@ def test_compute_categories_chasse_controles_classification(sample_categories_cf
     assert autres_row["taux_non_conforme"] == 50.0
 
 
+def test_compute_categories_chasse_controles_resultat_composite(sample_categories_cfg):
+    points = pd.DataFrame([
+        {"nom_dossie": "Contrôle agrainage forêt", "type_actio": "Chasse", "resultat": "Conforme"},
+        {"nom_dossie": "Opération nourrissage", "type_actio": "Chasse", "resultat": "Manquement et infraction"},
+        {"nom_dossie": "Battue du dimanche", "type_actio": "Sécurité à la chasse", "resultat": "Infraction"},
+    ])
+
+    res = compute_categories_chasse_controles(points, sample_categories_cfg)
+    df = res["df"]
+
+    agrain_row = df[df["categorie"] == "agrainage"].iloc[0]
+    assert agrain_row["total"] == 2
+    assert agrain_row["conforme"] == 1
+    assert agrain_row["non_conforme"] == 1
+    assert agrain_row["taux_non_conforme"] == 50.0
+
+    sec_row = df[df["categorie"] == "securite"].iloc[0]
+    assert sec_row["total"] == 1
+    assert sec_row["conforme"] == 0
+    assert sec_row["non_conforme"] == 1
+    assert sec_row["taux_non_conforme"] == 100.0
+
+
 def test_compute_categories_chasse_infractions(sample_categories_cfg, capsys, caplog):
     pve = pd.DataFrame([
         {"INF-NATINF": "27742"},  # Agrainage

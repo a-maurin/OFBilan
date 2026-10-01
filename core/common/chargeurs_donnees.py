@@ -2080,7 +2080,7 @@ def load_communes_centroides(root: Path) -> pd.DataFrame:
 
     # Fallback possible : shapefile / gpkg de communes avec géométrie, si disponible.
     # On extrait alors le centroïde de chaque polygone.
-    for base_name in ["communes-france-2025", "communes_france_2025", "communes_21/communes"]:
+    for base_name in ["communes-france-2025", "communes_france_2025", "communes_21/communes", "communes_pnf/communes_PNF_centroides"]:
         for ext in (".gpkg", ".shp"):
             vec_path = ref_dir / f"{base_name}{ext}"
             if vec_path.exists():
@@ -2471,12 +2471,10 @@ def load_pve(
             elif "INF-DEPART" in df.columns and "INF-DEPARTEMENT" not in df.columns:
                 df["INF-DEPARTEMENT"] = df["INF-DEPART"]
 
-            # Alias UNITE_libelle
+            # Alias UNITE_libelle (sans générer de doublons insensibles à la casse pour GeoPackage/SQLite)
             unite_col = next((c for c in df.columns if str(c).upper() in ("UNITE_LIBELLE", "UNITE_LIBEL", "UNITE_LIB", "UNITE")), None)
-            if unite_col and "UNITE_libelle" not in df.columns:
+            if unite_col and not any(str(c).lower() == "unite_libelle" for c in df.columns):
                 df["UNITE_libelle"] = df[unite_col]
-            if "UNITE_libelle" in df.columns and "unite_libelle" not in df.columns:
-                df["unite_libelle"] = df["UNITE_libelle"]
 
             # Traitement et déduplication des doublons sur INF-ID
             if "INF-ID" in df.columns:

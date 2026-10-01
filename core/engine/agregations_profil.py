@@ -859,15 +859,18 @@ def compute_categories_chasse_controles(
             mask |= series_str_contains(pt[col_act], pattern, regex=True)
         pt.loc[mask & (pt["_cat"] == "autres"), "_cat"] = cat_id
 
-    res_col = "resultat_c" if "resultat_c" in pt.columns else ("resultat_controle" if "resultat_controle" in pt.columns else None)
+    res_col = next(
+        (c for c in ("resultat", "resultat_c", "resultat_controle", "Resultat", "resultat_ctrl") if c in pt.columns),
+        None,
+    )
     for cat_id, cfg in categories_cfg.items():
         lbl = cfg.get("label", cat_id)
         sub = pt[pt["_cat"] == cat_id]
         total = len(sub)
         if total > 0 and res_col:
-            classified = classify_resultat_controle_series(sub[res_col])
-            conf = int((classified == "Conforme").sum())
-            non_conf = int(((classified == "Infraction") | (classified == "Manquement")).sum())
+            r_s = sub[res_col].astype(str).str.lower().str.strip()
+            conf = int((r_s == "conforme").sum())
+            non_conf = int((r_s.str.contains("infraction") | r_s.str.contains("manquement")).sum())
         else:
             conf = 0
             non_conf = 0

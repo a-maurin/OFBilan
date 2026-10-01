@@ -192,6 +192,27 @@ from core.common.cartographie_config import (
 from core.engine.registre_sections_pdf import SectionRegistry
 
 _log = logging.getLogger(__name__)
+
+
+def _sanitize_gdf_for_gpkg(gdf: Any) -> Any:
+    """Assainit un GeoDataFrame pour l'export GeoPackage (dédoublonnage insensible à la casse et typage)."""
+    if gdf is None or getattr(gdf, "empty", True):
+        return gdf
+    seen_lower = set()
+    cols_to_keep = []
+    geom_col = gdf.geometry.name if hasattr(gdf, "geometry") else "geometry"
+    for col in gdf.columns:
+        if col == geom_col:
+            continue
+        c_low = str(col).lower()
+        if c_low not in seen_lower:
+            seen_lower.add(c_low)
+            cols_to_keep.append(col)
+    cols_to_keep.append(geom_col)
+    cleaned = gdf[cols_to_keep].copy()
+    for col in cleaned.select_dtypes(include=['datetime64[ns, UTC]', 'datetime64[ns]', 'datetime64']).columns:
+        cleaned[col] = cleaned[col].astype(str)
+    return cleaned
 # ═══════════════════════════════════════════════════════════════════════════
 # 1. Chargement du profil YAML (délégué à core.engine.orchestration)
 # ═══════════════════════════════════════════════════════════════════════════
@@ -672,6 +693,7 @@ def _run_global_profile_via_yaml(
                         alt_col = next((c for c in ["usager", "type_usager_cible", "types_usager_cible", "cat_usager"] if c in gdf_pts.columns), None)
                         gdf_pts["type_usager"] = gdf_pts[alt_col] if alt_col else "Autre"
                     gpkg_path_pts = carto_dir / f"controles_{prefix}_export_automatique.gpkg"
+                    gdf_pts = _sanitize_gdf_for_gpkg(gdf_pts)
                     gdf_pts.to_file(gpkg_path_pts, driver="GPKG")
                     gpkg_logger.info(f"Couche géographique Contrôles générée pour QGIS : {gpkg_path_pts} ({mask_geo.sum()} points)")
         
@@ -699,10 +721,7 @@ def _run_global_profile_via_yaml(
                         geometry=gpd.points_from_xy(df_geo.loc[mask_geo, "_lon"], df_geo.loc[mask_geo, "_lat"]),
                         crs="EPSG:4326"
                     )
-                    gdf.columns = [str(c).lower() for c in gdf.columns]
-                    gdf = gdf.loc[:, ~gdf.columns.duplicated()].copy()
-                    for col in gdf.select_dtypes(include=['datetime64[ns, UTC]', 'datetime64[ns]', 'datetime64']).columns:
-                        gdf[col] = gdf[col].astype(str)
+                    gdf = _sanitize_gdf_for_gpkg(gdf)
                     gpkg_path = carto_dir / f"pve_{prefix}_export_automatique.gpkg"
                     gdf.to_file(gpkg_path, driver="GPKG")
                     gpkg_logger.info(f"Couche géographique PVe générée pour QGIS : {gpkg_path} ({mask_geo.sum()} points)")
@@ -3053,6 +3072,7 @@ def _export_csv(
     profil_id = profile["id"]
     base_prefix = profile.get("_export_prefix") or profil_id
     prefix = f"{base_prefix}_{code_norm}" if str(code_norm).strip() else base_prefix
+    root = PROJECT_ROOT
     # Points filtrés
     if not point_filtered.empty:
         cols = [c for c in [
@@ -3125,6 +3145,7 @@ def _export_csv(
                     carto_dir.mkdir(parents=True, exist_ok=True)
                     gpkg_path_pts = carto_dir / f"controles_{prefix}_export_automatique.gpkg"
                     
+                    gdf_pts = _sanitize_gdf_for_gpkg(gdf_pts)
                     gdf_pts.to_file(gpkg_path_pts, driver="GPKG")
                     logger.info(f"Couche géographique Contrôles générée pour QGIS : {gpkg_path_pts} ({mask_geo.sum()} points)")
         except Exception as e:
@@ -3192,8 +3213,6 @@ def _export_csv(
                 
                 # Gérer les PEJ orphelins (sans coordonnées) en utilisant le centroïde de leur commune si possible
                 missing = df_geo["_lon"].isna() | df_geo["_lat"].isna() | (df_geo["_lon"] == 0) | (df_geo["_lat"] == 0)
-                root = Path(__file__).resolve().parent.parent.parent.parent
-                
                 if missing.any():
                     try:
                         dict_x, dict_y = get_communes_centroids_dicts(root)
@@ -3226,12 +3245,10 @@ def _export_csv(
                             crs="EPSG:4326"
                         ).to_crs("EPSG:2154")
                     
-                    for col in gdf.select_dtypes(include=['datetime64[ns, UTC]', 'datetime64[ns]', 'datetime64']).columns:
-                        gdf[col] = gdf[col].astype(str)
-                    
                     carto_dir = get_carto_temp_dir()
                     carto_dir.mkdir(parents=True, exist_ok=True)
                     gpkg_path = carto_dir / f"pej_{prefix}_export_automatique.gpkg"
+                    gdf = _sanitize_gdf_for_gpkg(gdf)
                     gdf.to_file(gpkg_path, driver="GPKG")
                     logger.info(f"Couche géographique PEJ générée pour QGIS : {gpkg_path} ({mask_geo.sum()} points)")
         except Exception as e:
@@ -3263,11 +3280,10 @@ def _export_csv(
                         )
                         if gdf_pa.crs.to_epsg() != 2154:
                             gdf_pa = gdf_pa.to_crs("EPSG:2154")
-                        for col in gdf_pa.select_dtypes(include=['datetime64[ns, UTC]', 'datetime64[ns]', 'datetime64']).columns:
-                            gdf_pa[col] = gdf_pa[col].astype(str)
                         carto_dir = get_carto_temp_dir()
                         carto_dir.mkdir(parents=True, exist_ok=True)
                         gpkg_path_pa = carto_dir / f"pa_{prefix}_export_automatique.gpkg"
+                        gdf_pa = _sanitize_gdf_for_gpkg(gdf_pa)
                         gdf_pa.to_file(gpkg_path_pa, driver="GPKG")
                         logger.info(f"Couche géographique PA générée pour QGIS : {gpkg_path_pa}")
         except Exception as e_pa_gpkg:
@@ -3294,8 +3310,6 @@ def _export_csv(
                 
                 # Gérer les PVe orphelins (sans coordonnées) en utilisant le centroïde de leur commune
                 missing = df_geo["_lon"].isna() | df_geo["_lat"].isna() | (df_geo["_lon"] == 0) | (df_geo["_lat"] == 0)
-                root = Path(__file__).resolve().parent.parent.parent.parent
-                
                 if missing.any():
                     try:
                         dict_x, dict_y = get_communes_centroids_dicts(root)
@@ -3327,12 +3341,10 @@ def _export_csv(
                             crs="EPSG:4326"
                         ).to_crs("EPSG:2154")
                     
-                    for col in gdf.select_dtypes(include=['datetime64[ns, UTC]', 'datetime64[ns]', 'datetime64']).columns:
-                        gdf[col] = gdf[col].astype(str)
-                    
                     carto_dir = get_carto_temp_dir()
                     carto_dir.mkdir(parents=True, exist_ok=True)
                     gpkg_path = carto_dir / f"pve_{prefix}_export_automatique.gpkg"
+                    gdf = _sanitize_gdf_for_gpkg(gdf)
                     gdf.to_file(gpkg_path, driver="GPKG")
                     logger.info(f"Couche géographique PVe générée pour QGIS : {gpkg_path} ({mask_geo.sum()} points)")
         except Exception as e:
@@ -6339,6 +6351,11 @@ def _run_engine_thematic_pipeline(
                 )
 
     # ── Cartographie ──
+    if resolved_opts.get("cartes", False):
+        print("[5/6] Préparation des cartes de localisation...")
+    else:
+        print("[5/6] Préparation des cartes de localisation (Désactivé)...")
+
     resolved_opts = _finalize_cartes_selection(
         profile,
         resolved_opts,
@@ -6354,9 +6371,15 @@ def _run_engine_thematic_pipeline(
 
     map_profiles = resolve_qgis_profile_ids(profile, profil_id, resolved_opts)
 
-    if resolved_opts.get("cartes", False) and map_profiles:
-        print("[5/6] Préparation des cartes de localisation...")
+    if resolved_opts.get("cartes", False) and map_profiles and not resolved_opts.get("_maps_already_generated"):
         try:
+            gabarit_id_opt = (options or {}).get("gabarit") or resolved_opts.get("gabarit")
+            from core.common.chargeur_gabarits import load_gabarit
+            g_data = load_gabarit(gabarit_id_opt) if gabarit_id_opt else None
+            is_brochure_mode = (
+                bool((options or {}).get("brochure"))
+                or bool(resolved_opts.get("brochure"))
+            )
             ensure_maps_for_profiles(
                 map_profiles,
                 date_deb=date_deb,
@@ -6365,13 +6388,13 @@ def _run_engine_thematic_pipeline(
                 bilan_profiles={profil_id: profile},
                 target_dir=out_dir,
                 diffusion=str(resolved_opts.get("diffusion", "externe")),
-                force_regen=True,
+                force_regen=False,
+                is_brochure=is_brochure_mode,
+                gabarit_data=g_data,
             )
         except Exception as e:
             logger = logging.getLogger("ofbilan.engine")
             logger.warning("Cartes profils : %s", e)
-    else:
-        print("[5/6] Préparation des cartes de localisation (Désactivé)...")
 
     prompt_cartography_integration(
         root=root,

@@ -1288,13 +1288,13 @@ def _build_pve_expression(fields, date_deb: str, date_fin: str, config, profile=
 
     # Résolution des noms de champs (support préfixe PVe_ ou classique INF-)
     natinf_col = next(
-        (c for c in ("PVe_INF-NATINF", "INF-NATINF") if c in field_names), None
+        (c for c in ("PVe_INF-NATINF", "INF-NATINF", "NATINF", "natinf") if c in field_names), None
     )
     date_col = next(
-        (c for c in ("PVe_INF-DATE-MIF", "INF-DATE-I") if c in field_names), None
+        (c for c in ("PVe_INF-DATE-MIF", "INF-DATE-MIF", "INF-DATE-I", "INF-DATE", "date_mif") if c in field_names), None
     )
     depart_col = next(
-        (c for c in ("INSEE_DEP", "INF-DEPART") if c in field_names), None
+        (c for c in ("INSEE_DEP", "INF-DEPART", "INF-DEPARTEMENT", "num_depart") if c in field_names), None
     )
 
     if not natinf_col or not date_col or not depart_col:
@@ -1353,8 +1353,17 @@ def _build_pve_expression(fields, date_deb: str, date_fin: str, config, profile=
 
 def _build_pj_expression(fields, date_deb: str, date_fin: str, config, profile=None) -> Optional[str]:
     field_names = {f.name() for f in fields}
-    required = {"entite", "natinf", "date_saisine"}
-    if not required.issubset(field_names):
+    entite_col = next(
+        (c for c in ("entite", "ENTITE_ORIGINE_PROCEDURE", "ENTITE", "entite_origine") if c in field_names), None
+    )
+    natinf_col = next(
+        (c for c in ("natinf", "NATINF_PEJ", "NATINF", "numero_natinf") if c in field_names), None
+    )
+    date_col = next(
+        (c for c in ("date_saisine", "DATE_REF", "DATE_DOSSIER", "DATE_CONSTATATION", "DATE_OUVERTURE_PROCEDURE") if c in field_names), None
+    )
+
+    if not entite_col or not natinf_col or not date_col:
         return None
 
     natinf_values = None
@@ -1366,7 +1375,7 @@ def _build_pj_expression(fields, date_deb: str, date_fin: str, config, profile=N
         natinf_values = getattr(config, "natinf_pj", [27742, 25001])
 
     depart = str(getattr(config, "departement_code", "21")).strip()
-    date_cond = _build_date_condition(fields, "date_saisine", date_deb, date_fin)
+    date_cond = _build_date_condition(fields, date_col, date_deb, date_fin)
 
     entite_list = []
     import os
@@ -1389,13 +1398,13 @@ def _build_pj_expression(fields, date_deb: str, date_fin: str, config, profile=N
         else:
             entite_list.append(f"sd{depart.lower()}")
 
-    entite_cond = "lower(\"entite\") IN ('" + "', '".join(entite_list) + "')"
+    entite_cond = f"lower(\"{entite_col}\") IN ('" + "', '".join(entite_list) + "')"
 
     if not natinf_values:
         return f"{entite_cond} AND {date_cond}"
 
     natinf_list = ", ".join(str(x) for x in natinf_values)
-    return f"{entite_cond} AND \"natinf\" IN ({natinf_list}) AND {date_cond}"
+    return f"{entite_cond} AND \"{natinf_col}\" IN ({natinf_list}) AND {date_cond}"
 
 
 def _build_point_ctrl_agrainage_expression(fields, date_deb: str, date_fin: str, config) -> Optional[str]:
@@ -1665,11 +1674,13 @@ def apply_date_filter(
         return
 
     if not expr:
-        logger.warning(
-            "Filtre '%s' non appliqué à la couche '%s' (champs requis manquants, disponibles=%s)",
+        is_auto_export = "export_automatique" in str(getattr(layer, "source", lambda: "")() or "")
+        log_fn = logger.info if is_auto_export else logger.warning
+        log_fn(
+            "Filtre '%s' non appliqué à la couche '%s'%s",
             filter_type,
             layer.name(),
-            fields,
+            " (couche pré-filtrée par le bilan)" if is_auto_export else f" (champs requis manquants, disponibles={fields})",
         )
         return
 

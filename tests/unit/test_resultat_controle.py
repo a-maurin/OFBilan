@@ -61,3 +61,19 @@ def test_build_tab_resultats_controles_agrege_en_attente() -> None:
     assert int(tab.loc[tab["resultat"] == "Conforme", "nb"].sum()) == 1
     assert int(tab.loc[tab["resultat"] == "Non-conforme", "nb"].sum()) == 2
     assert int(tab.loc[tab["resultat"] == "En attente", "nb"].sum()) == 3
+
+
+def test_build_tab_resultats_controles_composite() -> None:
+    point = pd.DataFrame(
+        {
+            "resultat": [
+                "Conforme",
+                "Manquement et infraction",
+            ],
+        }
+    )
+    tab = build_tab_resultats_controles(point)
+    assert int(tab.loc[tab["resultat"] == "Conforme", "nb"].sum()) == 1
+    assert int(tab.loc[tab["resultat"] == "Non-conforme", "nb"].sum()) == 1
+    assert int(tab.loc[tab["resultat"].str.strip() == "Dont manquement", "nb"].sum()) == 1
+    assert int(tab.loc[tab["resultat"].str.strip() == "Dont infraction", "nb"].sum()) == 1

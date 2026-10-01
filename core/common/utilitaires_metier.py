@@ -1565,12 +1565,18 @@ def build_tab_resultats_controles(
     if nb_total == 0 or "resultat" not in point.columns:
         return pd.DataFrame(columns=["resultat", "nb", "taux"])
 
-    r_norm = classify_resultat_controle_series(point["resultat"])
-    nb_conf = int((r_norm == "Conforme").sum())
-    nb_inf = int((r_norm == "Infraction").sum())
-    nb_manq = int((r_norm == "Manquement").sum())
-    nb_en_attente = int((r_norm == "En attente").sum())
-    nb_nc = nb_inf + nb_manq
+    s_res = point["resultat"].astype(str).str.lower().str.strip()
+    mask_conf = s_res == "conforme"
+    mask_inf = s_res.str.contains("infraction")
+    mask_manq = s_res.str.contains("manquement")
+    mask_nc = mask_inf | mask_manq
+    mask_attente = ~mask_conf & ~mask_nc
+
+    nb_conf = int(mask_conf.sum())
+    nb_inf = int(mask_inf.sum())
+    nb_manq = int(mask_manq.sum())
+    nb_nc = int(mask_nc.sum())
+    nb_en_attente = int(mask_attente.sum())
 
     show_zone_col = distinction_coeur_hors_coeur or zone_lecteur_4_zones
     tub_set = tub_codes if isinstance(tub_codes, set) else set()
@@ -1585,22 +1591,22 @@ def build_tab_resultats_controles(
             {
                 "resultat": "Conforme",
                 "nb": nb_conf,
-                "coeur_hors_coeur": _zone_txt(r_norm.eq("Conforme")),
+                "coeur_hors_coeur": _zone_txt(mask_conf),
             },
             {
                 "resultat": "Non-conforme",
                 "nb": nb_nc,
-                "coeur_hors_coeur": _zone_txt(r_norm.isin(["Infraction", "Manquement"])),
+                "coeur_hors_coeur": _zone_txt(mask_nc),
             },
             {
                 "resultat": "    Dont manquement",
                 "nb": nb_manq,
-                "coeur_hors_coeur": _zone_txt(r_norm.eq("Manquement")),
+                "coeur_hors_coeur": _zone_txt(mask_manq),
             },
             {
                 "resultat": "    Dont infraction",
                 "nb": nb_inf,
-                "coeur_hors_coeur": _zone_txt(r_norm.eq("Infraction")),
+                "coeur_hors_coeur": _zone_txt(mask_inf),
             },
         ]
         if nb_en_attente > 0:
@@ -1625,22 +1631,22 @@ def build_tab_resultats_controles(
             {
                 "resultat": "Conforme",
                 "nb": nb_conf,
-                **_coeur_hors_row(r_norm.eq("Conforme")),
+                **_coeur_hors_row(mask_conf),
             },
             {
                 "resultat": "Non-conforme",
                 "nb": nb_nc,
-                **_coeur_hors_row(r_norm.isin(["Infraction", "Manquement"])),
+                **_coeur_hors_row(mask_nc),
             },
             {
                 "resultat": "    Dont manquement",
                 "nb": nb_manq,
-                **_coeur_hors_row(r_norm.eq("Manquement")),
+                **_coeur_hors_row(mask_manq),
             },
             {
                 "resultat": "    Dont infraction",
                 "nb": nb_inf,
-                **_coeur_hors_row(r_norm.eq("Infraction")),
+                **_coeur_hors_row(mask_inf),
             },
         ]
         if nb_en_attente > 0:
