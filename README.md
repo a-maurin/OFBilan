@@ -7,7 +7,7 @@
 [![Licence](https://img.shields.io/badge/Licence-GPLv3-orange.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Plateforme](https://img.shields.io/badge/Plateforme-Windows%20%7C%20Linux-lightgrey.svg)]()
 
-**OFBilan** est une application autonome d'aide à la décision, d'exploration de données et de communication, dotée d'une intégration optionnelle sous forme d'extension relais pour QGIS. Elle s'appuie sur les données de contrôles (OSCEAN) et les procédures judiciaires et administratives (PVe, PEJ, PA) de l'Office français de la biodiversité (OFB).
+**OFBilan** est une application d'aide à la décision, d'exploration de données et de communication, dotée d'une intégration optionnelle sous forme d'extension relais pour QGIS. Elle s'appuie sur les données de contrôles (OSCEAN) et les procédures judiciaires et administratives (PVe, PEJ, PA) de l'Office français de la biodiversité (OFB).
 
 ---
 
