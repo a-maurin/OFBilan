@@ -95,15 +95,18 @@ echo Python QGIS : !QGIS_PYTHON!
 echo.
 
 if not "%~1"=="" (
-    echo Execution : python -m ofbilan %*
+    echo Execution avec PyQGIS...
     echo.
-    "!QGIS_PYTHON!" -m ofbilan %*
+    "!QGIS_PYTHON!" -c "import ofbilan" 2>nul
+    if !ERRORLEVEL! equ 0 (
+        "!QGIS_PYTHON!" -m ofbilan %*
+    ) else (
+        "!QGIS_PYTHON!" "%PROJECT_ROOT%\core\point_entree_cli.py" %*
+    )
     set "ERR=!ERRORLEVEL!"
     if !ERR! neq 0 (
         echo.
         echo Echec du bilan (code !ERR!^).
-        echo Si le module ofbilan est absent, installer une fois :
-        echo   "!QGIS_PYTHON!" -m pip install -e .
     ) else (
         echo.
         echo ===== Termine =====
@@ -118,19 +121,22 @@ echo   Bilans avec PyQGIS (cartes adaptatives)
 echo ===============================================
 echo.
 echo Ce script configure l'environnement QGIS puis lance
-echo python -m ofbilan en mode interactif (profils, periode,
+echo la generation en mode interactif (profils, periode,
 echo echelle, options cartes).
 echo.
 echo Exemple non interactif :
 echo   %~nx0 --profil global --cartes --echelle departement --code 21 --date-deb 2025-01-01 --date-fin 2025-12-31
 echo.
-"!QGIS_PYTHON!" -m ofbilan
+"!QGIS_PYTHON!" -c "import ofbilan" 2>nul
+if !ERRORLEVEL! equ 0 (
+    "!QGIS_PYTHON!" -m ofbilan
+) else (
+    "!QGIS_PYTHON!" "%PROJECT_ROOT%\core\point_entree_cli.py"
+)
 set "ERR=!ERRORLEVEL!"
 echo.
 if !ERR! neq 0 (
     echo Echec du bilan (code !ERR!^).
-    echo Si le module ofbilan est absent, installer une fois :
-    echo   "!QGIS_PYTHON!" -m pip install -e .
 ) else (
     echo ===== Termine =====
 )
