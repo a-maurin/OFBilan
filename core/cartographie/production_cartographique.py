@@ -2912,21 +2912,50 @@ def run_export(
                         layers_to_render.append(layer)
 
             # Ordre de rendu (QGIS : index 0 = premier plan)
-            # 1. Pochoirs (doit masquer tout ce qui dépasse)
-            # 2. Points (PEJ, PVe, etc.)
-            # 3. Contexte (coeur_parc, aoa...)
-            # 4. Fonds de carte (déjà à la fin)
+            # 1. Pochoirs (doit masquer tout ce qui dépasse hors du département)
+            # 2. Points prioritaires (PEJ, PVe, PA)
+            # 3. Points de contrôles généraux (point_ctrl)
+            # 4. Polygones et couches contextuelles (TUB, Parcs, etc.)
+            # 5. Fonds de carte (déjà à la fin)
             pochoir_layers = [lyr for lyr in layers_to_render if "pochoir" in lyr.name().lower()]
-            context_layers = [lyr for lyr in layers_to_render if lyr.name().lower() in ("coeur_parc", "coeur_data_gouv_pnforets", "aoa_2021_pnforet_21")]
             basemap_layers = [lyr for lyr in layers_to_render if is_basemap_layer(lyr.name())]
-            other_layers = [
+
+            priority_point_layers = [
                 lyr for lyr in layers_to_render
-                if lyr not in pochoir_layers
-                and lyr not in context_layers
-                and lyr not in basemap_layers
+                if lyr not in pochoir_layers and lyr not in basemap_layers
+                and (
+                    any(k in lyr.name().lower() for k in ("pej", "pve", "pa", "infrac", "fait"))
+                    or (hasattr(lyr, "geometryType") and lyr.geometryType() == 0 and "point_ctrl" not in lyr.name().lower())
+                )
+                and not (hasattr(lyr, "geometryType") and lyr.geometryType() == 2)
             ]
-            
-            layers_to_render = pochoir_layers + other_layers + context_layers + basemap_layers
+
+            control_point_layers = [
+                lyr for lyr in layers_to_render
+                if lyr not in pochoir_layers and lyr not in basemap_layers
+                and lyr not in priority_point_layers
+                and (
+                    "point_ctrl" in lyr.name().lower()
+                    or "controle" in lyr.name().lower()
+                    or (hasattr(lyr, "geometryType") and lyr.geometryType() == 0)
+                )
+                and not (hasattr(lyr, "geometryType") and lyr.geometryType() == 2)
+            ]
+
+            context_layers = [
+                lyr for lyr in layers_to_render
+                if lyr not in pochoir_layers and lyr not in basemap_layers
+                and lyr not in priority_point_layers
+                and lyr not in control_point_layers
+            ]
+
+            layers_to_render = (
+                pochoir_layers
+                + priority_point_layers
+                + control_point_layers
+                + context_layers
+                + basemap_layers
+            )
 
             filename = prof.output_filename
             if items_a_masquer or getattr(prof, "items_masques", None):

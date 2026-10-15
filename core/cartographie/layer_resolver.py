@@ -75,6 +75,8 @@ LAYER_ROLE_SPECS: tuple[LayerRoleSpec, ...] = (
             "Zone d'interdiction d'agrainage*",
             "Zone*d'interdiction*d'agrainage*",
             "Zone d'interdiction d'agrainage",
+            "COMMUNE_InterdAgrain*",
+            "*InterdAgrain*",
         ),
         prefer_latest_dated=True,
     ),

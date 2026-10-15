@@ -81,6 +81,65 @@ chasse:
   layout_title_item_id: "titre_principal"
   layout_subtitle_item_id: "sous_titre"
   layers:
+    localisation_infrac_FAITS:
+      layer_name: "localisation_infrac_FAITS"
+      layer_role: "pej"
+      legend_label: "Procédures judiciaires (PEJ)"
+      filter_type: "pj"
+      geometry_mode: "point"
+      renderer_type: "single"
+      palette: "#2980B9"
+      symbol_size_mm: 1.5
+      symbol_shape: "triangle"
+      symbology_source: "yaml"
+    pve:
+      layer_name: "pve"
+      layer_role: "pve"
+      legend_label: "Procès-verbaux électroniques (PVe)"
+      filter_type: "pve"
+      geometry_mode: "point"
+      renderer_type: "single"
+      palette: "#E67E22"
+      symbol_size_mm: 1.5
+      symbol_shape: "square"
+      symbology_source: "yaml"
+    point_ctrl:
+      layer_name: "point_ctrl"
+      layer_role: "point_controles"
+      legend_label: "Contrôles"
+      filter_type: "point_ctrl_global"
+      geometry_mode: "point"
+      renderer_type: "categorized"
+      field: >
+        CASE
+          WHEN lower("resultat") LIKE '%infraction%' THEN 'Contrôles avec infraction'
+          WHEN lower("resultat") LIKE '%conforme%' THEN 'Contrôles conformes'
+          ELSE 'Autres contrôles'
+        END
+      categories:
+        "Contrôles conformes": "#2ECC71"
+        "Contrôles avec infraction": "#E74C3C"
+      symbol_size_mm: 1.2
+      symbol_shape: "circle"
+      symbology_source: "yaml"
+    Zone infectée:
+      layer_name: "Zone infectée"
+      layer_role: "zone_infectee"
+      legend_label: "Zone infectée (TUB)"
+      geometry_mode: "polygon_fill"
+      symbology_source: "qgis"
+    Zone à risque:
+      layer_name: "Zone à risque"
+      layer_role: "zone_risque"
+      legend_label: "Zone à risque (TUB)"
+      geometry_mode: "polygon_fill"
+      symbology_source: "qgis"
+    Zone d'interdiction d'agrainage:
+      layer_name: "Zone d'interdiction d'agrainage"
+      layer_role: "zone_interdiction_agrainage"
+      legend_label: "Zone d'interdiction d'agrainage"
+      geometry_mode: "polygon_fill"
+      symbology_source: "qgis"
     Coeur_data_gouv_PNForets:
       layer_name: "Coeur_data_gouv_PNForets"
       legend_label: "Cœur de Parc national"
@@ -93,55 +152,12 @@ chasse:
       symbology_source: "yaml"
       geometry_mode: "polygon_fill"
       renderer_type: "single"
-    Zone d'interdiction d'agrainage:
-      layer_name: "Zone d'interdiction d'agrainage"
-      legend_label: "Zone d'interdiction d'agrainage"
-      geometry_mode: "polygon_fill"
-      renderer_type: "graduated"
-      palette: "Blues"
-    Zone infectée:
-      layer_name: "Zone infectée"
-      legend_label: "Zone infectée"
-      geometry_mode: "polygon_fill"
-      renderer_type: "graduated"
-      palette: "Blues"
-    Zone à risque:
-      layer_name: "Zone à risque"
-      legend_label: "Zone à risque"
-      geometry_mode: "polygon_fill"
-      renderer_type: "graduated"
-      palette: "Blues"
     emprise_dep:
       layer_name: "emprise_dep"
+      layer_role: "pochoir"
       legend_label: "Périmètre départemental"
       geometry_mode: "polygon_fill"
-      renderer_type: "graduated"
-      palette: "Blues"
-    point_ctrl:
-      layer_name: "point_ctrl"
-      legend_label: "Contrôles"
-      geometry_mode: "polygon_fill"
-      renderer_type: "graduated"
-      palette: "Blues"
-    localisation_infrac_FAITS:
-      layer_name: "localisation_infrac_FAITS"
-      legend_label: "Procédures judiciaires (PEJ)"
-      filter_type: "pj"
-      geometry_mode: "point"
       renderer_type: "single"
-      palette: "#3498DB"
-      symbol_size_mm: 1.5
-      symbol_shape: "triangle"
-      symbology_source: "yaml"
-    pve_agrainage_points_centroides:
-      layer_name: "pve_agrainage_points_centroides"
-      legend_label: "Procès-verbaux électroniques (PVe)"
-      filter_type: "pve"
-      geometry_mode: "point"
-      renderer_type: "single"
-      palette: "#E67E22"
-      symbol_size_mm: 1.5
-      symbol_shape: "square"
       symbology_source: "yaml"
 
 piegeage:
