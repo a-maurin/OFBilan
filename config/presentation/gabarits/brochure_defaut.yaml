@@ -68,3 +68,9 @@ layout_grid:
             - width: "50%"
               widget:
                 type: evolution_chart
+
+sections_enrichies:
+  brochure:
+    page2_colonnes_ratio: 0.50
+    pve_table_colonnes: "natinf_detail"
+

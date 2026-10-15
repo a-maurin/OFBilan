@@ -213,6 +213,7 @@ class BrochureEncadre(Flowable):
         pad_pt: float = _PAD_STD_PT,
         col_headers: list[str] | None = None,
         col_width_fracs: list[float] | None = None,
+        col_aligns: list[str] | None = None,
     ):
         super().__init__()
         self.box_width = float(width)
@@ -223,6 +224,7 @@ class BrochureEncadre(Flowable):
         self.pad = float(pad_pt)
         self.col_headers = [str(h).strip() for h in (col_headers or []) if str(h).strip()]
         self.col_width_fracs = list(col_width_fracs) if col_width_fracs else None
+        self.col_aligns = [str(a).strip().upper() for a in col_aligns] if col_aligns else None
         self._hdr_h = 0.0
         self._body_h = 0.0
         self._header_table: Table | None = None
@@ -270,8 +272,10 @@ class BrochureEncadre(Flowable):
         title_ps = self._header_title_style()
         col_ps = self._header_col_style()
         cells: list = [Paragraph(f"<b>{self.title}</b>", title_ps)]
-        for label in self.col_headers:
-            cells.append(Paragraph(f"<b>{label}</b>", col_ps))
+        for idx, label in enumerate(self.col_headers):
+            cell_al = (self.col_aligns[idx + 1] if self.col_aligns and (idx + 1) < len(self.col_aligns) else "RIGHT")
+            ps = title_ps if cell_al == "LEFT" else col_ps
+            cells.append(Paragraph(f"<b>{label}</b>", ps))
         while len(cells) < len(col_ws):
             cells.append("")
         cells = cells[: len(col_ws)]
@@ -287,7 +291,11 @@ class BrochureEncadre(Flowable):
             ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
             ("ALIGN", (0, 0), (0, 0), "LEFT"),
         ]
-        if n_hdr and first_num <= last_col:
+        if self.col_aligns:
+            for c_idx, al in enumerate(self.col_aligns[: len(col_ws)]):
+                cmd_al = "RIGHT" if al == "RIGHT" else ("CENTER" if al == "CENTER" else "LEFT")
+                style_cmds.append(("ALIGN", (c_idx, 0), (c_idx, 0), cmd_al))
+        elif n_hdr and first_num <= last_col:
             style_cmds.append(("ALIGN", (first_num, 0), (last_col, 0), "RIGHT"))
         tbl.setStyle(TableStyle(style_cmds))
         return tbl
@@ -475,6 +483,7 @@ def encadre_section(
     variant: str = "default",
     col_headers: list[str] | None = None,
     col_width_fracs: list[float] | None = None,
+    col_aligns: list[str] | None = None,
 ) -> BrochureEncadre:
     style = ENCADRE_SURFACE if variant == "surface" else ENCADRE_SECTION
     return BrochureEncadre(
@@ -485,6 +494,7 @@ def encadre_section(
         styles=styles,
         col_headers=col_headers,
         col_width_fracs=col_width_fracs,
+        col_aligns=col_aligns,
     )
 
 

@@ -88,3 +88,33 @@ def test_resolve_map_title_custom_title_main() -> None:
     res = resolve_map_title(prof, "21")
     assert "Contrôles — résultats — Côte-d'Or" in res
 
+
+def test_deduplicate_legend_data() -> None:
+    from core.cartographie.production_cartographique import _deduplicate_legend_data
+
+    raw = [
+        {
+            "title": "Contrôles (localisations)",
+            "items": [
+                {"label": "Conforme", "color": "#2ECC71", "shape": "square"},
+                {"label": "Infraction", "color": "#E74C3C", "shape": "square"},
+            ],
+        },
+        {
+            "title": "Contrôles (localisations)",
+            "items": [
+                {"label": "Conforme", "color": "#2ECC71", "shape": "square"},
+                {"label": "Infraction", "color": "#E74C3C", "shape": "square"},
+            ],
+        },
+    ]
+
+    dedup_std = _deduplicate_legend_data(raw, is_brochure=False)
+    assert len(dedup_std) == 1
+    assert len(dedup_std[0]["items"]) == 2
+
+    dedup_brochure = _deduplicate_legend_data(raw, is_brochure=True)
+    assert len(dedup_brochure) == 1
+    assert len(dedup_brochure[0]["items"]) == 2
+
+

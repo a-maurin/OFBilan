@@ -81,4 +81,8 @@ sections_enrichies:
       width_ratio: 0.95
       cbar_title: "Pression de contrôle (localisations/commune)"
       afficher_note_hors_communes: true
+  brochure:
+    page2_colonnes_ratio: 0.50
+    pve_table_colonnes: "natinf_detail"
+
 

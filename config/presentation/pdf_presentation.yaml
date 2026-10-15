@@ -365,6 +365,8 @@ profiles:
         show_categories_controles: true
       sec3:
         show_categories_infractions: true
+    brochure:
+      use_categories_chasse: true
 
   # Exemple: profil thématique PNF
   pnf:

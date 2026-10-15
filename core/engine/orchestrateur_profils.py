@@ -3421,6 +3421,23 @@ def _export_csv(
     if "categories_chasse_infractions" in results and isinstance(results["categories_chasse_infractions"], pd.DataFrame):
         results["categories_chasse_infractions"].to_csv(out_dir / "categories_chasse_infractions.csv", sep=";", index=False, encoding="utf-8")
 
+    nb_loc = int(results.get("nb_localisations", len(point_filtered)))
+    nb_ops = int(results.get("nb_operations_controle", 0))
+    nb_pej = int(results.get("nb_pej", len(pej_filtered)))
+    nb_pa = int(results.get("nb_pa", len(pa_filtered)))
+    nb_pve = int(results.get("nb_pve", len(pve_filtered)))
+
+    pd.DataFrame([{
+        "nb_localisations": nb_loc,
+        "nb_operations_controle": nb_ops,
+    }]).to_csv(out_dir / f"controles_{prefix}_operations_resume.csv", sep=";", index=False)
+    pd.DataFrame([{"nb_pej_global": nb_pej}]).to_csv(out_dir / f"pej_{prefix}_resume.csv", sep=";", index=False)
+    pd.DataFrame([{"nb_pa_global": nb_pa}]).to_csv(out_dir / f"pa_{prefix}_resume.csv", sep=";", index=False)
+    pd.DataFrame([{"nb_pve_global": nb_pve}]).to_csv(out_dir / f"pve_{prefix}_resume.csv", sep=";", index=False)
+
+    if "pve_top_infractions" in results and isinstance(results["pve_top_infractions"], pd.DataFrame):
+        results["pve_top_infractions"].to_csv(out_dir / f"pve_{prefix}_par_natinf.csv", sep=";", index=False)
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 6. Génération PDF
@@ -6456,6 +6473,7 @@ def _run_engine_thematic_pipeline(
                 diffusion=str(resolved_opts.get("diffusion", "externe")),
                 cartes=bool(resolved_opts.get("cartes", True)),
                 gabarit=gabarit_id_opt or "gabarit_defaut",
+                results=results,
             )
 
         if format_sortie == "brochure":

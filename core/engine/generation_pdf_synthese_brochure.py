@@ -43,7 +43,7 @@ from pathlib import Path  # Pour manipuler facilement les chemins de fichiers
 import pandas as pd  # Bibliothèque de traitement de tableaux de données (CSV)
 from reportlab.lib import colors as rl_colors  # Gestion des couleurs pour ReportLab
 from reportlab.lib.pagesizes import A4, landscape  # Format de page A4 en mode Paysage (horizontal)
-from reportlab.lib.enums import TA_RIGHT  # Alignement du texte (droite pour les colonnes numériques)
+from reportlab.lib.enums import TA_LEFT, TA_RIGHT  # Alignement du texte
 from reportlab.lib.styles import ParagraphStyle  # Style de texte (police, taille, couleur, alignement)
 from reportlab.lib.units import mm  # Conversion de millimètres en points PDF
 from reportlab.platypus import Flowable, Image as RLImage, Paragraph, Spacer, Table, TableStyle  # Éléments de mise en page ReportLab
@@ -146,7 +146,7 @@ _PAGE1_LOWER_SYNTH_RATIO = 0.32  # Proportion du tableau de synthèse par rappor
 _PAGE1_MAP_ENCADRE_OVERHEAD_MM = 13.0  # Hauteur fixe consommée par le titre de l'encadré de carte
 _PAGE2_CHART_HERO_RATIO = 0.48  # Part de hauteur de la zone des graphiques en haut de page 2
 _PAGE2_LOWER_LEFT_RATIO = 0.40  # Largeur relative du bloc gauche en bas de page 2
-_PAGE2_PROC_WIDTH_RATIO = 0.25  # Proportion de largeur de la colonne des procédures en page 2
+_PAGE2_PROC_WIDTH_RATIO = 0.50  # Proportion de largeur de la colonne des procédures en page 2 (alignement vertical 50%)
 _PAGE2_TOP_PIE_RATIO = 0.50  # Largeur du camembert (50%) en haut de page 2
 _PAGE2_PIE_LEGEND_FONTSIZE = 10.0  # Taille de police de la légende du graphique en camembert
 _PAGE2_METHODO_MM = 9.0  # Hauteur de la bande explicative/méthodologique en bas de page 2
@@ -279,7 +279,7 @@ def _flatten_key_figures(figure_rows: list[list[tuple[str, str]]]) -> list[tuple
 _BROCHURE_THEME_COL_FRACS = [0.64, 0.12, 0.24]  # Thème (64%) | Valeur (12%) | Pourcentage (24%)
 _BROCHURE_RESULT_COL_FRACS = [0.60, 0.12, 0.28]  # Résultat (60%) | Valeur (12%) | Taux (28%)
 _BROCHURE_PROC_COL_FRACS = [0.58, 0.21, 0.21]  # Thème (58%) | PEJ (21%) | PA (21%)
-_BROCHURE_PVE_NATINF_COL_FRACS = [0.44, 0.38, 0.18]  # Libellé NATINF (44%) | Thème SNC (38%) | Nombre (18%)
+_BROCHURE_PVE_NATINF_COL_FRACS = [0.20, 0.65, 0.15]  # N° NATINF (20%) | Libellé NATINF (65%) | Nombre (15%)
 
 
 def _build_rows_resultats_brochure(tr: pd.DataFrame | None) -> list[list[str]]:
@@ -291,11 +291,28 @@ def _build_rows_resultats_brochure(tr: pd.DataFrame | None) -> list[list[str]]:
         return [["—", "0", "n.d."]]
 
     strip_res = tr["resultat"].astype(str).str.strip()
+    has_nc = strip_res.isin(["Non-conforme", "non_conforme"]).any()
+    if not has_nc and strip_res.isin(["Infraction", "Manquement"]).any():
+        c_conf = int(tr.loc[strip_res == "Conforme", "nb"].sum()) if (strip_res == "Conforme").any() else 0
+        c_inf = int(tr.loc[strip_res == "Infraction", "nb"].sum()) if (strip_res == "Infraction").any() else 0
+        c_manq = int(tr.loc[strip_res == "Manquement", "nb"].sum()) if (strip_res == "Manquement").any() else 0
+        c_att = int(tr.loc[strip_res == "En attente", "nb"].sum()) if (strip_res == "En attente").any() else 0
+        nc_tot = c_inf + c_manq
+        counts = [c_conf, nc_tot]
+        rows_out = [["Conforme", str(c_conf), ""], ["Non-conforme", str(nc_tot), ""]]
+        if c_att > 0:
+            counts.append(c_att)
+            rows_out.append(["En attente", str(c_att), ""])
+        rates = tab_counts_to_pct_strings(counts)
+        for i, row in enumerate(rows_out):
+            if i < len(rates):
+                row[2] = rates[i]
+        return rows_out
+
     labels = ("Conforme", "Non-conforme", "En attente")
     counts: list[int] = []
     rows_out: list[list[str]] = []
 
-    # Extrait les chiffres pour chaque catégorie de résultat
     for label in labels:
         sub = tr.loc[strip_res == label]
         if sub.empty:
@@ -303,7 +320,6 @@ def _build_rows_resultats_brochure(tr: pd.DataFrame | None) -> list[list[str]]:
         counts.append(int(sub.iloc[0]["nb"]))
         rows_out.append([label, str(int(sub.iloc[0]["nb"])), ""])
 
-    # Calcule les pourcentages correspondants
     if counts:
         rates = tab_counts_to_pct_strings(counts)
         for i, row in enumerate(rows_out):
@@ -465,6 +481,24 @@ def _format_pve_natinf_label(row: pd.Series) -> str:
     return code or "—"
 
 
+def _format_pve_natinf_libelle(row: pd.Series) -> str:
+    """Formate le libellé de l'infraction NATINF en minuscules/sentence case."""
+    libelle = str(row.get("libelle_natinf") or row.get("LIBELLE_NATINF") or "").strip()
+    if libelle:
+        if libelle.isupper():
+            libelle = libelle[0].upper() + libelle[1:].lower()
+            for acr in ("OFB", "SDGC", "PVe", "PEJ", "PA", "SNC", "CSD", "ZPS", "ZSC", "PPRN", "PLU"):
+                libelle = re.sub(rf"\b{re.escape(acr.lower())}\b", acr, libelle, flags=re.IGNORECASE)
+        return libelle
+    return "—"
+
+
+def _format_pve_natinf_code(row: pd.Series) -> str:
+    """Extrait le code ou numéro NATINF de l'infraction."""
+    code = str(row.get("numero_natinf") or row.get("natinf") or "").strip()
+    return code or "—"
+
+
 # ========================================================================================
 # FONCTIONS DE CONSTRUCTION DES TABLEAUX STYLISÉS DE LA BROCHURE
 # ========================================================================================
@@ -472,23 +506,25 @@ def _format_pve_natinf_label(row: pd.Series) -> str:
 def _build_pve_natinf_table_brochure(
     pve_natinf: pd.DataFrame | None, inner_w: float, *, max_rows: int
 ) -> Table:
-    """Génère le tableau des infractions PV/E les plus fréquentes (Codes NATINF, Thème SNC et volumes)."""
+    """Génère le tableau des infractions PV/E les plus fréquentes (N° NATINF, Libellé et volumes)."""
     col_widths = col_widths_from_fracs(inner_w, _BROCHURE_PVE_NATINF_COL_FRACS)
     cap = max(1, min(int(max_rows), _BROCHURE_MAX_PVE_NATINF))
     rows: list[list[Any]] = []
+    p_style_code = ParagraphStyle(
+        "BrochurePveCode",
+        fontName=FONT_FAMILY,
+        fontSize=7.2,
+        leading=8.8,
+        textColor=rl_colors.HexColor("#1F2937"),
+        alignment=TA_LEFT,
+    )
     p_style_desc = ParagraphStyle(
         "BrochurePveDesc",
         fontName=FONT_FAMILY,
         fontSize=7.2,
         leading=8.8,
         textColor=rl_colors.HexColor("#1F2937"),
-    )
-    p_style_theme = ParagraphStyle(
-        "BrochurePveTheme",
-        fontName=FONT_FAMILY,
-        fontSize=7.2,
-        leading=8.8,
-        textColor=rl_colors.HexColor("#4B5563"),
+        alignment=TA_LEFT,
     )
     p_style_num = ParagraphStyle(
         "BrochurePveNum",
@@ -500,19 +536,17 @@ def _build_pve_natinf_table_brochure(
     )
     if pve_natinf is not None and not pve_natinf.empty:
         for _, row in pve_natinf.head(cap).iterrows():
-            theme_val = str(row.get("theme_snc") or row.get("THEME_SNC") or row.get("theme") or "Infractions hors périmètre SNC").strip()
-            if theme_val in ["", "Hors thème", "Non Classé / Hors SNC", "nan", "None"]:
-                theme_val = "Infractions hors périmètre SNC"
-            label_text = _format_pve_natinf_label(row)
+            code_text = _format_pve_natinf_code(row)
+            libelle_text = _format_pve_natinf_libelle(row)
             rows.append(
                 [
-                    Paragraph(label_text, p_style_desc),
-                    Paragraph(theme_val, p_style_theme),
+                    Paragraph(code_text, p_style_code),
+                    Paragraph(libelle_text, p_style_desc),
                     Paragraph(str(int(row["nb"])), p_style_num),
                 ]
             )
     else:
-        rows.append(["—", "—", Paragraph("0", p_style_num)])
+        rows.append([Paragraph("—", p_style_code), Paragraph("—", p_style_desc), Paragraph("0", p_style_num)])
     return brochure_table(
         rows,
         col_widths=col_widths,
@@ -600,6 +634,128 @@ def _theme_pct_strings_brochure(values: list[int], *, total_value: int) -> list[
         format_pct_int_from_rate((int(value) / int(total_value)) if total_value > 0 else None)
         for value in values
     ]
+
+
+def _build_categories_chasse_controles_table_brochure(
+    df_cat: pd.DataFrame | None,
+    inner_w: float,
+) -> Table:
+    """Génère le tableau d'activité par catégories de chasse (Agrainage, Sécurité, Autres)."""
+    rows: list[list[Any]] = []
+    p_style = ParagraphStyle(
+        "BrochureCatChasseCtrl",
+        fontName=FONT_FAMILY,
+        fontSize=7.6,
+        leading=9.0,
+        textColor=rl_colors.HexColor("#1F2937"),
+    )
+    p_style_num = ParagraphStyle(
+        "BrochureCatChasseNum",
+        fontName=FONT_FAMILY,
+        fontSize=7.6,
+        leading=9.0,
+        textColor=rl_colors.HexColor("#1F2937"),
+        alignment=TA_RIGHT,
+    )
+    if df_cat is not None and not df_cat.empty:
+        for _, r in df_cat.iterrows():
+            lbl = str(r.get("libelle", r.get("categorie", "")))
+            tot = int(r.get("total", 0))
+            t_nc = r.get("taux_non_conforme", 0.0)
+            rows.append([
+                Paragraph(lbl, p_style),
+                Paragraph(str(tot), p_style_num),
+                Paragraph(f"{t_nc} %", p_style_num),
+            ])
+    if not rows:
+        rows.append(["—", Paragraph("0", p_style_num), Paragraph("n.d.", p_style_num)])
+    return brochure_table(
+        rows,
+        col_widths=col_widths_from_fracs(inner_w, _BROCHURE_THEME_COL_FRACS),
+        col_aligns=["LEFT", "RIGHT", "RIGHT"],
+        split_by_row=False,
+        header_row=False,
+    )
+
+
+def _build_hierarchical_categories_chasse_table_brochure(
+    df_cat_inf: pd.DataFrame | None,
+    inner_w: float,
+) -> Table:
+    """Génère le tableau hiérarchique des infractions par catégorie de chasse avec sous-lignes PEJ et PVe."""
+    rows: list[list[Any]] = []
+    p_style_cat = ParagraphStyle(
+        "BrochureHierCat",
+        fontName=FONT_FAMILY,
+        fontSize=7.2,
+        leading=8.6,
+        textColor=rl_colors.HexColor("#003366"),
+    )
+    p_style_sub = ParagraphStyle(
+        "BrochureHierSub",
+        fontName=FONT_FAMILY,
+        fontSize=6.8,
+        leading=8.2,
+        textColor=rl_colors.HexColor("#4B5563"),
+    )
+    p_style_num_bold = ParagraphStyle(
+        "BrochureHierNumBold",
+        fontName=FONT_FAMILY,
+        fontSize=7.2,
+        leading=8.6,
+        textColor=rl_colors.HexColor("#003366"),
+        alignment=TA_RIGHT,
+    )
+    p_style_num = ParagraphStyle(
+        "BrochureHierNum",
+        fontName=FONT_FAMILY,
+        fontSize=6.8,
+        leading=8.2,
+        textColor=rl_colors.HexColor("#4B5563"),
+        alignment=TA_RIGHT,
+    )
+    col_w = col_widths_from_fracs(inner_w, [0.64, 0.18, 0.18])
+
+    tot_all = 0
+    if df_cat_inf is not None and not df_cat_inf.empty:
+        tot_all = int(df_cat_inf["total"].sum()) if "total" in df_cat_inf.columns else 0
+
+    if df_cat_inf is not None and not df_cat_inf.empty:
+        for _, r in df_cat_inf.iterrows():
+            lbl = str(r.get("libelle", r.get("categorie", "")))
+            tot_cat = int(r.get("total", 0))
+            pct_cat = r.get("pct", 0.0)
+            pv = int(r.get("nb_pve", 0))
+            pj = int(r.get("nb_pej", 0))
+            pct_pv = round((pv / tot_all) * 100, 1) if tot_all > 0 else 0.0
+            pct_pj = round((pj / tot_all) * 100, 1) if tot_all > 0 else 0.0
+
+            rows.append([
+                Paragraph(f"<b>{lbl}</b>", p_style_cat),
+                Paragraph(f"<b>{tot_cat}</b>", p_style_num_bold),
+                Paragraph(f"<b>{pct_cat} %</b>", p_style_num_bold),
+            ])
+            rows.append([
+                Paragraph("&nbsp;&nbsp;&nbsp;&nbsp;Procès-verbaux électroniques (PVe)", p_style_sub),
+                Paragraph(str(pv), p_style_num),
+                Paragraph(f"{pct_pv} %", p_style_num),
+            ])
+            rows.append([
+                Paragraph("&nbsp;&nbsp;&nbsp;&nbsp;Procédures d'enquête judiciaire (PEJ)", p_style_sub),
+                Paragraph(str(pj), p_style_num),
+                Paragraph(f"{pct_pj} %", p_style_num),
+            ])
+
+    if not rows:
+        rows.append(["—", Paragraph("0", p_style_num), Paragraph("0 %", p_style_num)])
+
+    return brochure_table(
+        rows,
+        col_widths=col_w,
+        col_aligns=["LEFT", "RIGHT", "RIGHT"],
+        split_by_row=False,
+        header_row=False,
+    )
 
 
 def _build_treemap_placeholder_banner(builder: PDFReportBuilder, outer_w: float):
@@ -1144,6 +1300,7 @@ def _generate_srp_r27_brochure_pdf(
                 donut=True,
                 figure_scale=1.0,
                 legend_fontsize=9.5,
+                other_label="Autres usagers",
             )
         )
         img = _image_fit(builder, chart_path, max_width=encadre_inner_width(left_w, pad_pt=_PAD_STD_PT), max_height=50.0 * mm, scale_to_fill=True)
@@ -1599,6 +1756,7 @@ def generate_synthese_brochure_pdf_report(
     cartes: bool = True,
     brochure: bool = True,
     gabarit: str | None = None,
+    results: dict | None = None,
 ) -> None:
     """Point d'entrée principal appelé par le plugin QGIS ou le script CLI batch.
 
@@ -1624,6 +1782,7 @@ def generate_synthese_brochure_pdf_report(
         diffusion=diffusion,
         cartes=cartes,
         gabarit=gabarit,
+        results=results,
     )
 
 
@@ -1644,6 +1803,7 @@ def _generate_synthese_brochure_pdf(
     diffusion: str = "externe",
     cartes: bool = True,
     gabarit: str | None = None,
+    results: dict | None = None,
 ) -> None:
     """Fonction principale d'orchestration de la brochure 2 pages A4 paysage.
 
@@ -1703,15 +1863,40 @@ def _generate_synthese_brochure_pdf(
     brochure_header_text = " — ".join(title_parts)
 
 
-    act_theme = _sort_desc(_load_csv_fallback(out_dir, ["synthese_activite_par_theme.csv", f"controles_{profil_id}_par_theme.csv", "controles_global_par_theme.csv"]), ["nb_total", "nb"])
+    res_code = str(code).strip()
+    prefix_candidates = [f"{profil_id}_{res_code}", profil_id, "global"] if res_code else [profil_id, "global"]
+
+    use_cat_chasse = (
+        profil_id == "chasse"
+        or bool(presentation_cfg.get("brochure", {}).get("use_categories_chasse"))
+    ) and bool(profile.get("categories_chasse"))
+
+    curr_res = results or {}
+
+    categories_controles_df = curr_res.get("categories_chasse_controles")
+    if categories_controles_df is None or categories_controles_df.empty:
+        categories_controles_df = _load_csv_opt(out_dir, "categories_chasse_controles.csv")
+
+    categories_infractions_df = curr_res.get("categories_chasse_infractions")
+    if categories_infractions_df is None or categories_infractions_df.empty:
+        categories_infractions_df = _load_csv_opt(out_dir, "categories_chasse_infractions.csv")
+
+    act_theme = curr_res.get("agg_theme")
+    if act_theme is None or act_theme.empty:
+        theme_candidates = ["synthese_activite_par_theme.csv"] + [f"controles_{p}_par_theme.csv" for p in prefix_candidates]
+        act_theme = _sort_desc(_load_csv_fallback(out_dir, theme_candidates), ["nb_total", "nb"])
     if act_theme is not None and not act_theme.empty and "nb_total" not in act_theme.columns and "nb" in act_theme.columns:
         act_theme["nb_total"] = act_theme["nb"]
 
-    proc_theme = _sort_desc(_load_csv_fallback(out_dir, ["synthese_procedures_par_theme.csv", f"procedures_{profil_id}_par_theme.csv", "procedures_global_par_theme.csv"]), ["nb_pej", "nb_pa", "nb_pve"])
+    proc_theme = _sort_desc(_load_csv_fallback(out_dir, ["synthese_procedures_par_theme.csv"] + [f"procedures_{p}_par_theme.csv" for p in prefix_candidates]), ["nb_pej", "nb_pa", "nb_pve"])
     if proc_theme is None or proc_theme.empty:
-        pej_t = _load_csv_fallback(out_dir, [f"pej_{profil_id}_par_theme.csv", "pej_global_par_theme.csv"])
-        pa_t = _load_csv_fallback(out_dir, [f"pa_{profil_id}_par_theme.csv", "pa_global_par_theme.csv"])
-        pve_t = _load_csv_fallback(out_dir, [f"pve_{profil_id}_par_theme.csv", "pve_global_par_theme.csv"])
+        pej_t = curr_res.get("pej_par_theme")
+        if pej_t is None or pej_t.empty:
+            pej_t = _load_csv_fallback(out_dir, [f"pej_{p}_par_theme.csv" for p in prefix_candidates])
+        pa_t = curr_res.get("pa_par_theme")
+        if pa_t is None or pa_t.empty:
+            pa_t = _load_csv_fallback(out_dir, [f"pa_{p}_par_theme.csv" for p in prefix_candidates])
+        pve_t = _load_csv_fallback(out_dir, [f"pve_{p}_par_theme.csv" for p in prefix_candidates])
         if pej_t is not None or pa_t is not None or pve_t is not None:
             frames = []
             if pej_t is not None and not pej_t.empty and "theme" in pej_t.columns:
@@ -1731,77 +1916,105 @@ def _generate_synthese_brochure_pdf(
                         merged[c] = merged[c].fillna(0).astype(int)
                 merged["nb_total_proc"] = merged["nb_pej"] + merged["nb_pa"]
                 merged["nb_total"] = merged["nb_total_proc"] + merged["nb_pve"]
-                # Filtrer les thématiques n'ayant aucune procédure (0 PEJ et 0 PA)
                 merged = merged[merged["nb_total_proc"] > 0]
                 proc_theme = _sort_desc(merged, ["nb_total_proc", "nb_pej", "nb_pa", "nb_pve"])
 
-    pve_natinf = _sort_desc(_load_csv_fallback(out_dir, ["pve_global_par_natinf.csv", f"pve_{profil_id}_par_natinf.csv"]), ["nb"])
-    act_par_type = _sort_desc(
-        _load_csv_fallback(out_dir, ["synthese_activite_par_type_usager.csv", f"controles_{profil_id}_par_usager.csv", "controles_global_par_usager.csv"]), ["nb_total", "nb"]
-    )
+    pve_natinf = curr_res.get("pve_top_infractions")
+    if pve_natinf is None or pve_natinf.empty:
+        pve_natinf = _sort_desc(_load_csv_fallback(out_dir, ["pve_global_par_natinf.csv"] + [f"pve_{p}_par_natinf.csv" for p in prefix_candidates]), ["nb"])
+    if pve_natinf is not None and not pve_natinf.empty and "libelle_natinf" not in pve_natinf.columns:
+        from core.common.chargeurs_donnees import load_natinf_ref
+        natinf_ref = load_natinf_ref(_ROOT)
+        if not natinf_ref.empty:
+            top_df = pve_natinf.copy()
+            if "numero_natinf" not in top_df.columns and "natinf" in top_df.columns:
+                top_df["numero_natinf"] = top_df["natinf"].astype(str).str.extract(r"(\d+)", expand=False)
+            if "numero_natinf" in top_df.columns:
+                top_df["numero_natinf"] = top_df["numero_natinf"].astype(str).str.strip()
+                nref = natinf_ref.copy()
+                nref["numero_natinf"] = nref["numero_natinf"].astype(str).str.strip()
+                top_df = top_df.merge(
+                    nref[["numero_natinf", "libelle_natinf"]].drop_duplicates(subset=["numero_natinf"]),
+                    on="numero_natinf",
+                    how="left",
+                )
+                pve_natinf = top_df
+
+    act_par_type = curr_res.get("usager_effectifs")
+    if act_par_type is None or act_par_type.empty:
+        act_par_type = _sort_desc(
+            _load_csv_fallback(out_dir, ["synthese_activite_par_type_usager.csv"] + [f"controles_{p}_par_usager.csv" for p in prefix_candidates]), ["nb_total", "nb"]
+        )
     if act_par_type is not None and not act_par_type.empty and "nb_total" not in act_par_type.columns and "nb" in act_par_type.columns:
         act_par_type["nb_total"] = act_par_type["nb"]
-    tab_res_ctrl = _load_csv_fallback(out_dir, ["controles_global_resultats_controles.csv", f"controles_{profil_id}_resultats_controles.csv"])
-    tab_resultats = _load_csv_fallback(out_dir, ["controles_global_resultats.csv", f"controles_{profil_id}_resultats.csv"])
 
-    res_usager = _sort_desc(
-        _load_csv_fallback(out_dir, ["synthese_resultats_usager_effectifs.csv", f"controles_{profil_id}_resultats_par_type_usager.csv", "controles_global_resultats_par_type_usager.csv"]),
-        ["Total", "Conforme", "Infraction", "Manquement"],
-    )
+    tab_res_ctrl = curr_res.get("tab_resultats_controles")
+    if tab_res_ctrl is None or tab_res_ctrl.empty:
+        tab_res_ctrl = _load_csv_fallback(out_dir, ["controles_global_resultats_controles.csv"] + [f"controles_{p}_resultats_controles.csv" for p in prefix_candidates])
+
+    tab_resultats = curr_res.get("tab_resultats")
+    if tab_resultats is None or tab_resultats.empty:
+        tab_resultats = _load_csv_fallback(out_dir, ["controles_global_resultats.csv"] + [f"controles_{p}_resultats.csv" for p in prefix_candidates])
+
+    res_usager = curr_res.get("res_bilan_par_type_usager")
+    if res_usager is None or res_usager.empty:
+        res_usager = _sort_desc(
+            _load_csv_fallback(out_dir, [f"controles_{p}_resultats_par_type_usager.csv" for p in prefix_candidates] + ["resultats_bilan_par_type_usager.csv", "synthese_resultats_usager_effectifs.csv"]),
+            ["Total", "Conforme", "Infraction", "Manquement"],
+        )
+
     ops_resume = _load_csv_fallback(
         out_dir,
         [
             "synthese_resume.csv",
-            f"controles_{profil_id}_operations_resume.csv",
             "controles_global_operations_resume.csv",
-            f"controles_{profil_id}_usagers_resume.csv",
             "controles_global_usagers_resume.csv",
-        ],
+        ] + [f"controles_{p}_operations_resume.csv" for p in prefix_candidates] + [f"controles_{p}_usagers_resume.csv" for p in prefix_candidates],
     )
-    resume = _load_csv_fallback(out_dir, ["synthese_resume.csv", f"controles_{profil_id}_usagers_resume.csv", "controles_global_usagers_resume.csv"])
-    pej_resume = _load_csv_fallback(out_dir, ["pej_global_resume.csv", f"pej_{profil_id}_resume.csv"])
-    pa_resume = _load_csv_fallback(out_dir, ["pa_global_resume.csv", f"pa_{profil_id}_resume.csv"])
-    pve_resume = _load_csv_fallback(out_dir, ["pve_global_resume.csv", f"pve_{profil_id}_resume.csv"])
+    resume = _load_csv_fallback(out_dir, ["synthese_resume.csv", "controles_global_usagers_resume.csv"] + [f"controles_{p}_usagers_resume.csv" for p in prefix_candidates])
+    pej_resume = _load_csv_fallback(out_dir, ["pej_global_resume.csv"] + [f"pej_{p}_resume.csv" for p in prefix_candidates])
+    pa_resume = _load_csv_fallback(out_dir, ["pa_global_resume.csv"] + [f"pa_{p}_resume.csv" for p in prefix_candidates])
+    pve_resume = _load_csv_fallback(out_dir, ["pve_global_resume.csv"] + [f"pve_{p}_resume.csv" for p in prefix_candidates])
 
-    # Calcul des totaux de synthèse pour la page de garde
-    if resume is not None and not resume.empty and "nb_localisations" in resume.columns:
+    if "nb_localisations" in curr_res:
+        nb_localisations = int(curr_res["nb_localisations"])
+    elif resume is not None and not resume.empty and "nb_localisations" in resume.columns:
         nb_localisations = int(resume.iloc[0]["nb_localisations"])
     elif tab_resultats is not None and not tab_resultats.empty and "nb" in tab_resultats.columns:
         nb_localisations = int(tab_resultats["nb"].sum())
     else:
         nb_localisations = 0
 
-    # Extraction des nombres globaux d'opérations et de procédures (PA / PEJ / PVe)
-    nb_operations_controle = 0
-    if ops_resume is not None and not ops_resume.empty and "nb_operations_controle" in ops_resume.columns:
+    if "nb_operations_controle" in curr_res:
+        nb_operations_controle = int(curr_res["nb_operations_controle"])
+    elif ops_resume is not None and not ops_resume.empty and "nb_operations_controle" in ops_resume.columns:
         nb_operations_controle = int(ops_resume.iloc[0]["nb_operations_controle"])
     elif resume is not None and not resume.empty and "nb_operations_controle" in resume.columns:
         nb_operations_controle = int(resume.iloc[0]["nb_operations_controle"])
-    if nb_operations_controle == 0:
+    else:
         nb_operations_controle = nb_localisations
 
-    if pej_resume is not None and not pej_resume.empty and "nb_pej_global" in pej_resume.columns:
+    if "nb_pej" in curr_res:
+        nb_pej = int(curr_res["nb_pej"])
+    elif pej_resume is not None and not pej_resume.empty and "nb_pej_global" in pej_resume.columns:
         nb_pej = int(pej_resume.iloc[0]["nb_pej_global"])
     else:
-        if pej_resume is not None and not pej_resume.empty:
-            logger.warning(f"Résumé PEJ sans colonne 'nb_pej_global' pour le profil '{profil_id}'.")
         nb_pej = 0
 
-    if pa_resume is not None and not pa_resume.empty and "nb_pa_global" in pa_resume.columns:
+    if "nb_pa" in curr_res:
+        nb_pa = int(curr_res["nb_pa"])
+    elif pa_resume is not None and not pa_resume.empty and "nb_pa_global" in pa_resume.columns:
         nb_pa = int(pa_resume.iloc[0]["nb_pa_global"])
     else:
-        if pa_resume is not None and not pa_resume.empty:
-            logger.warning(f"Résumé PA sans colonne 'nb_pa_global' pour le profil '{profil_id}'.")
         nb_pa = 0
 
-    if pve_resume is not None and not pve_resume.empty and "nb_pve_global" in pve_resume.columns:
+    if "nb_pve" in curr_res:
+        nb_pve = int(curr_res["nb_pve"])
+    elif pve_resume is not None and not pve_resume.empty and "nb_pve_global" in pve_resume.columns:
         nb_pve = int(pve_resume.iloc[0]["nb_pve_global"])
     else:
-        if pve_resume is not None and not pve_resume.empty:
-            logger.warning(f"Résumé PVe sans colonne 'nb_pve_global' pour le profil '{profil_id}'.")
         nb_pve = 0
 
-    # Préparation du tableau des usagers et calcul des non-conformités
     res_usager_roll = _rollup_resultats_usager(res_usager)
     nb_effectifs = (
         int(res_usager_roll["Total"].sum())
@@ -1969,7 +2182,20 @@ def _generate_synthese_brochure_pdf(
         split_by_row=False,
         header_row=False,
     )
-    if gabarit_id == "srp_r27":
+    if use_cat_chasse and categories_controles_df is not None and not categories_controles_df.empty:
+        cat_ctrl_table = _build_categories_chasse_controles_table_brochure(
+            categories_controles_df,
+            inner_themes,
+        )
+        themes_panel = encadre_section(
+            themes_w,
+            "Contrôles par catégorie",
+            [cat_ctrl_table],
+            builder.styles,
+            col_headers=["Nb", "Taux non-conf."],
+            col_width_fracs=_BROCHURE_THEME_COL_FRACS,
+        )
+    elif gabarit_id == "srp_r27":
         themes_panel = _build_treemap_placeholder_banner(builder, themes_w)
     else:
         themes_panel = encadre_section(
@@ -2067,6 +2293,7 @@ def _generate_synthese_brochure_pdf(
                 legend_percent_only=True,
                 figure_scale=min(0.88, 0.58 + top_p2_mm * 0.004),
                 legend_fontsize=_PAGE2_PIE_LEGEND_FONTSIZE,
+                other_label="Autres usagers",
             )
         )
         img = _image_fit(
@@ -2159,50 +2386,44 @@ def _generate_synthese_brochure_pdf(
     _append_page2_row(builder, [pie_panel, result_panel], [pie_w, top_gap, result_w])
     _append_spacer(builder, _BROCHURE_SECTION_GAP_MM)
 
-    # Calcul du nombre maximal de lignes de tableaux pour le bas de Page 2
-    bottom_row_cap = _page2_table_row_cap(bottom_p2_mm, with_footer=True)
-    proc_row_cap = bottom_row_cap
-    if proc_theme is not None and not proc_theme.empty:
-        proc_row_cap = min(bottom_row_cap, len(proc_theme))
-    pve_row_cap = bottom_row_cap
-    if show_pve_band and pve_natinf is not None and not pve_natinf.empty:
-        n_pve_avail = len(pve_natinf)
-        pve_row_cap = min(bottom_row_cap, n_pve_avail)
-        pve_row_cap = max(pve_row_cap, min(proc_row_cap, n_pve_avail))
+    if use_cat_chasse and categories_infractions_df is not None and not categories_infractions_df.empty:
+        bottom_gap = top_gap
+        cat_w = pie_w
+        pve_w = result_w
 
-    inner_proc = encadre_inner_width(proc_w, pad_pt=_PAD_STD_PT)
-    proc_body: list = [
-        _build_procedures_table_brochure(proc_theme, inner_proc, max_rows=proc_row_cap)
-    ]
-    if nb_pej or nb_pa:
-        parts = []
-        if nb_pej:
-            parts.append(f"<b>{nb_pej}</b> PEJ")
-        parts.append(f"<b>{nb_pa}</b> PA")
-        proc_body.append(
-            brochure_totaux_band(
-                f"<b>Totaux procéduraux</b> : {' · '.join(parts)}",
-                inner_proc,
-                builder.styles,
+        inner_cat = encadre_inner_width(cat_w, pad_pt=_PAD_STD_PT)
+        cat_table = _build_hierarchical_categories_chasse_table_brochure(
+            categories_infractions_df, inner_cat
+        )
+        cat_body: list = [cat_table]
+        if nb_pej or nb_pve:
+            parts = []
+            if nb_pve:
+                parts.append(f"<b>{nb_pve}</b> PVe")
+            if nb_pej:
+                parts.append(f"<b>{nb_pej}</b> PEJ")
+            cat_body.append(
+                brochure_totaux_band(
+                    f"<b>Totaux répressifs</b> : {' · '.join(parts)}",
+                    inner_cat,
+                    builder.styles,
+                )
             )
+
+        cat_panel = encadre_section(
+            cat_w,
+            pdf_metric_caption("Infractions par catégorie de chasse", "proc"),
+            cat_body,
+            builder.styles,
+            variant="surface",
+            col_headers=["Catégorie / Procédure", "Nb", "Part"],
+            col_width_fracs=[0.64, 0.18, 0.18],
         )
 
-    # Panneau des procédures par thématique
-    proc_panel = encadre_section(
-        proc_w,
-        pdf_metric_caption("Procédures par thème (principaux postes)", "proc"),
-        proc_body,
-        builder.styles,
-        variant="surface",
-        col_headers=["PEJ", "PA"],
-        col_width_fracs=_BROCHURE_PROC_COL_FRACS,
-    )
-
-    # Panneau optionnel des amendes forfaitaires (PVe)
-    if show_pve_band:
         inner_pve = encadre_inner_width(pve_w, pad_pt=_PAD_STD_PT)
+        bottom_row_cap = _page2_table_row_cap(bottom_p2_mm, with_footer=True)
         pve_body: list = [
-            _build_pve_natinf_table_brochure(pve_natinf, inner_pve, max_rows=pve_row_cap)
+            _build_pve_natinf_table_brochure(pve_natinf, inner_pve, max_rows=bottom_row_cap)
         ]
         if nb_pve:
             pve_body.append(
@@ -2214,16 +2435,82 @@ def _generate_synthese_brochure_pdf(
             )
         pve_panel = encadre_section(
             pve_w,
-            "PVe — natures d'infraction",
+            "N° NATINF",
             pve_body,
             builder.styles,
             variant="default",
-            col_headers=["Thème SNC", "Nb"],
+            col_headers=["Libellé NATINF", "Nb"],
             col_width_fracs=_BROCHURE_PVE_NATINF_COL_FRACS,
+            col_aligns=["LEFT", "LEFT", "RIGHT"],
         )
-        _append_page2_row(builder, [proc_panel, pve_panel], [proc_w, bottom_gap, pve_w])
+        _append_page2_row(builder, [cat_panel, pve_panel], [cat_w, bottom_gap, pve_w])
     else:
-        _append_page2_row(builder, [proc_panel], [proc_w])
+        # Calcul du nombre maximal de lignes de tableaux pour le bas de Page 2
+        bottom_row_cap = _page2_table_row_cap(bottom_p2_mm, with_footer=True)
+        proc_row_cap = bottom_row_cap
+        if proc_theme is not None and not proc_theme.empty:
+            proc_row_cap = min(bottom_row_cap, len(proc_theme))
+        pve_row_cap = bottom_row_cap
+        if show_pve_band and pve_natinf is not None and not pve_natinf.empty:
+            n_pve_avail = len(pve_natinf)
+            pve_row_cap = min(bottom_row_cap, n_pve_avail)
+            pve_row_cap = max(pve_row_cap, min(proc_row_cap, n_pve_avail))
+
+        inner_proc = encadre_inner_width(proc_w, pad_pt=_PAD_STD_PT)
+        proc_body: list = [
+            _build_procedures_table_brochure(proc_theme, inner_proc, max_rows=proc_row_cap)
+        ]
+        if nb_pej or nb_pa:
+            parts = []
+            if nb_pej:
+                parts.append(f"<b>{nb_pej}</b> PEJ")
+            parts.append(f"<b>{nb_pa}</b> PA")
+            proc_body.append(
+                brochure_totaux_band(
+                    f"<b>Totaux procéduraux</b> : {' · '.join(parts)}",
+                    inner_proc,
+                    builder.styles,
+                )
+            )
+
+        # Panneau des procédures par thématique
+        proc_panel = encadre_section(
+            proc_w,
+            pdf_metric_caption("Procédures par thème (principaux postes)", "proc"),
+            proc_body,
+            builder.styles,
+            variant="surface",
+            col_headers=["PEJ", "PA"],
+            col_width_fracs=_BROCHURE_PROC_COL_FRACS,
+        )
+
+        # Panneau optionnel des amendes forfaitaires (PVe)
+        if show_pve_band:
+            inner_pve = encadre_inner_width(pve_w, pad_pt=_PAD_STD_PT)
+            pve_body: list = [
+                _build_pve_natinf_table_brochure(pve_natinf, inner_pve, max_rows=pve_row_cap)
+            ]
+            if nb_pve:
+                pve_body.append(
+                    brochure_totaux_band(
+                        f"<b>Total PVe (source OFB)</b> : <b>{nb_pve}</b>",
+                        inner_pve,
+                        builder.styles,
+                    )
+                )
+            pve_panel = encadre_section(
+                pve_w,
+                "N° NATINF",
+                pve_body,
+                builder.styles,
+                variant="default",
+                col_headers=["Libellé NATINF", "Nb"],
+                col_width_fracs=_BROCHURE_PVE_NATINF_COL_FRACS,
+                col_aligns=["LEFT", "LEFT", "RIGHT"],
+            )
+            _append_page2_row(builder, [proc_panel, pve_panel], [proc_w, bottom_gap, pve_w])
+        else:
+            _append_page2_row(builder, [proc_panel], [proc_w])
 
     # Insertion du pied de page méthodologique final
     _append_methodology_footer(

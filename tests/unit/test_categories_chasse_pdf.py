@@ -108,3 +108,80 @@ def test_render_sec3_without_categories_when_flag_false(mock_pdf_context):
     for call in mock_pdf_context.builder.add_table.call_args_list:
         _, kwargs = call
         assert "infractions par catégorie" not in str(kwargs.get("caption", ""))
+
+
+def test_build_categories_chasse_controles_table_brochure():
+    from core.engine.generation_pdf_synthese_brochure import _build_categories_chasse_controles_table_brochure
+    df = pd.DataFrame([
+        {"categorie": "agrainage", "libelle": "Agrainage", "total": 12, "non_conforme": 3, "taux_non_conforme": 25.0},
+        {"categorie": "securite", "libelle": "Sécurité à la chasse", "total": 24, "non_conforme": 6, "taux_non_conforme": 25.0},
+    ])
+    tbl = _build_categories_chasse_controles_table_brochure(df, 300.0)
+    assert tbl is not None
+    # Vérifie qu'il y a 2 lignes de données
+    assert len(tbl._cellvalues) == 2
+
+
+def test_build_hierarchical_categories_chasse_table_brochure():
+    from core.engine.generation_pdf_synthese_brochure import _build_hierarchical_categories_chasse_table_brochure
+    df = pd.DataFrame([
+        {"categorie": "agrainage", "libelle": "Agrainage", "nb_pve": 2, "nb_pej": 1, "total": 3, "pct": 20.0},
+        {"categorie": "securite", "libelle": "Sécurité à la chasse", "nb_pve": 8, "nb_pej": 4, "total": 12, "pct": 80.0},
+    ])
+    tbl = _build_hierarchical_categories_chasse_table_brochure(df, 300.0)
+    assert tbl is not None
+    # 2 catégories * 3 lignes (1 principale + 2 sous-lignes) = 6 lignes
+    assert len(tbl._cellvalues) == 6
+    # Première ligne = libellé catégorie principale en gras
+    assert "Agrainage" in tbl._cellvalues[0][0].text
+    # Deuxième ligne = PVe
+    assert "PVe" in tbl._cellvalues[1][0].text
+    # Troisième ligne = PEJ
+    assert "PEJ" in tbl._cellvalues[2][0].text
+
+
+def test_generate_synthese_brochure_pdf_with_results(tmp_path):
+    from core.engine.generation_pdf_synthese_brochure import generate_synthese_brochure_pdf_report
+    profile = {
+        "id": "chasse",
+        "label": "Contrôles chasse",
+        "categories_chasse": {
+            "agrainage": {"label": "Agrainage"},
+            "securite": {"label": "Sécurité à la chasse"},
+        },
+    }
+    df_ctrl = pd.DataFrame([
+        {"categorie": "agrainage", "libelle": "Agrainage", "total": 12, "non_conforme": 3, "taux_non_conforme": 25.0},
+    ])
+    df_inf = pd.DataFrame([
+        {"categorie": "agrainage", "libelle": "Agrainage", "nb_pve": 2, "nb_pej": 1, "total": 3, "pct": 100.0},
+    ])
+    tab_res = pd.DataFrame([
+        {"resultat": "Conforme", "nb": 9},
+        {"resultat": "Non-conforme", "nb": 3},
+    ])
+    results = {
+        "nb_localisations": 12,
+        "nb_operations_controle": 10,
+        "nb_pej": 1,
+        "nb_pa": 0,
+        "nb_pve": 2,
+        "tab_resultats": tab_res,
+        "categories_chasse_controles": df_ctrl,
+        "categories_chasse_infractions": df_inf,
+    }
+    out_pdf = tmp_path / "test_brochure.pdf"
+    generate_synthese_brochure_pdf_report(
+        tmp_path,
+        profile=profile,
+        date_deb="2025-05-01",
+        date_fin="2026-05-30",
+        echelle="departement",
+        code="21",
+        output_filename="test_brochure.pdf",
+        cartes=False,
+        results=results,
+    )
+    pdfs = list(tmp_path.glob("*.pdf"))
+    assert len(pdfs) == 1
+    assert pdfs[0].stat().st_size > 1000

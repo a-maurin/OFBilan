@@ -3305,11 +3305,69 @@ def _extract_legend_info(layer, lcfg):
     return {"title": title, "items": items}
 
 
+def _deduplicate_legend_data(legend_data: list[dict], is_brochure: bool = False) -> list[dict]:
+    """Fusionne et déduplique les entrées de légende cartographique (notamment en cas de millésimes multiples)."""
+    if not legend_data:
+        return []
+
+    if is_brochure:
+        seen_items: set[tuple[str, str, str]] = set()
+        unique_items: list[dict] = []
+        for group in legend_data:
+            for item in group.get("items", []):
+                key = (
+                    str(item.get("label", "")).strip().lower(),
+                    str(item.get("color", "")).strip().lower(),
+                    str(item.get("shape", "")).strip().lower(),
+                )
+                if key not in seen_items:
+                    seen_items.add(key)
+                    unique_items.append(item)
+        return [{"title": None, "items": unique_items}] if unique_items else []
+
+    merged_groups: list[dict] = []
+    group_map: dict[str, dict] = {}
+
+    for group in legend_data:
+        raw_title = group.get("title")
+        title_key = str(raw_title).strip() if raw_title else ""
+
+        if title_key not in group_map:
+            new_group: dict = {
+                "title": raw_title,
+                "items": [],
+                "_seen_items": set(),
+            }
+            group_map[title_key] = new_group
+            merged_groups.append(new_group)
+
+        target = group_map[title_key]
+        for item in group.get("items", []):
+            item_key = (
+                str(item.get("label", "")).strip().lower(),
+                str(item.get("color", "")).strip().lower(),
+                str(item.get("shape", "")).strip().lower(),
+            )
+            if item_key not in target["_seen_items"]:
+                target["_seen_items"].add(item_key)
+                target["items"].append(item)
+
+    for g in merged_groups:
+        g.pop("_seen_items", None)
+
+    return [g for g in merged_groups if g["items"]]
+
+
 def _draw_legend_on_image(image_path, legend_data):
     """Dessine une légende via Pillow directement sur le PNG exporté."""
     if not legend_data:
         return
-        
+
+    is_brochure = "_brochure" in image_path.name.lower()
+    legend_data = _deduplicate_legend_data(legend_data, is_brochure=is_brochure)
+    if not legend_data:
+        return
+
     try:
         from PIL import Image, ImageDraw, ImageFont
     except ImportError:
@@ -3322,8 +3380,6 @@ def _draw_legend_on_image(image_path, legend_data):
     except Exception as e:
         logger.error("Erreur d'ouverture de l'image %s : %s", image_path.name, e)
         return
-
-    is_brochure = "_brochure" in image_path.name.lower()
 
     total_items = sum(len(g.get("items", [])) for g in legend_data)
 

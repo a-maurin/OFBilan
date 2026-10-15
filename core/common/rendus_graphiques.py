@@ -245,7 +245,7 @@ def _prepare_pie_data(
         if val <= 0:
             continue
         pct = (val / total) * 100.0
-        if pct < group_below_pct or str(k).strip().lower() in ("autres domaines", "autres"):
+        if pct < group_below_pct or str(k).strip().lower() in ("autres domaines", "autres usagers", "autres thèmes", "autres"):
             other_count += val
         else:
             main_items.append((str(k), val))
@@ -280,7 +280,10 @@ def chart_pie(
     """Génère un graphique camembert (ou anneau/donut) avec légende inférieure."""
     if apply_mpl:
         apply_mpl_style()
-    prepared_data = _prepare_pie_data(data, group_below_pct=group_below_pct, other_label=other_label)
+    effective_other = other_label
+    if other_label == "Autres domaines" and "usager" in title.lower():
+        effective_other = "Autres usagers"
+    prepared_data = _prepare_pie_data(data, group_below_pct=group_below_pct, other_label=effective_other)
     labels = list(prepared_data.keys())
     values = list(prepared_data.values())
     fig_w = CHART_FIG_WIDTH * figure_scale if figsize is None else (figsize[0] * figure_scale)
@@ -397,7 +400,10 @@ def chart_pie_legend_right(
     """Génère un camembert compact avec légende latérale disposée à droite."""
     if apply_mpl:
         apply_mpl_style()
-    prepared_data = _prepare_pie_data(data, group_below_pct=group_below_pct, other_label=other_label)
+    effective_other = other_label
+    if other_label == "Autres domaines" and "usager" in title.lower():
+        effective_other = "Autres usagers"
+    prepared_data = _prepare_pie_data(data, group_below_pct=group_below_pct, other_label=effective_other)
     labels = list(prepared_data.keys())
     values = list(prepared_data.values())
     colors_pie = []

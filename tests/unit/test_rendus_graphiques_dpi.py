@@ -73,3 +73,11 @@ def test_pie_segment_color_uses_grey_for_en_attente() -> None:
     assert rg._pie_segment_color("En attente", "#ffffff") == COLOR_GREY
     assert rg._pie_segment_color("Infraction", "#ffffff") == COLOR_CHART_4
     assert rg._pie_segment_color("Conforme", "#123456") == "#123456"
+
+
+def test_prepare_pie_data_autres_usagers() -> None:
+    data = {"Chasseur": 95, "Agriculteur": 3, "Pêcheur": 2}
+    res = rg._prepare_pie_data(data, group_below_pct=5.0, other_label="Autres usagers")
+    assert "Autres usagers" in res
+    assert res["Autres usagers"] == 5
+    assert "Chasseur" in res
