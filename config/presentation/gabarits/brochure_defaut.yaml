@@ -73,4 +73,7 @@ sections_enrichies:
   brochure:
     page2_colonnes_ratio: 0.50
     pve_table_colonnes: "natinf_detail"
+    libelle_total_repressif: "Total"
+    libelle_total_pve: "Total PVe"
+    categories_table_font_size: 9.0
 

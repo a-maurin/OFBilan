@@ -252,10 +252,12 @@ def _canonical_type_usager_aliases() -> dict[str, str]:
     return aliases
 
 
-def format_type_usager_display(label: str) -> str:
+def format_type_usager_display(label: str, regrouper_autres: bool = False) -> str:
     """Formatage propre des intitulés d'usagers pour les tableaux PDF."""
     s = str(label or "").strip()
     if s == "Autre":
+        return "Autre usager"
+    if regrouper_autres and s in ("Autres", "Autres usagers"):
         return "Autre usager"
     return s
 
@@ -1383,9 +1385,12 @@ def est_chasse_point(row: pd.Series) -> bool:
 def contient_natinf(s: str, natinf_list: List[str]) -> bool:
     """Vérifie si une chaîne contient l'un des codes d'infractions NATINF cibles."""
     s = str(s) if pd.notna(s) else ""
+    if not s or not natinf_list:
+        return False
+    tokens = {t for t in re.split(r"[^0-9]+", s) if t}
     for code in natinf_list:
-        pattern = rf"\b{code}\b"
-        if re.search(pattern, s):
+        c_str = str(code).strip()
+        if c_str and c_str in tokens:
             return True
     return False
 

@@ -263,6 +263,12 @@ defaults:
       show_methodology: true
       show_glossary: true
 
+  sections_enrichies:
+    brochure:
+      libelle_total_repressif: "Total"
+      libelle_total_pve: "Total PVe"
+      categories_table_font_size: 9.0
+
 scopes:
   global:
     title:

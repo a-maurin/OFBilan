@@ -169,3 +169,38 @@ def test_analyse_categories_chasse_with_export(sample_categories_cfg, tmp_path):
     assert (tmp_path / "categories_chasse_infractions.csv").exists()
     assert (tmp_path / "categories_chasse_controles_donut.png").exists()
     assert (tmp_path / "categories_chasse_infractions_donut.png").exists()
+
+
+def test_categories_chasse_specific_labels():
+    cfg = {
+        "autres": {
+            "label": "Autres infractions",
+            "label_controles": "Autres contrôles chasse",
+            "label_infractions": "Autres infractions chasse",
+            "keywords_controles": [],
+            "natinf_pve": [],
+            "natinf_pej": [],
+        }
+    }
+    pts = pd.DataFrame([{"nom_dossie": "Autre action", "type_actio": "Chasse", "resultat_c": "Conforme"}])
+    res_ctrl = compute_categories_chasse_controles(pts, cfg)
+    assert res_ctrl["df"].iloc[0]["libelle"] == "Autres contrôles chasse"
+    assert "Autres contrôles chasse" in res_ctrl["donut_data"]
+
+    pve = pd.DataFrame([{"INF-NATINF": "99999"}])
+    pej = pd.DataFrame()
+    res_inf = compute_categories_chasse_infractions(pve, pej, cfg)
+    assert res_inf["df"].iloc[0]["libelle"] == "Autres infractions chasse"
+    assert "Autres infractions chasse" in res_inf["donut_data"]
+
+
+def test_contient_natinf_multi_codes():
+    from core.common.utilitaires_metier import contient_natinf
+    assert contient_natinf("26188_27742", ["27742"])
+    assert contient_natinf("27742_26188", ["27742"])
+    assert contient_natinf("26305_323_27745", ["27745"])
+    assert contient_natinf("25001_25001", ["25001"])
+    assert not contient_natinf("127742", ["27742"])
+    assert not contient_natinf("277429", ["27742"])
+
+

@@ -83,34 +83,66 @@ chasse:
   layers:
     Coeur_data_gouv_PNForets:
       layer_name: "Coeur_data_gouv_PNForets"
-      legend_label: "Cœur de Parc National"
+      legend_label: "Cœur de Parc national"
       symbology_source: "yaml"
       geometry_mode: "polygon_fill"
       renderer_type: "single"
     AOA_2021_PNForet_21:
       layer_name: "AOA_2021_PNForet_21"
-      legend_label: "AOA Parc National"
+      legend_label: "AOA Parc national"
       symbology_source: "yaml"
       geometry_mode: "polygon_fill"
       renderer_type: "single"
-    localisation_infrac_FAITS:
-      layer_name: "localisation_infrac_FAITS"
-      legend_label: "localisation_infrac_FAITS"
+    Zone d'interdiction d'agrainage:
+      layer_name: "Zone d'interdiction d'agrainage"
+      legend_label: "Zone d'interdiction d'agrainage"
+      geometry_mode: "polygon_fill"
+      renderer_type: "graduated"
+      palette: "Blues"
+    Zone infectée:
+      layer_name: "Zone infectée"
+      legend_label: "Zone infectée"
+      geometry_mode: "polygon_fill"
+      renderer_type: "graduated"
+      palette: "Blues"
+    Zone à risque:
+      layer_name: "Zone à risque"
+      legend_label: "Zone à risque"
       geometry_mode: "polygon_fill"
       renderer_type: "graduated"
       palette: "Blues"
     emprise_dep:
       layer_name: "emprise_dep"
-      legend_label: "emprise_dep"
+      legend_label: "Périmètre départemental"
       geometry_mode: "polygon_fill"
       renderer_type: "graduated"
       palette: "Blues"
     point_ctrl:
       layer_name: "point_ctrl"
-      legend_label: "point_ctrl"
+      legend_label: "Contrôles"
       geometry_mode: "polygon_fill"
       renderer_type: "graduated"
       palette: "Blues"
+    localisation_infrac_FAITS:
+      layer_name: "localisation_infrac_FAITS"
+      legend_label: "Procédures judiciaires (PEJ)"
+      filter_type: "pj"
+      geometry_mode: "point"
+      renderer_type: "single"
+      palette: "#3498DB"
+      symbol_size_mm: 1.5
+      symbol_shape: "triangle"
+      symbology_source: "yaml"
+    pve_agrainage_points_centroides:
+      layer_name: "pve_agrainage_points_centroides"
+      legend_label: "Procès-verbaux électroniques (PVe)"
+      filter_type: "pve"
+      geometry_mode: "point"
+      renderer_type: "single"
+      palette: "#E67E22"
+      symbol_size_mm: 1.5
+      symbol_shape: "square"
+      symbology_source: "yaml"
 
 piegeage:
   title: "Bilan piégeage — Contrôles piégeage — Côte-d'Or"

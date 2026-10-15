@@ -266,7 +266,8 @@ def _pie_data_controles_par_type_usager(df: pd.DataFrame | None) -> dict[str, in
     for _, row in df.iterrows():
         total = int(row.get(col, 0) or 0)
         if total > 0:
-            out[_display_type_usager(row["type_usager"])] = total
+            lbl = _display_type_usager(row["type_usager"])
+            out[lbl] = out.get(lbl, 0) + total
     return out
 
 

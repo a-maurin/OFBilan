@@ -117,4 +117,28 @@ def test_deduplicate_legend_data() -> None:
     assert len(dedup_brochure) == 1
     assert len(dedup_brochure[0]["items"]) == 2
 
+    # Test avec normalisation hexadécimale RGBA (canal alpha 'ff') et mise à niveau vers forme 'circle'
+    raw_rgba = [
+        {
+            "title": "Résultats",
+            "items": [
+                {"label": "Conforme", "color": "#2ecc71ff", "shape": "square"},
+                {"label": "Infraction", "color": "#e74c3cff", "shape": "square"},
+            ],
+        },
+        {
+            "title": "Résultats",
+            "items": [
+                {"label": "Conforme", "color": "#2ECC71", "shape": "circle"},
+                {"label": "Infraction", "color": "#E74C3C", "shape": "circle"},
+            ],
+        },
+    ]
+    dedup_rgba = _deduplicate_legend_data(raw_rgba, is_brochure=True)
+    assert len(dedup_rgba) == 1
+    assert len(dedup_rgba[0]["items"]) == 2
+    assert dedup_rgba[0]["items"][0]["shape"] == "circle"
+    assert dedup_rgba[0]["items"][0]["color"] == "#2ecc71"
+    assert dedup_rgba[0]["items"][1]["color"] == "#e74c3c"
+
 

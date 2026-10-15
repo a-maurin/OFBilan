@@ -168,8 +168,11 @@ def _truncate_theme(label: str, max_len: int = 34) -> str:
     return txt[: max_len - 1].rstrip() + "…"
 
 
-def _rollup_usager_types(df: pd.DataFrame | None) -> pd.DataFrame | None:
-    """Regroupe les catégories d'usagers minoritaires dans une ligne synthétique 'Autres'.
+def _rollup_usager_types(
+    df: pd.DataFrame | None,
+    regrouper_autres_usagers: bool = False,
+) -> pd.DataFrame | None:
+    """Regroupe les catégories d'usagers minoritaires dans une ligne synthétique 'Autres' ou 'Autre usager'.
 
     Conserve les catégories principales (part > 2%) et fusionne les petites catégories
     afin d'avoir un tableau lisible de 5 lignes maximum sur le document PDF.
@@ -206,28 +209,50 @@ def _rollup_usager_types(df: pd.DataFrame | None) -> pd.DataFrame | None:
             autres_ctrl += float(row.get("nb_effectifs", row.get("nb_total", 0)) or 0)
             autres_pej += float(row.get("nb_pej_hors_controle", 0) or 0)
 
-    # Ajoute la ligne de synthèse 'Autres' si des usagers ont été cumulés
+    # Ajoute la ligne de synthèse 'Autres' (ou fusionne dans 'Autre usager') si des usagers ont été cumulés
     if autres_ctrl + autres_pej > 0 or len(rows) >= _BROCHURE_MAX_USAGER_TYPES:
-        rows.append(
-            {
-                "type_usager": "Autres",
-                "nb_effectifs": int(autres_ctrl),
-                "nb_pej_hors_controle": int(autres_pej),
-                "nb_total": int(autres_ctrl + autres_pej),
-            }
-        )
+        if regrouper_autres_usagers:
+            autre_row = None
+            for r in rows:
+                if str(r.get("type_usager", "")).strip().lower() in ("autre", "autre usager", "autres", "autres usagers"):
+                    autre_row = r
+                    break
+            if autre_row is not None:
+                autre_row["nb_effectifs"] = int(float(autre_row.get("nb_effectifs", 0) or 0) + autres_ctrl)
+                autre_row["nb_pej_hors_controle"] = int(float(autre_row.get("nb_pej_hors_controle", 0) or 0) + autres_pej)
+                autre_row["nb_total"] = int(float(autre_row.get("nb_total", 0) or 0) + autres_ctrl + autres_pej)
+                autre_row["type_usager"] = "Autre usager"
+            else:
+                rows.append(
+                    {
+                        "type_usager": "Autre usager",
+                        "nb_effectifs": int(autres_ctrl),
+                        "nb_pej_hors_controle": int(autres_pej),
+                        "nb_total": int(autres_ctrl + autres_pej),
+                    }
+                )
+        else:
+            rows.append(
+                {
+                    "type_usager": "Autres",
+                    "nb_effectifs": int(autres_ctrl),
+                    "nb_pej_hors_controle": int(autres_pej),
+                    "nb_total": int(autres_ctrl + autres_pej),
+                }
+            )
     return pd.DataFrame(rows)
 
 
 def _rollup_resultats_usager(
     df: pd.DataFrame | None,
     *,
-    min_share: float = _BROCHURE_USAGER_MIN_SHARE,
-    max_types: int = _BROCHURE_MAX_USAGER_TYPES,
+    min_share: float = _BROCHURE_RESULT_USAGER_MIN_SHARE,
+    max_types: int = _BROCHURE_MAX_RESULT_USAGER_TYPES,
+    regrouper_autres_usagers: bool = False,
 ) -> pd.DataFrame | None:
     """Regroupe les résultats de contrôles (Conforme / Infraction / Manquement) des petits usagers.
 
-    Cumule les effectifs par type de résultat pour la catégorie 'Autres'.
+    Cumule les effectifs par type de résultat pour la catégorie 'Autres' ou 'Autre usager'.
     """
     if df is None or df.empty:
         return df
@@ -261,9 +286,24 @@ def _rollup_resultats_usager(
                 if k in row.index:
                     autres[k] += int(row.get(k, 0) or 0)
 
-    # Ajoute la ligne cumulée 'Autres' s'il y a du contenu
+    # Ajoute la ligne cumulée 'Autres' ou fusionne dans 'Autre usager' s'il y a du contenu
     if autres["Total"] > 0:
-        kept.append(pd.Series({**{"type_usager": "Autres"}, **autres}))
+        if regrouper_autres_usagers:
+            autre_idx = None
+            for i, s in enumerate(kept):
+                if str(s.get("type_usager", "")).strip().lower() in ("autre", "autre usager", "autres", "autres usagers"):
+                    autre_idx = i
+                    break
+            if autre_idx is not None:
+                updated = kept[autre_idx].copy()
+                for k in autres:
+                    updated[k] = int(updated.get(k, 0) or 0) + autres[k]
+                updated["type_usager"] = "Autre usager"
+                kept[autre_idx] = updated
+            else:
+                kept.append(pd.Series({**{"type_usager": "Autre usager"}, **autres}))
+        else:
+            kept.append(pd.Series({**{"type_usager": "Autres"}, **autres}))
     return pd.DataFrame(kept)
 
 
@@ -639,21 +679,25 @@ def _theme_pct_strings_brochure(values: list[int], *, total_value: int) -> list[
 def _build_categories_chasse_controles_table_brochure(
     df_cat: pd.DataFrame | None,
     inner_w: float,
+    *,
+    font_size: float = 9.0,
 ) -> Table:
     """Génère le tableau d'activité par catégories de chasse (Agrainage, Sécurité, Autres)."""
     rows: list[list[Any]] = []
+    fs = float(font_size)
+    leading = max(fs + 3.0, fs * 1.33)
     p_style = ParagraphStyle(
         "BrochureCatChasseCtrl",
         fontName=FONT_FAMILY,
-        fontSize=7.6,
-        leading=9.0,
+        fontSize=fs,
+        leading=leading,
         textColor=rl_colors.HexColor("#1F2937"),
     )
     p_style_num = ParagraphStyle(
         "BrochureCatChasseNum",
         fontName=FONT_FAMILY,
-        fontSize=7.6,
-        leading=9.0,
+        fontSize=fs,
+        leading=leading,
         textColor=rl_colors.HexColor("#1F2937"),
         alignment=TA_RIGHT,
     )
@@ -1210,6 +1254,7 @@ def _generate_srp_r27_brochure_pdf(
     code: str = "r27",
     service_override: str | None = None,
     tab_resultats: pd.DataFrame | None = None,
+    regrouper_autres_usagers: bool = False,
 ) -> None:
     """Génère la brochure PDF spécifique au gabarit SRP R27 (Services Régionaux de Police).
 
@@ -1287,7 +1332,9 @@ def _generate_srp_r27_brochure_pdf(
     map_panel = encadre_section(right_w, "Résultats des contrôles", maps_body, builder.styles)
 
     # ── GRAPHIQUE CAMEMBERT TYPES USAGERS ──
-    pie_data = _pie_data_controles_par_type_usager(_rollup_usager_types(act_par_type))
+    pie_data = _pie_data_controles_par_type_usager(
+        _rollup_usager_types(act_par_type, regrouper_autres_usagers=regrouper_autres_usagers)
+    )
     pie_body: list = []
     if pie_data:
         chart_path = Path(
@@ -1300,7 +1347,7 @@ def _generate_srp_r27_brochure_pdf(
                 donut=True,
                 figure_scale=1.0,
                 legend_fontsize=9.5,
-                other_label="Autres usagers",
+                other_label="Autre usager" if regrouper_autres_usagers else "Autres usagers",
             )
         )
         img = _image_fit(builder, chart_path, max_width=encadre_inner_width(left_w, pad_pt=_PAD_STD_PT), max_height=50.0 * mm, scale_to_fill=True)
@@ -1819,6 +1866,10 @@ def _generate_synthese_brochure_pdf(
     )
     presentation_cfg = resolved.get("effective", {}) if isinstance(resolved, dict) else {}
     gabarit_id = (resolved.get("gabarit_id") if isinstance(resolved, dict) else None) or gabarit or "gabarit_defaut"
+    regrouper_autres_usagers = bool(
+        profile.get("regrouper_autres_usagers")
+        or presentation_cfg.get("regrouper_autres_usagers")
+    )
 
     # Récupération de la configuration du territoire et du nom affiché
     cfg = BilanConfig.from_strings(
@@ -1866,9 +1917,14 @@ def _generate_synthese_brochure_pdf(
     res_code = str(code).strip()
     prefix_candidates = [f"{profil_id}_{res_code}", profil_id, "global"] if res_code else [profil_id, "global"]
 
+    brochure_cfg = (
+        presentation_cfg.get("sections_enrichies", {}).get("brochure", {})
+        or presentation_cfg.get("brochure", {})
+        or {}
+    )
     use_cat_chasse = (
         profil_id == "chasse"
-        or bool(presentation_cfg.get("brochure", {}).get("use_categories_chasse"))
+        or bool(brochure_cfg.get("use_categories_chasse"))
     ) and bool(profile.get("categories_chasse"))
 
     curr_res = results or {}
@@ -2031,7 +2087,27 @@ def _generate_synthese_brochure_pdf(
         cartes_dir = get_cartes_dir()
 
         # Liste des noms de fichiers de cartes possibles par ordre de priorité (out_dir du run courant prioritaire)
-        res_brochure_candidates = [
+        carto_cfg = profile.get("cartographie") or {}
+        fichiers_specifiques = carto_cfg.get("fichiers") or []
+        res_brochure_candidates = []
+        for f in fichiers_specifiques:
+            f_p = Path(f)
+            f_stem = f_p.stem
+            f_ext = f_p.suffix or ".png"
+            res_brochure_candidates.extend([
+                out_dir / f"{f_stem}_brochure{f_ext}",
+                out_dir / f,
+                cartes_dir / f"{f_stem}_brochure{f_ext}",
+                cartes_dir / f,
+            ])
+        if carto_cfg.get("mode") == "dedie":
+            res_brochure_candidates.extend([
+                out_dir / f"carte_{map_id}_brochure.png",
+                out_dir / f"carte_{map_id}.png",
+                cartes_dir / f"carte_{map_id}_brochure.png",
+                cartes_dir / f"carte_{map_id}.png",
+            ])
+        res_brochure_candidates.extend([
             out_dir / f"carte_{map_id}_resultats_brochure.png",
             out_dir / f"carte_{map_id}_resultats.png",
             out_dir / f"carte_{map_id}_domaines_brochure.png",
@@ -2044,7 +2120,7 @@ def _generate_synthese_brochure_pdf(
             cartes_dir / f"carte_{map_id}_domaines.png",
             cartes_dir / f"carte_{map_id}_brochure.png",
             cartes_dir / f"carte_{map_id}.png",
-        ]
+        ])
         found_brochure = next((p for p in res_brochure_candidates if p.exists()), None)
         if not found_brochure:
             brochure_globs = list(out_dir.glob(f"carte_{map_id}_*.png")) + list(cartes_dir.glob(f"carte_{map_id}_*.png"))
@@ -2112,6 +2188,7 @@ def _generate_synthese_brochure_pdf(
             echelle=echelle,
             code=code,
             tab_resultats=tab_resultats,
+            regrouper_autres_usagers=regrouper_autres_usagers,
         )
         return
 
@@ -2182,10 +2259,12 @@ def _generate_synthese_brochure_pdf(
         split_by_row=False,
         header_row=False,
     )
+    cat_font_size = float(brochure_cfg.get("categories_table_font_size", 9.0))
     if use_cat_chasse and categories_controles_df is not None and not categories_controles_df.empty:
         cat_ctrl_table = _build_categories_chasse_controles_table_brochure(
             categories_controles_df,
             inner_themes,
+            font_size=cat_font_size,
         )
         themes_panel = encadre_section(
             themes_w,
@@ -2253,6 +2332,7 @@ def _generate_synthese_brochure_pdf(
         res_usager,
         min_share=_BROCHURE_RESULT_USAGER_MIN_SHARE,
         max_types=_BROCHURE_MAX_RESULT_USAGER_TYPES,
+        regrouper_autres_usagers=regrouper_autres_usagers,
     )
     n_usager_rows = (
         len(res_usager_plot)
@@ -2282,7 +2362,9 @@ def _generate_synthese_brochure_pdf(
 
     # Camembert de répartition des usagers contrôlés (haut gauche)
     pie_body: list = []
-    pie_data = _pie_data_controles_par_type_usager(_rollup_usager_types(act_par_type))
+    pie_data = _pie_data_controles_par_type_usager(
+        _rollup_usager_types(act_par_type, regrouper_autres_usagers=regrouper_autres_usagers)
+    )
     if pie_data:
         chart_path = Path(
             chart_pie_legend_right(
@@ -2293,7 +2375,7 @@ def _generate_synthese_brochure_pdf(
                 legend_percent_only=True,
                 figure_scale=min(0.88, 0.58 + top_p2_mm * 0.004),
                 legend_fontsize=_PAGE2_PIE_LEGEND_FONTSIZE,
-                other_label="Autres usagers",
+                other_label="Autre usager" if regrouper_autres_usagers else "Autres usagers",
             )
         )
         img = _image_fit(
@@ -2386,6 +2468,14 @@ def _generate_synthese_brochure_pdf(
     _append_page2_row(builder, [pie_panel, result_panel], [pie_w, top_gap, result_w])
     _append_spacer(builder, _BROCHURE_SECTION_GAP_MM)
 
+    brochure_cfg = (
+        presentation_cfg.get("sections_enrichies", {}).get("brochure", {})
+        or presentation_cfg.get("brochure", {})
+        or {}
+    )
+    lbl_total_repressif = brochure_cfg.get("libelle_total_repressif", "Total")
+    lbl_total_pve = brochure_cfg.get("libelle_total_pve", "Total PVe")
+
     if use_cat_chasse and categories_infractions_df is not None and not categories_infractions_df.empty:
         bottom_gap = top_gap
         cat_w = pie_w
@@ -2404,7 +2494,7 @@ def _generate_synthese_brochure_pdf(
                 parts.append(f"<b>{nb_pej}</b> PEJ")
             cat_body.append(
                 brochure_totaux_band(
-                    f"<b>Totaux répressifs</b> : {' · '.join(parts)}",
+                    f"<b>{lbl_total_repressif}</b> : {' · '.join(parts)}",
                     inner_cat,
                     builder.styles,
                 )
@@ -2428,7 +2518,7 @@ def _generate_synthese_brochure_pdf(
         if nb_pve:
             pve_body.append(
                 brochure_totaux_band(
-                    f"<b>Total PVe (source OFB)</b> : <b>{nb_pve}</b>",
+                    f"<b>{lbl_total_pve}</b> : <b>{nb_pve}</b>",
                     inner_pve,
                     builder.styles,
                 )
@@ -2493,7 +2583,7 @@ def _generate_synthese_brochure_pdf(
             if nb_pve:
                 pve_body.append(
                     brochure_totaux_band(
-                        f"<b>Total PVe (source OFB)</b> : <b>{nb_pve}</b>",
+                        f"<b>{lbl_total_pve}</b> : <b>{nb_pve}</b>",
                         inner_pve,
                         builder.styles,
                     )

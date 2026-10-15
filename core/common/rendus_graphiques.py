@@ -245,7 +245,11 @@ def _prepare_pie_data(
         if val <= 0:
             continue
         pct = (val / total) * 100.0
-        if pct < group_below_pct or str(k).strip().lower() in ("autres domaines", "autres usagers", "autres thèmes", "autres"):
+        k_clean = str(k).strip().lower()
+        is_other = k_clean in ("autres domaines", "autres usagers", "autres thèmes", "autres")
+        if other_label and other_label.strip().lower() == "autre usager" and k_clean in ("autre usager", "autre"):
+            is_other = True
+        if pct < group_below_pct or is_other or (other_label and k_clean == other_label.strip().lower()):
             other_count += val
         else:
             main_items.append((str(k), val))

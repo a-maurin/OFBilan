@@ -822,7 +822,7 @@ def compute_categories_chasse_controles(
 
     if point.empty or not categories_cfg:
         for cat_id, cfg in categories_cfg.items():
-            lbl = cfg.get("label", cat_id)
+            lbl = cfg.get("label_controles", cfg.get("label", cat_id))
             rows.append({
                 "categorie": cat_id,
                 "libelle": lbl,
@@ -864,7 +864,7 @@ def compute_categories_chasse_controles(
         None,
     )
     for cat_id, cfg in categories_cfg.items():
-        lbl = cfg.get("label", cat_id)
+        lbl = cfg.get("label_controles", cfg.get("label", cat_id))
         sub = pt[pt["_cat"] == cat_id]
         total = len(sub)
         if total > 0 and res_col:
@@ -956,7 +956,7 @@ def compute_categories_chasse_infractions(
                     matched_cat = "autres"
                 else:
                     matched_cat = "autres" if "autres" in categories_cfg else list(categories_cfg.keys())[-1]
-                    codes_found = re.findall(r"\b\d{3,5}\b", s_val)
+                    codes_found = [c for c in re.split(r"[^0-9]+", s_val) if 3 <= len(c) <= 5]
                     for c in codes_found:
                         if c not in all_known:
                             unlisted_set.add(c)
@@ -980,7 +980,7 @@ def compute_categories_chasse_infractions(
                     matched_cat = "autres"
                 else:
                     matched_cat = "autres" if "autres" in categories_cfg else list(categories_cfg.keys())[-1]
-                    codes_found = re.findall(r"\b\d{3,5}\b", s_val)
+                    codes_found = [c for c in re.split(r"[^0-9]+", s_val) if 3 <= len(c) <= 5]
                     for c in codes_found:
                         if c not in all_known:
                             unlisted_set.add(c)
@@ -998,7 +998,7 @@ def compute_categories_chasse_infractions(
     grand_total = sum(pve_cat_counts.values()) + sum(pej_cat_counts.values())
 
     for cat_id, cfg in categories_cfg.items():
-        lbl = cfg.get("label", cat_id)
+        lbl = cfg.get("label_infractions", cfg.get("label", cat_id))
         nb_pve = pve_cat_counts.get(cat_id, 0)
         nb_pej = pej_cat_counts.get(cat_id, 0)
         tot = nb_pve + nb_pej

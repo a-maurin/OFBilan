@@ -367,8 +367,7 @@ def _load_profiles_from_param() -> Optional[tuple[Dict[str, "ProfileConfig"], st
     for yaml_pid, yaml_pdata in data.items():
         if yaml_pid in _RESERVED_KEYS or not isinstance(yaml_pdata, dict) or "layers" not in yaml_pdata:
             continue
-        if yaml_pid in result:
-            continue  # Profil bilan déjà chargé, ne pas écraser
+        existing_prof = result.get(yaml_pid)
 
         yaml_layers: Dict[str, LayerSymbologyConfig] = {}
         for lname, lval in yaml_pdata.get("layers", {}).items():
@@ -381,8 +380,10 @@ def _load_profiles_from_param() -> Optional[tuple[Dict[str, "ProfileConfig"], st
         if yaml_sym_src not in ("qgis", "yaml"):
             yaml_sym_src = global_symbology_source
 
-        n_pve = _to_int_list(yaml_pdata.get("natinf_pve"))
-        n_pj = _to_int_list(yaml_pdata.get("natinf_pj") or yaml_pdata.get("natinf_pej"))
+        n_pve = _to_int_list(yaml_pdata.get("natinf_pve")) or (existing_prof.natinf_pve if existing_prof else None)
+        n_pj = _to_int_list(yaml_pdata.get("natinf_pj") or yaml_pdata.get("natinf_pej")) or (existing_prof.natinf_pj if existing_prof else None)
+        sources = yaml_pdata.get("sources") or (existing_prof.sources if existing_prof else {})
+        theme_id = getattr(existing_prof, "theme_id", yaml_pid) if existing_prof else yaml_pid
 
         result[yaml_pid] = ProfileConfig(
             id=yaml_pid,
@@ -396,11 +397,12 @@ def _load_profiles_from_param() -> Optional[tuple[Dict[str, "ProfileConfig"], st
             subtitle=str(yaml_pdata.get("subtitle", "")),
             layout_title_item_id=str(yaml_pdata.get("layout_title_item_id", "titre_principal")),
             layout_subtitle_item_id=str(yaml_pdata.get("layout_subtitle_item_id", "sous_titre")),
+            theme_id=theme_id,
             pochoir=str(yaml_pdata.get("pochoir", "departement")),
             emprise=str(yaml_pdata.get("emprise", yaml_pdata.get("pochoir", "departement"))),
             couches_vecteurs_extra=yaml_pdata.get("couches_vecteurs_extra", []),
             symbology_source=yaml_sym_src,
-            sources=yaml_pdata.get("sources", {}),
+            sources=sources,
             natinf_pve=n_pve,
             natinf_pj=n_pj,
             items_masques=yaml_pdata.get("items_masques", []),
@@ -3305,24 +3307,43 @@ def _extract_legend_info(layer, lcfg):
     return {"title": title, "items": items}
 
 
+def _normalize_hex_color(color_str: str) -> str:
+    """Normalise un code couleur hexadécimal (retrait canal alpha 'ff', minuscule, trim)."""
+    s = str(color_str or "").strip().lower()
+    if s.startswith("#"):
+        raw = s[1:]
+        if len(raw) == 8 and raw.endswith("ff"):
+            raw = raw[:6]
+        return f"#{raw}"
+    return s
+
+
 def _deduplicate_legend_data(legend_data: list[dict], is_brochure: bool = False) -> list[dict]:
     """Fusionne et déduplique les entrées de légende cartographique (notamment en cas de millésimes multiples)."""
     if not legend_data:
         return []
 
     if is_brochure:
-        seen_items: set[tuple[str, str, str]] = set()
+        seen_items: set[tuple[str, str]] = set()
         unique_items: list[dict] = []
         for group in legend_data:
             for item in group.get("items", []):
-                key = (
-                    str(item.get("label", "")).strip().lower(),
-                    str(item.get("color", "")).strip().lower(),
-                    str(item.get("shape", "")).strip().lower(),
-                )
+                lbl = str(item.get("label", "")).strip().lower()
+                col = _normalize_hex_color(item.get("color", ""))
+                if not lbl:
+                    continue
+                key = (lbl, col)
                 if key not in seen_items:
                     seen_items.add(key)
-                    unique_items.append(item)
+                    item_copy = dict(item)
+                    item_copy["color"] = col
+                    unique_items.append(item_copy)
+                else:
+                    for ui in unique_items:
+                        if (str(ui.get("label", "")).strip().lower(), _normalize_hex_color(ui.get("color", ""))) == key:
+                            if ui.get("shape") != "circle" and item.get("shape") == "circle":
+                                ui["shape"] = "circle"
+                            break
         return [{"title": None, "items": unique_items}] if unique_items else []
 
     merged_groups: list[dict] = []
@@ -3330,7 +3351,7 @@ def _deduplicate_legend_data(legend_data: list[dict], is_brochure: bool = False)
 
     for group in legend_data:
         raw_title = group.get("title")
-        title_key = str(raw_title).strip() if raw_title else ""
+        title_key = str(raw_title).strip().lower() if raw_title else ""
 
         if title_key not in group_map:
             new_group: dict = {
@@ -3343,19 +3364,28 @@ def _deduplicate_legend_data(legend_data: list[dict], is_brochure: bool = False)
 
         target = group_map[title_key]
         for item in group.get("items", []):
-            item_key = (
-                str(item.get("label", "")).strip().lower(),
-                str(item.get("color", "")).strip().lower(),
-                str(item.get("shape", "")).strip().lower(),
-            )
+            lbl = str(item.get("label", "")).strip().lower()
+            col = _normalize_hex_color(item.get("color", ""))
+            if not lbl:
+                continue
+            item_key = (lbl, col)
             if item_key not in target["_seen_items"]:
                 target["_seen_items"].add(item_key)
-                target["items"].append(item)
+                item_copy = dict(item)
+                item_copy["color"] = col
+                target["items"].append(item_copy)
+            else:
+                for ti in target["items"]:
+                    if (str(ti.get("label", "")).strip().lower(), _normalize_hex_color(ti.get("color", ""))) == item_key:
+                        if ti.get("shape") != "circle" and item.get("shape") == "circle":
+                            ti["shape"] = "circle"
+                        break
 
     for g in merged_groups:
         g.pop("_seen_items", None)
 
     return [g for g in merged_groups if g["items"]]
+
 
 
 def _draw_legend_on_image(image_path, legend_data):

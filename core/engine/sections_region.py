@@ -42,7 +42,7 @@ from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.styles import ParagraphStyle
 from core.common.pdf_utils import ofb_table
 from core.engine.pdf_context import PdfContext
-from core.common.utilitaires_metier import get_dept_name
+from core.common.utilitaires_metier import get_dept_name, format_type_usager_display
 from core.common.pdf_report_builder import PDFReportBuilder
 from core.common.rendus_graphiques import chart_interdept_stacked_bar, chart_pie, chart_pie_legend_right
 
@@ -645,13 +645,20 @@ def render_sec_region_dashboard(ctx: Any) -> None:
                 df_usg = pd.read_csv(csv_usg, sep=";", encoding="utf-8")
                 if not df_usg.empty and "type_usager" in df_usg.columns and "nb_operations" in df_usg.columns:
                     import re
-                    df_usg["type_usager_clean"] = df_usg["type_usager"].apply(lambda u: re.sub(r'[\s_]+\d+$', '', str(u)).strip() if pd.notna(u) else "Non renseigné")
+                    regrouper_autres = bool((getattr(ctx, "profile", {}) or {}).get("regrouper_autres_usagers", False))
+                    df_usg["type_usager_clean"] = df_usg["type_usager"].apply(
+                        lambda u: format_type_usager_display(
+                            re.sub(r'[\s_]+\d+$', '', str(u)).strip(),
+                            regrouper_autres=regrouper_autres,
+                        ) if pd.notna(u) else "Non renseigné"
+                    )
                     usg_grp = df_usg.groupby("type_usager_clean")["nb_operations"].sum().reset_index()
                     usg_counts = {str(r["type_usager_clean"]): int(r["nb_operations"]) for _, r in usg_grp.iterrows() if int(r["nb_operations"]) > 0}
             except Exception:
                 usg_counts = {}
 
         if usg_counts:
+            regrouper_autres = bool((getattr(ctx, "profile", {}) or {}).get("regrouper_autres_usagers", False))
             donut_usg_path = chart_pie(
                 usg_counts,
                 "Répartition par Type d'usager",
@@ -660,7 +667,8 @@ def render_sec_region_dashboard(ctx: Any) -> None:
                 figure_scale=getattr(ctx, "ref_pie_fs", 1.22),
                 donut=True,
                 legend_ncol=1,
-                legend_fontsize=legend_fs_donut
+                legend_fontsize=legend_fs_donut,
+                other_label="Autre usager" if regrouper_autres else "Autres domaines",
             )
 
             img_donut_usg = _create_proportional_rl_image(Path(donut_usg_path), ctx.avail_w * 0.46, "Graphique usagers indisponible", ctx.builder.styles, max_h=220.0)
@@ -1126,10 +1134,14 @@ def render_sec_region_fiches(ctx: PdfContext) -> None:
             # Visuel de droite : Donut Usagers ou Donut Domaines selon la config
             pie_dict = {}
             pie_title = ""
+            regrouper_autres = bool((getattr(ctx, "profile", {}) or {}).get("regrouper_autres_usagers", False))
             if visuel_droite == "usagers" and not df_usg_dept.empty:
                 sub_usg = df_usg_dept[df_usg_dept["departement"] == dept_str]
                 if not sub_usg.empty:
-                    pie_dict = {str(r["type_usager"]): int(r["nb_operations"]) for _, r in sub_usg.iterrows() if int(r["nb_operations"]) > 0}
+                    for _, r in sub_usg.iterrows():
+                        if int(r["nb_operations"]) > 0:
+                            lbl = format_type_usager_display(str(r["type_usager"]), regrouper_autres=regrouper_autres)
+                            pie_dict[lbl] = pie_dict.get(lbl, 0) + int(r["nb_operations"])
                     pie_title = f"Types d'usagers ({dept_name})"
             else:
                 cols_dom = [c for c in ["nb_operations", "nb_localisations", "nb_pej", "nb_pa", "nb_pve"] if c in df_dept.columns]
@@ -1145,7 +1157,8 @@ def render_sec_region_fiches(ctx: PdfContext) -> None:
                     ctx.tmp_dir,
                     img_name,
                     figure_scale=ctx.figure_scale,
-                    legend_fontsize=6.5 if visuel_droite == "usagers" else 7.0
+                    legend_fontsize=6.5 if visuel_droite == "usagers" else 7.0,
+                    other_label="Autre usager" if (visuel_droite == "usagers" and regrouper_autres) else "Autres domaines",
                 )
                 pie_w = ctx.avail_w * 0.46 if (show_nc or show_mail or visuel_droite == "usagers") else ctx.avail_w * 0.48
                 img_pie = _create_proportional_rl_image(Path(pie_path), pie_w, "Graphique indisponible", ctx.builder.styles, max_h=200.0)

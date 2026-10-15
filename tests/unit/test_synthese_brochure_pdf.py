@@ -350,4 +350,50 @@ def test_brochure_pve_natinf_typography() -> None:
         assert hasattr(cell, "text")
 
 
+def test_rollup_usager_types_regrouper_autres_usagers() -> None:
+    """Vérifie que les petits usagers sont fusionnés dans 'Autre usager' quand l'option est active."""
+    import pandas as pd
+    from core.engine.generation_pdf_synthese_brochure import _rollup_usager_types
+    from core.common.rendus_graphiques import _prepare_pie_data
+
+    # Cas 1 : 'Autre' existe déjà et petits usagers cumulés dedans
+    df1 = pd.DataFrame([
+        {"type_usager": "Particulier", "nb_total": 930},
+        {"type_usager": "Autre", "nb_total": 50},
+        {"type_usager": "Agriculteur", "nb_total": 10},
+        {"type_usager": "Collectivité", "nb_total": 10},
+    ])
+    res1 = _rollup_usager_types(df1, regrouper_autres_usagers=True)
+    assert res1 is not None
+    assert len(res1) == 2
+    types1 = res1["type_usager"].tolist()
+    assert "Autre usager" in types1
+    assert "Autres" not in types1
+    assert "Autres usagers" not in types1
+    autre_row = res1[res1["type_usager"] == "Autre usager"].iloc[0]
+    assert int(autre_row["nb_total"]) == 70
+
+    # Cas 2 : 'Autre' n'existe pas, les petits usagers créent la ligne 'Autre usager'
+    df2 = pd.DataFrame([
+        {"type_usager": "Particulier", "nb_total": 980},
+        {"type_usager": "Agriculteur", "nb_total": 10},
+        {"type_usager": "Collectivité", "nb_total": 10},
+    ])
+    res2 = _rollup_usager_types(df2, regrouper_autres_usagers=True)
+    assert res2 is not None
+    assert len(res2) == 2
+    assert "Autre usager" in res2["type_usager"].tolist()
+
+    # Cas 3 : Regroupement dans le camembert _prepare_pie_data
+    pie_in = {
+        "Particulier (usager de la nature + gestionnaire d'une propriété)": 93,
+        "Autre usager": 5,
+        "Autres usagers": 2,
+    }
+    pie_out = _prepare_pie_data(pie_in, group_below_pct=1.0, other_label="Autre usager")
+    assert "Autres usagers" not in pie_out
+    assert "Autre usager" in pie_out
+    assert pie_out["Autre usager"] == 7
+
+
 

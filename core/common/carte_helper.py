@@ -126,6 +126,23 @@ def resolve_map_png_path(
         for prof in (bilan_profiles or {}).values():
             if not isinstance(prof, dict):
                 continue
+            carto = prof.get("cartographie") or {}
+            fichiers = carto.get("fichiers") or []
+            for f_name in fichiers:
+                f_p = Path(f_name)
+                f_stem = f_p.stem
+                f_ext = f_p.suffix or ".png"
+                brochure_cand = f"{f_stem}_brochure{f_ext}" if not f_stem.endswith("_brochure") else f_name
+                if target_dir:
+                    if (target_dir / brochure_cand).exists():
+                        return target_dir / brochure_cand
+                    if (target_dir / f_name).exists():
+                        return target_dir / f_name
+                if (get_cartes_dir() / brochure_cand).exists():
+                    return get_cartes_dir() / brochure_cand
+                if (get_cartes_dir() / f_name).exists():
+                    return get_cartes_dir() / f_name
+
             for entry in parse_cartography_catalog(prof):
                 if str(entry.get("id", "")).strip() == pid:
                     file_name = str(entry.get("fichier", "")).strip()
@@ -139,7 +156,12 @@ def resolve_map_png_path(
                         return cand
 
         # Recherche fallback sur les noms de fichiers brochure historiques
-        brochure_legacy_names = [f"carte_{pid}_resultats_brochure.png", f"carte_{pid}_domaines_brochure.png", f"carte_{pid}_brochure.png"]
+        current_prof = (bilan_profiles or {}).get(pid, {})
+        is_dedie = isinstance(current_prof, dict) and current_prof.get("cartographie", {}).get("mode") == "dedie"
+        if is_dedie:
+            brochure_legacy_names = [f"carte_{pid}_brochure.png", f"carte_{pid}.png", f"carte_{pid}_resultats_brochure.png", f"carte_{pid}_domaines_brochure.png"]
+        else:
+            brochure_legacy_names = [f"carte_{pid}_resultats_brochure.png", f"carte_{pid}_domaines_brochure.png", f"carte_{pid}_brochure.png", f"carte_{pid}.png"]
         for b_name in brochure_legacy_names:
             if target_dir and (target_dir / b_name).exists():
                 return target_dir / b_name
@@ -567,6 +589,16 @@ def ensure_maps_for_profiles(
     existing: List[Path] = []
     missing: List[str] = []
     for pid in unique_ids:
+        p_cfg = (bilan_profiles or {}).get(pid, {})
+        if isinstance(p_cfg, dict) and p_cfg.get("cartographie", {}).get("mode") == "dedie" and target_dir:
+            for obs in (target_dir / f"carte_{pid}_resultats_brochure.png", target_dir / f"carte_{pid}_resultats.png"):
+                if obs.exists():
+                    try:
+                        obs.unlink()
+                        logger.info("Ancien résidu de carte nettoyé : %s", obs.name)
+                    except Exception:
+                        pass
+
         m = resolve_map_png_path(
             pid,
             bilan_profiles=bilan_profiles,

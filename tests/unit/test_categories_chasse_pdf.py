@@ -118,8 +118,12 @@ def test_build_categories_chasse_controles_table_brochure():
     ])
     tbl = _build_categories_chasse_controles_table_brochure(df, 300.0)
     assert tbl is not None
-    # Vérifie qu'il y a 2 lignes de données
+    # Vérifie qu'il y a 2 lignes de données et que la taille de police est 9.0 (alignée sur les résultats)
     assert len(tbl._cellvalues) == 2
+    assert tbl._cellvalues[0][0].style.fontSize == 9.0
+
+    tbl_custom = _build_categories_chasse_controles_table_brochure(df, 300.0, font_size=8.5)
+    assert tbl_custom._cellvalues[0][0].style.fontSize == 8.5
 
 
 def test_build_hierarchical_categories_chasse_table_brochure():
@@ -185,3 +189,10 @@ def test_generate_synthese_brochure_pdf_with_results(tmp_path):
     pdfs = list(tmp_path.glob("*.pdf"))
     assert len(pdfs) == 1
     assert pdfs[0].stat().st_size > 1000
+
+    from pypdf import PdfReader
+    reader = PdfReader(str(pdfs[0]))
+    text = "".join(page.extract_text() for page in reader.pages)
+    assert "Totaux répressifs" not in text
+    assert "source OFB" not in text
+    assert "Total" in text

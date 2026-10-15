@@ -2,6 +2,7 @@ schema_version: 2
 id: chasse
 label: Contrôles chasse
 out_subdir: bilan_chasse
+regrouper_autres_usagers: true
 
 filter:
   type: chasse
@@ -39,28 +40,17 @@ categories_chasse:
     - '13184'
     - '26273'
     natinf_pej:
-    - '29821'
-    - '29844'
-    - '29845'
-    - '26307'
-    - '323'
-    - '11975'
-    - '26305'
-    - '2172'
-    - '5984'
-    - '11889'
-    - '28969'
-    - '26303'
-    - '27741'
-    - '13184'
-    - '26273'
-    - '320'
-    - '1538'
-    - '1624'
-    - '1625'
-    - '9792'
+    - '27745'
+    - '26274'
+    - '26301'
+    - '22083'
+    - '22084'
+    - '22085'
+    - '35186'
   autres:
     label: Autres infractions
+    label_controles: Autres contrôles chasse
+    label_infractions: Autres infractions chasse
     keywords_controles: []
     natinf_pve:
     - '2191'
@@ -78,10 +68,14 @@ categories_chasse:
     - '5986'
     natinf_pej:
     - '321'
+    - '323'
     - '2166'
     - '2167'
     - '2168'
     - '2173'
+    - '11889'
+    - '26305'
+    - '26307'
     - '2174'
     - '2178'
     - '2181'
@@ -244,6 +238,11 @@ periode_analyse:
   ventilation:
     type: auto
     seuil_jours: 366
+cartographie:
+  mode: dedie
+  fichiers:
+    - carte_chasse.png
+
 options:
   pnf:
     label: Analyse PNF / hors PNF
