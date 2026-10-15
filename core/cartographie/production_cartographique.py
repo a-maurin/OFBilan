@@ -2949,6 +2949,29 @@ def run_export(
                 and lyr not in control_point_layers
             ]
 
+            # Ordre d'affichage des polygones (du premier plan vers l'arrière-plan contextuel) :
+            # 1. Plus petite zone imbriquée (interdiction d'agrainage) au-dessus
+            # 2. Zone infectée (moyenne zone, au-dessus de la zone à risque)
+            # 3. Zone à risque (grande zone englobante, en dessous de la zone infectée)
+            # 4. Cœur de parc national
+            # 5. AOA parc national
+            # 6. Autres polygones de contexte (emprise, etc.)
+            def _context_layer_sort_key(lyr) -> int:
+                name = lyr.name().lower()
+                if "agrain" in name or "interd" in name:
+                    return 0
+                if "infect" in name:
+                    return 1
+                if "risque" in name:
+                    return 2
+                if "coeur" in name:
+                    return 3
+                if "aoa" in name:
+                    return 4
+                return 5
+
+            context_layers.sort(key=_context_layer_sort_key)
+
             layers_to_render = (
                 pochoir_layers
                 + priority_point_layers
@@ -3373,6 +3396,31 @@ def _deduplicate_legend_data(legend_data: list[dict], is_brochure: bool = False)
                             if ui.get("shape") != "circle" and item.get("shape") == "circle":
                                 ui["shape"] = "circle"
                             break
+        def _legend_order_key(it: dict) -> int:
+            lbl = str(it.get("label", "")).lower()
+            if "pej" in lbl or "judiciaire" in lbl:
+                return 0
+            if "pve" in lbl or "électronique" in lbl or "electronique" in lbl:
+                return 1
+            if "conforme" in lbl:
+                return 2
+            if "infraction" in lbl and ("contrôle" in lbl or "controle" in lbl):
+                return 3
+            if "contrôle" in lbl or "controle" in lbl:
+                return 4
+            if "infect" in lbl:
+                return 5
+            if "risque" in lbl:
+                return 6
+            if "agrain" in lbl or "interd" in lbl:
+                return 7
+            if "coeur" in lbl or "cœur" in lbl:
+                return 8
+            if "aoa" in lbl:
+                return 9
+            return 10
+
+        unique_items.sort(key=_legend_order_key)
         return [{"title": None, "items": unique_items}] if unique_items else []
 
     merged_groups: list[dict] = []
