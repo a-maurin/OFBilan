@@ -269,12 +269,17 @@ def build_comment_paragraph(
     if not text:
         return None
     
+    cfg = getattr(ctx, "presentation_cfg", {}) or {}
+    sec_enr = cfg.get("sections_enrichies", {})
+    palette = sec_enr.get("synthese_regionale", {}).get("palette", {}) or sec_enr.get("brochure", {}).get("palette", {})
+    text_color = palette.get("commentaire_texte", palette.get("texte_principal", "#222222"))
+
     p_style = style or ParagraphStyle(
         name=f"Comment_{section_id}",
         fontName="Helvetica",
         fontSize=9,
         leading=11.5,
-        textColor="#222222",
+        textColor=text_color,
         spaceAfter=spacer_after_mm * 2.83465,  # mm -> pt
         keepWithNext=True,
     )

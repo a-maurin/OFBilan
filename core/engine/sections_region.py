@@ -107,15 +107,28 @@ def _generate_dept_vignette(
     img_name: str,
     figure_scale: float = 1.0,
     profile_id: str = "global",
+    presentation_cfg: dict[str, Any] | None = None,
 ) -> Path:
     """
     Génère la vignette cartographique épurée du département avec conservation STRICTE du ratio d'aspect
     (1:1 carré, sans aucune déformation) et carte de chaleur de la pression de contrôle (Hexbin / Heatmap).
     """
+    sr_cfg = (presentation_cfg or {}).get("sections_enrichies", {}).get("synthese_regionale", {})
+    palette = sr_cfg.get("palette", {})
+    styles = sr_cfg.get("styles", {})
+
+    fond_carte = palette.get("fond_carte", "#ffffff")
+    zero_color = palette.get("zero_color", "#f1f5f9")
+    dept_ec = palette.get("dept_edgecolor", "#003366")
+    dept_highlight = palette.get("dept_highlight_fill", "#bfdbfe")
+    coeur_ec = palette.get("coeur_parc_edgecolor", "#16a34a")
+    cbar_fontsize = float(styles.get("mini_map_cbar_fontsize", 6.5))
+    fallback_fontsize = float(styles.get("mini_map_fallback_fontsize", 8.0))
+
     out_path = tmp_dir / img_name
     fig, ax = plt.subplots(figsize=(2.5 * figure_scale, 2.5 * figure_scale), dpi=150)
-    fig.patch.set_facecolor('white')
-    ax.set_facecolor('#ffffff')
+    fig.patch.set_facecolor(fond_carte)
+    ax.set_facecolor(fond_carte)
     
     ax.set_aspect('equal')
     
@@ -139,15 +152,15 @@ def _generate_dept_vignette(
                 col_dep = next((c for c in gdf_aoa.columns if c.lower() in ("insee_dep", "num_depart", "code_dept", "insee_com")), None)
                 if col_dep:
                     mask_dept = gdf_aoa[col_dep].astype(str).str.strip().str[:2] == target_dept
-                    gdf_aoa[~mask_dept].plot(ax=ax, color='#f1f5f9', edgecolor='#003366', linewidth=0.7)
-                    gdf_aoa[mask_dept].plot(ax=ax, color='#bfdbfe', edgecolor='#003366', linewidth=1.1)
+                    gdf_aoa[~mask_dept].plot(ax=ax, color=zero_color, edgecolor=dept_ec, linewidth=0.7)
+                    gdf_aoa[mask_dept].plot(ax=ax, color=dept_highlight, edgecolor=dept_ec, linewidth=1.1)
                 else:
-                    gdf_aoa.plot(ax=ax, color='#f1f5f9', edgecolor='#003366', linewidth=0.8)
+                    gdf_aoa.plot(ax=ax, color=zero_color, edgecolor=dept_ec, linewidth=0.8)
                 
                 if gdf_coeur is not None and not gdf_coeur.empty:
-                    gdf_coeur.plot(ax=ax, facecolor='none', edgecolor='#16a34a', linewidth=1.8, label='Cœur de parc')
+                    gdf_coeur.plot(ax=ax, facecolor='none', edgecolor=coeur_ec, linewidth=1.8, label='Cœur de parc')
             else:
-                gdf_dept.plot(ax=ax, color='#f1f5f9', edgecolor='#003366', linewidth=1.2, aspect='equal')
+                gdf_dept.plot(ax=ax, color=zero_color, edgecolor=dept_ec, linewidth=1.2, aspect='equal')
             
             from core.chemins_projet import get_carto_temp_dir
             carto_dir_default = PROJECT_ROOT / "data" / "sources" / "sig" / "CARTO"
@@ -218,7 +231,7 @@ def _generate_dept_vignette(
                     pass
 
                 cbar = fig.colorbar(hb, ax=ax, orientation='horizontal', pad=0.02, shrink=0.25, aspect=12)
-                cbar.set_label('Pression de contrôle (Faible -> Forte)', fontsize=6.5, color='#003366')
+                cbar.set_label('Pression de contrôle (faible -> forte)', fontsize=cbar_fontsize, color=dept_ec)
                 cbar.ax.tick_params(labelsize=5.5)
 
             minx, miny, maxx, maxy = gdf_dept.total_bounds
@@ -228,13 +241,13 @@ def _generate_dept_vignette(
             ax.set_xlim(cx - max_span, cx + max_span)
             ax.set_ylim(cy - max_span, cy + max_span)
         else:
-            ax.text(0.5, 0.5, f"Département {dept_code}", ha='center', va='center', fontsize=9, color='#003366')
+            ax.text(0.5, 0.5, f"Département {dept_code}", ha='center', va='center', fontsize=fallback_fontsize, color=dept_ec)
     except Exception:
-        ax.text(0.5, 0.5, f"Département {dept_code}", ha='center', va='center', fontsize=9, color='#003366')
+        ax.text(0.5, 0.5, f"Département {dept_code}", ha='center', va='center', fontsize=fallback_fontsize, color=dept_ec)
         
     ax.axis('off')
     fig.tight_layout(pad=0.05)
-    fig.savefig(out_path, dpi=150, facecolor='white')
+    fig.savefig(out_path, dpi=150, facecolor=fond_carte)
     plt.close(fig)
     return out_path
 
@@ -254,20 +267,31 @@ def _generate_region_choropleth(
     max_span_factor: float = 0.51,
     commune_counts: dict[str, int] | None = None,
     carto_cfg: dict[str, Any] | None = None,
+    palette: dict[str, Any] | None = None,
+    styles: dict[str, Any] | None = None,
 ) -> Path:
     """Génère la carte choroplèthe de la pression de contrôle (aplat par commune ou département)."""
+    cfg = carto_cfg or {}
+    pal = palette or {}
+    sty = styles or {}
+
+    fond_carte = pal.get("fond_carte", "#ffffff")
+    zero_color = pal.get("zero_color", cfg.get("zero_color", "#f1f5f9"))
+    commune_ec = pal.get("commune_edgecolor", cfg.get("commune_edgecolor", "#cbd5e1"))
+    dept_ec = pal.get("dept_edgecolor", cfg.get("dept_edgecolor", "#003366"))
+    coeur_ec = pal.get("coeur_parc_edgecolor", "#16a34a")
+    note_color = pal.get("note_color", "#64748b")
+    title_fs = float(sty.get("title_fontsize", 8.5))
+    note_fs = float(sty.get("note_fontsize", 5.5))
+
     out_path = tmp_dir / img_name
     fig, ax = plt.subplots(figsize=(5.8 * figure_scale, 3.6 * figure_scale), dpi=150)
-    fig.patch.set_facecolor('white')
-    ax.set_facecolor('#ffffff')
+    fig.patch.set_facecolor(fond_carte)
+    ax.set_facecolor(fond_carte)
     ax.set_aspect('equal')
     
-    cfg = carto_cfg or {}
     titre_carte = cfg.get("titre", "Carte de la pression de contrôle par commune")
     cbar_title_text = cfg.get("cbar_title", "Pression de contrôle (localisations/commune)")
-    zero_color = cfg.get("zero_color", "#f1f5f9")
-    commune_ec = cfg.get("commune_edgecolor", "#cbd5e1")
-    dept_ec = cfg.get("dept_edgecolor", "#003366")
     show_labels = cfg.get("afficher_etiquettes_communes", False)
 
     try:
@@ -293,7 +317,7 @@ def _generate_region_choropleth(
                     if gdf_coeur.crs is None or gdf_coeur.crs.to_epsg() != 2154:
                         gdf_coeur = gdf_coeur.set_crs("EPSG:2154") if gdf_coeur.crs is None else gdf_coeur.to_crs("EPSG:2154")
 
-                gdf_region.plot(ax=ax, color='#f1f5f9', edgecolor='#003366', linewidth=1.0)
+                gdf_region.plot(ax=ax, color=zero_color, edgecolor=dept_ec, linewidth=1.0)
                 
                 # Chargement des points de contrôle pour l'affichage de la grille de densité (hexbin)
                 from core.chemins_projet import get_carto_temp_dir
@@ -338,13 +362,13 @@ def _generate_region_choropleth(
                         pass
 
                     cbar = fig.colorbar(hb, ax=ax, orientation='horizontal', pad=0.02, shrink=cbar_shrink, aspect=20)
-                    cbar.ax.set_title(cbar_title_text, fontsize=cbar_title_fontsize, color='#003366', pad=2)
+                    cbar.ax.set_title(cbar_title_text, fontsize=cbar_title_fontsize, color=dept_ec, pad=2)
                     import matplotlib.ticker as ticker
                     cbar.ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, pos: f"{int(round(x))}"))
                     cbar.ax.tick_params(labelsize=cbar_labelsize)
 
                 if gdf_coeur is not None and not gdf_coeur.empty:
-                    gdf_coeur.plot(ax=ax, facecolor='none', edgecolor='#16a34a', linewidth=1.0, linestyle='--', label='Cœur de parc')
+                    gdf_coeur.plot(ax=ax, facecolor='none', edgecolor=coeur_ec, linewidth=1.0, linestyle='--', label='Cœur de parc')
 
                 minx, miny, maxx, maxy = gdf_region.total_bounds
                 cx = (minx + maxx) / 2.0
@@ -354,11 +378,11 @@ def _generate_region_choropleth(
                 ax.set_ylim(cy - max_span, cy + max_span)
 
                 if titre_carte:
-                    ax.set_title(titre_carte, fontsize=8.5, color='#003366', fontweight='bold', pad=4)
+                    ax.set_title(titre_carte, fontsize=title_fs, color=dept_ec, fontweight='bold', pad=4)
 
                 ax.set_axis_off()
                 fig.tight_layout(pad=0.05)
-                fig.savefig(str(out_path), dpi=150, bbox_inches="tight", facecolor="white")
+                fig.savefig(str(out_path), dpi=150, bbox_inches="tight", facecolor=fond_carte)
                 plt.close(fig)
                 return out_path
         else:
@@ -395,7 +419,7 @@ def _generate_region_choropleth(
                     sm = cm.ScalarMappable(cmap=cm.get_cmap("YlGnBu"), norm=norm)
                     sm._A = []
                     cbar = fig.colorbar(sm, ax=ax, orientation='horizontal', pad=0.02, shrink=cbar_shrink, aspect=20)
-                    cbar.ax.set_title(cbar_title_text, fontsize=cbar_title_fontsize, color='#003366', pad=2)
+                    cbar.ax.set_title(cbar_title_text, fontsize=cbar_title_fontsize, color=dept_ec, pad=2)
                     import matplotlib.ticker as ticker
                     cbar.ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, pos: f"{int(round(x))}"))
                     cbar.ax.tick_params(labelsize=cbar_labelsize)
@@ -407,7 +431,7 @@ def _generate_region_choropleth(
                     gdf_region.plot(ax=ax, facecolor="none", edgecolor=dept_ec, linewidth=1.2)
 
                 if titre_carte:
-                    ax.set_title(titre_carte, fontsize=8.5, color='#003366', fontweight='bold', pad=4)
+                    ax.set_title(titre_carte, fontsize=title_fs, color=dept_ec, fontweight='bold', pad=4)
 
                 # Traitement note des contrôles hors-communes si total_unique_ops > sum(mapped)
                 total_mapped = int(gdf_communes["nb_ops"].sum())
@@ -418,12 +442,12 @@ def _generate_region_choropleth(
                         0.5, -0.05,
                         f"* {diff_cnt} localisation(s) non rattachée(s) à une commune du périmètre",
                         transform=ax.transAxes, ha="center", va="top",
-                        fontsize=5.5, color="#64748b", fontstyle="italic"
+                        fontsize=note_fs, color=note_color, fontstyle="italic"
                     )
 
                 ax.set_axis_off()
                 fig.tight_layout(pad=0.05)
-                fig.savefig(str(out_path), dpi=150, bbox_inches="tight", facecolor="white")
+                fig.savefig(str(out_path), dpi=150, bbox_inches="tight", facecolor=fond_carte)
                 plt.close(fig)
                 return out_path
 
@@ -444,11 +468,11 @@ def _generate_region_choropleth(
             )
 
             if titre_carte:
-                ax.set_title(titre_carte, fontsize=8.5, color='#003366', fontweight='bold', pad=4)
+                ax.set_title(titre_carte, fontsize=title_fs, color=dept_ec, fontweight='bold', pad=4)
 
             ax.set_axis_off()
             fig.tight_layout(pad=0.05)
-            fig.savefig(str(out_path), dpi=150, bbox_inches="tight", facecolor="white")
+            fig.savefig(str(out_path), dpi=150, bbox_inches="tight", facecolor=fond_carte)
             plt.close(fig)
             return out_path
     except Exception:
@@ -566,6 +590,8 @@ def render_sec_region_dashboard(ctx: Any) -> None:
         max_span_factor=max_span_factor,
         commune_counts=commune_counts,
         carto_cfg=carto_cfg,
+        palette=sec_enr.get("palette"),
+        styles=sec_enr.get("styles"),
     )
 
     if carto_path.exists():
@@ -607,7 +633,7 @@ def render_sec_region_dashboard(ctx: Any) -> None:
             parent=ctx.builder.styles.get("BodySmall", ctx.builder.styles["BodyText"]),
             fontSize=7,
             leading=8.5,
-            textColor=colors.HexColor("#555555"),
+            textColor=colors.HexColor(sec_enr.get("palette", {}).get("sous_titre_texte", "#555555")),
             alignment=TA_CENTER,
         )
         ctx.builder.story.append(Spacer(1, 2))
@@ -759,7 +785,7 @@ def render_sec_region_dashboard(ctx: Any) -> None:
                         parent=ctx.builder.styles.get("BodySmall", ctx.builder.styles["BodyText"]),
                         fontSize=7,
                         leading=8.5,
-                        textColor=colors.HexColor("#555555"),
+                        textColor=colors.HexColor(sec_enr.get("palette", {}).get("sous_titre_texte", "#555555")),
                         alignment=TA_CENTER,
                     )
                     ctx.builder.story.append(Spacer(1, 2))
@@ -1127,7 +1153,15 @@ def render_sec_region_fiches(ctx: PdfContext) -> None:
             ctx.builder.add_spacer(spacer_h)
 
             prof_id = str((ctx.profile or {}).get("id", "")) if hasattr(ctx, "profile") else "global"
-            vignette_path = _generate_dept_vignette(dept_str, ctx.out_dir, ctx.tmp_dir, f"vignette_dept_{dept_str}.png", figure_scale=ctx.figure_scale, profile_id=prof_id)
+            vignette_path = _generate_dept_vignette(
+                dept_str,
+                ctx.out_dir,
+                ctx.tmp_dir,
+                f"vignette_dept_{dept_str}.png",
+                figure_scale=ctx.figure_scale,
+                profile_id=prof_id,
+                presentation_cfg=getattr(ctx, "presentation_cfg", None),
+            )
             vignette_w = ctx.avail_w * 0.44 if (show_nc or show_mail or visuel_droite == "usagers") else ctx.avail_w * 0.46
             img_vignette = _create_proportional_rl_image(vignette_path, vignette_w, "Vignette cartographique", ctx.builder.styles, max_h=200.0)
 

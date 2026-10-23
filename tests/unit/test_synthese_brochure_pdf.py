@@ -396,4 +396,41 @@ def test_rollup_usager_types_regrouper_autres_usagers() -> None:
     assert pie_out["Autre usager"] == 7
 
 
+def test_rollup_resultats_usager_fusionne_lignes_secondaires() -> None:
+    import pandas as pd
+    from core.engine.generation_pdf_synthese_brochure import _rollup_resultats_usager
+
+    df = pd.DataFrame(
+        [
+            {"type_usager": "Entreprise", "Conforme": 33, "Infraction": 4, "Manquement": 12, "Autre_resultat": 1, "Total": 50},
+            {"type_usager": "Particulier", "Conforme": 36, "Infraction": 4, "Manquement": 0, "Autre_resultat": 0, "Total": 40},
+            {"type_usager": "Agriculteur", "Conforme": 30, "Infraction": 0, "Manquement": 2, "Autre_resultat": 0, "Total": 32},
+            {"type_usager": "Collectivité", "Conforme": 22, "Infraction": 2, "Manquement": 2, "Autre_resultat": 0, "Total": 26},
+            {"type_usager": "Autre usager", "Conforme": 2, "Infraction": 0, "Manquement": 0, "Autre_resultat": 0, "Total": 2},
+            {"type_usager": "Secteur minime", "Conforme": 1, "Infraction": 0, "Manquement": 0, "Autre_resultat": 0, "Total": 1},
+        ]
+    )
+
+    # Sans regrouper_autres_usagers (défaut) : la ligne "Autre usager" et la ligne mineure fusionnent dans "Autres"
+    res_defaut = _rollup_resultats_usager(df, regrouper_autres_usagers=False)
+    assert res_defaut is not None
+    usagers_defaut = res_defaut["type_usager"].tolist()
+    assert "Autre usager" not in usagers_defaut
+    assert "Autres" in usagers_defaut
+    row_autres = res_defaut.loc[res_defaut["type_usager"] == "Autres"].iloc[0]
+    assert row_autres["Total"] == 3
+    assert row_autres["Conforme"] == 3
+
+    # Avec regrouper_autres_usagers=True : la fusion se fait sous le libellé "Autre usager"
+    res_regroupe = _rollup_resultats_usager(df, regrouper_autres_usagers=True)
+    assert res_regroupe is not None
+    usagers_regroupe = res_regroupe["type_usager"].tolist()
+    assert "Autres" not in usagers_regroupe
+    assert "Autre usager" in usagers_regroupe
+    row_autre_u = res_regroupe.loc[res_regroupe["type_usager"] == "Autre usager"].iloc[0]
+    assert row_autre_u["Total"] == 3
+    assert row_autre_u["Conforme"] == 3
+
+
+
 

@@ -46,6 +46,7 @@ from core.common.utilitaires_metier import (
     agg_effectifs_usagers_par_domaine,
     agg_procedures_dossiers_par_domaine,
     agg_resultat_counts_par_type_usager,
+    agg_resultat_effectifs_par_type_usager,
     build_tab_resultats,
     build_tab_resultats_controles,
     classify_resultat_controle_series,
@@ -157,7 +158,11 @@ def _resultats_par_domaine_pour_pdf(pt: pd.DataFrame) -> pd.DataFrame:
     return out.reset_index(drop=True)
 
 
-def analyse_controles_global(point: pd.DataFrame, out_dir: Path) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def analyse_controles_global(
+    point: pd.DataFrame,
+    out_dir: Path,
+    metrique_resultats_usagers: str = "effectifs",
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Controles tous domaines/themes (point deja filtre par le loader sur departement et periode).
     Produit : effectifs par domaine, par theme, resultats (Conforme/Infraction/Manquement).
@@ -242,7 +247,10 @@ def analyse_controles_global(point: pd.DataFrame, out_dir: Path) -> Tuple[pd.Dat
         agg_usager["nb_total"] = agg_usager["nb"]
         agg_usager.to_csv(out_dir / "controles_global_par_usager.csv", sep=";", index=False)
 
-        res_type_usager = agg_resultat_counts_par_type_usager(pt)
+        if str(metrique_resultats_usagers).strip().lower() == "controles":
+            res_type_usager = agg_resultat_counts_par_type_usager(pt)
+        else:
+            res_type_usager = agg_resultat_effectifs_par_type_usager(pt)
         res_type_usager.to_csv(
             out_dir / "controles_global_resultats_par_type_usager.csv",
             sep=";",

@@ -72,3 +72,10 @@ def patch_pdf_charts(monkeypatch, module) -> None:
 def patch_thematique_pdf_charts(monkeypatch, orch_module) -> None:
     monkeypatch.setattr(orch_module, "load_communes_noms", lambda *a, **k: {})
     patch_pdf_charts(monkeypatch, orch_module)
+    try:
+        from core.engine import sections_thematiques, generation_pdf_thematique
+        monkeypatch.setattr(generation_pdf_thematique, "load_communes_noms", lambda *a, **k: {}, raising=False)
+        patch_pdf_charts(monkeypatch, sections_thematiques)
+        patch_pdf_charts(monkeypatch, generation_pdf_thematique)
+    except Exception:
+        pass

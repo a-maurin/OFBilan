@@ -615,4 +615,28 @@ def test_resolve_pdf_presentation_config_gabarit_overlay(tmp_path: Path):
     assert title_line2 == "Service Régional Police – BFC"
 
 
+def test_resolve_pdf_presentation_config_palette_and_styles():
+    """Vérifie que les palettes et styles externalisés des gabarits sont résolus."""
+    root = Path(__file__).resolve().parents[2]
+    resolved = resolve_pdf_presentation_config(root, scope="global", profile_id=None, gabarit_id="srp_r27")
+    effective = resolved["effective"]
+    sec_enr = effective.get("sections_enrichies", {})
+    
+    # Palette et styles brochure
+    brochure_pal = sec_enr.get("brochure", {}).get("palette", {})
+    brochure_sty = sec_enr.get("brochure", {}).get("styles", {})
+    assert brochure_pal.get("texte_principal") == "#1F2937"
+    assert brochure_pal.get("titre_accent") == "#003366"
+    assert brochure_pal.get("pastille_conforme") == "#70C157"
+    assert brochure_sty.get("pve_table_font_size") == 7.2
+
+    # Palette et styles synthèse régionale
+    reg_pal = sec_enr.get("synthese_regionale", {}).get("palette", {})
+    reg_sty = sec_enr.get("synthese_regionale", {}).get("styles", {})
+    assert reg_pal.get("fond_carte") == "#ffffff"
+    assert reg_pal.get("dept_edgecolor") == "#003366"
+    assert reg_sty.get("title_fontsize") == 8.5
+
+
+
 

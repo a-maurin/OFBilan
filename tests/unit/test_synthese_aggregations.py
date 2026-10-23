@@ -127,6 +127,7 @@ def test_resultat_effectifs_par_type_usager() -> None:
 def test_resultat_counts_par_type_usager_dedupplique_par_fc_id() -> None:
     point = pd.DataFrame(
         {
+            "dc_id": ["DC-1", "DC-1"],
             "fc_id": ["FC-1", "FC-1"],
             "type_usager": ["Collectivité 2", "Collectivité 2"],
             "resultat": ["Conforme", "Conforme"],
@@ -142,6 +143,7 @@ def test_resultat_counts_par_type_usager_dedupplique_par_fc_id() -> None:
 def test_resultat_effectifs_par_type_usager_dedupplique_par_fc_id() -> None:
     point = pd.DataFrame(
         {
+            "dc_id": ["DC-1", "DC-1"],
             "fc_id": ["FC-1", "FC-1"],
             "type_usager": ["Collectivité 2", "Collectivité 2"],
             "resultat": ["Conforme", "Conforme"],
@@ -157,6 +159,7 @@ def test_resultat_effectifs_par_type_usager_dedupplique_par_fc_id() -> None:
 def test_resultat_effectifs_par_type_usager_journalise_conflit_fc_id(caplog) -> None:
     point = pd.DataFrame(
         {
+            "dc_id": ["DC-1", "DC-1"],
             "fc_id": ["FC-1", "FC-1"],
             "type_usager": ["Collectivité 2", "Collectivité 2"],
             "resultat": ["Conforme", "Infraction"],
@@ -266,6 +269,7 @@ def test_effectifs_usagers_par_theme() -> None:
 def test_effectifs_usagers_par_theme_dedupplique_par_fc_id() -> None:
     point = pd.DataFrame(
         {
+            "dc_id": ["DC-1", "DC-1"],
             "fc_id": ["FC-1", "FC-1"],
             "theme": ["T1", "T1"],
             "type_usager": ["Collectivité 4", "Collectivité 4"],
@@ -401,3 +405,37 @@ def test_activite_par_type_usager_pej_hors_ventile_par_categorie() -> None:
     assert int(agr.sum()) == 1
     assert int(part.sum()) == 1
     assert int(out.loc[out["type_usager"] == "Autre", "nb_pej_hors_controle"].sum()) == 0
+
+
+def test_run_aggregations_metrique_resultats_usagers() -> None:
+    from core.engine.agregations_thematiques import _run_aggregations
+
+    point = pd.DataFrame(
+        {
+            "dc_id": ["DC-1", "DC-1"],
+            "fc_id": ["FC-1", "FC-1"],
+            "type_usager": ["Particulier 5", "Particulier 5"],
+            "resultat": ["Conforme", "Conforme"],
+            "date_ctrl": [pd.Timestamp("2026-06-01"), pd.Timestamp("2026-06-01")],
+            "insee_comm": ["21001", "21001"],
+            "domaine": ["Eau", "Eau"],
+            "theme": ["Milieux aquatiques", "Milieux aquatiques"],
+        }
+    )
+    empty_df = pd.DataFrame()
+    profile_default = {"id": "test_profil", "filter": {"type": "thematique"}}
+    options_default: dict[str, object] = {}
+    spatial: dict[str, object] = {}
+
+    # Par défaut (ou metrique_resultats_usagers='effectifs') : compte les 5 effectifs
+    res_eff = _run_aggregations(point, empty_df, empty_df, empty_df, profile_default, options_default, spatial)
+    rb_eff = res_eff["res_bilan_par_type_usager"]
+    assert int(rb_eff["Conforme"].sum()) == 5
+    assert int(rb_eff["Total"].sum()) == 5
+
+    # Avec metrique_resultats_usagers='controles' : compte 1 opération consolidée
+    options_ctrl = {"metrique_resultats_usagers": "controles"}
+    res_ctrl = _run_aggregations(point, empty_df, empty_df, empty_df, profile_default, options_ctrl, spatial)
+    rb_ctrl = res_ctrl["res_bilan_par_type_usager"]
+    assert int(rb_ctrl["Conforme"].sum()) == 1
+    assert int(rb_ctrl["Total"].sum()) == 1

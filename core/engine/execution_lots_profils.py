@@ -43,23 +43,47 @@ from core.common.utilitaires_metier import resolve_code_subdir_suffix
 logger = logging.getLogger("ofbilan.engine")
 
 
-def resolve_profile_output_dir(profil_id: str, code: str = "", *, root: Path | None = None) -> Path:
+def resolve_profile_output_dir(
+    profil_id: str,
+    code: str = "",
+    *,
+    root: Path | None = None,
+    cli_options: dict | None = None,
+) -> Path:
     """
-    Dossier ``data/out/<out_subdir>/`` où le moteur écrit pour ce profil (aligné global / thématique).
+    Dossier de sortie où le moteur écrit pour ce profil (aligné global / thématique).
     """
-    from core.engine.orchestrateur_profils import load_profile_config
+    from core.chemins_projet import get_export_base_dir
+    from core.engine.orchestrateur_profils import load_profile_config, _safe_type_usager_for_filename
 
     base = root or PROJECT_ROOT
     profile = load_profile_config(base, profil_id)
+    cli_opts = cli_options or {}
     
     if profil_id == "global":
+        filter_label = None
+        if cli_opts.get("themes"):
+            filter_label = ", ".join(cli_opts["themes"]) if isinstance(cli_opts["themes"], list) else str(cli_opts["themes"])
+        elif cli_opts.get("domaines"):
+            filter_label = ", ".join(cli_opts["domaines"]) if isinstance(cli_opts["domaines"], list) else str(cli_opts["domaines"])
+        elif cli_opts.get("types_action"):
+            filter_label = ", ".join(cli_opts["types_action"]) if isinstance(cli_opts["types_action"], list) else str(cli_opts["types_action"])
+
+        if filter_label:
+            safe_filter = _safe_type_usager_for_filename(filter_label) or "filtre"
+            out_subdir = f"bilan_{safe_filter}"
+            code_suffix = resolve_code_subdir_suffix(profile, code)
+            if code_suffix:
+                out_subdir = f"{out_subdir}_{code_suffix}"
+            return get_out_dir(out_subdir)
+
         code_suffix = resolve_code_subdir_suffix(profile, code)
         candidates = []
-        out_root = base / "data" / "out"
-        if out_root.exists():
-            for d in out_root.iterdir():
-                if d.is_dir() and d.name.startswith("bilan_") and d.name.endswith(f"_{code_suffix}"):
-                    candidates.append(d)
+        for candidate_root in [get_export_base_dir(), base / "data" / "out"]:
+            if candidate_root.exists():
+                for d in candidate_root.iterdir():
+                    if d.is_dir() and d.name.startswith("bilan_global_") and d.name.endswith(f"_{code_suffix}"):
+                        candidates.append(d)
         if candidates:
             return max(candidates, key=lambda d: d.stat().st_mtime)
 
@@ -86,25 +110,7 @@ def resolve_profile_output_dir(profil_id: str, code: str = "", *, root: Path | N
 def _list_generated_pdf_files(profil_id: str, started_at_epoch: float, code: str = "", cli_options: dict | None = None) -> list[Path]:
     """Retourne les PDF générés/écrasés pendant le run du profil."""
     cli_opts = cli_options or {}
-    filter_label = None
-    if profil_id == "global":
-        if cli_opts.get("themes"):
-            filter_label = ", ".join(cli_opts["themes"])
-        elif cli_opts.get("domaines"):
-            filter_label = ", ".join(cli_opts["domaines"])
-
-    if filter_label:
-        from core.engine.orchestrateur_profils import _safe_type_usager_for_filename, load_profile_config
-        safe_filter = _safe_type_usager_for_filename(filter_label) or "filtre"
-        out_subdir = f"bilan_{safe_filter}"
-        profile = load_profile_config(PROJECT_ROOT, profil_id)
-        code_suffix = resolve_code_subdir_suffix(profile, code)
-        if code_suffix:
-            out_subdir = f"{out_subdir}_{code_suffix}"
-        out_dir = get_out_dir(out_subdir)
-    else:
-        out_dir = resolve_profile_output_dir(profil_id, code=code)
-
+    out_dir = resolve_profile_output_dir(profil_id, code=code, cli_options=cli_opts)
 
     if not out_dir.exists():
         return []

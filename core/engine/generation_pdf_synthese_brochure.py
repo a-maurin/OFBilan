@@ -286,24 +286,27 @@ def _rollup_resultats_usager(
                 if k in row.index:
                     autres[k] += int(row.get(k, 0) or 0)
 
-    # Ajoute la ligne cumulée 'Autres' ou fusionne dans 'Autre usager' s'il y a du contenu
+    # Ajoute la ligne cumulée 'Autres' ou fusionne dans une ligne unique s'il y a du contenu
+    target_label = "Autre usager" if regrouper_autres_usagers else "Autres"
+    autre_idx = None
+    for i, s in enumerate(kept):
+        if str(s.get("type_usager", "")).strip().lower() in ("autre", "autre usager", "autres", "autres usagers"):
+            autre_idx = i
+            break
+
     if autres["Total"] > 0:
-        if regrouper_autres_usagers:
-            autre_idx = None
-            for i, s in enumerate(kept):
-                if str(s.get("type_usager", "")).strip().lower() in ("autre", "autre usager", "autres", "autres usagers"):
-                    autre_idx = i
-                    break
-            if autre_idx is not None:
-                updated = kept[autre_idx].copy()
-                for k in autres:
-                    updated[k] = int(updated.get(k, 0) or 0) + autres[k]
-                updated["type_usager"] = "Autre usager"
-                kept[autre_idx] = updated
-            else:
-                kept.append(pd.Series({**{"type_usager": "Autre usager"}, **autres}))
+        if autre_idx is not None:
+            updated = kept[autre_idx].copy()
+            for k in autres:
+                updated[k] = int(updated.get(k, 0) or 0) + autres[k]
+            updated["type_usager"] = target_label
+            kept[autre_idx] = updated
         else:
-            kept.append(pd.Series({**{"type_usager": "Autres"}, **autres}))
+            kept.append(pd.Series({**{"type_usager": target_label}, **autres}))
+    elif autre_idx is not None and regrouper_autres_usagers:
+        updated = kept[autre_idx].copy()
+        updated["type_usager"] = target_label
+        kept[autre_idx] = updated
     return pd.DataFrame(kept)
 
 
@@ -544,34 +547,39 @@ def _format_pve_natinf_code(row: pd.Series) -> str:
 # ========================================================================================
 
 def _build_pve_natinf_table_brochure(
-    pve_natinf: pd.DataFrame | None, inner_w: float, *, max_rows: int
+    pve_natinf: pd.DataFrame | None, inner_w: float, *, max_rows: int, palette: dict | None = None, styles: dict | None = None
 ) -> Table:
     """Génère le tableau des infractions PV/E les plus fréquentes (N° NATINF, Libellé et volumes)."""
     col_widths = col_widths_from_fracs(inner_w, _BROCHURE_PVE_NATINF_COL_FRACS)
     cap = max(1, min(int(max_rows), _BROCHURE_MAX_PVE_NATINF))
     rows: list[list[Any]] = []
+    pal = palette or {}
+    sty = styles or {}
+    clr_text = rl_colors.HexColor(pal.get("texte_principal", "#1F2937"))
+    fs = float(sty.get("pve_table_font_size", 7.2))
+    ld = fs * (8.8 / 7.2)
     p_style_code = ParagraphStyle(
         "BrochurePveCode",
         fontName=FONT_FAMILY,
-        fontSize=7.2,
-        leading=8.8,
-        textColor=rl_colors.HexColor("#1F2937"),
+        fontSize=fs,
+        leading=ld,
+        textColor=clr_text,
         alignment=TA_LEFT,
     )
     p_style_desc = ParagraphStyle(
         "BrochurePveDesc",
         fontName=FONT_FAMILY,
-        fontSize=7.2,
-        leading=8.8,
-        textColor=rl_colors.HexColor("#1F2937"),
+        fontSize=fs,
+        leading=ld,
+        textColor=clr_text,
         alignment=TA_LEFT,
     )
     p_style_num = ParagraphStyle(
         "BrochurePveNum",
         fontName=FONT_FAMILY,
-        fontSize=7.2,
-        leading=8.8,
-        textColor=rl_colors.HexColor("#1F2937"),
+        fontSize=fs,
+        leading=ld,
+        textColor=clr_text,
         alignment=TA_RIGHT,
     )
     if pve_natinf is not None and not pve_natinf.empty:
@@ -597,24 +605,29 @@ def _build_pve_natinf_table_brochure(
 
 
 def _build_procedures_table_brochure(
-    proc_theme: pd.DataFrame | None, inner_w: float, *, max_rows: int
+    proc_theme: pd.DataFrame | None, inner_w: float, *, max_rows: int, palette: dict | None = None, styles: dict | None = None
 ) -> Table:
     """Génère le tableau synthétique des procédures administratives (PA) et judiciaires (PEJ) par thème."""
     cap = max(1, min(int(max_rows), _BROCHURE_MAX_PROC_THEMES))
     rows: list[list[Any]] = []
+    pal = palette or {}
+    sty = styles or {}
+    clr_text = rl_colors.HexColor(pal.get("texte_principal", "#1F2937"))
+    fs = float(sty.get("procedures_table_font_size", 7.5))
+    ld = fs * (9.0 / 7.5)
     p_style = ParagraphStyle(
         "BrochureProcTheme",
         fontName=FONT_FAMILY,
-        fontSize=7.5,
-        leading=9.0,
-        textColor=rl_colors.HexColor("#1F2937"),
+        fontSize=fs,
+        leading=ld,
+        textColor=clr_text,
     )
     p_style_num = ParagraphStyle(
         "BrochureProcNum",
         fontName=FONT_FAMILY,
-        fontSize=7.5,
-        leading=9.0,
-        textColor=rl_colors.HexColor("#1F2937"),
+        fontSize=fs,
+        leading=ld,
+        textColor=clr_text,
         alignment=TA_RIGHT,
     )
     if proc_theme is not None and not proc_theme.empty:
@@ -647,15 +660,17 @@ def _build_themes_table_brochure(
     inner_w: float,
     *,
     total_value: int,
+    palette: dict | None = None,
 ) -> Table:
     """Génère un tableau par thématiques avec les valeurs brutes et les pourcentages calculés."""
+    pal = palette or {}
     rows: list[list[Any]] = []
     p_style = ParagraphStyle(
         "BrochurePage1Theme",
         fontName=FONT_FAMILY,
         fontSize=7.6,
         leading=9.0,
-        textColor=rl_colors.HexColor("#1F2937"),
+        textColor=rl_colors.HexColor(pal.get("texte_principal", "#1F2937")),
     )
     for lb, v, pct in zip(labels, values, _theme_pct_strings_brochure(values, total_value=total_value)):
         rows.append([Paragraph(str(lb).strip(), p_style), str(int(v)), pct])
@@ -681,24 +696,27 @@ def _build_categories_chasse_controles_table_brochure(
     inner_w: float,
     *,
     font_size: float = 9.0,
+    palette: dict | None = None,
 ) -> Table:
     """Génère le tableau d'activité par catégories de chasse (Agrainage, Sécurité, Autres)."""
+    pal = palette or {}
     rows: list[list[Any]] = []
     fs = float(font_size)
     leading = max(fs + 3.0, fs * 1.33)
+    clr_text = rl_colors.HexColor(pal.get("texte_principal", "#1F2937"))
     p_style = ParagraphStyle(
         "BrochureCatChasseCtrl",
         fontName=FONT_FAMILY,
         fontSize=fs,
         leading=leading,
-        textColor=rl_colors.HexColor("#1F2937"),
+        textColor=clr_text,
     )
     p_style_num = ParagraphStyle(
         "BrochureCatChasseNum",
         fontName=FONT_FAMILY,
         fontSize=fs,
         leading=leading,
-        textColor=rl_colors.HexColor("#1F2937"),
+        textColor=clr_text,
         alignment=TA_RIGHT,
     )
     if df_cat is not None and not df_cat.empty:
@@ -725,37 +743,45 @@ def _build_categories_chasse_controles_table_brochure(
 def _build_hierarchical_categories_chasse_table_brochure(
     df_cat_inf: pd.DataFrame | None,
     inner_w: float,
+    palette: dict | None = None,
+    styles: dict | None = None,
 ) -> Table:
     """Génère le tableau hiérarchique des infractions par catégorie de chasse avec sous-lignes PEJ et PVe."""
     rows: list[list[Any]] = []
+    pal = palette or {}
+    sty = styles or {}
+    clr_cat = rl_colors.HexColor(pal.get("titre_accent", "#003366"))
+    clr_sub = rl_colors.HexColor(pal.get("texte_secondaire", "#4B5563"))
+    fs_cat = float(sty.get("hierarchie_cat_font_size", 7.2))
+    fs_sub = float(sty.get("hierarchie_sub_font_size", 6.8))
     p_style_cat = ParagraphStyle(
         "BrochureHierCat",
         fontName=FONT_FAMILY,
-        fontSize=7.2,
-        leading=8.6,
-        textColor=rl_colors.HexColor("#003366"),
+        fontSize=fs_cat,
+        leading=fs_cat * (8.6 / 7.2),
+        textColor=clr_cat,
     )
     p_style_sub = ParagraphStyle(
         "BrochureHierSub",
         fontName=FONT_FAMILY,
-        fontSize=6.8,
-        leading=8.2,
-        textColor=rl_colors.HexColor("#4B5563"),
+        fontSize=fs_sub,
+        leading=fs_sub * (8.2 / 6.8),
+        textColor=clr_sub,
     )
     p_style_num_bold = ParagraphStyle(
         "BrochureHierNumBold",
         fontName=FONT_FAMILY,
-        fontSize=7.2,
-        leading=8.6,
-        textColor=rl_colors.HexColor("#003366"),
+        fontSize=fs_cat,
+        leading=fs_cat * (8.6 / 7.2),
+        textColor=clr_cat,
         alignment=TA_RIGHT,
     )
     p_style_num = ParagraphStyle(
         "BrochureHierNum",
         fontName=FONT_FAMILY,
-        fontSize=6.8,
-        leading=8.2,
-        textColor=rl_colors.HexColor("#4B5563"),
+        fontSize=fs_sub,
+        leading=fs_sub * (8.2 / 6.8),
+        textColor=clr_sub,
         alignment=TA_RIGHT,
     )
     col_w = col_widths_from_fracs(inner_w, [0.64, 0.18, 0.18])
@@ -802,30 +828,36 @@ def _build_hierarchical_categories_chasse_table_brochure(
     )
 
 
-def _build_treemap_placeholder_banner(builder: PDFReportBuilder, outer_w: float):
+def _build_treemap_placeholder_banner(builder: PDFReportBuilder, outer_w: float, *, palette: dict | None = None, styles: dict | None = None):
     """Crée un encadré d'attente (placeholder) pour le futur graphique de temps passé par thématique."""
     inner_w = encadre_inner_width(outer_w, pad_pt=_PAD_STD_PT)
+    pal = palette or {}
+    sty = styles or {}
+    clr_text = rl_colors.HexColor(pal.get("texte_secondaire", "#4B5563"))
+    clr_bg = rl_colors.HexColor(pal.get("encadre_fond", "#F3F4F6"))
+    clr_box = rl_colors.HexColor(pal.get("encadre_bordure", "#D1D5DB"))
+    fs = float(sty.get("placeholder_font_size", 8.5))
     p_style = ParagraphStyle(
         "BrochureTreemapPlaceholder",
         parent=builder.styles["BodyText"],
         fontName=builder.styles["BodyText"].fontName,
-        fontSize=8.5,
-        leading=11.0,
-        textColor=rl_colors.HexColor("#4B5563"),
+        fontSize=fs,
+        leading=fs * (11.0 / 8.5),
+        textColor=clr_text,
         alignment=1,
     )
     p = Paragraph("<i>treemap temps par thématique en attente d'implémentation</i>", p_style)
     body_tbl = Table([[p]], colWidths=[inner_w])
     body_tbl.setStyle(
         TableStyle([
-            ("BACKGROUND", (0, 0), (-1, -1), rl_colors.HexColor("#F3F4F6")),
+            ("BACKGROUND", (0, 0), (-1, -1), clr_bg),
             ("ALIGN", (0, 0), (-1, -1), "CENTER"),
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
             ("TOPPADDING", (0, 0), (-1, -1), 8),
             ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
             ("LEFTPADDING", (0, 0), (-1, -1), 6),
             ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-            ("BOX", (0, 0), (-1, -1), 0.5, rl_colors.HexColor("#D1D5DB")),
+            ("BOX", (0, 0), (-1, -1), 0.5, clr_box),
         ])
     )
     return encadre_section(
@@ -906,22 +938,34 @@ class BrochureResultatPastilles(Flowable):
     - Violet : Manquements (%)
     - Rouge : Infractions (%)
     """
-    def __init__(self, width: float, n_ops: int, pct_conf: int, pct_manq: int, pct_inf: int):
+    def __init__(self, width: float, n_ops: int, pct_conf: int, pct_manq: int, pct_inf: int, *, palette: dict | None = None, styles: dict | None = None):
         super().__init__()
         self.width = float(width)
         self.n_ops = int(n_ops)
         self.pct_conf = int(pct_conf)
         self.pct_manq = int(pct_manq)
         self.pct_inf = int(pct_inf)
+        self.palette = palette or {}
+        self.styles = styles or {}
         self.height = 70.0
 
     def draw(self):
         """Dessine les cercles et textes vectoriels directement sur le canevas PDF."""
         canv = self.canv
         w = self.width
+        pal = self.palette
+        sty = self.styles
+        clr_dark = rl_colors.HexColor(pal.get("pastille_texte_bordure", "#1E293B"))
+        clr_conf = rl_colors.HexColor(pal.get("pastille_conforme", "#70C157"))
+        clr_manq = rl_colors.HexColor(pal.get("pastille_manquement", "#8B5CF6"))
+        clr_inf = rl_colors.HexColor(pal.get("pastille_infraction", "#EF4444"))
+        fs_title = float(sty.get("pastille_title_font_size", 10.0))
+        fs_pct = float(sty.get("pastille_pct_font_size", 10.0))
+        fs_lbl = float(sty.get("pastille_label_font_size", 7.5))
+
         canv.saveState()
-        canv.setFont("Helvetica-Bold", 10)
-        canv.setFillColor(rl_colors.HexColor("#1E293B"))
+        canv.setFont("Helvetica-Bold", fs_title)
+        canv.setFillColor(clr_dark)
         canv.drawCentredString(w / 2.0, self.height - 5, f"{self.n_ops} OPERATIONS DE CONTROLES")
 
         cx_list = [w * 0.20, w * 0.50, w * 0.80]
@@ -929,23 +973,23 @@ class BrochureResultatPastilles(Flowable):
         r = 18.0
 
         pastilles = [
-            (self.pct_conf, "CONFORMES", rl_colors.HexColor("#70C157")),
-            (self.pct_manq, "MANQUEMENTS", rl_colors.HexColor("#8B5CF6")),
-            (self.pct_inf, "INFRACTIONS", rl_colors.HexColor("#EF4444")),
+            (self.pct_conf, "CONFORMES", clr_conf),
+            (self.pct_manq, "MANQUEMENTS", clr_manq),
+            (self.pct_inf, "INFRACTIONS", clr_inf),
         ]
 
         for (pct, label, color), cx in zip(pastilles, cx_list):
             canv.setFillColor(color)
-            canv.setStrokeColor(rl_colors.HexColor("#1E293B"))
+            canv.setStrokeColor(clr_dark)
             canv.setLineWidth(1.5)
             canv.circle(cx, cy, r, fill=1, stroke=1)
 
-            canv.setFont("Helvetica-Bold", 10)
-            canv.setFillColor(rl_colors.HexColor("#1E293B") if color == rl_colors.HexColor("#70C157") else rl_colors.white)
+            canv.setFont("Helvetica-Bold", fs_pct)
+            canv.setFillColor(clr_dark if color == clr_conf else rl_colors.white)
             canv.drawCentredString(cx, cy - 3.5, f"{pct} %")
 
-            canv.setFont("Helvetica-Bold", 7.5)
-            canv.setFillColor(rl_colors.HexColor("#1E293B"))
+            canv.setFont("Helvetica-Bold", fs_lbl)
+            canv.setFillColor(clr_dark)
             canv.drawCentredString(cx, cy - r - 10, label)
 
         canv.restoreState()
@@ -953,26 +997,38 @@ class BrochureResultatPastilles(Flowable):
 
 class BrochureBadgesSuites(Flowable):
     """Élément graphique vectoriel affichant les badges rectangulaires des suites administratives et judiciaires."""
-    def __init__(self, width: float, nb_pa: int, nb_pve: int, nb_pej: int):
+    def __init__(self, width: float, nb_pa: int, nb_pve: int, nb_pej: int, *, palette: dict | None = None, styles: dict | None = None):
         super().__init__()
         self.width = float(width)
         self.nb_pa = int(nb_pa)
         self.nb_pve = int(nb_pve)
         self.nb_pej = int(nb_pej)
+        self.palette = palette or {}
+        self.styles = styles or {}
         self.height = 100.0
 
     def draw(self):
         """Dessine les badges de comptage des procédures."""
         canv = self.canv
         w = self.width
+        pal = self.palette
+        sty = self.styles
+        clr_dark = rl_colors.HexColor(pal.get("pastille_texte_bordure", "#1E293B"))
+        clr_sub = rl_colors.HexColor(pal.get("badge_sous_titre", "#475569"))
+        clr_bg = rl_colors.HexColor(pal.get("badge_fond", "#E2E8F0"))
+        clr_val = rl_colors.HexColor(pal.get("badge_valeur", "#0284C7"))
+        fs_title = float(sty.get("badge_title_font_size", 9.5))
+        fs_sub = float(sty.get("badge_subtitle_font_size", 7.5))
+        fs_val = float(sty.get("badge_value_font_size", 17.0))
+        fs_lbl = float(sty.get("badge_label_font_size", 7.0))
+
         canv.saveState()
 
-
-        canv.setFont("Helvetica-Bold", 9.5)
-        canv.setFillColor(rl_colors.HexColor("#1E293B"))
+        canv.setFont("Helvetica-Bold", fs_title)
+        canv.setFillColor(clr_dark)
         canv.drawCentredString(w / 2.0, self.height - 11, "SUITES DONNEES AUX SITUATIONS NON CONFORMES")
-        canv.setFont("Helvetica", 7.5)
-        canv.setFillColor(rl_colors.HexColor("#475569"))
+        canv.setFont("Helvetica", fs_sub)
+        canv.setFillColor(clr_sub)
         canv.drawCentredString(w / 2.0, self.height - 21, "(Contrôles administratifs + saisines judiciaires)")
 
         # Calcul de la largeur de chaque badge (3 badges répartis équitablement)
@@ -990,18 +1046,18 @@ class BrochureBadgesSuites(Flowable):
         # Dessine chaque rectange de badge avec la valeur en gros et le libellé en dessous
         for i, (val, lines) in enumerate(badges):
             card_x = i * (card_w + 8)
-            canv.setFillColor(rl_colors.HexColor("#E2E8F0"))
+            canv.setFillColor(clr_bg)
             canv.setStrokeColor(rl_colors.transparent)
             canv.roundRect(card_x, card_y, card_w, card_h, 8, fill=1, stroke=0)
 
             # Nombre de procédures (valeur numérique mise en avant en bleu)
-            canv.setFont("Helvetica-Bold", 17)
-            canv.setFillColor(rl_colors.HexColor("#0284C7"))
+            canv.setFont("Helvetica-Bold", fs_val)
+            canv.setFillColor(clr_val)
             canv.drawCentredString(card_x + card_w / 2.0, card_y + card_h - 20, str(val))
 
             # Texte de description (libellé)
-            canv.setFont("Helvetica-Bold", 7)
-            canv.setFillColor(rl_colors.HexColor("#1E293B"))
+            canv.setFont("Helvetica-Bold", fs_lbl)
+            canv.setFillColor(clr_dark)
             start_y = card_y + card_h - 32
             for line in lines:
                 canv.drawCentredString(card_x + card_w / 2.0, start_y, line)
@@ -1088,6 +1144,8 @@ def _build_evolution_chart_srp_r27(
     nb_pa: int,
     nb_pej: int,
     nb_pve: int,
+    palette: dict | None = None,
+    styles: dict | None = None,
 ) -> Path:
     """Génère un graphique à barres empilées de l'évolution sur 4 ans pour le gabarit SRP R27.
 
@@ -1108,19 +1166,28 @@ def _build_evolution_chart_srp_r27(
     x = np.arange(len(years))
     width = 0.40
 
+    pal = palette or {}
+    sty = styles or {}
+    clr_pa = pal.get("histo_pa", "#0284C7")
+    clr_pej = pal.get("histo_pej", "#D97706")
+    clr_pve = pal.get("histo_pve", "#16A34A")
+    fs_title = float(sty.get("evolution_title_font_size", 9.0))
+    fs_axis = float(sty.get("evolution_axis_font_size", 8.0))
+    fs_legend = float(sty.get("evolution_legend_font_size", 7.0))
+
     # Étage 1 : Procédures administratives (Bleu)
-    p1 = ax.bar(x, pas, width, label="Procédures administratives", color="#0284C7")
+    p1 = ax.bar(x, pas, width, label="Procédures administratives", color=clr_pa)
     # Étage 2 : Procédures judiciaires (Orange)
-    p2 = ax.bar(x, pjs, width, bottom=pas, label="Procédures judiciaires", color="#D97706")
+    p2 = ax.bar(x, pjs, width, bottom=pas, label="Procédures judiciaires", color=clr_pej)
     # Étage 3 : Amendes forfaitaires / PVe (Vert)
-    p3 = ax.bar(x, pves, width, bottom=np.array(pas) + np.array(pjs), label="Procédures d'amendes forfaitaires", color="#16A34A")
+    p3 = ax.bar(x, pves, width, bottom=np.array(pas) + np.array(pjs), label="Procédures d'amendes forfaitaires", color=clr_pve)
 
     # Personnalisation des axes et de la légende
     ax.set_xticks(x)
-    ax.set_xticklabels(years, fontsize=8.0)
-    ax.set_ylabel("Nombre de procédures", fontsize=8.0)
-    ax.set_title("TENDANCES EVOLUTIVES DE L'ACTIVITE PROCEDURALE", fontsize=9.0, fontweight="bold", pad=8)
-    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.15), ncol=3, fontsize=7.0, frameon=False)
+    ax.set_xticklabels(years, fontsize=fs_axis)
+    ax.set_ylabel("Nombre de procédures", fontsize=fs_axis)
+    ax.set_title("TENDANCES EVOLUTIVES DE L'ACTIVITE PROCEDURALE", fontsize=fs_title, fontweight="bold", pad=8)
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.15), ncol=3, fontsize=fs_legend, frameon=False)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     plt.tight_layout()
@@ -1255,6 +1322,8 @@ def _generate_srp_r27_brochure_pdf(
     service_override: str | None = None,
     tab_resultats: pd.DataFrame | None = None,
     regrouper_autres_usagers: bool = False,
+    presentation_cfg: dict | None = None,
+    profile_title: str | None = None,
 ) -> None:
     """Génère la brochure PDF spécifique au gabarit SRP R27 (Services Régionaux de Police).
 
@@ -1263,6 +1332,9 @@ def _generate_srp_r27_brochure_pdf(
       - Page 2 : Badges des suites, Matrice par thématique et Graphique d'évolution pluriannuelle.
     """
     avail_w = builder.avail_w
+    b_cfg = (presentation_cfg or {}).get("sections_enrichies", {}).get("brochure", {}) or (presentation_cfg or {}).get("brochure", {}) or {}
+    palette = b_cfg.get("palette", {})
+    styles = b_cfg.get("styles", {})
 
     # ── EN-TÊTE PAGE 1 : BLOC MARQUE + TITRE + LIGNE SÉPARATRICE ──
     logo_path = _ROOT / "ref" / "programme" / "modele_ofb" / "bloc-marque-RF-OFB_horizontal.jpg"
@@ -1278,7 +1350,10 @@ def _generate_srp_r27_brochure_pdf(
     )
     year_val = date_fin.year
     perimetre_display = format_perimetre_title_label(echelle, dept_name_typo)
-    header_text = f"<b>Bilan Police</b> — {perimetre_display} — Année {year_val}"
+    if profile_title and profile_title.lower() != perimetre_display.lower():
+        header_text = f"<b>Bilan Police</b> — {profile_title} — {perimetre_display} — Année {year_val}"
+    else:
+        header_text = f"<b>Bilan Police</b> — {perimetre_display} — Année {year_val}"
 
     # Construction du tableau d'en-tête (Logo République/OFB à gauche + Titre à droite)
     if logo_img:
@@ -1426,7 +1501,7 @@ def _generate_srp_r27_brochure_pdf(
     builder.story.append(Spacer(1, 2 * mm))
 
     # Graphique Matplotlib d'évolution centré en bas de la Page 2
-    chart_path = _build_evolution_chart_srp_r27(tmp_dir, current_year=date_fin.year, nb_pa=nb_pa, nb_pej=nb_pej, nb_pve=nb_pve)
+    chart_path = _build_evolution_chart_srp_r27(tmp_dir, current_year=date_fin.year, nb_pa=nb_pa, nb_pej=nb_pej, nb_pve=nb_pve, palette=palette, styles=styles)
     evo_img = _image_fit(builder, chart_path, max_width=avail_w * 0.88, max_height=65.0 * mm, scale_to_fill=True)
     if evo_img:
         evo_img.hAlign = "CENTER"
@@ -1743,14 +1818,15 @@ def _append_page1_lower_band(
     _append_dual_panels(builder, left_panel=left_panel, right_panel=right_panel)
 
 
-def _append_methodology_footer(builder: PDFReportBuilder, html: str) -> None:
+def _append_methodology_footer(builder: PDFReportBuilder, html: str, palette: dict | None = None) -> None:
     """Ajoute en très petites lettres au bas de la page le texte d'avertissement et de méthodologie."""
+    pal = palette or {}
     ps = ParagraphStyle(
         "BrochureMethodoFooter",
         parent=builder.styles["BodySmall"],
         fontSize=7.5,
         leading=9.5,
-        textColor=rl_colors.HexColor("#6B7280"),
+        textColor=rl_colors.HexColor(pal.get("texte_legende", "#6B7280")),
     )
     para = Paragraph(html, ps)
     para.hAlign = "LEFT"
@@ -1764,6 +1840,9 @@ def _brochure_methodology_html(
     ventilation_mode: str,
     diffusion: str,
     realisation_label: str | None = None,
+    filter_label: str | None = None,
+    nb_pve: int = 0,
+    analyse_pve: bool = True,
 ) -> str:
     """Formate les mentions de méthodologie au format HTML (dates, sources de données, niveau de diffusion)."""
     diff = "externe" if str(diffusion).strip().lower() in ("externe", "external", "ext") else "interne"
@@ -1772,8 +1851,10 @@ def _brochure_methodology_html(
         if realisation_label
         else "service départemental de la Côte d'Or"
     )
+    pve_mention = " et PVe OFB" if (analyse_pve and nb_pve > 0) else ""
+    ciblage_mention = f"Données ciblées sur : <b>{filter_label}</b> — " if filter_label else ""
     return (
-        "<i><b>Méthodologie.</b> Sources OSCEAN (points de contrôle, PEJ, PA) et PVe OFB — "
+        f"<i><b>Méthodologie.</b> {ciblage_mention}Sources OSCEAN (points de contrôle, PEJ, PA){pve_mention} — "
         f"période du {date_deb.date():%d/%m/%Y} au {date_fin.date():%d/%m/%Y} — "
         f"ventilation {ventilation_mode} — diffusion {diff} — "
         "effectifs d'usagers contrôlés (chaque usager sur une fiche) ; "
@@ -1897,11 +1978,17 @@ def _generate_synthese_brochure_pdf(
             else cfg.perimetre_name
         )
         perimetre_display = format_perimetre_title_label(cfg.echelle, dept_name_typo)
-    report_header = f"Bilan Police — {perimetre_display} — Année {date_fin.year}"
     period_str = f"du {date_deb.date():%d/%m/%Y} au {date_fin.date():%d/%m/%Y}"
 
-    # Construction du titre dynamique d'en-tête (Page 1)
-    is_global = profil_id in ("global", "synthese_activite_PA_PJ")
+    # Construction du titre dynamique d'en-tête (Page 1 et Page 2)
+    is_filtered_thematic = (
+        profile.get("presentation_scope") == "filtre_thematique"
+        or (
+            str(profile.get("label", "")).strip().lower()
+            not in ("", "global", "bilan global")
+        )
+    )
+    is_global = (profil_id in ("global", "synthese_activite_PA_PJ")) and not is_filtered_thematic
     profile_title = "" if is_global else str(profile.get("title_label") or profile.get("label") or "").strip()
 
     title_parts = ["<b>Bilan Police</b>"]
@@ -1913,6 +2000,11 @@ def _generate_synthese_brochure_pdf(
 
     brochure_header_text = " — ".join(title_parts)
 
+    if profile_title and profile_title.lower() != perimetre_display.lower():
+        report_header = f"Bilan Police — {profile_title} — {perimetre_display} — Année {date_fin.year}"
+    else:
+        report_header = f"Bilan Police — {perimetre_display} — Année {date_fin.year}"
+
 
     res_code = str(code).strip()
     prefix_candidates = [f"{profil_id}_{res_code}", profil_id, "global"] if res_code else [profil_id, "global"]
@@ -1922,6 +2014,8 @@ def _generate_synthese_brochure_pdf(
         or presentation_cfg.get("brochure", {})
         or {}
     )
+    palette = brochure_cfg.get("palette", {})
+    styles = brochure_cfg.get("styles", {})
     use_cat_chasse = (
         profil_id == "chasse"
         or bool(brochure_cfg.get("use_categories_chasse"))
@@ -2189,6 +2283,8 @@ def _generate_synthese_brochure_pdf(
             code=code,
             tab_resultats=tab_resultats,
             regrouper_autres_usagers=regrouper_autres_usagers,
+            presentation_cfg=presentation_cfg,
+            profile_title=profile_title,
         )
         return
 
@@ -2322,6 +2418,7 @@ def _generate_synthese_brochure_pdf(
             builder,
             "<i>Cartographie : cartes non disponibles "
             "(fichiers attendus dans data/out/generateur_de_cartes/).</i>",
+            palette=palette,
         )
 
     # Saut de page vers la Page 2
@@ -2483,7 +2580,7 @@ def _generate_synthese_brochure_pdf(
 
         inner_cat = encadre_inner_width(cat_w, pad_pt=_PAD_STD_PT)
         cat_table = _build_hierarchical_categories_chasse_table_brochure(
-            categories_infractions_df, inner_cat
+            categories_infractions_df, inner_cat, palette=palette, styles=styles
         )
         cat_body: list = [cat_table]
         if nb_pej or nb_pve:
@@ -2611,7 +2708,11 @@ def _generate_synthese_brochure_pdf(
             ventilation_mode=ventilation_mode,
             diffusion=diffusion,
             realisation_label=f_line1 or "Office français de la biodiversité",
+            filter_label=profile_title if is_filtered_thematic else None,
+            nb_pve=nb_pve,
+            analyse_pve=bool(profile.get("analyse_PVe", True)),
         ),
+        palette=palette,
     )
 
     # Génération effective du fichier PDF

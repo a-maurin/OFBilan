@@ -2192,7 +2192,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 
             try:
                 from core.engine.execution_lots_profils import resolve_profile_output_dir
-                out_dir = resolve_profile_output_dir(profil, code)
+                out_dir = resolve_profile_output_dir(profil, code, cli_options=params)
                 
                 if parsed_path == "/api/open-folder":
                     target = out_dir

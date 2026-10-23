@@ -76,4 +76,56 @@ sections_enrichies:
     libelle_total_repressif: "Total"
     libelle_total_pve: "Total PVe"
     categories_table_font_size: 9.0
+    palette:
+      texte_principal: '#1F2937'
+      texte_secondaire: '#4B5563'
+      texte_legende: '#6B7280'
+      titre_accent: '#003366'
+      encadre_fond: '#F3F4F6'
+      encadre_bordure: '#D1D5DB'
+      total_fond: '#E8EEF4'
+      pastille_texte_bordure: '#1E293B'
+      pastille_conforme: '#70C157'
+      pastille_manquement: '#8B5CF6'
+      pastille_infraction: '#EF4444'
+      badge_sous_titre: '#475569'
+      badge_fond: '#E2E8F0'
+      badge_valeur: '#0284C7'
+      histo_pa: '#0284C7'
+      histo_pej: '#D97706'
+      histo_pve: '#16A34A'
+    styles:
+      pve_table_font_size: 7.2
+      procedures_table_font_size: 7.5
+      hierarchie_cat_font_size: 7.2
+      hierarchie_sub_font_size: 6.8
+      placeholder_font_size: 8.5
+      pastille_title_font_size: 10.0
+      pastille_pct_font_size: 10.0
+      pastille_label_font_size: 7.5
+      badge_title_font_size: 9.5
+      badge_subtitle_font_size: 7.5
+      badge_value_font_size: 17.0
+      badge_label_font_size: 7.0
+      evolution_title_font_size: 9.0
+      evolution_axis_font_size: 8.0
+      evolution_legend_font_size: 7.0
+  synthese_regionale:
+    palette:
+      fond_carte: '#ffffff'
+      zero_color: '#f1f5f9'
+      commune_edgecolor: '#cbd5e1'
+      dept_edgecolor: '#003366'
+      dept_highlight_fill: '#bfdbfe'
+      coeur_parc_edgecolor: '#16a34a'
+      note_color: '#64748b'
+      sous_titre_texte: '#555555'
+      ligne_tableau_entete: '#003366'
+      ligne_tableau_corps: '#e2e8f0'
+      commentaire_texte: '#222222'
+    styles:
+      title_fontsize: 8.5
+      note_fontsize: 5.5
+      mini_map_cbar_fontsize: 6.5
+      mini_map_fallback_fontsize: 8.0
 

@@ -909,6 +909,19 @@ document.addEventListener('DOMContentLoaded', () => {
             payload.pdf_type = pdfType;
         }
 
+        const inputDomaineSNC = document.getElementById('domaine-snc');
+        if (inputDomaineSNC && inputDomaineSNC.value) {
+            payload.domaines = [inputDomaineSNC.value.trim()];
+        }
+        const inputThemeSNC = document.getElementById('theme-snc');
+        if (inputThemeSNC && inputThemeSNC.value) {
+            payload.themes = [inputThemeSNC.value.trim()];
+        }
+        const inputTypeAction = document.getElementById('type-action-snc');
+        if (inputTypeAction && inputTypeAction.value) {
+            payload.types_action = [inputTypeAction.value.trim()];
+        }
+
         fetch(endpoint, {
             method: 'POST',
             headers: {

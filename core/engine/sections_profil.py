@@ -1055,7 +1055,9 @@ def render_sec42(ctx: PdfContext) -> None:
             series["En attente"] = [int(x) for x in df_ru["Autre_resultat"].tolist()]
 
         if is_block_enabled(ctx.presentation_cfg, "sec4.show_resultats_par_type_usager_chart", True):
-            bar_path = chart_bar_horizontal_stacked(labels, series, "Résultats des contrôles par type d'usager", "Contrôles", ctx.tmp_dir, "bar_resultats_par_type_usager_global.png", legend_fontsize=max(6.5, ctx.legend_fontsize - 0.5), legend_ncol_max=ctx.legend_ncol_max, figure_scale=max(0.88, float(ctx.figure_scale) * 0.88))
+            metrique_usagers = ctx.presentation_cfg.get("metrique_resultats_usagers", "effectifs")
+            axis_label = "Effectifs d'usagers" if str(metrique_usagers).strip().lower() == "effectifs" else "Contrôles"
+            bar_path = chart_bar_horizontal_stacked(labels, series, "Résultats des contrôles par type d'usager", axis_label, ctx.tmp_dir, "bar_resultats_par_type_usager_global.png", legend_fontsize=max(6.5, ctx.legend_fontsize - 0.5), legend_ncol_max=ctx.legend_ncol_max, figure_scale=max(0.88, float(ctx.figure_scale) * 0.88))
             ctx.builder.add_image(Path(bar_path), width_ratio=sec4_bar_w, spacer_after_mm=sec4_img_sp)
 
         total_global = float(

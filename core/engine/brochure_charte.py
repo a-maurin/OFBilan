@@ -46,6 +46,7 @@ from reportlab.platypus import Flowable, Paragraph, Spacer, Table, TableStyle
 
 from core.common.ofb_charte import (
     COLOR_GREY,
+    COLOR_NOTICE_BG,
     COLOR_PRIMARY,
     COLOR_TABLE_ALT_ROW,
     COLOR_TABLE_BORDER,
@@ -443,7 +444,7 @@ class BrochureBandeau(Flowable):
             )
 
 
-_CLR_TOTALS_BG = rl_colors.HexColor("#E8EEF4")
+_CLR_TOTALS_BG = rl_colors.HexColor(COLOR_NOTICE_BG)
 
 
 def brochure_totaux_band(text_html: str, width: float, styles) -> Table:
