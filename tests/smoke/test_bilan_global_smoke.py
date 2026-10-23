@@ -109,9 +109,17 @@ def test_analyse_controles_global_consolide_exports_usagers_par_fc_id(tmp_path: 
     resume = pd.read_csv(tmp_path / "controles_global_usagers_resume.csv", sep=";")
 
     assert int(agg_usager["nb"].sum()) == 4
-    assert int(res_usager["Total"].sum()) == 3
+    # Par défaut (métrique unifiée effectifs) : 4 effectifs d'usagers
+    assert int(res_usager["Total"].sum()) == 4
     assert int(cross.drop(columns=["type_usager"]).sum().sum()) == 4
     assert int(resume["nb_localisations_multi_usagers"].iloc[0]) == 1
+
+    # Mode historique par contrôles/opérations : 3 contrôles
+    tmp_path_ctrl = tmp_path / "ctrl_mode"
+    tmp_path_ctrl.mkdir()
+    analyse_controles(df, tmp_path_ctrl, metrique_resultats_usagers="controles")
+    res_ctrl = pd.read_csv(tmp_path_ctrl / "controles_global_resultats_par_type_usager.csv", sep=";")
+    assert int(res_ctrl["Total"].sum()) == 3
 
 
 def test_run_global_smoke(monkeypatch, tmp_path: Path) -> None:
