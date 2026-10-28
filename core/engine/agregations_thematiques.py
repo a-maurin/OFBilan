@@ -68,9 +68,9 @@ def _sanitize_gdf_for_gpkg(gdf: Any) -> Any:
     cols_to_keep = []
     geom_col = gdf.geometry.name if hasattr(gdf, 'geometry') else 'geometry'
     for col in gdf.columns:
-        if col == geom_col:
-            continue
         c_low = str(col).lower()
+        if col == geom_col or c_low == "fid":
+            continue
         if c_low not in seen_lower:
             seen_lower.add(c_low)
             cols_to_keep.append(col)

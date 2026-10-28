@@ -142,3 +142,28 @@ def test_load_department_gdf_region_dissolve_false(require_admin_shp):
     gdf = load_department_gdf("r27", project_root=PROJECT_ROOT, dissolve=False)
     assert len(gdf) > 1
     assert all(gdf["insee_reg"] == "27")
+
+
+def test_write_pochoir_gpkg_strips_fid(tmp_path, monkeypatch):
+    import geopandas as gpd
+    from shapely.geometry import Polygon
+    from core.cartographie.pochoir_helper import write_pochoir_gpkg
+
+    # Mock load_pochoir_gdf to return a GeoDataFrame with 'fid' column
+    poly = Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])
+    mock_gdf = gpd.GeoDataFrame(
+        [{"fid": 123, "name": "test_zone", "geometry": poly}],
+        crs="EPSG:2154",
+    )
+    monkeypatch.setattr(
+        "core.cartographie.pochoir_helper.load_pochoir_gdf",
+        lambda *args, **kwargs: mock_gdf.copy(),
+    )
+
+    out_gpkg = tmp_path / "pochoir_test.gpkg"
+    write_pochoir_gpkg("21", out_gpkg, pochoir_id="zone_a_risque")
+    assert out_gpkg.exists()
+
+    loaded = gpd.read_file(out_gpkg)
+    assert "name" in loaded.columns
+

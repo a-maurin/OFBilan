@@ -79,6 +79,7 @@ from core.common.ofb_charte import Spinner
 from core.common.pdf_presentation_config import (
     normalize_dept_typography,
     apply_diffusion_pdf_suffix,
+    resolve_pdf_presentation_config,
 )
 from core.common.carte_helper import (
     ensure_maps_for_profiles,
@@ -102,9 +103,9 @@ def _sanitize_gdf_for_gpkg(gdf: Any) -> Any:
     cols_to_keep = []
     geom_col = gdf.geometry.name if hasattr(gdf, "geometry") else "geometry"
     for col in gdf.columns:
-        if col == geom_col:
-            continue
         c_low = str(col).lower()
+        if col == geom_col or c_low == "fid":
+            continue
         if c_low not in seen_lower:
             seen_lower.add(c_low)
             cols_to_keep.append(col)
@@ -122,92 +123,6 @@ from core.engine.orchestration.loader import (
     _deep_merge_dicts,
     _normalize_profile,
 )
-
-
-def _normalize_profile(data: dict, profil_id: str) -> dict:
-    """Assure la présence de toutes les clés attendues par le moteur."""
-    data.setdefault("id", profil_id)
-    data.setdefault("label", profil_id)
-    data.setdefault("title_label", data.get("label", profil_id))
-    pipeline = str(data.get("pipeline", "")).strip().lower()
-    if not pipeline:
-        raise ValueError(f"Profil {profil_id}: clé YAML requise manquante: pipeline")
-    data["pipeline"] = pipeline
-    data.setdefault("out_subdir", f"bilan_{profil_id}")
-    # Activation par défaut de l'analyse PVe (comportement historique).
-    # Peut être désactivée par profil via analyse_PVe: false dans le YAML.
-    data.setdefault("analyse_PVe", True)
-
-    # --- filter ---
-    if "filter" not in data:
-        data["filter"] = {
-            "type": data.pop("filter_type", "keywords"),
-            "keywords": data.get("keywords", []),
-            "columns": ["theme", "type_actio", "nom_dossie"],
-            "exclude_patterns": [],
-            "type_usager_target": [],
-        }
-    filt = data["filter"]
-    filt.setdefault("type", "keywords")
-    filt.setdefault("keywords", data.get("keywords", []))
-    filt.setdefault("type_actions", [])
-    filt.setdefault("columns", ["theme", "type_actio", "nom_dossie"])
-    filt.setdefault("exclude_patterns", [])
-    filt.setdefault("type_usager_target", [])
-
-    # --- natinf ---
-    data.setdefault("natinf_pve", [])
-    data.setdefault("natinf_pej", [])
-    if isinstance(data["natinf_pve"], str):
-        data["natinf_pve"] = [x.strip() for x in data["natinf_pve"].split(",") if x.strip()]
-    if isinstance(data["natinf_pej"], str):
-        data["natinf_pej"] = [x.strip() for x in data["natinf_pej"].split(",") if x.strip()]
-
-    # --- sources ---
-    if "sources" not in data:
-        ft = filt["type"]
-        if ft == "procedures":
-            data["sources"] = {"point_ctrl": False, "pej": True, "pa": False, "pve": False}
-        else:
-            data["sources"] = {"point_ctrl": True, "pej": True, "pa": True, "pve": True}
-    for key in ("point_ctrl", "pej", "pa", "pve"):
-        data["sources"].setdefault(key, True)
-
-    # --- période d'analyse / ventilation ---
-    period_cfg = data.setdefault("periode_analyse", {})
-    if not isinstance(period_cfg, dict):
-        period_cfg = {}
-        data["periode_analyse"] = period_cfg
-    vent_cfg = period_cfg.setdefault("ventilation", {})
-    if not isinstance(vent_cfg, dict):
-        vent_cfg = {}
-        period_cfg["ventilation"] = vent_cfg
-    vent_cfg.setdefault("type", "auto")  # auto | globale | annuelle
-    vent_cfg.setdefault("seuil_jours", 366)
-
-    # --- restriction géographique (ex. périmètre PNF sur codes INSEE) ---
-    data.setdefault("restrict_geo", None)
-
-    # --- options ---
-    data.setdefault("options", {})
-    aggregation = data.get("aggregation")
-    if not isinstance(aggregation, dict) or not str(aggregation.get("adapter", "")).strip():
-        raise ValueError(f"Profil {profil_id}: clé YAML requise manquante: aggregation.adapter")
-    pdf = data.get("pdf")
-    if not isinstance(pdf, dict) or not str(pdf.get("adapter", "")).strip():
-        raise ValueError(f"Profil {profil_id}: clé YAML requise manquante: pdf.adapter")
-    if not str(data.get("presentation_scope", "")).strip():
-        raise ValueError(f"Profil {profil_id}: clé YAML requise manquante: presentation_scope")
-    capabilities = data.setdefault("capabilities", {})
-    if not isinstance(capabilities, dict):
-        capabilities = {}
-        data["capabilities"] = capabilities
-    capabilities.setdefault("combine", True)
-    capabilities.setdefault("mix_batch", True)
-    default_map_profiles: list[str] = [] if profil_id == "types_usager_cible" else [profil_id]
-    capabilities.setdefault("map_profiles", default_map_profiles)
-
-    return data
 
 
 def _resolve_ventilation_mode_from_profile(
@@ -1291,8 +1206,8 @@ def _run_engine_thematic_pipeline(
     from core.configuration_journalisation import add_file_handler
     add_file_handler(out_dir)
 
-    label = profile["label"]
-    sources = profile["sources"]
+    label = profile.get("label", profil_id)
+    sources = profile.setdefault("sources", {"point_ctrl": True, "pej": True, "pa": True, "pve": True})
 
     # Le paramètre de profil analyse_PVe permet de désactiver complètement
     # l'analyse et l'affichage liés aux PVe (chargement, agrégations, PDF).

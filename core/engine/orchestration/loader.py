@@ -91,6 +91,50 @@ def _normalize_profile(data: dict, profil_id: str) -> dict:
     if isinstance(data["natinf_pej"], str):
         data["natinf_pej"] = [x.strip() for x in data["natinf_pej"].split(",") if x.strip()]
 
+    # --- sources ---
+    if "sources" not in data or not isinstance(data.get("sources"), dict):
+        ft = filt.get("type")
+        if ft == "procedures":
+            data["sources"] = {"point_ctrl": False, "pej": True, "pa": False, "pve": False}
+        else:
+            data["sources"] = {"point_ctrl": True, "pej": True, "pa": True, "pve": True}
+    for key in ("point_ctrl", "pej", "pa", "pve"):
+        data["sources"].setdefault(key, True)
+
+    # --- période d'analyse / ventilation ---
+    period_cfg = data.setdefault("periode_analyse", {})
+    if not isinstance(period_cfg, dict):
+        period_cfg = {}
+        data["periode_analyse"] = period_cfg
+    vent_cfg = period_cfg.setdefault("ventilation", {})
+    if not isinstance(vent_cfg, dict):
+        vent_cfg = {}
+        period_cfg["ventilation"] = vent_cfg
+    vent_cfg.setdefault("type", "auto")  # auto | globale | annuelle
+    vent_cfg.setdefault("seuil_jours", 366)
+
+    # --- restriction géographique (ex. périmètre PNF sur codes INSEE) ---
+    data.setdefault("restrict_geo", None)
+
+    # --- options ---
+    data.setdefault("options", {})
+    aggregation = data.get("aggregation")
+    if not isinstance(aggregation, dict) or not str(aggregation.get("adapter", "")).strip():
+        raise ValueError(f"Profil {profil_id}: clé YAML requise manquante: aggregation.adapter")
+    pdf = data.get("pdf")
+    if not isinstance(pdf, dict) or not str(pdf.get("adapter", "")).strip():
+        raise ValueError(f"Profil {profil_id}: clé YAML requise manquante: pdf.adapter")
+    if not str(data.get("presentation_scope", "")).strip():
+        raise ValueError(f"Profil {profil_id}: clé YAML requise manquante: presentation_scope")
+    capabilities = data.setdefault("capabilities", {})
+    if not isinstance(capabilities, dict):
+        capabilities = {}
+        data["capabilities"] = capabilities
+    capabilities.setdefault("combine", True)
+    capabilities.setdefault("mix_batch", True)
+    default_map_profiles: list[str] = [] if profil_id == "types_usager_cible" else [profil_id]
+    capabilities.setdefault("map_profiles", default_map_profiles)
+
     return data
 
 

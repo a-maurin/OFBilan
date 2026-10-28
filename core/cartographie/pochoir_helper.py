@@ -320,6 +320,9 @@ def write_pochoir_gpkg(
             norm_id = norm_id.split("_sd")[0]
         layer_n = f"pochoir_{norm_id}_sd{normalize_dept_code(dept_code)}"
         
+    fid_cols = [c for c in gdf.columns if str(c).lower() == "fid"]
+    if fid_cols:
+        gdf = gdf.drop(columns=fid_cols)
     gdf.to_file(output_path, driver="GPKG", layer=layer_n)
     return output_path
 

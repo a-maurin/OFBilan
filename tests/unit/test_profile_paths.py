@@ -236,3 +236,45 @@ def test_run_profiles_batch_opens_all_generated_pdfs_for_last_profile(
         (tmp_path / "data" / "out" / "bilan_synthese_activite_PA_PJ_21" / "synthese_brochure.pdf").resolve(),
         (tmp_path / "data" / "out" / "bilan_synthese_activite_PA_PJ_21" / "synthese_detail.pdf").resolve(),
     ]
+
+
+def test_load_profile_config_normalizes_sources(tmp_path: Path) -> None:
+    from core.engine.orchestration.loader import load_profile_config
+
+    profils_dir = tmp_path / "config" / "profils_bilan"
+    profils_dir.mkdir(parents=True, exist_ok=True)
+    (profils_dir / "_defaults.yaml").write_text(
+        "\n".join(
+            [
+                "pipeline: thematic",
+                "presentation_scope: thematique",
+                "aggregation:",
+                "  adapter: run_profile_aggregations",
+                "pdf:",
+                "  adapter: generate_profile_pdf_report",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (profils_dir / "test_sources.yaml").write_text(
+        "id: test_sources\nlabel: Test\nfilter:\n  type: custom\n",
+        encoding="utf-8",
+    )
+    cfg = load_profile_config(tmp_path, "test_sources")
+    assert "sources" in cfg
+    assert cfg["sources"]["point_ctrl"] is True
+    assert cfg["sources"]["pej"] is True
+    assert cfg["sources"]["pa"] is True
+    assert cfg["sources"]["pve"] is True
+
+
+def test_tub_profile_has_sources() -> None:
+    from core.chemins_projet import PROJECT_ROOT
+    from core.engine.orchestration.loader import load_profile_config
+
+    cfg = load_profile_config(PROJECT_ROOT, "tub")
+    assert "sources" in cfg
+    assert isinstance(cfg["sources"], dict)
+    assert cfg["sources"]["point_ctrl"] is True
+    assert cfg["sources"]["pej"] is True
+

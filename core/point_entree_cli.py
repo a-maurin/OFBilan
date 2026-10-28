@@ -552,6 +552,11 @@ def main() -> int:
                     exit_code = ret
     except Exception as e:
         logger.exception("Erreur critique survenue lors de l'exécution : %s", e)
+        for h in logger.handlers:
+            try:
+                h.flush()
+            except Exception:
+                pass
         print(f"\nErreur : Une erreur critique est survenue lors de la génération : {e}", file=sys.stderr)
         
         has_file_handler = any(isinstance(h, logging.FileHandler) for h in logger.handlers)

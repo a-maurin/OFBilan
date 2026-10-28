@@ -77,9 +77,22 @@ class OFBConsoleFormatter(logging.Formatter):
             time_str = datetime.fromtimestamp(record.created).strftime("%H:%M:%S")
             time_prefix = f"{self.GRAY}[{time_str}]{self.RESET}" if self.use_colors else f"[{time_str}]"
             name_prefix = f"{self.GRAY}[{record.name}]{self.RESET}" if self.use_colors else f"[{record.name}]"
-            return f"{time_prefix} {badge} {name_prefix} {msg}"
+            res = f"{time_prefix} {badge} {name_prefix} {msg}"
         else:
-            return f"{badge} {msg}"
+            res = f"{badge} {msg}"
+
+        if record.exc_info:
+            if not record.exc_text:
+                record.exc_text = self.formatException(record.exc_info)
+        if record.exc_text:
+            if not res.endswith("\n"):
+                res += "\n"
+            res += record.exc_text
+        if record.stack_info:
+            if not res.endswith("\n"):
+                res += "\n"
+            res += self.formatStack(record.stack_info)
+        return res
 
 
 def configure_logging(console_level: int = logging.INFO) -> None:
