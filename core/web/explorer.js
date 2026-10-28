@@ -1103,7 +1103,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (pnfDeptContainer) pnfDeptContainer.classList.remove('hidden');
                 if (pnfAgentContainer) pnfAgentContainer.classList.remove('hidden');
                 warnings.push("Le périmètre géographique est verrouillé sur le Parc National de Forêts (Départements 21 et 52).");
-            } else if (val === 'tub') {
+            } else if (val === 'tub' || (meta && meta.restrict_geo === 'tub')) {
                 if (selectEchelle) {
                     // Optionnel : on peut garder "departement" affiché ou ajouter une option "tub" invisible
                     selectEchelle.value = 'departement'; // Laissons 'departement' en visuel, de toute façon c'est forcé côté serveur
@@ -2833,8 +2833,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!terrText) {
                     const echelleVal = typeof selectEchelle !== 'undefined' && selectEchelle ? selectEchelle.value : '';
                     const parsed = typeof getParsedCodes === 'function' ? getParsedCodes() : [];
+                    const selProf = document.getElementById('profil-select');
+                    const isTub = selProf && (selProf.value === 'tub' || (window.profilsMetadata && window.profilsMetadata[selProf.value] && window.profilsMetadata[selProf.value].restrict_geo === 'tub'));
                     if (echelleVal === 'national') {
                         terrText = 'la France entière';
+                    } else if (isTub) {
+                        terrText = 'la zone TUB';
+                    } else if (echelleVal === 'pnf') {
+                        terrText = 'le Parc National de Forêts';
                     } else if (parsed && parsed.length > 0) {
                         const typeLabel = echelleVal === 'departement' ? 'le département' : echelleVal === 'region' ? 'la région' : 'le périmètre';
                         terrText = `${typeLabel} ${parsed.join(', ')}`;
@@ -2921,8 +2927,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const echelleVal = selectEchelle ? selectEchelle.value : '';
         const parsedCodes = getParsedCodes();
         const codeVal = (inputCode ? inputCode.value : '').trim();
+        const selectProfilEl = document.getElementById('profil-select');
+        const isTubProfile = selectProfilEl && (selectProfilEl.value === 'tub' || (window.profilsMetadata && window.profilsMetadata[selectProfilEl.value] && window.profilsMetadata[selectProfilEl.value].restrict_geo === 'tub'));
 
-        if (!echelleVal || (echelleVal !== 'national' && echelleVal !== 'pnf' && !codeVal && parsedCodes.length === 0)) {
+        if (!echelleVal || (echelleVal !== 'national' && echelleVal !== 'pnf' && !isTubProfile && !codeVal && parsedCodes.length === 0)) {
             btnUpdate.disabled = false;
             btnUpdate.innerHTML = 'Charger les données';
             setGlobalLoadingState(false, false);
@@ -5098,7 +5106,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const codes = getParsedCodes();
             let territoryStr = '';
 
-            if (selectEchelle.value === 'national') {
+            const selProfPdf = document.getElementById('profil-select');
+            const isTubPdf = selProfPdf && (selProfPdf.value === 'tub' || (window.profilsMetadata && window.profilsMetadata[selProfPdf.value] && window.profilsMetadata[selProfPdf.value].restrict_geo === 'tub'));
+            if (isTubPdf) {
+                territoryStr = 'Zone TUB';
+            } else if (selectEchelle.value === 'national') {
                 territoryStr = 'National';
             } else if (codes.length > 0) {
                 const activeList = getActiveCodesList();

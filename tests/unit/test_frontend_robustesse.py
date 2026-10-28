@@ -412,3 +412,20 @@ def test_gui_format_sortie_and_pnf_options():
     assert 'params.get("format")' in serveur_py
     assert 'params.get("pnf")' in serveur_py
     assert 'pdf_type = params.get("pdf_type")' in serveur_py
+
+def test_explorer_tub_profile_handling():
+    """Vérifie le déblocage et le bon traitement du profil TUB dans explorer.js et serveur.py."""
+    web_dir = Path(__file__).resolve().parents[2] / "core" / "web"
+    explorer_js = (web_dir / "explorer.js").read_text(encoding="utf-8")
+    serveur_py = (web_dir / "serveur.py").read_text(encoding="utf-8")
+
+    # explorer.js : levée du blocage géographique pour le profil TUB
+    assert "isTubProfile" in explorer_js
+    assert "!isTubProfile && !codeVal && parsedCodes.length === 0" in explorer_js
+    assert "terrText = 'la zone TUB'" in explorer_js
+    assert "territoryStr = 'Zone TUB'" in explorer_js
+
+    # serveur.py : exposition restrict_geo et périmètre TUB
+    assert '"restrict_geo": data.get("restrict_geo")' in serveur_py
+    assert 'profile_cfg.get("restrict_geo") == "tub"' in serveur_py
+    assert "perimeter_geojson_data = geojson_data" in serveur_py

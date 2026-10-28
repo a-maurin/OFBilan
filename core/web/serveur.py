@@ -920,7 +920,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                                     "departements": data.get("departements", []),
                                     "has_action_filter": has_action_filter,
                                     "has_natinf_filter": has_natinf_filter,
-                                    "has_custom_stats": has_custom_stats
+                                    "has_custom_stats": has_custom_stats,
+                                    "restrict_geo": data.get("restrict_geo")
                                 })
                         except Exception:
                             pass
@@ -2082,7 +2083,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                                 else:
                                     gdf_perim = None
                             elif profile_cfg.get("restrict_geo") == "tub":
-                                gdf_perim = load_department_gdf("FR", project_root=project_root, dissolve=False)
+                                perimeter_geojson_data = geojson_data
+                                gdf_perim = None
                             elif echelle == "departement":
                                 gdf_perim = load_department_gdf(code, project_root=project_root, dissolve=False)
                             else:
