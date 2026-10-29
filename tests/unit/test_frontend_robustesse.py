@@ -429,3 +429,27 @@ def test_explorer_tub_profile_handling():
     assert '"restrict_geo": data.get("restrict_geo")' in serveur_py
     assert 'profile_cfg.get("restrict_geo") == "tub"' in serveur_py
     assert "perimeter_geojson_data = geojson_data" in serveur_py
+
+
+def test_explorer_donut_percentages_and_nonzero_filtering():
+    """Vérifie le formatage des pourcentages et le filtrage des zéros sur les graphiques donut."""
+    web_dir = Path(__file__).resolve().parents[2] / "core" / "web"
+    explorer_js = (web_dir / "explorer.js").read_text(encoding="utf-8")
+    explorer_html = (web_dir / "explorer.html").read_text(encoding="utf-8")
+
+    # Présence de la fonction de formatage avec virgule française et arrondi propre
+    assert "function formatPercentage(val, total)" in explorer_js
+    assert "rounded.toFixed(1).replace('.', ',')" in explorer_js
+
+    # Filtrage des catégories nulles et mapping des couleurs stables pour les résultats
+    assert "resultMapColors" in explorer_js
+    assert "activeResultsLabels" in explorer_js
+    assert "formatPercentage(valN, totalResultsN)" in explorer_js
+
+    # Filtrage des catégories nulles et calcul sur l'ensemble usagers
+    assert "baseRawLabels.filter" in explorer_js
+    assert "formatPercentage(valN, totalUsagersN)" in explorer_js
+    assert "${label} (${pctStr})" in explorer_js
+
+    # Version du script incrémentée dans explorer.html
+    assert 'src="explorer.js?v=1.2.4"' in explorer_html

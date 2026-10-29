@@ -3686,6 +3686,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 // --- CHARTS GENERATION ---
                 const chartData = resN.charts || {};
 
+                function formatPercentage(val, total) {
+                    if (!total || total <= 0 || !val || val <= 0) return '0 %';
+                    const pct = (val / total) * 100;
+                    const rounded = Math.round(pct * 10) / 10;
+                    const str = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1).replace('.', ',');
+                    return `${str} %`;
+                }
+
                 const tooltipPercentageCallback = {
                     label: function (context) {
                         let label = context.dataset.label || '';
@@ -3715,8 +3723,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 };
 
-                // --- CHARTS GENERATION ---
-
                 // 1. Résultats des Contrôles (Doughnut concentrique)
                 if (chartResults) {
                     chartResults.destroy();
@@ -3724,23 +3730,43 @@ document.addEventListener('DOMContentLoaded', () => {
                 const resultsN = chartData.results || {};
                 const resultsN1 = isCompare ? (resN1.charts.results || {}) : null;
 
-                // Palette pour les anneaux spatiaux (opacités décroissantes)
-                const spatialRingsAlpha = ['ff', 'aa', '66', '44'];
-                const spatialResultsColors = [
-                    ['#53AB60', '#EF4444', '#64748B'],
-                    ['#53AB60aa', '#EF4444aa', '#64748Baa'],
-                    ['#53AB6066', '#EF444466', '#64748B66'],
-                    ['#53AB6044', '#EF444444', '#64748B44']
-                ];
+                const resultMapColors = {
+                    'Conforme': '#53AB60',
+                    'Non-conforme': '#EF4444',
+                    'En attente': '#64748B'
+                };
+                const spatialResultsColorsMap = {
+                    'Conforme': ['#53AB60', '#53AB60aa', '#53AB6066', '#53AB6044'],
+                    'Non-conforme': ['#EF4444', '#EF4444aa', '#EF444466', '#EF444444'],
+                    'En attente': ['#64748B', '#64748Baa', '#64748B66', '#64748B44']
+                };
+
+                const baseResultsKeys = isSpatial
+                    ? Array.from(new Set(resGeoUnits.flatMap(u => Object.keys((u.charts && u.charts.results) || {}))))
+                    : Object.keys(resultsN);
+
+                // Filtrage : conserver uniquement les catégories avec un volume non nul
+                const activeResultsLabels = baseResultsKeys.filter(k => {
+                    if (isSpatial) {
+                        return resGeoUnits.some(u => ((u.charts && u.charts.results && u.charts.results[k]) || 0) > 0);
+                    }
+                    if (isCompare && resultsN1) {
+                        return (resultsN[k] || 0) > 0 || (resultsN1[k] || 0) > 0;
+                    }
+                    return (resultsN[k] || 0) > 0;
+                });
 
                 const resultsDatasets = [];
                 if (isSpatial) {
                     // Un dataset (anneau) par unité géo — extérieur = unité 0
                     resGeoUnits.forEach((unit, idx) => {
-                        const unitResults = unit.charts.results || {};
-                        const colors = spatialResultsColors[idx] || spatialResultsColors[spatialResultsColors.length - 1];
+                        const unitResults = (unit.charts && unit.charts.results) || {};
+                        const colors = activeResultsLabels.map(k => {
+                            const ringPalette = spatialResultsColorsMap[k] || ['#64748B', '#64748Baa', '#64748B66', '#64748B44'];
+                            return ringPalette[idx] || ringPalette[ringPalette.length - 1];
+                        });
                         resultsDatasets.push({
-                            data: Object.values(unitResults),
+                            data: activeResultsLabels.map(k => unitResults[k] || 0),
                             backgroundColor: colors,
                             borderWidth: 1,
                             label: parsedCodes[idx]
@@ -3748,15 +3774,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
                 } else {
                     resultsDatasets.push({
-                        data: Object.values(resultsN),
-                        backgroundColor: ['#53AB60', '#EF4444', '#64748B'],
+                        data: activeResultsLabels.map(k => resultsN[k] || 0),
+                        backgroundColor: activeResultsLabels.map(k => resultMapColors[k] || '#64748B'),
                         borderWidth: 1,
                         label: isCompare ? 'Période N' : 'Période'
                     });
                     if (isCompare && resultsN1) {
                         resultsDatasets.push({
-                            data: Object.values(resultsN1),
-                            backgroundColor: ['rgba(83, 171, 96, 0.5)', 'rgba(239, 68, 68, 0.5)', 'rgba(100, 116, 139, 0.5)'],
+                            data: activeResultsLabels.map(k => resultsN1[k] || 0),
+                            backgroundColor: activeResultsLabels.map(k => {
+                                const hex = resultMapColors[k] || '#64748B';
+                                return hex === '#53AB60' ? 'rgba(83, 171, 96, 0.5)' : (hex === '#EF4444' ? 'rgba(239, 68, 68, 0.5)' : 'rgba(100, 116, 139, 0.5)');
+                            }),
                             borderWidth: 1,
                             label: 'Période N-1'
                         });
@@ -3767,7 +3796,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 chartResults = new Chart(ctxResults, {
                     type: 'doughnut',
                     data: {
-                        labels: Object.keys(isSpatial ? (resGeoUnits[0].charts.results || {}) : resultsN),
+                        labels: activeResultsLabels,
                         datasets: resultsDatasets
                     },
                     options: {
@@ -3793,16 +3822,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 const legendResults = document.getElementById('legend-results');
                 if (legendResults) {
                     legendResults.innerHTML = '';
-                    const resultsLabels = Object.keys(isSpatial ? (resGeoUnits[0].charts.results || {}) : resultsN);
-                    const resultsColors = ['#53AB60', '#EF4444', '#64748B'];
-                    resultsLabels.forEach((label, idx) => {
-                        const color = resultsColors[idx] || '#64748B';
+                    const totalResultsN = isSpatial
+                        ? (resultsDatasets[0] ? resultsDatasets[0].data.reduce((a, b) => a + (b || 0), 0) : 0)
+                        : activeResultsLabels.reduce((sum, k) => sum + (resultsN[k] || 0), 0);
+
+                    activeResultsLabels.forEach((label) => {
+                        const color = resultMapColors[label] || '#64748B';
+                        const valN = isSpatial
+                            ? (resGeoUnits[0] && resGeoUnits[0].charts && resGeoUnits[0].charts.results ? (resGeoUnits[0].charts.results[label] || 0) : 0)
+                            : (resultsN[label] || 0);
+                        const pctStr = formatPercentage(valN, totalResultsN);
+
                         const itemDiv = document.createElement('div');
                         itemDiv.style.cssText = "display: flex; align-items: center; gap: 5px; font-size: 9px; font-weight: 500; color: var(--color-text-dark); cursor: pointer;";
                         itemDiv.title = `Filtrer la carte sur : ${label}`;
                         itemDiv.innerHTML = `
                             <span style="display: inline-block; width: 8px; height: 8px; background-color: ${color}; border-radius: 50%; flex-shrink: 0;"></span>
-                            <span>${label}</span>
+                            <span>${label} (${pctStr})</span>
                         `;
                         itemDiv.addEventListener('click', (e) => {
                             e.preventDefault();
@@ -3825,27 +3861,34 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 const usagersN = chartData.usagers || {};
                 const usagersN1 = isCompare ? (resN1.charts.usagers || {}) : null;
-                const rawLabels = Object.keys(usagersN);
+
+                const baseRawLabels = isSpatial
+                    ? Array.from(new Set(resGeoUnits.flatMap(u => Object.keys((u.charts && u.charts.usagers) || {}))))
+                    : Array.from(new Set([...Object.keys(usagersN), ...(isCompare && usagersN1 ? Object.keys(usagersN1) : [])]));
+
+                // Filtrage : conserver uniquement les catégories avec un volume non nul
+                const rawLabels = baseRawLabels.filter(lbl => {
+                    if (isSpatial) {
+                        return resGeoUnits.some(u => ((u.charts && u.charts.usagers && u.charts.usagers[lbl]) || 0) > 0);
+                    }
+                    if (isCompare && usagersN1) {
+                        return (usagersN[lbl] || 0) > 0 || (usagersN1[lbl] || 0) > 0;
+                    }
+                    return (usagersN[lbl] || 0) > 0;
+                });
+
                 const usagersLabels = rawLabels.map(label => {
                     if (label.toLowerCase().includes('agriculteur')) return 'Agriculteur';
                     if (label.toLowerCase().includes('particulier')) return 'Particulier';
                     return label;
                 });
-                const usagersColors = rawLabels.map(label => {
-                    const l = label.toLowerCase();
-                    if (l.includes('agriculteur')) return '#F1C40F';
-                    if (l.includes('particulier')) return '#2980B9';
-                    if (l.includes('collectiv')) return '#27AE60';
-                    if (l.includes('entreprise')) return '#E74C3C';
-                    if (l.includes('sylvic')) return '#16A085';
-                    return '#95A5A6';
-                });
+                const usagersColors = rawLabels.map(label => getUsagerColor(label));
 
                 const usagersDatasets = [];
                 if (isSpatial) {
                     // Un anneau par unité géo
                     resGeoUnits.forEach((unit, idx) => {
-                        const unitUsagers = unit.charts.usagers || {};
+                        const unitUsagers = (unit.charts && unit.charts.usagers) || {};
                         const opacity = idx === 0 ? 'ff' : idx === 1 ? 'aa' : idx === 2 ? '66' : '44';
                         const colors = rawLabels.map(lbl => {
                             const base = usagersColors[rawLabels.indexOf(lbl)];
@@ -3860,7 +3903,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
                 } else {
                     usagersDatasets.push({
-                        data: Object.values(usagersN),
+                        data: rawLabels.map(lbl => usagersN[lbl] || 0),
                         backgroundColor: usagersColors,
                         borderWidth: 1,
                         label: isCompare ? 'Période N' : 'Période'
@@ -3906,14 +3949,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 const legendUsagers = document.getElementById('legend-usagers');
                 if (legendUsagers) {
                     legendUsagers.innerHTML = '';
+                    const totalUsagersN = isSpatial
+                        ? (usagersDatasets[0] ? usagersDatasets[0].data.reduce((a, b) => a + (b || 0), 0) : 0)
+                        : rawLabels.reduce((sum, lbl) => sum + (usagersN[lbl] || 0), 0);
+
                     usagersLabels.forEach((label, idx) => {
+                        const rawKey = rawLabels[idx];
                         const color = usagersColors[idx];
+                        const valN = isSpatial
+                            ? (resGeoUnits[0] && resGeoUnits[0].charts && resGeoUnits[0].charts.usagers ? (resGeoUnits[0].charts.usagers[rawKey] || 0) : 0)
+                            : (usagersN[rawKey] || 0);
+                        const pctStr = formatPercentage(valN, totalUsagersN);
+
                         const itemDiv = document.createElement('div');
                         itemDiv.style.cssText = "display: flex; align-items: center; gap: 5px; font-size: 9px; font-weight: 500; color: var(--color-text-dark); cursor: pointer;";
                         itemDiv.title = `Filtrer la carte sur : ${label}`;
                         itemDiv.innerHTML = `
                             <span style="display: inline-block; width: 8px; height: 8px; background-color: ${color}; border-radius: 50%; flex-shrink: 0;"></span>
-                            <span>${label}</span>
+                            <span>${label} (${pctStr})</span>
                         `;
                         itemDiv.addEventListener('click', (e) => {
                             e.preventDefault();
