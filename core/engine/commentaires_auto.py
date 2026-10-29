@@ -32,7 +32,9 @@ Fonctionnalités :
 
 from __future__ import annotations
 
+import ast
 import logging
+import operator
 from pathlib import Path
 from typing import Any
 import yaml
@@ -211,6 +213,69 @@ def _build_sec4_vars(ctx: Any) -> dict[str, Any] | None:
 # EVALUATION DE LA REGLE ET RENDU DU PARAGRAPHE
 # ========================================================================================
 
+_CMP_OPS = {
+    ast.Eq: operator.eq,
+    ast.NotEq: operator.ne,
+    ast.Lt: operator.lt,
+    ast.LtE: operator.le,
+    ast.Gt: operator.gt,
+    ast.GtE: operator.ge,
+}
+_BIN_OPS = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,
+}
+_UNARY_OPS = {
+    ast.Not: operator.not_,
+    ast.USub: operator.neg,
+    ast.UAdd: operator.pos,
+}
+
+
+def _safe_eval_condition(expr: str, variables: dict[str, Any]) -> bool:
+    """Évalue une expression conditionnelle simple sans utiliser eval()."""
+    tree = ast.parse(str(expr).strip(), mode="eval")
+
+    def _eval_node(node: ast.AST) -> Any:
+        if isinstance(node, ast.Expression):
+            return _eval_node(node.body)
+        if isinstance(node, ast.Constant):
+            return node.value
+        if isinstance(node, ast.Name):
+            if node.id == "True":
+                return True
+            if node.id == "False":
+                return False
+            if node.id in variables:
+                return variables[node.id]
+            raise NameError(f"Variable inconnue : {node.id}")
+        if isinstance(node, ast.UnaryOp) and type(node.op) in _UNARY_OPS:
+            return _UNARY_OPS[type(node.op)](_eval_node(node.operand))
+        if isinstance(node, ast.BinOp) and type(node.op) in _BIN_OPS:
+            return _BIN_OPS[type(node.op)](_eval_node(node.left), _eval_node(node.right))
+        if isinstance(node, ast.BoolOp):
+            if isinstance(node.op, ast.And):
+                return all(bool(_eval_node(v)) for v in node.values)
+            if isinstance(node.op, ast.Or):
+                return any(bool(_eval_node(v)) for v in node.values)
+        if isinstance(node, ast.Compare):
+            left_val = _eval_node(node.left)
+            for op, comp in zip(node.ops, node.comparators):
+                op_fn = _CMP_OPS.get(type(op))
+                if op_fn is None:
+                    raise ValueError(f"Opérateur de comparaison non autorisé : {type(op).__name__}")
+                right_val = _eval_node(comp)
+                if not op_fn(left_val, right_val):
+                    return False
+                left_val = right_val
+            return True
+        raise ValueError(f"Syntaxe AST non autorisée : {type(node).__name__}")
+
+    return bool(_eval_node(tree))
+
+
 def get_comment_text(section_id: str, ctx: Any) -> str | None:
     """Résout et retourne la chaîne de texte pour une section, ou None."""
     try:
@@ -245,7 +310,7 @@ def get_comment_text(section_id: str, ctx: Any) -> str | None:
         for rule in rules:
             cond = rule.get("condition", "True")
             try:
-                if eval(cond, {"__builtins__": {}}, variables):
+                if _safe_eval_condition(cond, variables):
                     template = rule.get("template", "")
                     return template.format(**variables).strip()
             except Exception as cond_err:

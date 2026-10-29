@@ -2,6 +2,7 @@
 schema_version: 2
 id: procedures_pve
 label: "Bilan procédures judiciaires et PVe"
+masquer_explorateur: true
 out_subdir: bilan_procedures
 
 filter:

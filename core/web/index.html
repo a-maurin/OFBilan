@@ -246,6 +246,7 @@ Composants principaux :
                                 <input type="date" id="date-fin" name="date-fin" required>
                             </div>
                         </div>
+                        <div id="perimeter-volume-badge" class="perimeter-volume-badge hidden"></div>
                     </div>
 
                     <!-- Filtres optionnels (accordéon) -->
@@ -308,10 +309,19 @@ Composants principaux :
                         </div>
                     </div>
 
-                    <!-- Options Carto & Analyse -->
+                    <!-- Options de Rendu -->
                     <div class="options-group">
                         <h3>Options de rendu</h3>
-                        <div class="checkbox-row">
+                        <div class="form-group">
+                            <label for="format-sortie">Format du document</label>
+                            <select id="format-sortie" name="format-sortie">
+                                <option value="complet" selected>Bilan complet</option>
+                                <option value="brochure">Brochure condensée (2 pages)</option>
+                                <option value="les_deux">Bilan complet et brochure (les deux)</option>
+                            </select>
+                        </div>
+
+                        <div class="checkbox-row" style="margin-top: 8px;">
                             <label class="switch">
                                 <input type="checkbox" id="cartes" name="cartes" checked>
                                 <span class="slider"></span>
@@ -319,16 +329,7 @@ Composants principaux :
                             <span class="checkbox-label">Générer et intégrer les cartes QGIS</span>
                         </div>
 
-                        <div class="checkbox-row">
-                            <label class="switch">
-                                <input type="checkbox" id="annexe-detaillee" name="annexe-detaillee">
-                                <span class="slider"></span>
-                            </label>
-                            <span class="checkbox-label">Inclure l'annexe technique détaillée par domaine/thème (Bilan
-                                Régional)</span>
-                        </div>
-
-                        <!-- Sélection des cartes et chemins personnalisés -->
+                        <!-- Sélection des cartes -->
                         <div id="cartes-sub-options" class="sub-options-container">
                             <div class="sub-options-title">Cartes à intégrer au PDF :</div>
                             <div class="sub-options-grid">
@@ -349,47 +350,54 @@ Composants principaux :
                                     <span>Procédures</span>
                                 </label>
                             </div>
-                            <div class="cartes-perso-container">
-                                <div class="sub-options-title">Cartes personnalisées (fichiers locaux PNG) :</div>
-                                <textarea id="cartes-perso"
-                                    placeholder="Un chemin absolu de fichier PNG par ligne (ex: C:\Cartes\ma_carte.png)"></textarea>
+                        </div>
+
+                        <!-- Options avancées de rendu (repliées par défaut) -->
+                        <div class="accordion-section" id="accordion-options-avancees" style="margin-top: 14px;">
+                            <div class="accordion-header" id="accordion-options-avancees-header">
+                                <span class="accordion-title">
+                                    <span>Options avancées de rendu (diffusion, tailles, annexes)</span>
+                                </span>
+                                <span class="accordion-arrow" id="options-avancees-arrow">&#9660;</span>
                             </div>
-                        </div>
-
-                        <div class="form-group" style="margin-top: 12px;">
-                            <label for="format-sortie">Format du document</label>
-                            <select id="format-sortie" name="format-sortie">
-                                <option value="complet" selected>Bilan complet</option>
-                                <option value="brochure">Brochure condensée (2 pages)</option>
-                                <option value="les_deux">Bilan complet et brochure (les deux)</option>
-                            </select>
-                        </div>
-
-                        <div class="checkbox-row">
-                            <label class="switch">
-                                <input type="checkbox" id="pnf" name="pnf">
-                                <span class="slider"></span>
-                            </label>
-                            <span class="checkbox-label">Analyse PNF (cœur / hors-cœur)</span>
-                        </div>
-                    </div>
-
-                    <!-- Publication / Diffusion & Taille -->
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="diffusion">Type de diffusion</label>
-                            <select id="diffusion" name="diffusion">
-                                <option value="externe" selected>Externe (Anonymisé)</option>
-                                <option value="interne">Interne (Détaillé)</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="preset">Taille des graphiques</label>
-                            <select id="preset" name="preset">
-                                <option value="standard" selected>Standard</option>
-                                <option value="compact">Compact</option>
-                                <option value="large">Large</option>
-                            </select>
+                            <div class="accordion-body" id="accordion-options-avancees-body">
+                                <div class="checkbox-row">
+                                    <label class="switch">
+                                        <input type="checkbox" id="annexe-detaillee" name="annexe-detaillee">
+                                        <span class="slider"></span>
+                                    </label>
+                                    <span class="checkbox-label">Inclure l'annexe technique détaillée par domaine/thème</span>
+                                </div>
+                                <div class="checkbox-row" style="margin-top: 8px;">
+                                    <label class="switch">
+                                        <input type="checkbox" id="pnf" name="pnf">
+                                        <span class="slider"></span>
+                                    </label>
+                                    <span class="checkbox-label">Analyse PNF (cœur / hors-cœur)</span>
+                                </div>
+                                <div class="form-row" style="margin-top: 10px;">
+                                    <div class="form-group">
+                                        <label for="diffusion">Type de diffusion</label>
+                                        <select id="diffusion" name="diffusion">
+                                            <option value="externe" selected>Externe (Anonymisé)</option>
+                                            <option value="interne">Interne (Détaillé)</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="preset">Taille des graphiques</label>
+                                        <select id="preset" name="preset">
+                                            <option value="standard" selected>Standard</option>
+                                            <option value="compact">Compact</option>
+                                            <option value="large">Large</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="cartes-perso-container" style="margin-top: 10px;">
+                                    <div class="sub-options-title">Cartes personnalisées (fichiers locaux PNG) :</div>
+                                    <textarea id="cartes-perso"
+                                        placeholder="Un chemin absolu de fichier PNG par ligne (ex: C:\Cartes\ma_carte.png)"></textarea>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -398,8 +406,9 @@ Composants principaux :
                         style="display:none; color:#EF4444; background:#fef2f2; border:1px solid #fecaca; border-radius:6px; padding:8px 12px; margin-bottom:8px; font-size:0.875rem;">
                     </div>
                     <!-- Bouton de lancement (sticky) -->
-                    <div class="form-footer-sticky">
-                        <button type="button" id="btn-generate" class="btn btn-primary">Générer le Bilan</button>
+                    <div class="form-footer-sticky" style="display: flex; gap: 8px; align-items: center;">
+                        <button type="button" id="btn-generate" class="btn btn-primary" style="flex: 1;">Générer le Bilan</button>
+                        <button type="button" id="btn-cancel-generation" class="btn-cancel-generation hidden">Annuler</button>
                     </div>
                 </form>
             </div>
@@ -409,6 +418,13 @@ Composants principaux :
         <section class="status-panel">
             <div class="card">
                 <h2>Suivi de Génération</h2>
+
+                <div class="generation-steps" id="generation-steps">
+                    <div class="step-pill" id="step-pill-1">1. Initialisation</div>
+                    <div class="step-pill" id="step-pill-2">2. Données</div>
+                    <div class="step-pill" id="step-pill-3">3. Cartes QGIS</div>
+                    <div class="step-pill" id="step-pill-4">4. Rapport PDF</div>
+                </div>
 
                 <div class="progress-container">
                     <div class="progress-bar-bg">

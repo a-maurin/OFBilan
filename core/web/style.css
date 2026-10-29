@@ -1028,3 +1028,159 @@ body.theme-sombre .leaflet-control-layers-list {
 .cluster-offset-active .cluster-pa::after { opacity: 1; width: var(--a-w); transform: rotate(var(--a-r)); }
 .cluster-offset-active .cluster-pa-n1 { transform: translate(var(--a-x-n1), var(--a-y-n1)) !important; }
 .cluster-offset-active .cluster-pa-n1::after { opacity: 1; width: var(--a-w-n1); transform: rotate(var(--a-r-n1)); }
+
+/* ==============================================================
+   LOT 2 : AMÉLIORATIONS ERGONOMIQUES UX
+   ============================================================== */
+
+/* 1. Bouton actualiser modifié non appliqué */
+.btn-update-dirty {
+    background-color: #d97706 !important;
+    color: #ffffff !important;
+    box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.35) !important;
+    position: relative;
+}
+.btn-update-dirty::after {
+    content: " •";
+    font-weight: bold;
+    color: #fef08a;
+}
+
+/* 2. Bandeau de puces des filtres actifs */
+.active-filters-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    margin-bottom: 14px;
+    font-size: 12px;
+}
+.active-filters-bar-title {
+    font-weight: 600;
+    color: #475569;
+    margin-right: 4px;
+}
+.filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: #e2e8f0;
+    color: #1e293b;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.2;
+}
+.filter-chip.chip-cross {
+    background: #e0e7ff;
+    color: #3730a3;
+    border: 1px solid #c7d2fe;
+}
+.filter-chip-remove {
+    cursor: pointer;
+    font-weight: bold;
+    color: #64748b;
+    border-radius: 50%;
+    width: 14px;
+    height: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    transition: all 0.15s ease;
+}
+.filter-chip-remove:hover {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.1);
+}
+.filter-chip-clear-all {
+    cursor: pointer;
+    background: none;
+    border: none;
+    color: #0284c7;
+    font-size: 11px;
+    font-weight: 600;
+    text-decoration: underline;
+    margin-left: auto;
+    padding: 2px 4px;
+}
+
+/* 3. Bandeau volume et étapes générateur */
+.perimeter-volume-badge {
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    margin-top: 10px;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    line-height: 1.3;
+}
+.perimeter-volume-badge.ok {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    color: #15803d;
+}
+.perimeter-volume-badge.warn {
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    color: #b45309;
+}
+.perimeter-volume-badge.loading {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    color: #64748b;
+}
+
+.generation-steps {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    margin-bottom: 12px;
+}
+.step-pill {
+    padding: 6px 4px;
+    font-size: 10px;
+    text-align: center;
+    border-radius: 6px;
+    background: #f1f5f9;
+    color: #64748b;
+    border: 1px solid #e2e8f0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: all 0.2s ease;
+}
+.step-pill.active {
+    background: #eff6ff;
+    border-color: #3b82f6;
+    color: #1d4ed8;
+    font-weight: 600;
+}
+.step-pill.completed {
+    background: #f0fdf4;
+    border-color: #86efac;
+    color: #15803d;
+    font-weight: 600;
+}
+
+.btn-cancel-generation {
+    background: #fff;
+    border: 1px solid #ef4444;
+    color: #ef4444;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.15s ease;
+}
+.btn-cancel-generation:hover {
+    background: #fef2f2;
+}

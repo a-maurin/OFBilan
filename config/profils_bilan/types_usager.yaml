@@ -2,6 +2,7 @@
 schema_version: 2
 id: types_usager
 label: "Bilan types d'usagers"
+masquer_interface: true
 out_subdir: bilan_types_usager
 
 filter:

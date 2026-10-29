@@ -266,7 +266,30 @@ def test_resolve_items_masques_carte_gabarit_brochure_key_non_brochure_mode():
     ]
 
 
+def test_delete_user_gabarit_rejects_path_traversal(tmp_path, monkeypatch):
+    from core.common.chargeur_gabarits import delete_user_gabarit
+    monkeypatch.setattr("core.common.chargeur_gabarits.get_user_gabarits_dir", lambda: tmp_path)
+    outside_file = tmp_path.parent / "outside_target.yaml"
+    outside_file.write_text("gabarit_id: outside_target\n", encoding="utf-8")
+    try:
+        ok, msg = delete_user_gabarit("../outside_target")
+        assert ok is False
+        assert outside_file.exists()
+    finally:
+        outside_file.unlink(missing_ok=True)
 
 
+def test_load_gabarit_breaks_alias_cycle(tmp_path, monkeypatch):
+    monkeypatch.setattr("core.common.chargeur_gabarits.get_gabarits_dirs", lambda root=None: [tmp_path])
+    (tmp_path / "cycle_a.yaml").write_text("gabarit_id: cycle_a\nalias_of: cycle_b\n", encoding="utf-8")
+    (tmp_path / "cycle_b.yaml").write_text("gabarit_id: cycle_b\nalias_of: cycle_a\n", encoding="utf-8")
+    assert load_gabarit("cycle_a") is None
 
 
+def test_safe_eval_condition_blocks_unsafe_ast():
+    import pytest
+    from core.engine.commentaires_auto import _safe_eval_condition
+    assert _safe_eval_condition("top_pct_val >= 30 and total_val > 0", {"top_pct_val": 45, "total_val": 10}) is True
+    assert _safe_eval_condition("top_pct_val < 30", {"top_pct_val": 45}) is False
+    with pytest.raises(Exception):
+        _safe_eval_condition("__import__('os').system('echo pwned')", {})

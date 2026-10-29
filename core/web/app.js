@@ -35,6 +35,7 @@
 
 document.addEventListener('DOMContentLoaded', () => {
     const btnGenerate = document.getElementById('btn-generate');
+    const btnCancelGen = document.getElementById('btn-cancel-generation');
     const btnClear = document.getElementById('btn-clear');
     const btnCopy = document.getElementById('btn-copy');
     const progressBar = document.getElementById('progress-bar');
@@ -79,6 +80,7 @@ document.addEventListener('DOMContentLoaded', () => {
         .then(data => {
             if (Array.isArray(data)) {
                 profilesList = data;
+                applySharedPerimeterFromStorage();
             }
         })
         .catch(err => console.error('Erreur chargement profils:', err));
@@ -195,6 +197,141 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function applySharedPerimeterFromStorage() {
+        let raw = null;
+        try {
+            raw = sessionStorage.getItem('ofbilan_shared_perimeter');
+        } catch (e) {}
+        if (!raw) return;
+
+        let state = null;
+        try {
+            state = JSON.parse(raw);
+        } catch (e) {
+            return;
+        }
+        if (!state) return;
+
+        // Échelle et code
+        if (state.echelle) {
+            selectEchelle.value = state.echelle;
+            selectEchelle.dispatchEvent(new CustomEvent('change', { detail: { prefilled: true } }));
+        }
+        if (state.code) {
+            inputCode.value = state.code;
+            inputCode.disabled = false;
+        }
+
+        // Dates
+        if (state['date-deb'] && dateDebEl) dateDebEl.value = state['date-deb'];
+        if (state['date-fin'] && dateFinEl) dateFinEl.value = state['date-fin'];
+
+        // Profil
+        if (state.profil) {
+            const p = profilesList.find(item => item.value === state.profil);
+            if (p) {
+                inputProfil.value = p.label;
+                inputProfil.dataset.profileId = p.value;
+            } else {
+                inputProfil.value = state.profil;
+                inputProfil.dataset.profileId = state.profil;
+            }
+        }
+
+        // Filtres SNC
+        if (state['type-usager']) {
+            const val = Array.isArray(state['type-usager']) ? state['type-usager'][0] : state['type-usager'];
+            const el = document.getElementById('type-usager');
+            if (el && val) el.value = val;
+        }
+        if (state.domaines) {
+            const val = Array.isArray(state.domaines) ? state.domaines[0] : state.domaines;
+            const el = document.getElementById('domaine-snc');
+            if (el && val) el.value = val;
+        }
+        if (state.themes) {
+            const val = Array.isArray(state.themes) ? state.themes[0] : state.themes;
+            const el = document.getElementById('theme-snc');
+            if (el && val) el.value = val;
+        }
+        if (state.types_action) {
+            const val = Array.isArray(state.types_action) ? state.types_action[0] : state.types_action;
+            const el = document.getElementById('type-action-snc');
+            if (el && val) el.value = val;
+        }
+
+        renderGabaritsOptions();
+        if (typeof updateFiltresBadge === 'function') updateFiltresBadge();
+        scheduleVolumeCheck();
+
+        try {
+            sessionStorage.removeItem('ofbilan_shared_perimeter');
+        } catch (e) {}
+    }
+
+    let volumeCheckTimer = null;
+    function checkPerimeterVolume() {
+        const badge = document.getElementById('perimeter-volume-badge');
+        if (!badge) return;
+        const echelle = selectEchelle ? selectEchelle.value : '';
+        const code = inputCode ? inputCode.value.trim() : '';
+        const dDeb = dateDebEl ? dateDebEl.value : '';
+        const dFin = dateFinEl ? dateFinEl.value : '';
+
+        if (!echelle || (echelle !== 'national' && !code) || !dDeb || !dFin || dDeb > dFin) {
+            badge.className = 'perimeter-volume-badge hidden';
+            badge.textContent = '';
+            return;
+        }
+
+        badge.className = 'perimeter-volume-badge loading';
+        badge.textContent = '⏳ Évaluation du volume de données sur ce périmètre...';
+        badge.classList.remove('hidden');
+
+        const profId = (typeof getSelectedProfileId === 'function') ? getSelectedProfileId() : (inputProfil.dataset.profileId || inputProfil.value);
+        const payload = {
+            profil: profId || 'global',
+            echelle: echelle,
+            code: code,
+            'date-deb': dDeb,
+            'date-fin': dFin,
+            'type-usager': document.getElementById('type-usager')?.value || '',
+            'domaines': document.getElementById('domaine-snc')?.value ? [document.getElementById('domaine-snc').value] : [],
+            'themes': document.getElementById('theme-snc')?.value ? [document.getElementById('theme-snc').value] : [],
+            'types_action': document.getElementById('type-action-snc')?.value ? [document.getElementById('type-action-snc').value] : []
+        };
+
+        fetch('/api/data', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (!data || !data.stats) {
+                badge.className = 'perimeter-volume-badge hidden';
+                return;
+            }
+            const st = data.stats;
+            const total = (st.total_controles || 0) + (st.total_pej || 0) + (st.total_pa || 0) + (st.total_pve || 0);
+            if (total === 0) {
+                badge.className = 'perimeter-volume-badge warn';
+                badge.textContent = '⚠️ Attention : aucun contrôle ni procédure trouvé sur ce périmètre et cette période.';
+            } else {
+                badge.className = 'perimeter-volume-badge ok';
+                badge.textContent = `✓ Volume estimé : ${st.total_controles || 0} contrôle(s), ${st.total_pej || 0} PEJ, ${st.total_pa || 0} PA et ${st.total_pve || 0} PVe.`;
+            }
+        })
+        .catch(() => {
+            badge.className = 'perimeter-volume-badge hidden';
+        });
+    }
+
+    function scheduleVolumeCheck() {
+        if (volumeCheckTimer) clearTimeout(volumeCheckTimer);
+        volumeCheckTimer = setTimeout(checkPerimeterVolume, 450);
+    }
+
     function normalizeStr(str) {
         if (!str) return '';
         return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -221,12 +358,14 @@ document.addEventListener('DOMContentLoaded', () => {
             opt.dataset.value = p.value;
             opt.textContent = p.label;
             opt.addEventListener('click', () => {
-                inputProfil.value = p.value;
+                inputProfil.value = p.label;
+                inputProfil.dataset.profileId = p.value;
                 profilsDropdown.classList.add('hidden');
                 renderGabaritsOptions();
                 if (p.departements && p.departements.length > 0) {
                     inputCode.value = p.departements.join(', ');
                 }
+                scheduleVolumeCheck();
             });
             profilsDropdown.appendChild(opt);
         });
@@ -247,9 +386,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Show dropdown and filter on input typing
     inputProfil.addEventListener('input', () => {
+        inputProfil.dataset.profileId = '';
         renderDropdown(inputProfil.value);
         profilsDropdown.classList.remove('hidden');
         renderGabaritsOptions();
+        scheduleVolumeCheck();
     });
 
     // Show all when input is focused/clicked
@@ -609,9 +750,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let isRunning = false;
 
+    function getSelectedProfileId() {
+        const raw = (inputProfil.dataset.profileId || inputProfil.value || '').trim();
+        const byVal = profilesList.find(p => p.value.toLowerCase() === raw.toLowerCase());
+        if (byVal) return byVal.value;
+        const byLbl = profilesList.find(p => p.label.toLowerCase() === raw.toLowerCase());
+        if (byLbl) return byLbl.value;
+        return raw;
+    }
+
     // Validation du formulaire avant envoi
     function validateForm() {
-        const profil = inputProfil.value.trim();
+        const profil = getSelectedProfileId();
         const dateDeb = document.getElementById('date-deb').value;
         const dateFin = document.getElementById('date-fin').value;
         const echelle = selectEchelle.value;
@@ -627,7 +777,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Profil obligatoire et dans la liste
         if (!profil) { showErr('Veuillez sélectionner un profil de bilan.'); return false; }
         if (profilesList.length > 0 && !profilesList.some(p => p.value === profil)) {
-            showErr(`Profil "${profil}" inconnu. Choisissez un profil dans la liste.`); return false;
+            showErr(`Profil "${inputProfil.value}" inconnu. Choisissez un profil dans la liste.`); return false;
         }
 
         // Dates obligatoires et cohérentes
@@ -690,12 +840,31 @@ document.addEventListener('DOMContentLoaded', () => {
             codesDropdown.classList.add('hidden');
         }
         renderGabaritsOptions();
+        scheduleVolumeCheck();
     });
 
     if (inputCode) {
         inputCode.addEventListener('input', () => {
             renderGabaritsOptions();
+            scheduleVolumeCheck();
         });
+    }
+
+    if (dateDebEl) dateDebEl.addEventListener('change', scheduleVolumeCheck);
+    if (dateFinEl) dateFinEl.addEventListener('change', scheduleVolumeCheck);
+
+    function setGenerationStep(stepNumber) {
+        for (let i = 1; i <= 4; i++) {
+            const pill = document.getElementById(`step-pill-${i}`);
+            if (!pill) continue;
+            if (i < stepNumber) {
+                pill.className = 'step-pill completed';
+            } else if (i === stepNumber) {
+                pill.className = 'step-pill active';
+            } else {
+                pill.className = 'step-pill';
+            }
+        }
     }
 
     function setProgress(percent, status) {
@@ -708,20 +877,28 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateProgressFromLog(line) {
         if (line.includes("session de cache") || line.includes("init_session_cache")) {
             setProgress(10, "Initialisation de la session de cache...");
+            setGenerationStep(1);
         } else if (line.includes("dépendance") || line.includes("Vérifie la disponibilité")) {
             setProgress(20, "Vérification des dépendances...");
+            setGenerationStep(1);
         } else if (line.includes("run_profiles_batch") || line.includes("Début d'exécution")) {
             setProgress(30, "Lancement du batch de profils...");
+            setGenerationStep(1);
         } else if (line.includes("Chargement du profil") || line.includes("YAML")) {
             setProgress(40, "Lecture des configurations...");
+            setGenerationStep(1);
         } else if (line.includes("Agrégation") || line.includes("agregations")) {
             setProgress(60, "Agrégation des données...");
+            setGenerationStep(2);
         } else if (line.includes("QGIS") || line.includes("cartographie") || line.includes("carte")) {
             setProgress(80, "Production des cartes QGIS...");
+            setGenerationStep(3);
         } else if (line.includes("Génération du rapport") || line.includes("reportlab") || line.includes("PDF")) {
             setProgress(90, "Génération du rapport PDF...");
+            setGenerationStep(4);
         } else if (line.includes("[SUCCESS]")) {
             setProgress(100, "Génération complétée avec succès !");
+            setGenerationStep(5);
         } else if (line.includes("[ERREUR]")) {
             setProgress(100, "Une erreur est survenue.");
             statusText.textContent = "Erreur de génération";
@@ -760,11 +937,17 @@ document.addEventListener('DOMContentLoaded', () => {
         percentText.textContent = '0%';
         statusText.textContent = 'Lancement du traitement...';
         consoleOutput.textContent = '> Démarrage de la génération du bilan...\n';
+        setGenerationStep(1);
+        if (btnCancelGen) {
+            btnCancelGen.classList.remove('hidden');
+            btnCancelGen.disabled = false;
+            btnCancelGen.textContent = "Annuler";
+        }
 
         // Construction de la sélection des cartes
         const cartesSelection = [];
         if (cartesCheckbox.checked) {
-            const profilId = inputProfil.value || 'global';
+            const profilId = getSelectedProfileId() || 'global';
             if (document.getElementById('carte-domaines').checked) {
                 cartesSelection.push(`${profilId}_domaines`);
             }
@@ -792,7 +975,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Collect parameters from form
         const debugCheckbox = document.getElementById('set-tech-debug');
         const params = {
-            profil: inputProfil.value,
+            profil: getSelectedProfileId(),
             'date-deb': document.getElementById('date-deb').value,
             'date-fin': document.getElementById('date-fin').value,
             echelle: selectEchelle.value,
@@ -835,6 +1018,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             isRunning = false;
                             btnGenerate.disabled = false;
                             btnGenerate.textContent = "Génération du Bilan";
+                            if (btnCancelGen) btnCancelGen.classList.add('hidden');
 
                             if (consoleOutput.textContent.includes('[ERREUR]')) {
                                 progressBar.classList.remove('finished');
@@ -887,6 +1071,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 isRunning = false;
                 btnGenerate.disabled = false;
                 btnGenerate.textContent = "Génération du Bilan";
+                if (btnCancelGen) btnCancelGen.classList.add('hidden');
                 consoleOutput.textContent += `\n[ERREUR] Impossible de se connecter au serveur : ${err.message}\n`;
                 consoleOutput.scrollTop = consoleOutput.scrollHeight;
                 setProgress(100, "Erreur de connexion");
@@ -897,12 +1082,39 @@ document.addEventListener('DOMContentLoaded', () => {
             });
     });
 
+    if (btnCancelGen) {
+        btnCancelGen.addEventListener('click', () => {
+            btnCancelGen.disabled = true;
+            btnCancelGen.textContent = "Annulation...";
+            fetch('/api/generate/cancel', { method: 'POST' })
+                .then(r => r.json())
+                .then(res => {
+                    consoleOutput.textContent += "\n[ANNULATION] Demande d'interruption transmise au serveur.\n";
+                    consoleOutput.scrollTop = consoleOutput.scrollHeight;
+                })
+                .catch(err => {
+                    consoleOutput.textContent += `\n[ANNULATION] Erreur : ${err.message}\n`;
+                    consoleOutput.scrollTop = consoleOutput.scrollHeight;
+                });
+        });
+    }
+
+    const accordOptionsAvanceesHeader = document.getElementById('accordion-options-avancees-header');
+    const accordOptionsAvanceesBody = document.getElementById('accordion-options-avancees-body');
+    if (accordOptionsAvanceesHeader && accordOptionsAvanceesBody) {
+        accordOptionsAvanceesHeader.addEventListener('click', () => {
+            const isOpen = accordOptionsAvanceesBody.classList.contains('open');
+            accordOptionsAvanceesBody.classList.toggle('open', !isOpen);
+            accordOptionsAvanceesHeader.classList.toggle('open', !isOpen);
+        });
+    }
+
     const btnOpenPdf = document.getElementById('btn-open-pdf');
     const btnOpenPdfBrochure = document.getElementById('btn-open-pdf-brochure');
     const btnOpenFolder = document.getElementById('btn-open-folder');
 
     function openOutput(endpoint, pdfType = null) {
-        const profil = inputProfil.value;
+        const profil = getSelectedProfileId();
         const code = inputCode.value;
         const payload = { profil, code };
         if (pdfType) {

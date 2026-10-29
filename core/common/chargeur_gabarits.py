@@ -269,7 +269,11 @@ def delete_user_gabarit(gabarit_id: str, root: Path | None = None) -> tuple[bool
         return False, "Les gabarits système d'origine sont en lecture seule et ne peuvent pas être supprimés."
 
     user_dir = get_user_gabarits_dir()
-    gid_clean = str(gabarit_id).strip()
+    gid_raw = str(gabarit_id).strip()
+    gid_clean = "".join(c for c in gid_raw if c.isalnum() or c in ("_", "-"))
+    if not gid_clean or gid_clean != gid_raw:
+        return False, "Identifiant de gabarit non valide."
+
     target = user_dir / f"{gid_clean}.yaml"
 
     if not target.exists():
@@ -286,6 +290,8 @@ def delete_user_gabarit(gabarit_id: str, root: Path | None = None) -> tuple[bool
             return False, f"Gabarit utilisateur '{gabarit_id}' introuvable."
 
     try:
+        if not target.resolve().is_relative_to(user_dir.resolve()):
+            return False, "Accès refusé en dehors du répertoire des gabarits utilisateur."
         target.unlink()
         return True, f"Le gabarit '{gid_clean}' a été supprimé avec succès."
     except Exception as e:
@@ -308,11 +314,25 @@ def import_gabarit_content(yaml_str: str, file_stem: str | None = None) -> tuple
 # CHARGEMENT ET VERIFICATION DE COMPATIBILITE DES GABARITS
 # ========================================================================================
 
-def load_gabarit(gabarit_id: str, root: Path | None = None, *, warn_if_missing: bool = True) -> dict[str, Any] | None:
+def load_gabarit(
+    gabarit_id: str,
+    root: Path | None = None,
+    *,
+    warn_if_missing: bool = True,
+    _visited: set[str] | None = None,
+) -> dict[str, Any] | None:
     """Charge la configuration complète d'un gabarit spécifique par son identifiant."""
     gid_clean = str(gabarit_id).strip()
     if not gid_clean or gid_clean.lower() in ("none", "null", "standard", "default"):
         return None
+    if "/" in gid_clean or "\\" in gid_clean or ".." in gid_clean:
+        return None
+
+    visited = set(_visited) if _visited is not None else set()
+    if gid_clean in visited:
+        logger.warning(f"Cycle d'alias de gabarit détecté sur '{gid_clean}'. Interruption.")
+        return None
+    visited.add(gid_clean)
 
     for d in get_gabarits_dirs(root):
         candidate = d / f"{gid_clean}.yaml"
@@ -321,7 +341,7 @@ def load_gabarit(gabarit_id: str, root: Path | None = None, *, warn_if_missing: 
             if data:
                 if "alias_of" in data:
                     target_id = str(data["alias_of"]).strip()
-                    return load_gabarit(target_id, root, warn_if_missing=warn_if_missing)
+                    return load_gabarit(target_id, root, warn_if_missing=warn_if_missing, _visited=visited)
                 if data.get("gabarit_id") == gid_clean:
                     return data
 
@@ -332,7 +352,7 @@ def load_gabarit(gabarit_id: str, root: Path | None = None, *, warn_if_missing: 
                 if data.get("gabarit_id") == gid_clean:
                     if "alias_of" in data:
                         target_id = str(data["alias_of"]).strip()
-                        return load_gabarit(target_id, root, warn_if_missing=warn_if_missing)
+                        return load_gabarit(target_id, root, warn_if_missing=warn_if_missing, _visited=visited)
                     return data
 
     if warn_if_missing:

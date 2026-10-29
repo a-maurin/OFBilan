@@ -98,6 +98,8 @@ def _get_plugin_version(default: str = "1.0.7") -> str:
 
 _PRELOAD_STATUS = "loading"
 _preload_lock = threading.Lock()
+_current_generate_process: subprocess.Popen | None = None
+_generate_lock = threading.Lock()
 
 try:
     from core.chemins_projet import get_app_data_dir
@@ -385,7 +387,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.send_header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
         self.send_header('Pragma', 'no-cache')
         self.send_header('Expires', '0')
-        self.send_header('Access-Control-Allow-Origin', '*')
+        origin = self.headers.get('Origin', '') if hasattr(self, 'headers') and self.headers else ''
+        if origin.startswith(('http://localhost:', 'http://127.0.0.1:', 'http://localhost', 'http://127.0.0.1')):
+            allowed_origin = origin
+        else:
+            allowed_origin = f'http://localhost:{PORT}'
+        self.send_header('Access-Control-Allow-Origin', allowed_origin)
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
         super().end_headers()
@@ -426,13 +433,18 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
         # Route pour servir les logos et ressources du répertoire ref/
         if parsed_path.startswith("/ref/"):
-            ref_path = SRC_DIR / parsed_path.lstrip('/')
-            if ref_path.exists() and ref_path.is_file():
+            decoded_rel = urllib.parse.unquote(parsed_path).lstrip('/')
+            ref_root = (SRC_DIR / "ref").resolve()
+            try:
+                ref_path = (SRC_DIR / decoded_rel).resolve()
+                is_safe_ref = ref_path.is_relative_to(ref_root)
+            except Exception:
+                is_safe_ref = False
+            allowed_exts = {'.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg'}
+            ext_lower = ref_path.suffix.lower() if is_safe_ref else ''
+            if is_safe_ref and ext_lower in allowed_exts and ref_path.exists() and ref_path.is_file():
                 self.send_response(200)
-                if ref_path.suffix == '.png':
-                    self.send_header('Content-Type', 'image/png')
-                elif ref_path.suffix == '.svg':
-                    self.send_header('Content-Type', 'image/svg+xml')
+                self.send_header('Content-Type', allowed_exts[ext_lower])
                 self.end_headers()
                 with open(ref_path, 'rb') as f:
                     self.wfile.write(f.read())
@@ -703,8 +715,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 req = urllib.request.Request('https://api.github.com/repos/a-maurin/OFBilan/releases/latest')
                 req.add_header('User-Agent', 'OFBilan-Web-App')
                 ctx = ssl.create_default_context()
-                ctx.check_hostname = False
-                ctx.verify_mode = ssl.CERT_NONE
                 
                 response = urllib.request.urlopen(req, timeout=5, context=ctx)
                 data = json.loads(response.read().decode('utf-8'))
@@ -733,7 +743,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             # Endpoint pour recharger les données (simule un redémarrage)
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
             self.wfile.write(json.dumps({"status": "restarting"}).encode('utf-8'))
             print("Rechargement des données demandé via l'interface web...")
@@ -742,14 +751,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 time.sleep(0.5)
                 try:
                     from core.common.chargeurs_donnees import (
-                        _POINT_CTRL_RAW_CACHE, _PEJ_RAW_CACHE, 
+                        _CACHE_LOCK, _POINT_CTRL_RAW_CACHE, _PEJ_RAW_CACHE, 
                         _PA_RAW_CACHE, _PVE_RAW_CACHE, clear_session_cache
                     )
-                    _POINT_CTRL_RAW_CACHE.clear()
-                    _PEJ_RAW_CACHE.clear()
-                    _PA_RAW_CACHE.clear()
-                    _PVE_RAW_CACHE.clear()
-                    clear_session_cache()
+                    with _CACHE_LOCK:
+                        _POINT_CTRL_RAW_CACHE.clear()
+                        _PEJ_RAW_CACHE.clear()
+                        _PA_RAW_CACHE.clear()
+                        _PVE_RAW_CACHE.clear()
+                        clear_session_cache()
                 except Exception as e:
                     print("Erreur clear cache:", e)
                 
@@ -762,7 +772,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             # Endpoint pour éteindre le serveur
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
             self.wfile.write(json.dumps({"status": "shutting down"}).encode('utf-8'))
             log_server("Extinction du serveur demandée via l'interface web...", level="INFO")
@@ -880,6 +889,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
                 if profiles_dir.exists():
                     for yaml_file in profiles_dir.glob("*.yaml"):
+                        if yaml_file.stem.startswith("_") or yaml_file.stem == "schema_ui":
+                            continue
                         try:
                             content = yaml_file.read_text(encoding="utf-8")
                             data = yaml.safe_load(content)
@@ -890,7 +901,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                             if val_id and val_label:
                                 if any(p["value"] == val_id for p in profils_list):
                                     continue
-                                if val_id in excluded_ids:
+                                if bool(data.get("masquer_interface", False)) or val_id in excluded_ids:
+                                    continue
+                                if target == "explorer" and bool(data.get("masquer_explorateur", False)):
                                     continue
                                     
                                 sources_cfg = data.get("sources", {})
@@ -1000,6 +1013,26 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
                 return
+
+        elif parsed_path == "/api/generate/cancel":
+            cancelled = False
+            with _generate_lock:
+                global _current_generate_process
+                if _current_generate_process and _current_generate_process.poll() is None:
+                    try:
+                        _current_generate_process.terminate()
+                        cancelled = True
+                    except Exception:
+                        try:
+                            _current_generate_process.kill()
+                            cancelled = True
+                        except Exception:
+                            pass
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json; charset=utf-8')
+            self.end_headers()
+            self.wfile.write(json.dumps({"success": cancelled}).encode('utf-8'))
+            return
 
         elif parsed_path == "/api/generate":
             try:
@@ -1132,6 +1165,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         cwd=project_root,
                         env=env
                     )
+                    with _generate_lock:
+                        _current_generate_process = process
 
                     while True:
                         line = process.stdout.readline()
@@ -1156,6 +1191,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                                 break
 
                     process.wait()
+                    with _generate_lock:
+                        if _current_generate_process is process:
+                            _current_generate_process = None
                     fin_msg = ""
                     if process.returncode == 0:
                         fin_msg = "\n[SUCCESS] Génération terminée avec succès.\n"
@@ -2383,7 +2421,7 @@ def run_server():
 
     for attempt in range(max_tries):
         try:
-            httpd = socketserver.ThreadingTCPServer(("", active_port), Handler)
+            httpd = socketserver.ThreadingTCPServer(("127.0.0.1", active_port), Handler)
             break
         except OSError as e:
             if getattr(e, "errno", None) in (10048, 98) or "10048" in str(e) or "Address already in use" in str(e):

@@ -2076,7 +2076,7 @@ def export_layout(
             
         try:
             sources_item.update()
-        except:
+        except Exception:
             pass
     else:
         logger.warning("==> ITEM SOURCES INTROUVABLE DANS LE LAYOUT !")

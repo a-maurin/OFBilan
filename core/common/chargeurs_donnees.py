@@ -45,6 +45,7 @@ import logging
 import os
 import pickle
 import sys
+import threading
 from functools import lru_cache
 from pathlib import Path
 from typing import List, Optional, Tuple, Union
@@ -146,6 +147,7 @@ _PEJ_RAW_CACHE = {}
 _PA_RAW_CACHE = {}
 _PVE_RAW_CACHE = {}
 _FAITS_RAW_CACHE = {}
+_CACHE_LOCK = threading.RLock()
 
 
 def _get_cache_dir(root: Optional[Path] = None) -> Path:
@@ -355,12 +357,13 @@ def init_session_cache(
 def clear_session_cache() -> None:
     """Vide et désactive le cache global de session."""
     global _SESSION_CACHE
-    _SESSION_CACHE["active"] = False
-    _SESSION_CACHE["point_ctrl"] = None
-    _SESSION_CACHE["pej"] = None
-    _SESSION_CACHE["pa"] = None
-    _SESSION_CACHE["pve"] = None
-    _FAITS_RAW_CACHE.clear()
+    with _CACHE_LOCK:
+        _SESSION_CACHE["active"] = False
+        _SESSION_CACHE["point_ctrl"] = None
+        _SESSION_CACHE["pej"] = None
+        _SESSION_CACHE["pa"] = None
+        _SESSION_CACHE["pve"] = None
+        _FAITS_RAW_CACHE.clear()
 
 
 def safe_to_datetime(series: pd.Series) -> pd.Series:
@@ -2655,7 +2658,7 @@ def merge_pej_faits_locations(
     echelle: str,
     code: str,
     *,
-    natinf_list: list = [],
+    natinf_list: Optional[list] = None,
     log: Optional[logging.Logger] = None,
     gdf_faits: Optional[pd.DataFrame] = None,
     gdf_oscean: Optional[pd.DataFrame] = None,

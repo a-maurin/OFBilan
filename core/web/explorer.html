@@ -736,7 +736,7 @@ Composants principaux :
             <button class="burger-btn" onclick="document.querySelector('.app-nav').classList.toggle('open')">☰</button>
             <nav class="app-nav">
                 <a href="explorer.html" class="nav-item active">Analyse Interactive</a>
-                <a href="index.html" class="nav-item">Éditeur de Bilans</a>
+                <a href="index.html" class="nav-item" id="nav-link-generator">Éditeur de Bilans</a>
                 <a href="#" onclick="restartServer(); return false;" class="nav-item nav-item-push"
                     style="color: #F4A261; font-weight: 600;"
                     title="Redémarrer le serveur local (Utile après mise à jour des données brutes)">↻ <span
@@ -1068,7 +1068,10 @@ Composants principaux :
                             <button type="button" id="btn-reset" class="btn btn-primary"
                                 style="flex: 1;">Effacer</button>
                         </div>
-                        <button type="button" id="btn-pdf" class="btn btn-danger">Édition PDF</button>
+                        <div style="display: flex; gap: 8px;">
+                            <button type="button" id="btn-pdf" class="btn btn-secondary" style="flex: 1; background: #475569;" title="Imprimer ou exporter la vue actuelle du tableau de bord">Imprimer la vue</button>
+                            <button type="button" id="btn-go-to-generator" class="btn btn-danger" style="flex: 1;" title="Transférer ce périmètre vers l'éditeur pour générer un bilan officiel PDF">Édition bilan ▶</button>
+                        </div>
                     </div>
                     <div id="results-count" class="results-count-badge hidden">0 contrôle chargé</div>
                 </form>
@@ -1085,6 +1088,13 @@ Composants principaux :
                     <span id="data-loading-banner-text">Chargement des données en cours...</span>
                 </div>
                 <span style="font-size: 11px; color: #3b82f6; font-style: italic;">Mise en cache locale automatique</span>
+            </div>
+
+            <!-- Bandeau de puces récapitulatives des filtres actifs -->
+            <div id="active-filters-chips-bar" class="active-filters-bar hidden no-print">
+                <span class="active-filters-bar-title">Filtres actifs :</span>
+                <div id="active-filters-chips-container" style="display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center;"></div>
+                <button type="button" id="btn-clear-all-chips" class="filter-chip-clear-all">Tout réinitialiser</button>
             </div>
 
             <!-- Indicateurs Clés en pleine largeur -->
@@ -1469,7 +1479,7 @@ Composants principaux :
     <script src="vendor/html2canvas.min.js"></script>
     <script src="vendor/driver.js.iife.js"></script>
     <!-- Frontend controller script -->
-    <script src="explorer.js?v=1.2.4"></script>
+    <script src="explorer.js?v=1.2.5"></script>
     <!-- Modal Aide / Guide Complet -->
     <div id="help-modal" class="hidden"
         style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 999999; display: flex; justify-content: center; align-items: center;">

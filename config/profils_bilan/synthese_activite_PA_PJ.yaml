@@ -13,6 +13,7 @@
 schema_version: 2
 id: synthese_activite_PA_PJ
 label: Synthèse des activités PA / PJ
+masquer_interface: true
 title_label: Synthèse des activités PA / PJ
 pipeline: global
 presentation_scope: global

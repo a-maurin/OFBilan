@@ -3077,6 +3077,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const mapErrorBanner = document.getElementById('map-error-banner');
                 const hasError = mapErrorBanner && !mapErrorBanner.classList.contains('hidden');
                 setGlobalLoadingState(false, hasError);
+
+                lastLoadedFilterFingerprint = JSON.stringify(getFiltersState());
+                checkFiltersDirty();
+                renderActiveFiltersChips();
             });
     }
 
@@ -3822,14 +3826,34 @@ document.addEventListener('DOMContentLoaded', () => {
                 const legendResults = document.getElementById('legend-results');
                 if (legendResults) {
                     legendResults.innerHTML = '';
-                    const totalResultsN = isSpatial
-                        ? (resultsDatasets[0] ? resultsDatasets[0].data.reduce((a, b) => a + (b || 0), 0) : 0)
-                        : activeResultsLabels.reduce((sum, k) => sum + (resultsN[k] || 0), 0);
+                    let totalResultsN = 0;
+                    let refResultsData = null;
+                    const unitsWithResults = [];
+                    const unitsWithoutResults = [];
+
+                    if (isSpatial) {
+                        resGeoUnits.forEach((unit, idx) => {
+                            const uCharts = (unit.charts && unit.charts.results) || {};
+                            const uTotal = activeResultsLabels.reduce((sum, k) => sum + (uCharts[k] || 0), 0);
+                            const code = parsedCodes[idx] || String(idx);
+                            if (uTotal > 0) {
+                                unitsWithResults.push({ code, total: uTotal, results: uCharts });
+                            } else {
+                                unitsWithoutResults.push({ code });
+                            }
+                        });
+                        if (unitsWithResults.length > 0) {
+                            refResultsData = unitsWithResults[0].results;
+                            totalResultsN = unitsWithResults[0].total;
+                        }
+                    } else {
+                        totalResultsN = activeResultsLabels.reduce((sum, k) => sum + (resultsN[k] || 0), 0);
+                    }
 
                     activeResultsLabels.forEach((label) => {
                         const color = resultMapColors[label] || '#64748B';
                         const valN = isSpatial
-                            ? (resGeoUnits[0] && resGeoUnits[0].charts && resGeoUnits[0].charts.results ? (resGeoUnits[0].charts.results[label] || 0) : 0)
+                            ? ((refResultsData && refResultsData[label]) || 0)
                             : (resultsN[label] || 0);
                         const pctStr = formatPercentage(valN, totalResultsN);
 
@@ -3850,7 +3874,19 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (isSpatial) {
                         const spatialDiv = document.createElement('div');
                         spatialDiv.style.cssText = "font-size:8px;color:#888;margin-top:3px;";
-                        spatialDiv.textContent = `Anneau ext. = ${parsedCodes[0]}, int. = ${parsedCodes.slice(1).join(', ')}`;
+                        if (unitsWithResults.length === 0) {
+                            spatialDiv.textContent = 'Aucune donnée';
+                        } else if (unitsWithResults.length === 1) {
+                            const inactiveStr = unitsWithoutResults.length > 0
+                                ? ` (${unitsWithoutResults.map(u => u.code).join(', ')} : aucune donnée)`
+                                : '';
+                            spatialDiv.textContent = `Anneau = ${unitsWithResults[0].code}${inactiveStr}`;
+                        } else {
+                            const inactiveStr = unitsWithoutResults.length > 0
+                                ? ` (${unitsWithoutResults.map(u => u.code).join(', ')} : aucune donnée)`
+                                : '';
+                            spatialDiv.textContent = `Anneau ext. = ${unitsWithResults[0].code}, int. = ${unitsWithResults.slice(1).map(u => u.code).join(', ')}${inactiveStr}`;
+                        }
                         legendResults.appendChild(spatialDiv);
                     }
                 }
@@ -3949,15 +3985,35 @@ document.addEventListener('DOMContentLoaded', () => {
                 const legendUsagers = document.getElementById('legend-usagers');
                 if (legendUsagers) {
                     legendUsagers.innerHTML = '';
-                    const totalUsagersN = isSpatial
-                        ? (usagersDatasets[0] ? usagersDatasets[0].data.reduce((a, b) => a + (b || 0), 0) : 0)
-                        : rawLabels.reduce((sum, lbl) => sum + (usagersN[lbl] || 0), 0);
+                    let totalUsagersN = 0;
+                    let refUsagersData = null;
+                    const unitsWithUsagers = [];
+                    const unitsWithoutUsagers = [];
+
+                    if (isSpatial) {
+                        resGeoUnits.forEach((unit, idx) => {
+                            const uCharts = (unit.charts && unit.charts.usagers) || {};
+                            const uTotal = rawLabels.reduce((sum, lbl) => sum + (uCharts[lbl] || 0), 0);
+                            const code = parsedCodes[idx] || String(idx);
+                            if (uTotal > 0) {
+                                unitsWithUsagers.push({ code, total: uTotal, usagers: uCharts });
+                            } else {
+                                unitsWithoutUsagers.push({ code });
+                            }
+                        });
+                        if (unitsWithUsagers.length > 0) {
+                            refUsagersData = unitsWithUsagers[0].usagers;
+                            totalUsagersN = unitsWithUsagers[0].total;
+                        }
+                    } else {
+                        totalUsagersN = rawLabels.reduce((sum, lbl) => sum + (usagersN[lbl] || 0), 0);
+                    }
 
                     usagersLabels.forEach((label, idx) => {
                         const rawKey = rawLabels[idx];
                         const color = usagersColors[idx];
                         const valN = isSpatial
-                            ? (resGeoUnits[0] && resGeoUnits[0].charts && resGeoUnits[0].charts.usagers ? (resGeoUnits[0].charts.usagers[rawKey] || 0) : 0)
+                            ? ((refUsagersData && refUsagersData[rawKey]) || 0)
                             : (usagersN[rawKey] || 0);
                         const pctStr = formatPercentage(valN, totalUsagersN);
 
@@ -3978,7 +4034,19 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (isSpatial) {
                         const spatialDiv = document.createElement('div');
                         spatialDiv.style.cssText = "font-size:8px;color:#888;margin-top:3px;";
-                        spatialDiv.textContent = `Anneau ext. = ${parsedCodes[0]}, int. = ${parsedCodes.slice(1).join(', ')}`;
+                        if (unitsWithUsagers.length === 0) {
+                            spatialDiv.textContent = 'Aucune donnée';
+                        } else if (unitsWithUsagers.length === 1) {
+                            const inactiveStr = unitsWithoutUsagers.length > 0
+                                ? ` (${unitsWithoutUsagers.map(u => u.code).join(', ')} : aucune donnée)`
+                                : '';
+                            spatialDiv.textContent = `Anneau = ${unitsWithUsagers[0].code}${inactiveStr}`;
+                        } else {
+                            const inactiveStr = unitsWithoutUsagers.length > 0
+                                ? ` (${unitsWithoutUsagers.map(u => u.code).join(', ')} : aucune donnée)`
+                                : '';
+                            spatialDiv.textContent = `Anneau ext. = ${unitsWithUsagers[0].code}, int. = ${unitsWithUsagers.slice(1).map(u => u.code).join(', ')}${inactiveStr}`;
+                        }
                         legendUsagers.appendChild(spatialDiv);
                     }
                 }
@@ -4832,6 +4900,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- GESTION DU LOCAL STORAGE & DU PERMALIEN (LOT 3) ---
     function getFiltersState() {
         return {
+            profil: document.getElementById('profil-select')?.value || 'global',
             'date-deb': document.getElementById('date-deb').value,
             'date-fin': document.getElementById('date-fin').value,
             echelle: selectEchelle.value,
@@ -4852,6 +4921,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function applyFiltersState(state) {
         if (!state) return;
+
+        if (state.profil && document.getElementById('profil-select')) {
+            document.getElementById('profil-select').value = state.profil;
+            document.getElementById('profil-select').dispatchEvent(new Event('change'));
+        }
 
         if (state['date-deb']) document.getElementById('date-deb').value = state['date-deb'];
         if (state['date-fin']) document.getElementById('date-fin').value = state['date-fin'];
@@ -5391,6 +5465,176 @@ document.addEventListener('DOMContentLoaded', () => {
                 setTimeout(waitForTiles, 500);
 
             }, 350);
+        });
+    }
+
+    // ── GESTION DES FILTRES ACTIFS ET PASSERELLE VERS LE GÉNÉRATEUR (LOT 2) ──
+    let lastLoadedFilterFingerprint = null;
+
+    function checkFiltersDirty() {
+        const current = JSON.stringify(getFiltersState());
+        if (lastLoadedFilterFingerprint && current !== lastLoadedFilterFingerprint) {
+            btnUpdate.classList.add('btn-update-dirty');
+            btnUpdate.setAttribute('title', 'Filtres modifiés — Cliquez pour actualiser les données');
+        } else {
+            btnUpdate.classList.remove('btn-update-dirty');
+            btnUpdate.removeAttribute('title');
+        }
+    }
+
+    const configFormEl = document.getElementById('config-form');
+    if (configFormEl) {
+        configFormEl.addEventListener('change', checkFiltersDirty);
+        configFormEl.addEventListener('input', checkFiltersDirty);
+    }
+
+    function renderActiveFiltersChips() {
+        const bar = document.getElementById('active-filters-chips-bar');
+        const container = document.getElementById('active-filters-chips-container');
+        if (!bar || !container) return;
+
+        const state = getFiltersState();
+        container.innerHTML = '';
+        let chipsCount = 0;
+
+        function addChip(label, onRemove, isCross = false) {
+            const chip = document.createElement('span');
+            chip.className = 'filter-chip' + (isCross ? ' chip-cross' : '');
+            chip.textContent = label + ' ';
+            if (onRemove) {
+                const removeBtn = document.createElement('span');
+                removeBtn.className = 'filter-chip-remove';
+                removeBtn.textContent = '×';
+                removeBtn.title = 'Supprimer ce filtre';
+                removeBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    onRemove();
+                });
+                chip.appendChild(removeBtn);
+            }
+            container.appendChild(chip);
+            chipsCount++;
+        }
+
+        // Échelle et territoire
+        if (state.echelle) {
+            const scaleText = selectEchelle.options[selectEchelle.selectedIndex]?.text || state.echelle;
+            const codeText = state.code ? ` (${state.code})` : '';
+            addChip(`${scaleText}${codeText}`, () => {
+                selectEchelle.value = '';
+                inputCode.value = '';
+                inputCode.disabled = true;
+                if (btnToggleCodes) btnToggleCodes.disabled = true;
+                loadData();
+            });
+        }
+
+        // Période
+        if (state['date-deb'] && state['date-fin']) {
+            addChip(`${state['date-deb']} au ${state['date-fin']}`, null);
+        }
+
+        // Profil
+        const profilSelectEl = document.getElementById('profil-select');
+        if (profilSelectEl && profilSelectEl.value && profilSelectEl.value !== 'global') {
+            const profLabel = profilSelectEl.options[profilSelectEl.selectedIndex]?.text || profilSelectEl.value;
+            addChip(`Profil : ${profLabel}`, () => {
+                profilSelectEl.value = 'global';
+                profilSelectEl.dispatchEvent(new Event('change'));
+                loadData();
+            });
+        }
+
+        // Domaines
+        (state.domaines || []).forEach(d => {
+            if (!d) return;
+            addChip(`Domaine : ${d}`, () => {
+                const cur = (inputDomaineSNC.getSelectedValues ? inputDomaineSNC.getSelectedValues() : []).filter(v => v !== d);
+                if (inputDomaineSNC.setSelectedValues) inputDomaineSNC.setSelectedValues(cur);
+                loadData();
+            });
+        });
+
+        // Thèmes
+        (state.themes || []).forEach(t => {
+            if (!t) return;
+            addChip(`Thème : ${t}`, () => {
+                const cur = (inputThemeSNC.getSelectedValues ? inputThemeSNC.getSelectedValues() : []).filter(v => v !== t);
+                if (inputThemeSNC.setSelectedValues) inputThemeSNC.setSelectedValues(cur);
+                loadData();
+            });
+        });
+
+        // Usagers
+        (state['type-usager'] || []).forEach(u => {
+            if (!u) return;
+            addChip(`Usager : ${u}`, () => {
+                const cur = (inputUsager.getSelectedValues ? inputUsager.getSelectedValues() : []).filter(v => v !== u);
+                if (inputUsager.setSelectedValues) inputUsager.setSelectedValues(cur);
+                loadData();
+            });
+        });
+
+        // Types action
+        (state.types_action || []).forEach(a => {
+            if (!a) return;
+            addChip(`Action : ${a}`, () => {
+                const cur = (inputTypeAction.getSelectedValues ? inputTypeAction.getSelectedValues() : []).filter(v => v !== a);
+                if (inputTypeAction.setSelectedValues) inputTypeAction.setSelectedValues(cur);
+                loadData();
+            });
+        });
+
+        // Résultats
+        (state.resultats || []).forEach(r => {
+            if (!r) return;
+            addChip(`Résultat : ${r}`, () => {
+                const cur = (inputResultat.getSelectedValues ? inputResultat.getSelectedValues() : []).filter(v => v !== r);
+                if (inputResultat.setSelectedValues) inputResultat.setSelectedValues(cur);
+                loadData();
+            });
+        });
+
+        // KPI ou cross filter actif
+        if (typeof activeKpiFilter !== 'undefined' && activeKpiFilter) {
+            addChip(`Filtre interactif : ${activeKpiFilter}`, () => {
+                if (typeof resetKpiFilter === 'function') resetKpiFilter();
+            }, true);
+        }
+
+        if (chipsCount > 0) {
+            bar.classList.remove('hidden');
+        } else {
+            bar.classList.add('hidden');
+        }
+    }
+
+    const btnClearAllChips = document.getElementById('btn-clear-all-chips');
+    if (btnClearAllChips) {
+        btnClearAllChips.addEventListener('click', () => {
+            if (btnReset) btnReset.click();
+        });
+    }
+
+    function transferPerimeterToGenerator() {
+        const state = getFiltersState();
+        try {
+            sessionStorage.setItem('ofbilan_shared_perimeter', JSON.stringify(state));
+        } catch (e) {
+            console.warn("Impossible de sauvegarder le périmètre dans sessionStorage :", e);
+        }
+        window.location.href = 'index.html';
+    }
+
+    const btnGoToGenerator = document.getElementById('btn-go-to-generator');
+    if (btnGoToGenerator) {
+        btnGoToGenerator.addEventListener('click', transferPerimeterToGenerator);
+    }
+    const navLinkGen = document.getElementById('nav-link-generator');
+    if (navLinkGen) {
+        navLinkGen.addEventListener('click', (e) => {
+            e.preventDefault();
+            transferPerimeterToGenerator();
         });
     }
 });

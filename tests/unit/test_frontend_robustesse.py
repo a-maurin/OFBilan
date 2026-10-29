@@ -451,5 +451,10 @@ def test_explorer_donut_percentages_and_nonzero_filtering():
     assert "formatPercentage(valN, totalUsagersN)" in explorer_js
     assert "${label} (${pctStr})" in explorer_js
 
+    # Adaptation dynamique des entités spatiales actives et inactives
+    assert "unitsWithResults" in explorer_js
+    assert "unitsWithUsagers" in explorer_js
+    assert "aucune donnée" in explorer_js
+
     # Version du script incrémentée dans explorer.html
-    assert 'src="explorer.js?v=1.2.4"' in explorer_html
+    assert 'src="explorer.js?v=1.2.5"' in explorer_html
