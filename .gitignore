@@ -17,6 +17,8 @@ ref/programme/tables_reference/**
 !ref/programme/tables_reference/ref_themes_ctrl.csv
 !ref/programme/tables_reference/liste_natinf.csv
 !ref/programme/tables_reference/concordance_natinf_snc.csv
+!ref/programme/tables_reference/tub_communes.csv
+!ref/programme/tables_reference/communes_PNF.csv
 ref/hors_programme/**
 
 # Paquets ref/ et archives de distribution (transfert local, non versionnés)

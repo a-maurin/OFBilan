@@ -767,18 +767,22 @@ def _finalize_cartes_selection(
             resolved_opts["cartes_selection"] = maps_to_gen
             profile["_cartes_selection"] = maps_to_gen
 
-        ensure_maps_for_profiles(
-            maps_to_gen,
-            date_deb=date_deb,
-            date_fin=date_fin,
-            echelle=echelle, code=code,
-            bilan_profiles={bilan_key: profile},
-            target_dir=target_dir,
-            diffusion=str(resolved_opts.get("diffusion", "externe")),
-            force_regen=True,
-            is_brochure=is_brochure_mode,
-            gabarit_data=g_data,
-        )
+        try:
+            ensure_maps_for_profiles(
+                maps_to_gen,
+                date_deb=date_deb,
+                date_fin=date_fin,
+                echelle=echelle, code=code,
+                bilan_profiles={bilan_key: profile},
+                target_dir=target_dir,
+                diffusion=str(resolved_opts.get("diffusion", "externe")),
+                force_regen=True,
+                is_brochure=is_brochure_mode,
+                gabarit_data=g_data,
+            )
+        except Exception as e_maps:
+            logger = logging.getLogger("ofbilan.engine")
+            logger.warning("Préparation des cartes impossible (QGIS/fichiers) : %s", e_maps)
         resolved_opts["_maps_already_generated"] = True
     return resolved_opts
 
@@ -868,7 +872,7 @@ def prompt_cartography_integration(
             _copy_to_clipboard(expected_names[0])
             print("(Le premier nom de fichier attendu a été copié dans le presse-papiers si possible.)")
         try:
-            input("Appuyez sur Entrée une fois les cartes prêtes (renommées et placées au bon endroit)... ")
+            input("Appuyez sur Entrée une fois les cartes prêtes (ou appuyez sur Entrée pour continuer la génération du PDF sans les cartes)... ")
         except (EOFError, KeyboardInterrupt):
             pass
         return
@@ -928,7 +932,7 @@ def prompt_cartography_integration(
     print("(Le premier nom de fichier attendu a été copié dans le presse-papiers si possible.)")
 
     try:
-        input("Appuyez sur Entrée une fois la carte prête (renommée et placée au bon endroit)... ")
+        input("Appuyez sur Entrée une fois la carte prête (ou appuyez sur Entrée pour continuer la génération du PDF sans la carte)... ")
     except (EOFError, KeyboardInterrupt):
         pass
 

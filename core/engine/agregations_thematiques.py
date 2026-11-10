@@ -24,6 +24,7 @@ from core.chemins_projet import PROJECT_ROOT, get_carto_temp_dir
 from core.common.chargeurs_donnees import (
     get_communes_centroids_dicts,
     load_natinf_ref,
+    load_pnf_codes,
     load_pnf_commune_zone_maps,
     load_tub_pnf_codes,
 )
@@ -662,7 +663,7 @@ def _run_aggregations(
             if proc_type in ("PEJ", "PA"):
                 pnf_codes_s = results.get("pnf_codes")
                 if not isinstance(pnf_codes_s, set):
-                    _, pnf_codes_s = load_tub_pnf_codes(PROJECT_ROOT)
+                    pnf_codes_s = load_pnf_codes(PROJECT_ROOT)
                 pnf_codes_s = pnf_codes_s or set()
                 ch = out["coeur_hors_coeur"].astype(str).str.strip()
                 mask_nd = ch.isin(["", "n.d.", "nan", "None", "<na>"])

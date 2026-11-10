@@ -1343,15 +1343,62 @@ def load_ref_themes_ctrl(root: Path) -> List[dict]:
         return []
 
 
-def load_tub_pnf_codes(root: Path) -> Tuple[set, set]:
+def load_tub_codes(root: Path, *, strict: bool = False) -> set[str]:
+    """
+    Charge les codes INSEE des communes en zone TUB.
+
+    Si strict=False (par défaut), retourne un ensemble vide en cas d'absence du fichier.
+    Si strict=True, lève FileNotFoundError si tub_communes.csv est manquant.
+    """
+    try:
+        tub = load_tub(root)
+        return set(tub["INSEE_COM"].dropna().unique())
+    except FileNotFoundError:
+        if strict:
+            raise
+        logger.warning(
+            "Référentiel TUB (tub_communes.csv) introuvable dans ref/programme/tables_reference "
+            "ni data/sources/. Analyse poursuivie sans zonage TUB."
+        )
+        return set()
+    except Exception as exc:
+        if strict:
+            raise
+        logger.warning("Erreur lors de la lecture du référentiel TUB : %s", exc)
+        return set()
+
+
+def load_pnf_codes(root: Path, *, strict: bool = False) -> set[str]:
+    """
+    Charge les codes INSEE des communes du Parc national de forêts (PNF).
+
+    Si strict=False (par défaut), retourne un ensemble vide en cas d'absence du fichier.
+    Si strict=True, lève FileNotFoundError si aucun référentiel PNF n'est disponible.
+    """
+    try:
+        pnf = load_pnf(root)
+        return set(pnf["CODE_INSEE"].dropna().unique())
+    except FileNotFoundError:
+        if strict:
+            raise
+        logger.warning(
+            "Référentiel PNF introuvable (shapefiles PNF ou communes_PNF.csv). "
+            "Analyse poursuivie sans zonage PNF."
+        )
+        return set()
+    except Exception as exc:
+        if strict:
+            raise
+        logger.warning("Erreur lors de la lecture du référentiel PNF : %s", exc)
+        return set()
+
+
+def load_tub_pnf_codes(root: Path, *, strict: bool = False) -> Tuple[set, set]:
     """
     Charge les référentiels TUB et PNF et retourne les ensembles de codes INSEE
-    (tub_codes, pnf_codes) pour les agrégations par zone. Utile pour réutiliser
-    la même logique dans plusieurs bilans.
+    (tub_codes, pnf_codes) pour les agrégations par zone.
     """
-    tub = load_tub(root)
-    pnf = load_pnf(root)
-    return set(tub["INSEE_COM"].unique()), set(pnf["CODE_INSEE"].unique())
+    return load_tub_codes(root, strict=strict), load_pnf_codes(root, strict=strict)
 
 
 def get_pnf_coeur_shp_path(root: Path) -> Path:

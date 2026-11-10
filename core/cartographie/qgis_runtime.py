@@ -309,13 +309,21 @@ def get_qgis_env(python_exe: Path) -> dict[str, str]:
     env["VSI_CACHE_SIZE"] = "1000000"
     env["PYTHONUTF8"] = "1"
     
-    qt_plugins = f"{qgis_apps}\\qtplugins;{root_dir}\\apps\\Qt5\\plugins"
-    env["QT_PLUGIN_PATH"] = qt_plugins
+    qt_plugins_list = [f"{qgis_apps}\\qtplugins"]
+    qt_bin_paths = []
+    for qt_ver in ("Qt6", "Qt5", "qt6", "qt5"):
+        qt_cand = root_dir / "apps" / qt_ver
+        if qt_cand.exists():
+            qt_plugins_list.append(str(qt_cand / "plugins"))
+            qt_bin_paths.append(str(qt_cand / "bin"))
+    if not qt_bin_paths:
+        qt_bin_paths.append(str(root_dir / "apps" / "qt5" / "bin"))
+    env["QT_PLUGIN_PATH"] = ";".join(qt_plugins_list)
     
     paths = [
         str(qgis_apps / "bin"),
         str(python_home / "Scripts"),
-        str(root_dir / "apps" / "qt5" / "bin"),
+        *qt_bin_paths,
         str(bin_dir),
         env.get("SystemRoot", r"C:\Windows") + r"\system32",
         env.get("SystemRoot", r"C:\Windows"),
@@ -354,12 +362,14 @@ def can_import_pyqgis(python_exe: Path, env: dict[str, str] | None = None) -> bo
 
 
 def _cartography_launcher_bat() -> Path:
-    return (
-        PROJECT_ROOT
-        / "core"
-        / "cartographie"
-        / "lancer_production_cartographique.bat"
-    )
+    candidates = [
+        PROJECT_ROOT / "scripts" / "lancement" / "lancer_production_cartographique.bat",
+        PROJECT_ROOT / "core" / "cartographie" / "lancer_production_cartographique.bat",
+    ]
+    for c in candidates:
+        if c.is_file():
+            return c
+    return candidates[0]
 
 
 def run_cartography_export_subprocess(

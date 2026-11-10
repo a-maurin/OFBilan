@@ -24,8 +24,10 @@ import pandas as pd
 from core.common.chargeurs_donnees import (
     load_natinf_ref,
     load_pnf,
+    load_pnf_codes,
     load_rech_av,
     load_tub,
+    load_tub_codes,
     load_tub_pnf_codes,
 )
 from core.common.chargeurs_donnees import (
@@ -34,6 +36,8 @@ from core.common.chargeurs_donnees import (
 )
 from core.common.chargeurs_donnees import ensure_insee_from_communes_shp
 from core.common.utilitaires_metier import (
+    _zone_count,
+    _zone_summary,
     coalesced_insee_series,
     contient_natinf,
     count_controles_non_conformes_oscean,
@@ -511,7 +515,7 @@ def _apply_restrict_geo_pnf(
     référentiel (INSEE) **ou** localisation dans les polygones SIG (cœur +
     aire d'adhésion), pour pallier les écarts entre liste de communes et périmètre réel.
     """
-    _, pnf_codes = _get_loader("load_tub_pnf_codes", load_tub_pnf_codes)(root)
+    pnf_codes = _get_loader("load_pnf_codes", load_pnf_codes)(root, strict=True)
 
     if not point_filtered.empty:
         point_filtered = _get_loader("ensure_insee_from_communes_shp", ensure_insee_from_communes_shp)(
@@ -635,7 +639,7 @@ def _apply_restrict_geo_tub(
     log: logging.Logger,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Restreint les jeux de données au périmètre TUB (union INSEE et intersection spatiale SIG)."""
-    tub_codes, _ = _get_loader("load_tub_pnf_codes", load_tub_pnf_codes)(root)
+    tub_codes = _get_loader("load_tub_codes", load_tub_codes)(root, strict=True)
 
     def _has_coords(df):
         m = pd.Series(False, index=df.index)
@@ -731,7 +735,8 @@ def _run_spatial_analyses(
     if not need_pnf and not need_tub:
         return results, point_filtered
 
-    tub_codes, pnf_codes = _get_loader("load_tub_pnf_codes", load_tub_pnf_codes)(cfg.root)
+    tub_codes = _get_loader("load_tub_codes", load_tub_codes)(cfg.root) if need_tub else set()
+    pnf_codes = _get_loader("load_pnf_codes", load_pnf_codes)(cfg.root) if need_pnf else set()
     results["tub_codes"] = tub_codes
     results["pnf_codes"] = pnf_codes
 
@@ -740,17 +745,21 @@ def _run_spatial_analyses(
 
     if need_pnf and not pt.empty and insee_col:
         pt[insee_col] = pt[insee_col].astype(str).str.zfill(5)
-        pnf_df = _get_loader("load_pnf", load_pnf)(cfg.root)
-        pt = pt.merge(
-            pnf_df[["CODE_INSEE"]],
-            left_on=insee_col,
-            right_on="CODE_INSEE",
-            how="left",
-        )
-        pt["PNF"] = pt["CODE_INSEE"].notna().map(
-            {True: "PNF", False: "Hors PNF"}
-        )
-        pt = pt.drop(columns=["CODE_INSEE"], errors="ignore")
+        try:
+            pnf_df = _get_loader("load_pnf", load_pnf)(cfg.root)
+            pt = pt.merge(
+                pnf_df[["CODE_INSEE"]],
+                left_on=insee_col,
+                right_on="CODE_INSEE",
+                how="left",
+            )
+            pt["PNF"] = pt["CODE_INSEE"].notna().map(
+                {True: "PNF", False: "Hors PNF"}
+            )
+            pt = pt.drop(columns=["CODE_INSEE"], errors="ignore")
+        except Exception as exc:
+            logging.getLogger(__name__).warning("Référentiel PNF non exploitable pour l'association : %s", exc)
+            pt["PNF"] = pt[insee_col].isin(pnf_codes).map({True: "PNF", False: "Hors PNF"})
 
         agg_pnf = (
             pt.groupby("PNF")
