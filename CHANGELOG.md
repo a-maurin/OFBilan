@@ -6,6 +6,12 @@ Toutes les modifications notables apportées au projet **OFBilan** depuis la ver
 
 ## [v1.0.7] - 2026-08-08 : Bilan PNF v2, Pochoirs départementaux & Explorer dynamique
 
+### Découplage des référentiels et résilience cartographique
+* **Découplage strict PNF et TUB** : Séparation complète du chargement des communes du Parc national de forêts et du zonage sanitaire TUB dans le moteur de calcul. L'activation de l'option PNF n'exige plus la présence du fichier tub_communes.csv.
+* **Tolérance aux fichiers absents (fail-soft)** : Remplacement des erreurs bloquantes par un repli propre (ensemble vide et journalisation d'un avertissement) pour les zonages secondaires.
+* **Distribution des tables administratives** : Intégration directe des tables de référence tub_communes.csv et communes_PNF.csv au suivi Git du projet.
+* **Fiabilisation du pont QGIS et résilience PDF** : Correction du chemin vers le lanceur batch cartographique, support des environnements récents sous Qt6 et isolation complète de la chaîne d'édition PDF pour garantir la production du rapport même en cas d'absence ou d'échec de la cartographie.
+
 ### Explorer Web et Cartographie Dynamique
 * **Calibrage dynamique du choroplèthe** : Calcul dynamique de l'échelle et de la légende (min/max) des cartes choroplèthes et heatmaps selon les entités visibles dans le viewport.
 * **Cascade de géolocalisation des PEJ (4 niveaux)** : Intégration d'une cascade de géolocalisation à 4 niveaux pour les Procédures d'Enquête Judiciaire, affichage de l'avis de précision dans les infobulles et bandeau d'information dédié aux PEJ non géolocalisées.
