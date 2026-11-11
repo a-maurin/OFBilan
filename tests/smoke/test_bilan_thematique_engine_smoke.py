@@ -79,6 +79,8 @@ def test_run_engine_smoke(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(engine, "load_tub", lambda *args, **kwargs: _minimal_empty_df())
     monkeypatch.setattr(engine, "load_natinf_ref", lambda *args, **kwargs: pd.DataFrame())
     monkeypatch.setattr(engine, "load_tub_pnf_codes", lambda *args, **kwargs: (set(), set()))
+    monkeypatch.setattr(engine, "load_pnf_codes", lambda *args, **kwargs: set())
+    monkeypatch.setattr(engine, "load_tub_codes", lambda *args, **kwargs: set())
     monkeypatch.setattr(engine, "load_communes_noms", lambda *args, **kwargs: {})
 
     # PDF : neutralise la génération pour garder un test de fumée focalisé moteur.
@@ -186,6 +188,7 @@ def test_restrict_geo_pnf_pa_uses_manquement_controls(monkeypatch) -> None:
     pve = pd.DataFrame([{"INF-INSEE": "21001"}, {"INF-INSEE": "99999"}])
 
     monkeypatch.setattr(engine, "load_tub_pnf_codes", lambda root: (set(), {"21001"}))
+    monkeypatch.setattr(engine, "load_pnf_codes", lambda *args, **kwargs: {"21001"})
     monkeypatch.setattr(engine, "ensure_insee_from_communes_shp", lambda df, *args, **kwargs: df)
 
     pt2, pej2, pa2, pve2 = engine._apply_restrict_geo_pnf(
@@ -221,6 +224,7 @@ def test_restrict_geo_pnf_sig_mask_or_insee(monkeypatch) -> None:
     pve = pd.DataFrame([{"INF-INSEE": "99999", "inf_gps_long": 4.0, "inf_gps_lat": 47.0}])
 
     monkeypatch.setattr(engine, "load_tub_pnf_codes", lambda root: (set(), {"21001"}))
+    monkeypatch.setattr(engine, "load_pnf_codes", lambda *args, **kwargs: {"21001"})
     monkeypatch.setattr(engine, "ensure_insee_from_communes_shp", lambda df, *args, **kwargs: df)
     monkeypatch.setattr(
         engine,

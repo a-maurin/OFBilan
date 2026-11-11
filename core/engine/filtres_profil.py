@@ -53,8 +53,33 @@ import sys
 
 def _get_loader(name: str, fallback: Any) -> Any:
     orch = sys.modules.get("core.engine.orchestrateur_profils")
-    if orch and hasattr(orch, name):
-        return getattr(orch, name)
+    if orch:
+        if hasattr(orch, name):
+            loader = getattr(orch, name)
+            if loader is not fallback:
+                return loader
+        if name == "load_pnf_codes" and hasattr(orch, "load_tub_pnf_codes"):
+            tub_pnf = getattr(orch, "load_tub_pnf_codes")
+            if tub_pnf is not load_tub_pnf_codes:
+                def _extracted_pnf(root: Path, *args: Any, **kwargs: Any) -> set[str]:
+                    try:
+                        res = tub_pnf(root, *args, **kwargs)
+                    except TypeError:
+                        res = tub_pnf(root)
+                    return res[1] if isinstance(res, (tuple, list)) and len(res) > 1 else set()
+                return _extracted_pnf
+        elif name == "load_tub_codes" and hasattr(orch, "load_tub_pnf_codes"):
+            tub_pnf = getattr(orch, "load_tub_pnf_codes")
+            if tub_pnf is not load_tub_pnf_codes:
+                def _extracted_tub(root: Path, *args: Any, **kwargs: Any) -> set[str]:
+                    try:
+                        res = tub_pnf(root, *args, **kwargs)
+                    except TypeError:
+                        res = tub_pnf(root)
+                    return res[0] if isinstance(res, (tuple, list)) and len(res) > 0 else set()
+                return _extracted_tub
+        if hasattr(orch, name):
+            return getattr(orch, name)
     return fallback
 
 
