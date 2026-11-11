@@ -1675,7 +1675,11 @@ document.addEventListener('DOMContentLoaded', () => {
     boundaryPane.style.pointerEvents = 'none';
 
     const choroplethPane = map.createPane('choroplethPane');
-    choroplethPane.style.zIndex = '420';
+    choroplethPane.style.zIndex = '450';
+
+    const heatPane = map.createPane('heatPane');
+    heatPane.style.zIndex = '460';
+    heatPane.style.pointerEvents = 'none';
 
     const entityMarkersPane = map.createPane('entityMarkersPane');
     entityMarkersPane.style.zIndex = '650';
@@ -1684,6 +1688,31 @@ document.addEventListener('DOMContentLoaded', () => {
     const boundaryRenderer = L.svg({ pane: 'boundaryPane' });
     const choroplethRenderer = L.svg({ pane: 'choroplethPane' });
     const entityRenderer = L.canvas({ pane: 'entityMarkersPane' });
+
+    // Sécurisation de la prise en charge du pane pour L.HeatLayer
+    if (typeof L !== 'undefined' && L.HeatLayer) {
+        L.HeatLayer.prototype.onAdd = function(m) {
+            this._map = m;
+            if (!this._canvas) this._initCanvas();
+            const targetPane = (this.options && this.options.pane && m.getPane(this.options.pane)) ? m.getPane(this.options.pane) : (m._panes ? m._panes.overlayPane : m.getPanes().overlayPane);
+            targetPane.appendChild(this._canvas);
+            m.on('moveend', this._reset, this);
+            if (m.options.zoomAnimation && L.Browser.any3d) {
+                m.on('zoomanim', this._animateZoom, this);
+            }
+            this._reset();
+        };
+        L.HeatLayer.prototype.onRemove = function(m) {
+            const targetPane = (this.options && this.options.pane && m.getPane(this.options.pane)) ? m.getPane(this.options.pane) : m.getPanes().overlayPane;
+            if (targetPane && this._canvas && this._canvas.parentNode === targetPane) {
+                targetPane.removeChild(this._canvas);
+            }
+            m.off('moveend', this._reset, this);
+            if (m.options.zoomAnimation) {
+                m.off('zoomanim', this._animateZoom, this);
+            }
+        };
+    }
 
     L.tileLayer('https://data.geopf.fr/wmts?REQUEST=GetTile&SERVICE=WMTS&VERSION=1.0.0&STYLE=normal&TILEMATRIXSET=PM&FORMAT=image/png&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}', {
         maxZoom: 19,
@@ -3394,6 +3423,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const dynamicMax = getDynamicMaxForZoom(map, filteredHeat, 25);
 
                     heatmapLayer = L.heatLayer(filteredHeat, {
+                        pane: 'heatPane',
                         radius: 25,
                         blur: 18,
                         maxZoom: map.getZoom(), // Dynamic zoom recalibration
@@ -4865,6 +4895,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const dynamicMax = getDynamicMaxForZoom(map, heatData, 25);
                 heatmapLayer = L.heatLayer(heatData, {
+                    pane: 'heatPane',
                     radius: 25,
                     blur: 18,
                     maxZoom: map.getZoom(),

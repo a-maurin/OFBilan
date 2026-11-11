@@ -458,3 +458,27 @@ def test_explorer_donut_percentages_and_nonzero_filtering():
 
     # Version du script incrémentée dans explorer.html
     assert 'src="explorer.js?v=1.2.5"' in explorer_html
+
+
+def test_map_panes_zindex_hierarchy():
+    """Vérifie la hiérarchie des z-index pour garantir que les entités sont au-dessus des zones TUB et du masque."""
+    web_dir = Path(__file__).resolve().parents[2] / "core" / "web"
+    explorer_js = (web_dir / "explorer.js").read_text(encoding="utf-8")
+    leaflet_heat_js = (web_dir / "vendor" / "leaflet-heat.js").read_text(encoding="utf-8")
+
+    # 1. Déclaration des panes et z-index stricts
+    assert "map.createPane('maskPane')" in explorer_js
+    assert "maskPane.style.zIndex = '410'" in explorer_js
+    assert "map.createPane('boundaryPane')" in explorer_js
+    assert "boundaryPane.style.zIndex = '415'" in explorer_js
+    assert "map.createPane('choroplethPane')" in explorer_js
+    assert "choroplethPane.style.zIndex = '450'" in explorer_js
+    assert "map.createPane('heatPane')" in explorer_js
+    assert "heatPane.style.zIndex = '460'" in explorer_js
+    assert "map.createPane('entityMarkersPane')" in explorer_js
+    assert "entityMarkersPane.style.zIndex = '650'" in explorer_js
+
+    # 2. Prise en charge de pane: 'heatPane' pour la carte de chaleur
+    assert "pane: 'heatPane'" in explorer_js
+    assert "this.options.pane" in leaflet_heat_js
+    assert "targetPane" in explorer_js
